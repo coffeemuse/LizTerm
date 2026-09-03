@@ -16,10 +16,19 @@ public static class IndicationParser
             using var props = root.EnumerateObject();
             if (!props.MoveNext()) return false;
             var first = props.Current;
+            // Validate body kind: initialize requires Array, all others require Object
+            if (first.Name == "initialize")
+            {
+                if (first.Value.ValueKind != JsonValueKind.Array) return false;
+            }
+            else
+            {
+                if (first.Value.ValueKind != JsonValueKind.Object) return false;
+            }
             indication = Parse(first.Name, first.Value);
             return true;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
             return false;
         }
@@ -53,7 +62,19 @@ public static class IndicationParser
         {
             if (element.ValueKind != JsonValueKind.Object) continue;
             using var props = element.EnumerateObject();
-            if (props.MoveNext()) items.Add(Parse(props.Current.Name, props.Current.Value));
+            if (!props.MoveNext()) continue;
+            // Skip if the indication body is not an object (except initialize which expects Array)
+            var propName = props.Current.Name;
+            var propValue = props.Current.Value;
+            if (propName == "initialize")
+            {
+                if (propValue.ValueKind != JsonValueKind.Array) continue;
+            }
+            else
+            {
+                if (propValue.ValueKind != JsonValueKind.Object) continue;
+            }
+            items.Add(Parse(propName, propValue));
         }
         return items;
     }
@@ -114,7 +135,14 @@ public static class IndicationParser
     private static IReadOnlyList<string> StringList(JsonElement e, string name)
     {
         if (!e.TryGetProperty(name, out var v) || v.ValueKind != JsonValueKind.Array) return [];
-        return v.EnumerateArray().Select(x => x.GetString() ?? "").ToList();
+        return v.EnumerateArray().Select(x => x.ValueKind switch
+        {
+            JsonValueKind.String => x.GetString() ?? "",
+            JsonValueKind.Number => x.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => "",
+        }).ToList();
     }
 
     private static IReadOnlyList<bool> BoolList(JsonElement e, string name)
