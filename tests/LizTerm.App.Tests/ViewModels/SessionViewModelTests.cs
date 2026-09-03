@@ -118,4 +118,31 @@ public class SessionViewModelTests
         await vm.DisposeAsync();
         Assert.Contains("dispose", session.Calls);
     }
+
+    [Fact]
+    public async Task Events_after_dispose_do_not_change_state()
+    {
+        var (vm, session) = Create();
+        await vm.DisposeAsync();
+
+        session.RaiseHostMessage("late");
+        session.RaiseConnection(ConnectionState.Connected3270);
+
+        Assert.Null(vm.ErrorMessage);
+        Assert.False(vm.IsConnected);
+    }
+
+    [Fact]
+    public async Task Unexpected_exception_is_reported()
+    {
+        var (vm, session) = Create();
+
+        session.ActionException = new IOException("pipe broke");
+        await vm.SendKeyCommand.ExecuteAsync(TerminalKey.Enter);
+        Assert.Contains("pipe broke", vm.ErrorMessage);
+
+        session.ConnectException = new IOException("boom");
+        await vm.ConnectCommand.ExecuteAsync(null);
+        Assert.Contains("boom", vm.ErrorMessage);
+    }
 }
