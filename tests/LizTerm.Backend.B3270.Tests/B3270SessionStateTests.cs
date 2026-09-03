@@ -33,7 +33,7 @@ public class B3270SessionStateTests
         ScreenSnapshot? published = null;
         session.ScreenUpdated += (_, s) => published = s;
         fake.Emit("""{"screen-mode":{"model":4,"rows":43,"columns":80,"color":true,"oversize":false,"extended":true}}""");
-        await WaitUntilAsync(() => session.CurrentScreen.Rows == 43, "resize");
+        await WaitUntilAsync(() => published?.Rows == 43, "resize");
         Assert.NotNull(published);
         Assert.Equal(43, published!.Rows);
     }
