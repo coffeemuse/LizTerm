@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <!-- Avalonia.Diagnostics has not shipped a 12.x release on nuget.org yet; pin to the latest
+         11.3.x here (NuGet's transitive resolution unifies its Avalonia dependency with 12.1.2). -->
+    <PackageReference Include="Avalonia.Diagnostics" VersionOverride="11.3.20">
+      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../LizTerm.Core/LizTerm.Core.csproj" />
+    <ProjectReference Include="../LizTerm.Backend.B3270/LizTerm.Backend.B3270.csproj" />
+  </ItemGroup>
+
+  <!-- Bundle the locally built b3270 for the host runtime, when native/build/build-macos.sh has run. -->
+  <ItemGroup Condition="Exists('../../native/out/$(NETCoreSdkRuntimeIdentifier)')">
+    <None Include="../../native/out/$(NETCoreSdkRuntimeIdentifier)/b3270*"
+          Link="runtimes/$(NETCoreSdkRuntimeIdentifier)/native/%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LizTerm.App.Tests" />
+  </ItemGroup>
+</Project>
