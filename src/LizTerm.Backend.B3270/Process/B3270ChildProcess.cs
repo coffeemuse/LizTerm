@@ -58,8 +58,10 @@ public sealed class B3270ChildProcess(string executablePath) : IB3270Process
 
     public void Kill()
     {
+        // Killing a process on the way out must never throw: InvalidOperationException means it
+        // already exited, but a Win32Exception (or other platform failure) can also escape here.
         try { _process?.Kill(entireProcessTree: true); }
-        catch (InvalidOperationException) { /* already exited */ }
+        catch (Exception) { /* already exited, or the platform refused; nothing more we can do */ }
     }
 
     public void Dispose()

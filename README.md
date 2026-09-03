@@ -15,9 +15,14 @@ Design: `docs/superpowers/specs/2026-09-03-lizterm-v1-design.md`.
 
 Environment variables:
 
-- `LIZTERM_B3270_PATH`: use this b3270 instead of the bundled one.
+- `LIZTERM_B3270_PATH`: use this b3270 instead of the bundled one. The app and the integration
+  test project use the bundled b3270 when built after `native/build/build-macos.sh` has run;
+  otherwise set this.
 - `LIZTERM_WIRE_LOG`: append every protocol line in both directions to this file (attach to bug reports).
 - `LIZTERM_TEST_HOST`: `host[:port]` for the opt-in integration tests.
+
+`native/build/build-playback.sh` builds x3270's `playback` tool, for replaying a captured host
+trace against a live b3270 during local development.
 
 ## Recording protocol fixtures
 

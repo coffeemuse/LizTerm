@@ -5,7 +5,8 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.Integration.Tests;
 
-/// <summary>Runs only when LIZTERM_TEST_HOST=host[:port] is set. Needs a b3270 (bundled, or LIZTERM_B3270_PATH).</summary>
+/// <summary>Runs only when LIZTERM_TEST_HOST=host[:port] is set. Uses the bundled b3270 when this
+/// project was built after native/build/build-macos.sh; otherwise set LIZTERM_B3270_PATH.</summary>
 public class LiveHostTests
 {
     [Fact]
