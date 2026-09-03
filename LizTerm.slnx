@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/LizTerm.Backend.B3270/LizTerm.Backend.B3270.csproj" />
     <Project Path="src/LizTerm.Core/LizTerm.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/LizTerm.Backend.B3270.Tests/LizTerm.Backend.B3270.Tests.csproj" />
     <Project Path="tests/LizTerm.Core.Tests/LizTerm.Core.Tests.csproj" />
   </Folder>
 </Solution>
