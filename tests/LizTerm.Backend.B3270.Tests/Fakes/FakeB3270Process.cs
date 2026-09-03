@@ -18,7 +18,7 @@ public sealed partial class FakeB3270Process : IB3270Process
     public FakeB3270Process()
     {
         StandardOutput = new QueueReader(_stdout);
-        StandardInput = new LineWriter(OnInputLine);
+        StandardInput = new LineWriter(OnInputLine, () => FaultWrite);
     }
 
     public bool AutoInitialize { get; init; } = true;
@@ -32,6 +32,10 @@ public sealed partial class FakeB3270Process : IB3270Process
     /// <summary>When true, <see cref="WaitForExitAsync"/> returns a faulted task, simulating a
     /// disposed/gone real process (e.g. "No process is associated with this object.").</summary>
     public bool FaultWaitForExit { get; set; }
+
+    /// <summary>When true, writing to <see cref="StandardInput"/> throws <see cref="IOException"/>,
+    /// simulating a closed pipe on a dead process.</summary>
+    public bool FaultWrite { get; set; }
 
     public IReadOnlyList<string> InputLines
     {
@@ -63,7 +67,11 @@ public sealed partial class FakeB3270Process : IB3270Process
 
     public void Kill() => Exit(-1);
 
-    public void Dispose() => Exit(0);
+    public void Dispose()
+    {
+        Exit(0);
+        _stdout.Dispose();
+    }
 
     public async Task<string> WaitForInputAsync(Func<string, bool> predicate, TimeSpan timeout)
     {
@@ -98,13 +106,14 @@ public sealed partial class FakeB3270Process : IB3270Process
         public override string? ReadLine() => queue.TryTake(out var line, Timeout.Infinite) ? line : null;
     }
 
-    private sealed class LineWriter(Action<string> onLine) : TextWriter
+    private sealed class LineWriter(Action<string> onLine, Func<bool> faultWrite) : TextWriter
     {
         private readonly StringBuilder _pending = new();
         public override Encoding Encoding => Encoding.UTF8;
 
         public override void Write(char value)
         {
+            if (faultWrite()) throw new IOException("pipe closed");
             if (value == '\n')
             {
                 var line = _pending.ToString();

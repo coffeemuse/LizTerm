@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.RegularExpressions;
 using LizTerm.Backend.B3270.Tests.Fakes;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
@@ -180,7 +182,13 @@ public class B3270SessionStateTests
         var lines = fake.InputLines;
         Assert.Contains(lines, l => l.Contains("""{"action":"PF","args":["3"]}"""));
         Assert.Contains(lines, l => l.Contains("""{"action":"String","args":["a\\\\b"]}"""));
-        Assert.Contains(lines, l => l.Contains("""{"action":"PasteString","args":["line1\nline2"]}"""));
+
+        // PasteString takes hexadecimal UTF-8, not literal text; assert the round trip rather
+        // than a specific encoding.
+        var pasteLine = Assert.Single(lines, l => l.Contains("\"action\":\"PasteString\""));
+        var hexArg = Regex.Match(pasteLine, "\"PasteString\",\"args\":\\[\"([0-9A-Fa-f]+)\"\\]").Groups[1].Value;
+        Assert.Equal("line1\nline2", Encoding.UTF8.GetString(Convert.FromHexString(hexArg)));
+
         Assert.Contains(lines, l => l.Contains("""{"action":"MoveCursor","args":["4","10"]}"""));
         Assert.Contains(lines, l => l.Contains("""{"action":"Disconnect"}"""));
     }

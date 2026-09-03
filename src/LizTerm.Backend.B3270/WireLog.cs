@@ -7,12 +7,28 @@ public sealed class WireLog(TextWriter writer) : IDisposable
 {
     public const string EnvironmentVariable = "LIZTERM_WIRE_LOG";
     private readonly object _lock = new();
+    private bool _disposed;
+
+    /// <summary>Set by <see cref="FromEnvironment"/> when the environment variable names a path
+    /// that could not be opened for writing, so the caller can surface it instead of silently
+    /// running without a wire log. Cleared on a subsequent successful open.</summary>
+    public static string? LastOpenError { get; private set; }
 
     public static WireLog? FromEnvironment()
     {
         var path = Environment.GetEnvironmentVariable(EnvironmentVariable);
         if (string.IsNullOrWhiteSpace(path)) return null;
-        return new WireLog(new StreamWriter(path, append: true));
+        try
+        {
+            var log = new WireLog(new StreamWriter(path, append: true));
+            LastOpenError = null;
+            return log;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            LastOpenError = ex.Message;
+            return null;
+        }
     }
 
     public void Inbound(string line) => Write('<', line);
@@ -22,6 +38,7 @@ public sealed class WireLog(TextWriter writer) : IDisposable
     {
         lock (_lock)
         {
+            if (_disposed) return;
             writer.Write(DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
             writer.Write(' ');
             writer.Write(direction);
@@ -33,6 +50,11 @@ public sealed class WireLog(TextWriter writer) : IDisposable
 
     public void Dispose()
     {
-        lock (_lock) writer.Dispose();
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            writer.Dispose();
+        }
     }
 }
