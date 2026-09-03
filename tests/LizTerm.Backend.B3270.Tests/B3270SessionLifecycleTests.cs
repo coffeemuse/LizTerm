@@ -174,9 +174,36 @@ public class B3270SessionLifecycleTests
         var session = new B3270Session(Profile, () => fake);
         await session.StartProcessAsync(CancellationToken.None);
 
-        await session.DisposeAsync();
+        fake.FaultWrite = true;
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => session.RunAsync(new B3270Action("Enter")));
+        await Assert.ThrowsAsync<IOException>(() => session.RunAsync(new B3270Action("Enter")));
         Assert.Equal(0, session.PendingCount);
+    }
+
+    [Fact]
+    public async Task Connect_after_fault_spawns_a_new_process()
+    {
+        var calls = 0;
+        FakeB3270Process? fake1 = null;
+        FakeB3270Process? fake2 = null;
+        var session = new B3270Session(Profile, () =>
+        {
+            calls++;
+            var fake = new FakeB3270Process();
+            if (calls == 1) fake1 = fake; else fake2 = fake;
+            return fake;
+        });
+
+        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, f) => faulted.TrySetResult(f);
+
+        fake1!.Exit(137);
+        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        await session.ConnectAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, calls);
+        Assert.True(fake2!.Started);
     }
 }

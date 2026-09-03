@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using LizTerm.Backend.B3270.Process;
 using LizTerm.Backend.B3270.Protocol;
 using LizTerm.Core.Screen;
@@ -20,6 +21,7 @@ public sealed class B3270Session : IEmulatorSession
     private TaskCompletionSource<HelloIndication>? _hello;
     private int _tagCounter;
     private volatile bool _shuttingDown;
+    private bool _wireLogWarningRaised;
 
     public B3270Session(SessionProfile profile, Func<IB3270Process> processFactory, WireLog? wireLog = null)
     {
@@ -79,6 +81,12 @@ public sealed class B3270Session : IEmulatorSession
             TearDown();
             throw new BackendUnavailableException($"b3270 version {hello.Version} is too old; {MinimumVersion} or newer is required.");
         }
+
+        if (_wireLog is null && WireLog.LastOpenError is { } wireLogError && !_wireLogWarningRaised)
+        {
+            _wireLogWarningRaised = true;
+            HostMessage?.Invoke(this, "Wire log disabled: " + wireLogError);
+        }
     }
 
     private void ReadLoop()
@@ -128,7 +136,15 @@ public sealed class B3270Session : IEmulatorSession
             _hello?.TrySetException(new BackendUnavailableException(fault.Message + " stderr: " + string.Join(" | ", process.StderrTail)));
 
             SetConnectionState(ConnectionState.Disconnected);
-            if (!_shuttingDown) Faulted?.Invoke(this, fault);
+            if (!_shuttingDown)
+            {
+                Faulted?.Invoke(this, fault);
+                // Let a later ConnectAsync spawn a fresh process through the factory instead of
+                // being stuck thinking the dead one is still usable.
+                process.Dispose();
+                _process = null;
+                _hello = null;
+            }
         }
         catch (Exception)
         {
@@ -146,6 +162,9 @@ public sealed class B3270Session : IEmulatorSession
 
     public async ValueTask DisposeAsync()
     {
+        // Dispose the wire log unconditionally: a fault (see OnProcessEnded) may already have
+        // cleared _process, but the log still needs to be closed.
+        _wireLog?.Dispose();
         if (_process is null) return;
         _shuttingDown = true;
         try
@@ -159,7 +178,6 @@ public sealed class B3270Session : IEmulatorSession
         }
         _process.Dispose();
         _process = null;
-        _wireLog?.Dispose();
     }
 
     // ---- running actions ----
@@ -394,7 +412,10 @@ public sealed class B3270Session : IEmulatorSession
     /// <summary>x3270's String() interprets backslash escapes, so literal backslashes are doubled.</summary>
     public Task TypeTextAsync(string text) => RunAsync(new B3270Action("String", text.Replace("\\", "\\\\")));
 
-    public Task PasteTextAsync(string text) => RunAsync(new B3270Action("PasteString", text));
+    /// <summary>PasteString takes hexadecimal UTF-8, not literal text; it also applies b3270's
+    /// margin-aware paste behavior by default, unlike String().</summary>
+    public Task PasteTextAsync(string text) =>
+        RunAsync(new B3270Action("PasteString", Convert.ToHexString(Encoding.UTF8.GetBytes(text))));
 
     public Task MoveCursorAsync(int row, int column) =>
         RunAsync(new B3270Action("MoveCursor", row.ToString(), column.ToString()));
