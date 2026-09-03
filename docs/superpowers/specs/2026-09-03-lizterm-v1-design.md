@@ -86,9 +86,12 @@ Stored as one JSON file per profile in the per-user config directory (`~/.config
 
 ### 4.6 Session interface
 
+A session is created for one profile by a factory (one window, one session, one profile), so the profile is a property rather than a connect argument.
+
 ```
 IEmulatorSession : IAsyncDisposable
-  Task ConnectAsync(SessionProfile, CancellationToken)
+  SessionProfile Profile { get; }
+  Task ConnectAsync(CancellationToken)
   Task DisconnectAsync()
   Task SendKeyAsync(TerminalKey)
   Task TypeTextAsync(string)
