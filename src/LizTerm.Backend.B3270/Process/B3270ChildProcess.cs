@@ -46,6 +46,7 @@ public sealed class B3270ChildProcess(string executablePath) : IB3270Process
         };
         _process.BeginErrorReadLine();
         _process.StandardInput.AutoFlush = true;
+        _process.StandardInput.NewLine = "\n";
     }
 
     public async Task<int> WaitForExitAsync()
