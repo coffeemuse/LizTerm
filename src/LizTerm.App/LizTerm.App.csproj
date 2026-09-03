@@ -15,12 +15,6 @@
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.Fonts.Inter" />
-    <!-- Avalonia.Diagnostics has not shipped a 12.x release on nuget.org yet; pin to the latest
-         11.3.x here (NuGet's transitive resolution unifies its Avalonia dependency with 12.1.2). -->
-    <PackageReference Include="Avalonia.Diagnostics" VersionOverride="11.3.20">
-      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
-      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
-    </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" />
   </ItemGroup>
 
