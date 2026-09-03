@@ -29,7 +29,7 @@
 ## File Structure
 
 ```
-LizTerm.sln
+LizTerm.slnx
 Directory.Build.props                      shared TFM/nullable/CPM switches
 Directory.Packages.props                   every package version, once
 .gitignore                                 add native/cache, native/build-tmp, native/out
@@ -231,12 +231,12 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ### Task 2: Solution scaffold with Core project and test project
 
 **Files:**
-- Create: `LizTerm.sln`, `Directory.Build.props`, `Directory.Packages.props`
+- Create: `LizTerm.slnx`, `Directory.Build.props`, `Directory.Packages.props`
 - Create: `src/LizTerm.Core/LizTerm.Core.csproj`
 - Create: `tests/LizTerm.Core.Tests/LizTerm.Core.Tests.csproj`, `tests/LizTerm.Core.Tests/SmokeTests.cs`
 
 **Interfaces:**
-- Produces: the build and test commands every later task uses: `dotnet build LizTerm.sln` and `dotnet test LizTerm.sln`.
+- Produces: the build and test commands every later task uses: `dotnet build LizTerm.slnx` and `dotnet test LizTerm.slnx`.
 
 - [ ] **Step 1: Write the shared props**
 
@@ -328,7 +328,7 @@ dotnet new sln -n LizTerm && dotnet sln add src/LizTerm.Core/LizTerm.Core.csproj
 - [ ] **Step 4: Build and run the smoke test**
 
 ```bash
-dotnet test LizTerm.sln
+dotnet test LizTerm.slnx
 ```
 
 Expected: `Passed! - Failed: 0, Passed: 1`.
@@ -508,7 +508,7 @@ public class ScreenSnapshotTests
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-dotnet test LizTerm.sln
+dotnet test LizTerm.slnx
 ```
 
 Expected: build errors, `ScreenBuffer` not found.
@@ -728,7 +728,7 @@ public sealed class ScreenBuffer
 - [ ] **Step 4: Run tests**
 
 ```bash
-dotnet test LizTerm.sln
+dotnet test LizTerm.slnx
 ```
 
 Expected: all pass (11 tests).
@@ -835,7 +835,7 @@ public class SessionTypesTests
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-dotnet test LizTerm.sln
+dotnet test LizTerm.slnx
 ```
 
 Expected: build errors for missing types.
@@ -1036,7 +1036,7 @@ public interface IEmulatorSession : IAsyncDisposable
 - [ ] **Step 4: Run tests**
 
 ```bash
-dotnet test LizTerm.sln
+dotnet test LizTerm.slnx
 ```
 
 Expected: all pass.
@@ -1131,7 +1131,7 @@ public class ProfileStoreTests : IDisposable
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-dotnet test LizTerm.sln
+dotnet test LizTerm.slnx
 ```
 
 Expected: build errors, `ProfileStore` not found.
@@ -1222,7 +1222,7 @@ public sealed class ProfileStore(string directory)
 - [ ] **Step 4: Run tests**
 
 ```bash
-dotnet test LizTerm.sln
+dotnet test LizTerm.slnx
 ```
 
 Expected: all pass.
@@ -5512,7 +5512,7 @@ Note: `OpenSession` closes the picker before the session window shows, so the pi
 - [ ] **Step 7: Build and run the tests**
 
 ```bash
-dotnet build LizTerm.sln && dotnet test LizTerm.sln
+dotnet build LizTerm.slnx && dotnet test LizTerm.slnx
 ```
 
 Expected: build succeeds with no XAML compile errors; all tests pass.
@@ -5661,7 +5661,7 @@ Design: `docs/superpowers/specs/2026-09-03-lizterm-v1-design.md`.
 1. .NET 10 SDK, Xcode command line tools, Homebrew `openssl@3`.
 2. Build the emulator engine once: `native/build/build-macos.sh` (produces `native/out/osx-<arch>/b3270`,
    statically linked against OpenSSL; the app project copies it into its output).
-3. `dotnet test LizTerm.sln`
+3. `dotnet test LizTerm.slnx`
 4. `dotnet run --project src/LizTerm.App` (or `-- profile-name`, or `-- host:port`).
 
 Environment variables:
@@ -5685,7 +5685,7 @@ see `tests/LizTerm.Backend.B3270.Tests/Fixtures/README.md`.
 - [ ] **Step 4: Full verification**
 
 ```bash
-dotnet test LizTerm.sln
+dotnet test LizTerm.slnx
 ```
 
 Expected: every project passes; the integration test is skipped unless the host variable is set.
