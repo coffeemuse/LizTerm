@@ -106,18 +106,37 @@ public sealed class B3270Session : IEmulatorSession
 
     private void OnProcessEnded(IB3270Process process)
     {
+        // This runs on the raw reader thread with no surrounding try/catch (see ReadLoop), so
+        // nothing here may throw: an uncaught exception on a background thread terminates the
+        // process. WaitForExitAsync() can already be faulted (e.g. the process was disposed by
+        // TearDown/DisposeAsync before the reader thread noticed EOF), and Faulted/ConnectionChanged
+        // are external event handlers we don't control.
         int? exitCode = null;
-        var exitTask = process.WaitForExitAsync();
-        if (exitTask.Wait(TimeSpan.FromSeconds(2))) exitCode = exitTask.Result;
+        try
+        {
+            var exitTask = process.WaitForExitAsync();
+            if (exitTask.Wait(TimeSpan.FromSeconds(2))) exitCode = exitTask.Result;
+        }
+        catch (Exception)
+        {
+            exitCode = null;
+        }
 
-        var fault = new BackendFault("The emulator engine (b3270) exited unexpectedly.", process.StderrTail, exitCode);
-        foreach (var tag in _pending.Keys.ToArray())
-            if (_pending.TryRemove(tag, out var tcs))
-                tcs.TrySetException(new BackendUnavailableException(fault.Message));
-        _hello?.TrySetException(new BackendUnavailableException(fault.Message + " stderr: " + string.Join(" | ", process.StderrTail)));
+        try
+        {
+            var fault = new BackendFault("The emulator engine (b3270) exited unexpectedly.", process.StderrTail, exitCode);
+            foreach (var tag in _pending.Keys.ToArray())
+                if (_pending.TryRemove(tag, out var tcs))
+                    tcs.TrySetException(new BackendUnavailableException(fault.Message));
+            _hello?.TrySetException(new BackendUnavailableException(fault.Message + " stderr: " + string.Join(" | ", process.StderrTail)));
 
-        SetConnectionState(ConnectionState.Disconnected);
-        if (!_shuttingDown) Faulted?.Invoke(this, fault);
+            SetConnectionState(ConnectionState.Disconnected);
+            if (!_shuttingDown) Faulted?.Invoke(this, fault);
+        }
+        catch (Exception)
+        {
+            // Swallow: an exception here must not escape the reader thread.
+        }
     }
 
     private void TearDown()
@@ -152,13 +171,23 @@ public sealed class B3270Session : IEmulatorSession
 
     internal Task<RunResultIndication> RunRawAsync(IReadOnlyList<B3270Action> actions) => RunAsync(actions, throwOnFailure: false);
 
+    internal int PendingCount => _pending.Count;
+
     private async Task<RunResultIndication> RunAsync(IReadOnlyList<B3270Action> actions, bool throwOnFailure)
     {
         if (_process is null) throw new InvalidOperationException("The session has not been started.");
         var tag = Interlocked.Increment(ref _tagCounter).ToString();
         var tcs = new TaskCompletionSource<RunResultIndication>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[tag] = tcs;
-        WriteLine(RunOperation.Serialize(tag, actions));
+        try
+        {
+            WriteLine(RunOperation.Serialize(tag, actions));
+        }
+        catch
+        {
+            _pending.TryRemove(tag, out _);
+            throw;
+        }
         var result = await tcs.Task;
         if (throwOnFailure && !result.Success)
             throw new EmulatorActionException(string.Join("\n", result.Text));

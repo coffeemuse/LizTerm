@@ -29,6 +29,10 @@ public sealed partial class FakeB3270Process : IB3270Process
     public TextWriter StandardInput { get; }
     public IReadOnlyList<string> StderrTail => ["fake stderr line"];
 
+    /// <summary>When true, <see cref="WaitForExitAsync"/> returns a faulted task, simulating a
+    /// disposed/gone real process (e.g. "No process is associated with this object.").</summary>
+    public bool FaultWaitForExit { get; set; }
+
     public IReadOnlyList<string> InputLines
     {
         get { lock (_lock) return _stdin.ToArray(); }
@@ -52,7 +56,10 @@ public sealed partial class FakeB3270Process : IB3270Process
         _exit.TrySetResult(code);
     }
 
-    public Task<int> WaitForExitAsync() => _exit.Task;
+    public Task<int> WaitForExitAsync() =>
+        FaultWaitForExit
+            ? Task.FromException<int>(new InvalidOperationException("No process is associated with this object."))
+            : _exit.Task;
 
     public void Kill() => Exit(-1);
 

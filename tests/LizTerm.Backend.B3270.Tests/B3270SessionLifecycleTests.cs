@@ -132,4 +132,51 @@ public class B3270SessionLifecycleTests
         Assert.Contains(" > {\"run\":", text);
         Assert.Contains(" < {\"run-result\"", text);
     }
+
+    [Fact]
+    public async Task Unexpected_exit_with_faulting_wait_still_raises_Faulted_with_null_exit_code()
+    {
+        var fake = new FakeB3270Process { RunResponder = _ => [] };
+        await using var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(CancellationToken.None);
+        fake.FaultWaitForExit = true;
+        BackendFault? fault = null;
+        var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, f) => { fault = f; faulted.TrySetResult(f); };
+
+        fake.Exit(1);
+
+        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.Null(fault!.ExitCode);
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
+    [Fact]
+    public async Task Dispose_with_faulting_wait_does_not_throw_or_fault()
+    {
+        var fake = new FakeB3270Process { FaultWaitForExit = true };
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(CancellationToken.None);
+        var faulted = false;
+        session.Faulted += (_, _) => faulted = true;
+        fake.RunResponder = line => { if (line.Contains("Quit")) fake.Exit(0); return []; };
+
+        await session.DisposeAsync();
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(faulted);
+    }
+
+    [Fact]
+    public async Task Run_failure_to_write_removes_pending_entry()
+    {
+        var fake = new FakeB3270Process();
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(CancellationToken.None);
+
+        await session.DisposeAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => session.RunAsync(new B3270Action("Enter")));
+        Assert.Equal(0, session.PendingCount);
+    }
 }
