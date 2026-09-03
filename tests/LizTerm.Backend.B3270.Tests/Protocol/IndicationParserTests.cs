@@ -180,4 +180,33 @@ public class IndicationParserTests
         Assert.False(IndicationParser.TryParse("[1,2]", out _));
         Assert.False(IndicationParser.TryParse("{}", out _));
     }
+
+    [Theory]
+    [InlineData("""{"hello":"x"}""")]
+    [InlineData("""{"screen-mode":123}""")]
+    [InlineData("""{"oia":null}""")]
+    [InlineData("""{"connection":[1,2,3]}""")]
+    [InlineData("""{"initialize":{"hello":{}}}""")]
+    public void Non_object_bodies_return_false(string line)
+    {
+        Assert.False(IndicationParser.TryParse(line, out _));
+    }
+
+    [Fact]
+    public void Initialize_skips_non_object_items()
+    {
+        var line = """{"initialize":[1,{"hello":{"version":"4.5.6","build":"b"}},"x"]}""";
+        var init = Parse<InitializeIndication>(line);
+        Assert.Single(init.Items);
+        var hello = Assert.IsType<HelloIndication>(init.Items[0]);
+        Assert.Equal("4.5.6", hello.Version);
+    }
+
+    [Fact]
+    public void Run_result_text_tolerates_non_string_entries()
+    {
+        var line = """{"run-result":{"r-tag":"1","success":true,"text":["ok",123,true,null]}}""";
+        var result = Parse<RunResultIndication>(line);
+        Assert.Equal(["ok", "123", "true", ""], result.Text);
+    }
 }
