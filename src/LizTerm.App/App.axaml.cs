@@ -41,8 +41,9 @@ public partial class App : Application
         window.Closed += async (_, _) =>
         {
             _sessions.Remove(window);
-            await viewModel.DisposeAsync();
-            if (_sessions.Count == 0) ShowPicker();
+            try { await viewModel.DisposeAsync(); }
+            catch { /* the window is gone; nothing more to do with a failed disposal */ }
+            if (!_quitting && _sessions.Count == 0) ShowPicker();
         };
         _picker?.Close();
         window.Show();
