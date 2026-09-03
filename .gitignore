@@ -427,3 +427,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# LizTerm native build products
+native/cache/
+native/build-tmp/
+native/out/
