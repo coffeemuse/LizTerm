@@ -58,4 +58,39 @@ public class ProfileStoreTests : IDisposable
     {
         Assert.Equal("my_host_prod.json", ProfileStore.FileNameFor("my/host:prod"));
     }
+
+    [Fact]
+    public void LoadAll_skips_files_it_cannot_read()
+    {
+        var store = new ProfileStore(_dir);
+
+        // Save one valid profile
+        store.Save(new SessionProfile { Name = "readable", Host = "r" });
+
+        // Create an unreadable file
+        var unreadablePath = Path.Combine(_dir, "unreadable.json");
+        File.WriteAllText(unreadablePath, "{ \"name\": \"unreadable\", \"host\": \"u\" }");
+
+        // Make it unreadable on non-Windows platforms
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(unreadablePath, UnixFileMode.None);
+        }
+
+        try
+        {
+            // LoadAll should return only the readable profile
+            var profiles = store.LoadAll();
+            var readableProfile = Assert.Single(profiles);
+            Assert.Equal("readable", readableProfile.Name);
+        }
+        finally
+        {
+            // Restore file mode so Dispose can clean up the directory
+            if (!OperatingSystem.IsWindows() && File.Exists(unreadablePath))
+            {
+                File.SetUnixFileMode(unreadablePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+        }
+    }
 }

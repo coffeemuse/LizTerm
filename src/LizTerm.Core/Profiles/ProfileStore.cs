@@ -36,6 +36,14 @@ public sealed class ProfileStore(string directory)
             {
                 // Skip unreadable files; the user can delete them by hand.
             }
+            catch (IOException)
+            {
+                // Skip files that cannot be read due to I/O errors.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Skip files that cannot be read due to permission issues.
+            }
         }
         return profiles.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
