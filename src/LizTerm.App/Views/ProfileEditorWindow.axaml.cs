@@ -1,0 +1,25 @@
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using LizTerm.App.ViewModels;
+using LizTerm.Core.Session;
+
+namespace LizTerm.App.Views;
+
+public partial class ProfileEditorWindow : Window
+{
+    public ProfileEditorWindow() : this(null) { }
+
+    public ProfileEditorWindow(SessionProfile? existing)
+    {
+        InitializeComponent();
+        DataContext = new ProfileEditorViewModel(existing);
+        Title = existing is null ? "New Session Profile" : $"Edit {existing.Name}";
+    }
+
+    private void OnSaveClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ProfileEditorViewModel vm && vm.TryBuild() is { } profile) Close(profile);
+    }
+
+    private void OnCancelClick(object? sender, RoutedEventArgs e) => Close(null);
+}
