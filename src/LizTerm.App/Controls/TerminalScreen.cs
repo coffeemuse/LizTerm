@@ -1,9 +1,12 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
+using LizTerm.App.Keyboard;
 using LizTerm.App.Rendering;
 using LizTerm.Core.Screen;
+using LizTerm.Core.Session;
 
 namespace LizTerm.App.Controls;
 
@@ -33,6 +36,47 @@ public sealed class TerminalScreen : Control
     }
 
     internal CellGeometry LastGeometry { get; private set; }
+
+    public event EventHandler<TerminalKey>? KeyRequested;
+    public event EventHandler<string>? TextEntered;
+    public event EventHandler<(int Row, int Column)>? CellClicked;
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (DefaultKeymap.TryMap(e.Key, e.KeyModifiers, out var key))
+        {
+            KeyRequested?.Invoke(this, key);
+            e.Handled = true;
+            return;
+        }
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnTextInput(TextInputEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(e.Text))
+        {
+            TextEntered?.Invoke(this, e.Text);
+            e.Handled = true;
+            return;
+        }
+        base.OnTextInput(e);
+    }
+
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        Focus();
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        var snapshot = Snapshot;
+        if (snapshot is null) return;
+        var position = e.GetPosition(this);
+        if (LastGeometry.HitTest(position.X, position.Y, snapshot.Rows, snapshot.Columns) is { } cell)
+        {
+            CellClicked?.Invoke(this, cell);
+            e.Handled = true;
+        }
+    }
 
     protected override Size ArrangeOverride(Size finalSize)
     {
