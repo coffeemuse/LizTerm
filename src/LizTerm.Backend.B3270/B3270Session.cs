@@ -37,11 +37,8 @@ public sealed class B3270Session : IEmulatorSession
     public TlsInfo? Tls { get; private set; }
     public KeyboardStatus KeyboardStatus { get; private set; } = KeyboardStatus.Initial;
 
-    // ScreenUpdated and StatusChanged are raised once HandleStateIndication is filled in (Task 10).
-#pragma warning disable CS0067
     public event EventHandler<ScreenSnapshot>? ScreenUpdated;
     public event EventHandler<KeyboardStatus>? StatusChanged;
-#pragma warning restore CS0067
     public event EventHandler<ConnectionState>? ConnectionChanged;
     public event EventHandler<BackendFault>? Faulted;
     public event EventHandler<string>? HostMessage;
@@ -230,9 +227,146 @@ public sealed class B3270Session : IEmulatorSession
         }
     }
 
-    /// <summary>Screen, OIA, connection, TLS, popup handling. Filled in by the next task.</summary>
+    private static readonly Dictionary<string, ConnectionState> ConnectionStates = new(StringComparer.Ordinal)
+    {
+        ["not-connected"] = ConnectionState.Disconnected,
+        ["reconnecting"] = ConnectionState.Reconnecting,
+        ["resolving"] = ConnectionState.Resolving,
+        ["tcp-pending"] = ConnectionState.TcpPending,
+        ["tls-pending"] = ConnectionState.TlsPending,
+        ["tls-password-pending"] = ConnectionState.TlsPasswordPending,
+        ["proxy-pending"] = ConnectionState.ProxyPending,
+        ["telnet-pending"] = ConnectionState.TelnetPending,
+        ["connected-nvt"] = ConnectionState.ConnectedNvt,
+        ["connected-nvt-charmode"] = ConnectionState.ConnectedNvtCharMode,
+        ["connected-3270"] = ConnectionState.Connected3270,
+        ["connected-unbound"] = ConnectionState.ConnectedUnbound,
+        ["connected-e-nvt"] = ConnectionState.ConnectedENvt,
+        ["connected-sscp"] = ConnectionState.ConnectedSscp,
+        ["connected-tn3270e"] = ConnectionState.ConnectedTn3270E,
+    };
+
     private void HandleStateIndication(Indication indication)
     {
+        switch (indication)
+        {
+            case ScreenModeIndication mode:
+                _buffer.Resize(mode.Rows, mode.Columns, HostColor.Blue, HostColor.NeutralBlack);
+                Publish();
+                break;
+            case EraseIndication erase:
+                if (erase.LogicalRows is { } rows && erase.LogicalColumns is { } cols && (rows != _buffer.Rows || cols != _buffer.Columns))
+                    _buffer.Resize(rows, cols, HostColor.NeutralWhite, HostColor.NeutralBlack);
+                _buffer.Erase(
+                    erase.Fg is null ? HostColor.NeutralWhite : ColorNames.ParseColor(erase.Fg),
+                    erase.Bg is null ? HostColor.NeutralBlack : ColorNames.ParseColor(erase.Bg));
+                Publish();
+                break;
+            case ScreenIndication screen:
+                ApplyScreen(screen);
+                Publish();
+                break;
+            case OiaIndication oia:
+                ApplyOia(oia);
+                break;
+            case ConnectionIndication connection:
+                var state = ConnectionStates.GetValueOrDefault(connection.State, ConnectionState.Disconnected);
+                if (state == ConnectionState.Disconnected) Tls = null;
+                SetConnectionState(state);
+                break;
+            case TlsIndication tls:
+                Tls = new TlsInfo(tls.Secure, tls.Verified, tls.Session, tls.HostCert);
+                break;
+            case PopupIndication popup:
+                HostMessage?.Invoke(this, popup.Text);
+                break;
+        }
+    }
+
+    private void ApplyScreen(ScreenIndication screen)
+    {
+        if (screen.Rows is not null)
+        {
+            foreach (var row in screen.Rows)
+            {
+                var r = row.Row - 1;
+                if (r < 0 || r >= _buffer.Rows) continue;
+                foreach (var change in row.Changes)
+                {
+                    var c = change.Column - 1;
+                    if (c < 0 || c >= _buffer.Columns) continue;
+                    HostColor? fg = change.Fg is null ? null : ColorNames.ParseColor(change.Fg);
+                    HostColor? bg = change.Bg is null ? null : ColorNames.ParseColor(change.Bg);
+                    CellRendition? gr = change.Gr is null ? null : ColorNames.ParseRendition(change.Gr);
+                    if (change.Text is not null)
+                        _buffer.SetText(r, c, change.Text, fg, bg, gr);
+                    else if (change.Count is { } count)
+                        _buffer.SetAttributes(r, c, count, fg, bg, gr);
+                }
+            }
+        }
+        if (screen.Cursor is { } cursor)
+        {
+            // enabled:false hides the cursor but keeps its last position; enabled:true without a position re-shows it.
+            var current = _buffer.Cursor;
+            var row = cursor.Row is { } cr ? cr - 1 : current.Row;
+            var column = cursor.Column is { } cc ? cc - 1 : current.Column;
+            _buffer.SetCursor(new CursorPosition(row, column, cursor.Enabled));
+        }
+    }
+
+    private void ApplyOia(OiaIndication oia)
+    {
+        var status = KeyboardStatus;
+        switch (oia.Field)
+        {
+            case "lock":
+                var (lockState, detail) = MapLock(oia.Value);
+                status = status with { Lock = lockState, LockDetail = detail };
+                break;
+            case "insert":
+                status = status with { InsertMode = oia.Value == "true" };
+                break;
+            case "typeahead":
+                status = status with { Typeahead = oia.Value == "true" };
+                break;
+            case "lu":
+                status = status with { LuName = oia.Value };
+                break;
+            default:
+                return;
+        }
+        if (status == KeyboardStatus) return;
+        KeyboardStatus = status;
+        StatusChanged?.Invoke(this, status);
+    }
+
+    private static (KeyboardLock Lock, string? Detail) MapLock(string? value)
+    {
+        if (value is null) return (KeyboardLock.Unlocked, null);
+        if (value.StartsWith("scrolled", StringComparison.Ordinal)) return (KeyboardLock.Scrolled, value);
+        return value switch
+        {
+            "not-connected" => (KeyboardLock.NotConnected, null),
+            "syswait" => (KeyboardLock.WaitingForHost, null),
+            "twait" => (KeyboardLock.TerminalWait, null),
+            "deferred" => (KeyboardLock.Deferred, null),
+            "minus" => (KeyboardLock.MinusFunction, null),
+            "oerr protected" => (KeyboardLock.ProtectedField, null),
+            "oerr numeric" => (KeyboardLock.NumericOnly, null),
+            "oerr overflow" => (KeyboardLock.Overflow, null),
+            "oerr dbcs" => (KeyboardLock.Dbcs, null),
+            "disabled" => (KeyboardLock.Disabled, null),
+            "field" => (KeyboardLock.FieldWait, null),
+            "file-transfer" => (KeyboardLock.FileTransfer, null),
+            _ => (KeyboardLock.Unknown, value),
+        };
+    }
+
+    private void Publish()
+    {
+        CurrentScreen = _buffer.Snapshot();
+        ScreenUpdated?.Invoke(this, CurrentScreen);
     }
 
     private void SetConnectionState(ConnectionState state)
@@ -242,12 +376,26 @@ public sealed class B3270Session : IEmulatorSession
         ConnectionChanged?.Invoke(this, state);
     }
 
-    // ---- IEmulatorSession actions (completed in the next task) ----
+    // ---- IEmulatorSession actions ----
 
-    public Task ConnectAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task DisconnectAsync() => throw new NotImplementedException();
-    public Task SendKeyAsync(TerminalKey key) => throw new NotImplementedException();
-    public Task TypeTextAsync(string text) => throw new NotImplementedException();
-    public Task PasteTextAsync(string text) => throw new NotImplementedException();
-    public Task MoveCursorAsync(int row, int column) => throw new NotImplementedException();
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    {
+        await StartProcessAsync(cancellationToken);
+        await RunAsync(new B3270Action("Set", "verifyHostCert", Profile.VerifyCertificate ? "true" : "false"));
+        var result = await RunRawAsync([new B3270Action("Connect", HostStringBuilder.Build(Profile))]);
+        if (!result.Success) throw new ConnectionFailedException(result.Text);
+    }
+
+    public Task DisconnectAsync() =>
+        _process is null ? Task.CompletedTask : RunRawAsync([new B3270Action("Disconnect")]);
+
+    public Task SendKeyAsync(TerminalKey key) => RunAsync(ActionMap.ForKey(key));
+
+    /// <summary>x3270's String() interprets backslash escapes, so literal backslashes are doubled.</summary>
+    public Task TypeTextAsync(string text) => RunAsync(new B3270Action("String", text.Replace("\\", "\\\\")));
+
+    public Task PasteTextAsync(string text) => RunAsync(new B3270Action("PasteString", text));
+
+    public Task MoveCursorAsync(int row, int column) =>
+        RunAsync(new B3270Action("MoveCursor", row.ToString(), column.ToString()));
 }
