@@ -1,0 +1,67 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LizTerm.App.ViewModels"
+        xmlns:controls="using:LizTerm.App.Controls"
+        xmlns:core="using:LizTerm.Core.Session"
+        x:Class="LizTerm.App.Views.SessionWindow"
+        x:DataType="vm:SessionViewModel"
+        Title="{Binding Title}"
+        Width="960" Height="680" MinWidth="480" MinHeight="360"
+        Background="Black">
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <MenuItem Header="_New Session..." Click="OnNewSessionClick" />
+        <Separator />
+        <MenuItem Header="_Connect" Command="{Binding ConnectCommand}" />
+        <MenuItem Header="_Disconnect" Command="{Binding DisconnectCommand}" />
+        <Separator />
+        <MenuItem Header="C_lose" Click="OnCloseClick" />
+      </MenuItem>
+      <MenuItem Header="_Keys">
+        <MenuItem Header="Clear" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Clear}" />
+        <MenuItem Header="Reset" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Reset}" />
+        <MenuItem Header="Attn" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Attn}" />
+        <MenuItem Header="SysReq" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.SysReq}" />
+        <Separator />
+        <MenuItem Header="PA1" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA1}" />
+        <MenuItem Header="PA2" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA2}" />
+        <MenuItem Header="PA3" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA3}" />
+        <Separator />
+        <MenuItem Header="PF13" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF13}" />
+        <MenuItem Header="PF14" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF14}" />
+        <MenuItem Header="PF15" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF15}" />
+        <MenuItem Header="PF16" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF16}" />
+        <MenuItem Header="PF17" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF17}" />
+        <MenuItem Header="PF18" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF18}" />
+        <MenuItem Header="PF19" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF19}" />
+        <MenuItem Header="PF20" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF20}" />
+        <MenuItem Header="PF21" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF21}" />
+        <MenuItem Header="PF22" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF22}" />
+        <MenuItem Header="PF23" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF23}" />
+        <MenuItem Header="PF24" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF24}" />
+      </MenuItem>
+    </Menu>
+
+    <Border DockPanel.Dock="Bottom" Background="#181818" Padding="10,4">
+      <Grid ColumnDefinitions="Auto,16,Auto,*,Auto,16,Auto,16,Auto,16,Auto">
+        <TextBlock Grid.Column="0" Text="{Binding ConnectionText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
+        <TextBlock Grid.Column="2" Text="{Binding TlsText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
+        <TextBlock Grid.Column="4" Text="{Binding KeyboardText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#E0E0E0" />
+        <TextBlock Grid.Column="6" Text="{Binding InsertText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#FFFF80" />
+        <TextBlock Grid.Column="8" Text="{Binding CursorText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
+        <TextBlock Grid.Column="10" Text="{Binding ModelText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
+      </Grid>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Background="#5A2020" Padding="10,6"
+            IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="Dismiss" Command="{Binding DismissErrorCommand}" />
+        <TextBlock Text="{Binding ErrorMessage}" Foreground="White" TextWrapping="Wrap" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
+    <controls:TerminalScreen x:Name="Screen" Snapshot="{Binding Screen}" />
+  </DockPanel>
+</Window>

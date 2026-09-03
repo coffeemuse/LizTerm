@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LizTerm.App.ViewModels"
+        xmlns:core="using:LizTerm.Core.Session"
+        x:Class="LizTerm.App.Views.ProfilePickerWindow"
+        x:DataType="vm:ProfilePickerViewModel"
+        Title="LizTerm" Width="520" Height="400" MinWidth="400" MinHeight="300"
+        WindowStartupLocation="CenterScreen">
+  <DockPanel Margin="16">
+    <TextBlock DockPanel.Dock="Top" Text="Sessions" FontSize="20" Margin="0,0,0,10" />
+    <StackPanel DockPanel.Dock="Right" Margin="12,0,0,0" Spacing="8" Width="120">
+      <Button Content="Connect" Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch" IsDefault="True" />
+      <Button Content="New..." Command="{Binding NewCommand}" HorizontalAlignment="Stretch" />
+      <Button Content="Edit..." Command="{Binding EditCommand}" HorizontalAlignment="Stretch" />
+      <Button Content="Delete" Command="{Binding DeleteCommand}" HorizontalAlignment="Stretch" />
+      <Button Content="Quit" Command="{Binding QuitCommand}" HorizontalAlignment="Stretch" Margin="0,24,0,0" />
+    </StackPanel>
+    <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" DoubleTapped="OnDoubleTapped">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="core:SessionProfile">
+          <StackPanel>
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+            <TextBlock Foreground="#A0A0A0" FontSize="12">
+              <Run Text="{Binding Host}" /><Run Text=":" /><Run Text="{Binding Port}" />
+            </TextBlock>
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</Window>
