@@ -2,7 +2,7 @@
 
 Date: 2026-09-03
 Status: approved in discussion, pending written review
-License: undecided (BSD-3 or GPL; repo private for now; all dependencies are BSD-3 compatible with either)
+License: undecided (BSD-3 or GPL; repo private for now; x3270 is BSD-3 and the 3270 font is SIL OFL 1.1, both compatible with either)
 
 ## 1. Purpose
 
@@ -29,7 +29,7 @@ Rejected: porting x3270 to C# (months of engine work before a usable client); in
 - CommunityToolkit.Mvvm for view models (source-generated properties and commands). No ReactiveUI.
 - System.Text.Json with source-generated contexts for the b3270 protocol and profile files.
 - xUnit for all test projects.
-- Font: rbanffy's 3270font (BSD-3), embedded as an Avalonia resource. Not user-configurable in v1.
+- Font: rbanffy's 3270font v3.0.1 (SIL Open Font License 1.1), embedded as an Avalonia resource. Not user-configurable in v1.
 
 ```
 LizTerm.sln
@@ -53,12 +53,13 @@ Small and stable. Both the UI and any backend depend on it.
 
 ### 4.1 Screen snapshot
 
-Immutable grid of cells, `Rows x Columns`. Each cell:
+Immutable grid of cells, `Rows x Columns`. b3270 reports the *rendered* state of each cell (it applies field attributes, base color mapping, and extended attributes itself), so Core stores what b3270 reports rather than raw 3270 field attributes. Each cell:
 
 - `Rune Character`
-- Base field attributes: `Protected`, `Numeric`, `Display` (Normal, Intensified, Hidden), `Modified`
-- Extended attributes: `Foreground`, `Background` (IBM color enum: Default, Blue, Red, Pink, Green, Turquoise, Yellow, White, plus the extended set), `Highlight` (None, Underscore, Blink, Reverse), `CharacterSet` (Default, Apl, GraphicEscape)
-- `IsFieldAttribute` flag for the attribute-byte position
+- `HostColor Foreground`, `HostColor Background`: the 16 IBM host colors as b3270 names them (`neutralBlack`, `blue`, `red`, `pink`, `green`, `turquoise`, `yellow`, `neutralWhite`, `black`, `deepBlue`, `orange`, `purple`, `paleGreen`, `paleTurquoise`, `grey`, `white`) plus `Default`
+- `CellRendition Rendition` flags, from b3270's graphic rendition list: `Underline`, `Blink`, `Highlight` (intensified), `Selectable`, `Reverse`, `Wide`, `Order` (field attribute position), `PrivateUse`, `NoCopy`, `Wrap`, `LeftHalf`, `RightHalf`
+
+Protected/numeric status is not needed by the UI: b3270 enforces field rules itself and reports violations through the keyboard lock (`oerr protected`, `oerr numeric`).
 
 The backend owns a mutable buffer, applies each update batch, then publishes a snapshot with the cursor position. A model 5 screen is under 6,000 cells; copying is negligible. The UI never touches shared mutable state.
 
@@ -68,7 +69,7 @@ The backend owns a mutable buffer, applies each update batch, then publishes a s
 
 ### 4.3 Connection state
 
-Enum: `Disconnected`, `Resolving`, `Connecting`, `TlsHandshake`, `ConnectedNvt`, `Connected3270`, `Connected3270E`. Accompanied by TLS details when secured: protocol, whether the host certificate was verified.
+Enum mirroring the protocol states b3270 reports: `Disconnected`, `Reconnecting`, `Resolving`, `TcpPending`, `TlsPending`, `TlsPasswordPending`, `ProxyPending`, `TelnetPending`, `ConnectedNvt`, `ConnectedNvtCharMode`, `Connected3270`, `ConnectedUnbound`, `ConnectedENvt`, `ConnectedSscp`, `ConnectedTn3270E`. Accompanied by TLS details when secured: whether the session is secure, whether the host certificate was verified, and the session and certificate description text.
 
 ### 4.4 Keyboard status
 
@@ -123,13 +124,13 @@ Spawns the bundled b3270 in JSON mode with stdin and stdout redirected and stder
 
 ### 5.2 Message model
 
-Typed records for: hello/initialize (with version), screen-mode, erase, screen (row change runs with attribute blocks), cursor, oia, connection, tls, run-result, ft (transfer progress), popup (errors and info), setting. Unknown message types are logged and ignored so a newer b3270 does not break the client. The backend refuses a b3270 whose protocol version is older than the pinned minimum.
+Typed records for: hello/initialize (with version), screen-mode, erase, screen (row change runs with optional fg/bg/gr, and a nested cursor), oia, connection, tls, run-result, ft (transfer progress), popup (errors and info), ui-error, setting. Cursor position is nested inside screen indications, never separate. Unknown message types are logged and ignored so a newer b3270 does not break the client. The backend refuses a b3270 whose protocol version is older than the pinned minimum.
 
-Exact field names are taken from the b3270 documentation of the pinned release during planning, not from memory; the JSON format changed across 4.x releases.
+Field names were verified against the 4.5ga6 source (`include/b3270proto.h`) and live runs during planning; a change run applies to `text.Length` or `count` cells from `column` (1-based), and any `fg`, `bg`, or `gr` present applies to every cell of the run while absent attributes are unchanged.
 
 ### 5.3 Screen application
 
-Screen messages carry per-row change runs. The backend applies them to its mutable buffer and publishes one snapshot per screen message, with the current cursor. Coalescing is a later optimization only if profiling demands it.
+Screen messages carry per-row change runs and an optional cursor. The backend applies them to its mutable buffer and publishes one snapshot per screen message, with the current cursor. `erase` resets every cell to blank with the erase's fg/bg; `screen-mode` resizes the buffer. Coalescing is a later optimization only if profiling demands it.
 
 ### 5.4 Action correlation
 
@@ -205,7 +206,7 @@ Click moves the cursor. Drag makes a rectangular selection. Copy produces lines 
 
 ### 6.7 Status bar
 
-Rendered in the 3270 font so it reads as one instrument with the screen. Each state shows the font's own OIA glyph (from its private use area, code points taken from the font's documentation) followed by a plain word or phrase:
+Rendered in the 3270 font so it reads as one instrument with the screen. The font's true OIA glyphs are unencoded (not reachable by code point), so each state uses a glyph the font does encode, U+E0A2 padlock for TLS and ordinary symbols such as U+2713 and U+2715 for keyboard state, followed by a plain word or phrase:
 
 - Connection state in words, with a lock glyph and TLS state ("TLS, certificate verified" / "TLS, certificate not verified")
 - Keyboard state: "Ready", "Waiting for host", "Protected field, press Esc to reset", etc.
