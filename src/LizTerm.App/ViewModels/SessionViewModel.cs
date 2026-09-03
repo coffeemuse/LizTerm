@@ -10,6 +10,12 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly IEmulatorSession _session;
     private readonly Action<Action> _dispatch;
+    private readonly EventHandler<ScreenSnapshot> _onScreenUpdated;
+    private readonly EventHandler<KeyboardStatus> _onStatusChanged;
+    private readonly EventHandler<ConnectionState> _onConnectionChanged;
+    private readonly EventHandler<BackendFault> _onFaulted;
+    private readonly EventHandler<string> _onHostMessage;
+    private bool _disposed;
 
     [ObservableProperty] private ScreenSnapshot? _screen;
     [ObservableProperty] private string _connectionText = "";
@@ -27,11 +33,25 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _session = session;
         _dispatch = dispatch;
 
-        session.ScreenUpdated += (_, s) => _dispatch(() => ApplyScreen(s));
-        session.StatusChanged += (_, k) => _dispatch(() => ApplyStatus(k));
-        session.ConnectionChanged += (_, c) => _dispatch(() => ApplyConnection(c));
-        session.Faulted += (_, f) => _dispatch(() => ErrorMessage = StatusFormatter.Fault(f));
-        session.HostMessage += (_, m) => _dispatch(() => ErrorMessage = m);
+        _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
+        _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
+        _onConnectionChanged = (_, c) => _dispatch(() => ApplyConnection(c));
+        _onFaulted = (_, f) => _dispatch(() =>
+        {
+            if (_disposed) return;
+            ErrorMessage = StatusFormatter.Fault(f);
+        });
+        _onHostMessage = (_, m) => _dispatch(() =>
+        {
+            if (_disposed) return;
+            ErrorMessage = m;
+        });
+
+        session.ScreenUpdated += _onScreenUpdated;
+        session.StatusChanged += _onStatusChanged;
+        session.ConnectionChanged += _onConnectionChanged;
+        session.Faulted += _onFaulted;
+        session.HostMessage += _onHostMessage;
 
         ApplyScreen(session.CurrentScreen);
         ApplyStatus(session.KeyboardStatus);
@@ -43,12 +63,14 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     private void ApplyScreen(ScreenSnapshot snapshot)
     {
+        if (_disposed) return;
         Screen = snapshot;
         CursorText = StatusFormatter.Cursor(snapshot.Cursor);
     }
 
     private void ApplyStatus(KeyboardStatus status)
     {
+        if (_disposed) return;
         KeyboardText = StatusFormatter.Keyboard(status);
         InsertText = StatusFormatter.Insert(status.InsertMode);
         ModelText = StatusFormatter.Model(Profile, status.LuName);
@@ -56,6 +78,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     private void ApplyConnection(ConnectionState state)
     {
+        if (_disposed) return;
         IsConnected = state.IsConnected();
         ConnectionText = StatusFormatter.Connection(state, Profile.Host);
         TlsText = StatusFormatter.Tls(_session.Tls);
@@ -76,6 +99,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         catch (BackendUnavailableException ex)
         {
             ErrorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Unexpected error: " + ex.Message;
         }
     }
 
@@ -110,7 +137,20 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         {
             ErrorMessage = ex.Message;
         }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Unexpected error: " + ex.Message;
+        }
     }
 
-    public ValueTask DisposeAsync() => _session.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        _session.ScreenUpdated -= _onScreenUpdated;
+        _session.StatusChanged -= _onStatusChanged;
+        _session.ConnectionChanged -= _onConnectionChanged;
+        _session.Faulted -= _onFaulted;
+        _session.HostMessage -= _onHostMessage;
+        await _session.DisposeAsync();
+    }
 }
