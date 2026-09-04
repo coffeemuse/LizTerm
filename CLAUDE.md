@@ -47,7 +47,7 @@ line in both directions to this file; the fault message tells users to set it), 
 `.mcp.json` declares the `avalonia_devtools` MCP server (`avdt mcp`, from the global dotnet tool
 `AvaloniaUI.DeveloperTools`). Debug builds of the app reference `AvaloniaUI.DiagnosticsSupport` and call
 `WithDeveloperTools()` in `Program.BuildAvaloniaApp`, so an app started with `dotnet run` can be inspected
-through the server's `attach-to-app`, `tree`, `props`, `screenshot`, and `input` tools. Release builds
+through the server's `attach-to-app`, `tree`, `props`, `screenshot`, `input`, and `action` tools. Release builds
 carry none of it, and the headless test builder never calls it. Every tool call is refused until
 `AVALONIA_TOOLS_LICENSE_KEY` is present in the MCP server's environment. Put it in
 `.claude/settings.local.json` under `env` (gitignored), never in `.mcp.json`: settings `env` is inherited by
@@ -55,6 +55,18 @@ MCP child processes, but `${VAR}` placeholders in `.mcp.json` expand only from C
 environment (the desktop app does not source `~/.zshrc`), so an `env` entry for the key in `.mcp.json`
 overrides the inherited value with an empty string. Stdio MCP servers are never restarted mid-session, so a
 new key takes effect on the next session.
+
+Driving the app from a session (verified 2026-09-04): `dotnet build src/LizTerm.App`, then start it in the
+background with `LIZTERM_B3270_PATH=/opt/homebrew/bin/b3270 nohup dotnet run --project src/LizTerm.App
+--no-build &` (a fresh worktree has no `native/out`, so the override is required), then `attach-to-app` with
+no arguments to list apps and again with `id` set to the pid. `tree` with no node returns the window roots;
+a dialog opened by `input` Click appears there as a new root, but `search` does not find windows opened
+after its first query, so re-list roots instead. `props` returns `bindingExpression` next to each value,
+which is the quickest check that a control reached the view model; `IsEnabled` on a command-bound button
+reads `True` even while the tree shows `:disabled`, so check `IsEffectivelyEnabled`. The app writes real
+profiles to the per-OS config directory, so Cancel any editor dialog you drove rather than Save, and kill
+the `dotnet run` pid when done. `.claude/settings.local.json` is gitignored, so confirm a new worktree has
+its own copy before expecting the key to reach the server.
 
 ### Recording a replay fixture
 
