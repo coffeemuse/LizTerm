@@ -82,9 +82,12 @@ public class LiveHostTests
         var dataset = "LIZTERM.ITEST";
 
         await session.ConnectAsync(ct);
-        await tso.LogonAsync(user!.Trim(), password!);
         try
         {
+            // Inside the try: the password is accepted partway through LogonAsync, so a failure in the rest of it
+            // still has to reach the LOGOFF below or the userid stays logged on and the next run is refused.
+            await tso.LogonAsync(user!.Trim(), password!);
+
             var progress = new ProgressLog();
             var up = await session.TransferAsync(new FileTransferRequest { Direction = TransferDirection.Send, LocalPath = sent, HostFile = dataset }, progress, ct);
             Assert.True(up.Succeeded, "send failed: " + up.Message);
@@ -102,17 +105,27 @@ public class LiveHostTests
         }
         finally
         {
-            try
-            {
-                await tso.CommandAsync($"DELETE '{user!.Trim()}.{dataset}'");
-                await tso.LogoffAsync();
-                await session.DisconnectAsync();
-            }
-            catch (Exception ex)
-            {
-                TestContext.Current.SendDiagnosticMessage("cleanup failed: " + ex.Message);
-            }
+            // One try/catch per step, in this order: DELETE is the one that needs READY and so the one most likely
+            // to throw after a failure, and it must not take LOGOFF down with it. A leftover dataset is harmless
+            // (the next PUT replaces it); a userid left logged on blocks the next run.
+            await CleanupStepAsync("DELETE", () => tso.CommandAsync($"DELETE '{user!.Trim()}.{dataset}'"));
+            await CleanupStepAsync("LOGOFF", () => tso.LogoffAsync());
+            await CleanupStepAsync("disconnect", () => session.DisconnectAsync());
             dir.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>Runs one cleanup step, reporting a failure as a diagnostic rather than throwing, so the steps after
+    /// it still run.</summary>
+    private static async Task CleanupStepAsync(string step, Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            TestContext.Current.SendDiagnosticMessage($"cleanup step {step} failed: {ex.Message}");
         }
     }
 
