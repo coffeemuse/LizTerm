@@ -209,4 +209,26 @@ public class IndicationParserTests
         var result = Parse<RunResultIndication>(line);
         Assert.Equal(["ok", "123", "true", ""], result.Text);
     }
+
+    [Fact]
+    public void Indfile_fixture_parses_with_the_expected_ft_sequence()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "indfile-tso-roundtrip.jsonl");
+        var states = new List<FtIndication>();
+        foreach (var line in File.ReadLines(path))
+        {
+            Assert.True(IndicationParser.TryParse(line, out var indication), "unparsable line: " + line);
+            if (indication is FtIndication ft) states.Add(ft);
+        }
+        // One send and one receive, each awaiting -> running... -> complete, both successful.
+        Assert.Equal("awaiting", states[0].State);
+        Assert.Contains(states, s => s.State == "running" && s.Bytes > 0);
+        var completes = states.Where(s => s.State == "complete").ToList();
+        Assert.Equal(2, completes.Count);
+        Assert.All(completes, c =>
+        {
+            Assert.True(c.Success);
+            Assert.Contains("Transfer complete", c.Text);
+        });
+    }
 }
