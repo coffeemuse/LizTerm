@@ -18,6 +18,12 @@
         <Separator />
         <MenuItem Header="C_lose" Click="OnCloseClick" />
       </MenuItem>
+      <MenuItem Header="_Edit">
+        <MenuItem x:Name="CopyMenuItem" Header="_Copy" Command="{Binding CopyCommand}" />
+        <MenuItem x:Name="PasteMenuItem" Header="_Paste" Command="{Binding PasteCommand}" />
+        <Separator />
+        <MenuItem x:Name="SelectAllMenuItem" Header="Select _All" Command="{Binding SelectAllCommand}" />
+      </MenuItem>
       <MenuItem Header="_Keys">
         <MenuItem Header="Clear" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Clear}" />
         <MenuItem Header="Reset" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Reset}" />
@@ -62,6 +68,9 @@
       </DockPanel>
     </Border>
 
-    <controls:TerminalScreen x:Name="Screen" Snapshot="{Binding Screen}" DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />
+    <controls:TerminalScreen x:Name="Screen"
+                             Snapshot="{Binding Screen}"
+                             Selection="{Binding Selection, Mode=TwoWay}"
+                             DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />
   </DockPanel>
 </Window>

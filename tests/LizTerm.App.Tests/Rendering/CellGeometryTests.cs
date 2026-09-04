@@ -59,4 +59,17 @@ public class CellGeometryTests
         Assert.Equal(69.6 + 38.4, rect.Y, 6);
         Assert.Equal(9.6, rect.Width, 6);
     }
+
+    [Fact]
+    public void NearestCell_matches_HitTest_inside_and_clamps_to_the_edge_outside()
+    {
+        var g = CellGeometry.Fit(800, 600, 24, 80, Advance, Line);
+        Assert.Equal((3, 5), g.NearestCell(16 + 9.6 * 5 + 1, 69.6 + 19.2 * 3 + 1, 24, 80));
+        Assert.Equal((11, 0), g.NearestCell(2, 69.6 + 19.2 * 11 + 5, 24, 80));   // left margin -> column 0
+        Assert.Equal((0, 39), g.NearestCell(16 + 9.6 * 39 + 3, 5, 24, 80));      // top margin -> row 0
+        Assert.Equal((23, 79), g.NearestCell(799, 599, 24, 80));                 // bottom-right margin
+        Assert.Equal((0, 0), g.NearestCell(-50, -50, 24, 80));
+        Assert.Null(default(CellGeometry).NearestCell(1, 1, 24, 80));
+        Assert.Null(g.NearestCell(1, 1, 0, 80));
+    }
 }
