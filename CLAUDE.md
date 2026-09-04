@@ -40,7 +40,7 @@ works) as a development override. `native/cache`, `native/build-tmp`, and `nativ
 
 Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG` (append every protocol
 line in both directions to this file; the fault message tells users to set it), `LIZTERM_TEST_HOST`
-(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports one skipped test; add
+(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports two skipped tests; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
 `LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
 which logs on to TSO, sends and receives `LIZTERM.ITEST` under the user's prefix, and deletes it; without them that
