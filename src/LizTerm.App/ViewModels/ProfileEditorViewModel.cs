@@ -14,6 +14,7 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private bool _extended = true;
     [ObservableProperty] private string _codePage = "cp037";
     [ObservableProperty] private string _luName = "";
+    [ObservableProperty] private bool _destructiveBackspace;
     [ObservableProperty] private string? _validationMessage;
 
     public int[] Models { get; } = [2, 3, 4, 5];
@@ -32,6 +33,7 @@ public partial class ProfileEditorViewModel : ObservableObject
         _extended = existing.Extended;
         _codePage = existing.CodePage;
         _luName = existing.LuName ?? "";
+        _destructiveBackspace = existing.DestructiveBackspace;
     }
 
     partial void OnUseTlsChanged(bool value)
@@ -58,6 +60,7 @@ public partial class ProfileEditorViewModel : ObservableObject
             Extended = Extended,
             CodePage = CodePage.Trim(),
             LuName = string.IsNullOrWhiteSpace(LuName) ? null : LuName.Trim(),
+            DestructiveBackspace = DestructiveBackspace,
         };
     }
 }

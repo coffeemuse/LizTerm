@@ -35,6 +35,8 @@ public class MappersTests
     [InlineData(TerminalKey.EraseEof, "EraseEOF", new string[0])]
     [InlineData(TerminalKey.Insert, "ToggleInsert", new string[0])]
     [InlineData(TerminalKey.BackTab, "BackTab", new string[0])]
+    [InlineData(TerminalKey.Backspace, "BackSpace", new string[0])]
+    [InlineData(TerminalKey.Erase, "Erase", new string[0])]
     [InlineData(TerminalKey.SysReq, "SysReq", new string[0])]
     public void ActionMap_names_match_x3270_actions(TerminalKey key, string name, string[] args)
     {

@@ -40,7 +40,8 @@ works) as a development override. `native/cache`, `native/build-tmp`, and `nativ
 
 Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG` (append every protocol
 line in both directions to this file; the fault message tells users to set it), `LIZTERM_TEST_HOST`
-(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports one skipped test).
+(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports one skipped test; add
+`LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate).
 
 ### Avalonia Developer Tools MCP
 
@@ -61,17 +62,24 @@ background with `LIZTERM_B3270_PATH=/opt/homebrew/bin/b3270 nohup dotnet run --p
 --no-build &` (a fresh worktree has no `native/out`, so the override is required), then `attach-to-app` with
 no arguments to list apps and again with `id` set to the pid. `tree` with no node returns the window roots;
 a dialog opened by `input` Click appears there as a new root, but `search` does not find windows opened
-after its first query, so re-list roots instead. `props` returns `bindingExpression` next to each value,
+after its first query, so re-list roots instead. Menu popups never appear as roots, so menus cannot be driven through the
+inspector; to reach the picker and the profile editor, launch a second instance with no profile argument. `props` returns `bindingExpression` next to each value,
 which is the quickest check that a control reached the view model; `IsEnabled` on a command-bound button
 reads `True` even while the tree shows `:disabled`, so check `IsEffectivelyEnabled`. The app writes real
 profiles to the per-OS config directory, so Cancel any editor dialog you drove rather than Save, and kill
-the `dotnet run` pid when done. `.claude/settings.local.json` is gitignored, so confirm a new worktree has
+the `dotnet run` pid when done. To connect to a real host without touching real profiles, seed a profile JSON
+(camelCase fields) under `<scratch>/Library/Application Support/LizTerm/profiles/` and launch the built apphost
+`src/LizTerm.App/bin/Debug/net10.0/LizTerm.App <profile-name>` with `HOME=<scratch>` (the apphost rather than
+`dotnet run`, so the HOME override does not disturb the dotnet CLI). `.claude/settings.local.json` is gitignored, so confirm a new worktree has
 its own copy before expecting the key to reach the server.
 
 ### Recording a replay fixture
 
 `native/build/build-playback.sh` builds x3270's `playback` tool; `tools/record-fixture.sh <trace.trc>
 <out.jsonl> [model] [playback-step]` replays an x3270 `.trc` host trace through b3270 and saves raw stdout.
+`tools/wirelog-to-fixture.sh <wire.log> <out.jsonl>` turns a `LIZTERM_WIRE_LOG` file from a real session into
+the same format (inbound lines only, prefix stripped); `gateway-login-tls.jsonl` was made that way and covers TLS,
+plain `connected-3270`, and a host-initiated disconnect.
 Fixtures live in `tests/LizTerm.Backend.B3270.Tests/Fixtures/` and its README documents each one,
 including why `ibmlink-help.jsonl` was recorded with step `4r` instead of play-to-EOF. Every field bug is
 supposed to add a trimmed fixture.
@@ -122,7 +130,10 @@ the backend tests.
 - Outbound: `RunOperation.Serialize(tag, actions)` writes a `{"run":{"r-tag":..,"actions":[..]}}` line
   under a write lock. Each tag maps to a `TaskCompletionSource` in `_pending`; the matching `run-result`
   completes it. `RunAsync` throws `EmulatorActionException` on failure; `RunRawAsync` returns the result
-  so Connect can turn it into `ConnectionFailedException` instead.
+  so Connect can turn it into `ConnectionFailedException` instead. `DisconnectAsync` sends Disconnect and then
+  waits for the `not-connected` state (or process end), capped by the internal `DisconnectTimeout` of 5 s; it
+  sends nothing when already disconnected. `ConnectAsync` has no timeout of its own: a plain connect to a TLS
+  listener sits in `telnet-pending` forever because b3270's Connect action never completes.
 - Startup waits for the `hello` indication (default 10 s) and rejects versions below
   `B3270Session.MinimumVersion` (4.2.0). Process death raises `Faulted` with the stderr tail, drops to
   `Disconnected`, and clears the process so a later `ConnectAsync` spawns a fresh one. `OnProcessEnded`
@@ -149,7 +160,9 @@ the backend tests.
 - `TerminalScreen` is a custom `Control` that draws each row as runs of identical style, scaled to fit
   via `CellGeometry.Fit` (pure math, unit tested). It raises `KeyRequested`, `TextEntered`, and
   `CellClicked`; `SessionWindow` wires those to the view model. Key events go through `DefaultKeymap`
-  first; anything unmapped falls through to Avalonia's text input so dead keys and IMEs work.
+  first; anything unmapped falls through to Avalonia's text input so dead keys and IMEs work. Backspace maps
+  to b3270's non-destructive `BackSpace` unless the profile's `DestructiveBackspace` is on, in which case the
+  keymap emits `TerminalKey.Erase`; the control's `DestructiveBackspace` property carries that choice.
 - `StartupArguments.Parse` decides between a saved profile name, `host[:port]`, and `[ipv6]:port` from
   the first command-line argument. `ProfileStore` keeps one JSON file per profile under the per-OS config
   directory and silently skips unreadable files.

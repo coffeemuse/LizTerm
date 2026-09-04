@@ -12,4 +12,7 @@ public sealed record SessionProfile
     public bool Extended { get; init; } = true;
     public string CodePage { get; init; } = "cp037";
     public string? LuName { get; init; }
+    /// <summary>When true, the Backspace key erases the character to the left of the cursor (x3270's Erase
+    /// action) instead of only moving the cursor left (BackSpace), which is the x3270-family default.</summary>
+    public bool DestructiveBackspace { get; init; }
 }

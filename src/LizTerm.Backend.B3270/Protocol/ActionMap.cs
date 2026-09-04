@@ -26,6 +26,7 @@ public static class ActionMap
             TerminalKey.EraseInput => new("EraseInput"),
             TerminalKey.Delete => new("Delete"),
             TerminalKey.Backspace => new("BackSpace"),
+            TerminalKey.Erase => new("Erase"),
             TerminalKey.Insert => new("ToggleInsert"),
             TerminalKey.Dup => new("Dup"),
             TerminalKey.FieldMark => new("FieldMark"),

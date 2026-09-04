@@ -34,6 +34,20 @@ public class TerminalScreenInputTests
     }
 
     [AvaloniaFact]
+    public void Backspace_raises_Erase_only_when_DestructiveBackspace_is_set()
+    {
+        var (window, screen) = Show();
+        var keys = new List<TerminalKey>();
+        screen.KeyRequested += (_, k) => keys.Add(k);
+
+        window.KeyPressQwerty(PhysicalKey.Backspace, RawInputModifiers.None);
+        screen.DestructiveBackspace = true;
+        window.KeyPressQwerty(PhysicalKey.Backspace, RawInputModifiers.None);
+
+        Assert.Equal([TerminalKey.Backspace, TerminalKey.Erase], keys);
+    }
+
+    [AvaloniaFact]
     public void Tab_stays_on_the_screen_control()
     {
         var screen = new TerminalScreen { Snapshot = ScreenSnapshot.Empty(24, 80) };

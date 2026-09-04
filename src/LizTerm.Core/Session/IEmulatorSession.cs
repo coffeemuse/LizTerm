@@ -15,6 +15,8 @@ public interface IEmulatorSession : IAsyncDisposable
     KeyboardStatus KeyboardStatus { get; }
 
     Task ConnectAsync(CancellationToken cancellationToken = default);
+    /// <summary>Completes once the session reports <see cref="ConnectionState.Disconnected"/>, or after a
+    /// short backend-defined timeout if that report never comes. Does nothing when not connected.</summary>
     Task DisconnectAsync();
     Task SendKeyAsync(TerminalKey key);
     Task TypeTextAsync(string text);

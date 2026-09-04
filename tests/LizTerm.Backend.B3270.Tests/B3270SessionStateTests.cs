@@ -18,6 +18,14 @@ public class B3270SessionStateTests
         return (session, fake);
     }
 
+    private const string NotConnected = """{"connection":{"state":"not-connected"}}""";
+
+    private static string RunResult(string inputLine)
+    {
+        var tag = Regex.Match(inputLine, "\"r-tag\":\"([^\"]+)\"").Groups[1].Value;
+        return $$$"""{"run-result":{"r-tag":"{{{tag}}}","success":true,"time":0}}""";
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, string what)
     {
         var deadline = DateTime.UtcNow.AddSeconds(2);
@@ -178,6 +186,9 @@ public class B3270SessionStateTests
         await session.TypeTextAsync(@"a\b");
         await session.PasteTextAsync("line1\nline2");
         await session.MoveCursorAsync(4, 10);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+        fake.RunResponder = line => line.Contains("\"Disconnect\"") ? [NotConnected, RunResult(line)] : [RunResult(line)];
         await session.DisconnectAsync();
         var lines = fake.InputLines;
         Assert.Contains(lines, l => l.Contains("""{"action":"PF","args":["3"]}"""));
@@ -191,5 +202,48 @@ public class B3270SessionStateTests
 
         Assert.Contains(lines, l => l.Contains("""{"action":"MoveCursor","args":["4","10"]}"""));
         Assert.Contains(lines, l => l.Contains("""{"action":"Disconnect"}"""));
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_sends_nothing_when_not_connected()
+    {
+        var (session, fake) = await StartAsync();
+        await session.DisconnectAsync();
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"Disconnect\""));
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_returns_only_after_b3270_reports_not_connected()
+    {
+        var (session, fake) = await StartAsync();
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+        // b3270 acknowledges the action at once; the connection indication arrives a little later.
+        fake.RunResponder = line => [RunResult(line)];
+
+        var disconnect = session.DisconnectAsync();
+        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""), TimeSpan.FromSeconds(2));
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(disconnect.IsCompleted, "DisconnectAsync completed before the state changed");
+
+        fake.Emit(NotConnected);
+        await disconnect.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_gives_up_after_the_timeout_when_no_state_arrives()
+    {
+        var (session, fake) = await StartAsync();
+        session.DisconnectTimeout = TimeSpan.FromMilliseconds(200);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+        fake.RunResponder = line => [RunResult(line)];   // acknowledged, but never reports not-connected
+
+        await session.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        Assert.Contains(fake.InputLines, l => l.Contains("\"Disconnect\""));
+        Assert.Equal(ConnectionState.Connected3270, session.ConnectionState);
     }
 }
