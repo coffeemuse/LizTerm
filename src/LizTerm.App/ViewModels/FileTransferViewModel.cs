@@ -2,8 +2,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LizTerm.App.Files;
 using LizTerm.Core.Session;
+using System.Globalization;
 
 namespace LizTerm.App.ViewModels;
+
+public enum TransferPhase { Form, Running, Done }
 
 /// <summary>One File Transfer dialog: a form that becomes a progress view and then a result view, with the form
 /// kept filled behind them. Owns the transfer call; <see cref="SessionViewModel"/> only remembers the last request.
@@ -14,6 +17,7 @@ public partial class FileTransferViewModel : ObservableObject
     private readonly IEmulatorSession _session;
     private readonly IFilePicker _picker;
     private readonly Action<Action> _dispatch;
+    private CancellationTokenSource? _cts;
 
     /// <summary>Raised with the request each time Start passes validation, before the transfer begins.</summary>
     public event Action<FileTransferRequest>? Started;
@@ -126,6 +130,7 @@ public partial class FileTransferViewModel : ObservableObject
     [RelayCommand]
     private async Task BrowseAsync()
     {
+        ValidationMessage = null;
         string? path;
         try
         {
@@ -188,5 +193,136 @@ public partial class FileTransferViewModel : ObservableObject
         }
         ValidationMessage = field + " must be a whole number.";
         return false;
+    }
+
+    // ---- phase ----
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsForm), nameof(IsRunning), nameof(IsDone))]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand), nameof(CancelTransferCommand), nameof(BackCommand))]
+    private TransferPhase _phase = TransferPhase.Form;
+
+    public bool IsForm => Phase == TransferPhase.Form;
+    public bool IsRunning => Phase == TransferPhase.Running;
+    public bool IsDone => Phase == TransferPhase.Done;
+
+    // ---- running ----
+
+    [ObservableProperty] private string _statusText = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressValue))]
+    private long _bytesTransferred;
+
+    /// <summary>The local file's length when sending; null when receiving or when it cannot be read.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsProgressIndeterminate), nameof(ProgressMaximum))]
+    private long? _totalBytes;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelTransferCommand))]
+    private bool _isCancelling;
+
+    public bool IsProgressIndeterminate => TotalBytes is null;
+    public double ProgressValue => BytesTransferred;
+    public double ProgressMaximum => TotalBytes ?? 1;
+
+    // ---- done ----
+
+    [ObservableProperty] private string _resultMessage = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Failed))]
+    private bool _succeeded;
+
+    public bool Failed => !Succeeded;
+
+    [RelayCommand(CanExecute = nameof(IsForm))]
+    private async Task StartAsync()
+    {
+        if (!IsForm) return;
+        if (TryBuildRequest() is not { } request) return;
+        Started?.Invoke(request);
+
+        TotalBytes = request.Direction == TransferDirection.Send ? TryFileLength(request.LocalPath) : null;
+        BytesTransferred = 0;
+        StatusText = "Waiting for the host...";
+        IsCancelling = false;
+        Phase = TransferPhase.Running;
+
+        var cts = new CancellationTokenSource();
+        _cts = cts;
+        try
+        {
+            var result = await _session.TransferAsync(request, new DispatchedProgress(this), cts.Token);
+            if (result.Succeeded)
+                Finish(true, result.Message);
+            else if (string.IsNullOrWhiteSpace(result.Message))
+                Finish(false, "Transfer failed with no message from the host.");
+            else
+                Finish(false, result.Message);
+        }
+        catch (OperationCanceledException)
+        {
+            Finish(false, "Transfer cancelled.");
+        }
+        catch (Exception ex)
+        {
+            Finish(false, ex.Message);
+        }
+        finally
+        {
+            _cts = null;
+            cts.Dispose();
+        }
+    }
+
+    private void Finish(bool succeeded, string message)
+    {
+        Succeeded = succeeded;
+        ResultMessage = message;
+        Phase = TransferPhase.Done;
+    }
+
+    private static long? TryFileLength(string path)
+    {
+        try
+        {
+            return new FileInfo(path).Length;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private bool CanCancel => IsRunning && !IsCancelling;
+
+    [RelayCommand(CanExecute = nameof(CanCancel))]
+    private void CancelTransfer()
+    {
+        if (!CanCancel) return;
+        IsCancelling = true;
+        StatusText = "Cancelling...";
+        _cts?.Cancel();
+    }
+
+    [RelayCommand(CanExecute = nameof(IsDone))]
+    private void Back()
+    {
+        if (IsDone) Phase = TransferPhase.Form;
+    }
+
+    private void OnProgress(long bytes)
+    {
+        if (!IsRunning) return;
+        BytesTransferred = bytes;
+        if (!IsCancelling) StatusText = bytes.ToString("N0", CultureInfo.InvariantCulture) + " bytes";
+    }
+
+    /// <summary>The backend reports on its reader thread; every report goes through the dispatch delegate.</summary>
+    private sealed class DispatchedProgress(FileTransferViewModel owner) : IProgress<long>
+    {
+        public void Report(long value) => owner._dispatch(() => owner.OnProgress(value));
     }
 }
