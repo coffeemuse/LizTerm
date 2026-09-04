@@ -111,7 +111,7 @@ public class LiveHostTests
             await CleanupStepAsync("DELETE", () => tso.CommandAsync($"DELETE '{user!.Trim()}.{dataset}'"));
             await CleanupStepAsync("LOGOFF", () => tso.LogoffAsync());
             await CleanupStepAsync("disconnect", () => session.DisconnectAsync());
-            dir.Delete(recursive: true);
+            await CleanupStepAsync("delete scratch dir", () => { dir.Delete(recursive: true); return Task.CompletedTask; });
         }
     }
 

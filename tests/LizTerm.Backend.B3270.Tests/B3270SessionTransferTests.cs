@@ -188,7 +188,7 @@ public class B3270SessionTransferTests
     public async Task Transfer_before_start_throws()
     {
         var session = new B3270Session(Profile, () => new FakeB3270Process());
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => session.TransferAsync(Request));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => session.TransferAsync(Request, cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal("The session has not been started.", ex.Message);
     }
 }
