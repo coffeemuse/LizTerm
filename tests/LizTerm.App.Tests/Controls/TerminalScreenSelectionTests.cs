@@ -104,4 +104,23 @@ public class TerminalScreenSelectionTests
         Assert.Null(screen.Selection);
         Assert.False(clicked);
     }
+
+    [AvaloniaFact]
+    public void Clipboard_hotkeys_raise_requests_and_bypass_the_keymap()
+    {
+        var (window, screen) = Show();
+        var events = new List<string>();
+        screen.CopyRequested += (_, _) => events.Add("copy");
+        screen.PasteRequested += (_, _) => events.Add("paste");
+        screen.SelectAllRequested += (_, _) => events.Add("select-all");
+        screen.KeyRequested += (_, k) => events.Add("key:" + k);
+        screen.TextEntered += (_, t) => events.Add("text:" + t);
+
+        window.KeyPressQwerty(PhysicalKey.C, RawInputModifiers.Control);
+        window.KeyPressQwerty(PhysicalKey.V, RawInputModifiers.Control);
+        window.KeyPressQwerty(PhysicalKey.A, RawInputModifiers.Control);
+        window.KeyPressQwerty(PhysicalKey.F3, RawInputModifiers.None);
+
+        Assert.Equal(["copy", "paste", "select-all", "key:PF3"], events);
+    }
 }
