@@ -60,7 +60,8 @@ public sealed class B3270Session : IEmulatorSession
     {
         if (_process is not null) return;
         var process = _processFactory();
-        _hello = new TaskCompletionSource<HelloIndication>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var helloSource = new TaskCompletionSource<HelloIndication>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _hello = helloSource;
         _process = process;
         process.Start(BuildArguments(Profile));
         _readerThread = new Thread(ReadLoop) { IsBackground = true, Name = "b3270-reader" };
@@ -69,7 +70,7 @@ public sealed class B3270Session : IEmulatorSession
         HelloIndication hello;
         try
         {
-            hello = await _hello.Task.WaitAsync(StartupTimeout, cancellationToken);
+            hello = await helloSource.Task.WaitAsync(StartupTimeout, cancellationToken);
         }
         catch (TimeoutException)
         {
@@ -301,7 +302,7 @@ public sealed class B3270Session : IEmulatorSession
             case TlsIndication tls:
                 Tls = new TlsInfo(tls.Secure, tls.Verified, tls.Session, tls.HostCert);
                 break;
-            case FtIndication { Bytes: { } bytes } when _transfer is { } transfer:
+            case FtIndication { Bytes: { } bytes } when Volatile.Read(ref _transfer) is { } transfer:
                 // Progress only. The outcome comes from the Transfer run's run-result, which carries the same
                 // text as the "complete" indication; ft lines with no transfer in flight are dropped.
                 transfer.Bytes = bytes;
@@ -479,7 +480,7 @@ public sealed class B3270Session : IEmulatorSession
         {
             // b3270 does not answer the Transfer run until the transfer ends, so this run-result is the outcome.
             var run = RunRawAsync([TransferMapper.ToAction(request)]);
-            using var registration = cancellationToken.Register(() => _ = TryCancelTransferAsync());
+            using var registration = cancellationToken.Register(() => _ = Task.Run(TryCancelTransferAsync));
             var result = await run;
             if (!result.Success && cancellationToken.IsCancellationRequested)
                 throw new OperationCanceledException("The file transfer was cancelled.", cancellationToken);
