@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using LizTerm.App.Keyboard;
 using LizTerm.App.Mouse;
 using LizTerm.App.Rendering;
@@ -88,8 +89,7 @@ public sealed class TerminalScreen : Control
 
     private bool TryHandleClipboardKey(KeyEventArgs e)
     {
-        var app = Application.Current;
-        var hotkeys = app?.PlatformSettings?.HotkeyConfiguration;
+        var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
         if (Matches(hotkeys?.Copy, e, Key.C)) { CopyRequested?.Invoke(this, EventArgs.Empty); return true; }
         if (Matches(hotkeys?.Paste, e, Key.V)) { PasteRequested?.Invoke(this, EventArgs.Empty); return true; }
         if (Matches(hotkeys?.SelectAll, e, Key.A)) { SelectAllRequested?.Invoke(this, EventArgs.Empty); return true; }
