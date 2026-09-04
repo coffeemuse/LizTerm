@@ -129,8 +129,10 @@ public class FileTransferViewModelTests
 
         vm.IsReceive = true;
         vm.HostFile = "'MVSCE02.LIZTERM.JCL(JOB1)'";
+        vm.ValidationMessage = "stale";
         picker.Result = null;
         await vm.BrowseCommand.ExecuteAsync(null);
+        Assert.Null(vm.ValidationMessage);
         Assert.Equal(["open", "save:JOB1"], picker.Calls);
         Assert.Equal("/tmp/job.jcl", vm.LocalPath);
         Assert.Null(vm.ValidationMessage);
@@ -193,5 +195,192 @@ public class FileTransferViewModelTests
         var request = vm.TryBuildRequest();
         Assert.Equal("/tmp/a", request!.LocalPath);
         Assert.Equal("A.B", request.HostFile);
+    }
+
+    private static TaskCompletionSource Pending() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    [Fact]
+    public async Task Start_records_the_request_runs_shows_progress_and_lands_in_done()
+    {
+        var (vm, session, _) = Create();
+        vm.LocalPath = "/nonexistent/a.txt";
+        vm.HostFile = "A.B";
+        FileTransferRequest? started = null;
+        vm.Started += r => started = r;
+        session.TransferCompletion = Pending();
+
+        var run = vm.StartCommand.ExecuteAsync(null);
+
+        Assert.Equal(TransferPhase.Running, vm.Phase);
+        Assert.True(vm.IsRunning);
+        Assert.False(vm.IsForm);
+        Assert.Equal("Waiting for the host...", vm.StatusText);
+        Assert.Equal("A.B", started?.HostFile);
+        Assert.Equal(["transfer:Send:A.B"], session.Calls);
+        Assert.False(vm.StartCommand.CanExecute(null));
+        Assert.True(vm.CancelTransferCommand.CanExecute(null));
+        Assert.False(vm.BackCommand.CanExecute(null));
+        Assert.True(vm.IsProgressIndeterminate);
+
+        session.TransferProgress!.Report(2048);
+        Assert.Equal("2,048 bytes", vm.StatusText);
+        Assert.Equal(2048, vm.BytesTransferred);
+        Assert.Equal(2048, vm.ProgressValue);
+
+        session.TransferResult = new FileTransferResult(true, "Transfer complete, 2048 bytes transferred", 2048);
+        session.TransferCompletion.SetResult();
+        await run;
+
+        Assert.Equal(TransferPhase.Done, vm.Phase);
+        Assert.True(vm.IsDone);
+        Assert.True(vm.Succeeded);
+        Assert.False(vm.Failed);
+        Assert.Equal("Transfer complete, 2048 bytes transferred", vm.ResultMessage);
+        Assert.True(vm.BackCommand.CanExecute(null));
+        Assert.False(vm.CancelTransferCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Sending_a_real_file_shows_a_determinate_bar()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllTextAsync(path, "hello world", TestContext.Current.CancellationToken);
+        try
+        {
+            var (vm, session, _) = Create();
+            vm.LocalPath = path;
+            vm.HostFile = "A.B";
+            session.TransferCompletion = Pending();
+            var run = vm.StartCommand.ExecuteAsync(null);
+            Assert.Equal(11, vm.TotalBytes);
+            Assert.False(vm.IsProgressIndeterminate);
+            Assert.Equal(11, vm.ProgressMaximum);
+            session.TransferCompletion.SetResult();
+            await run;
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task Receiving_shows_an_indeterminate_bar()
+    {
+        var (vm, session, _) = Create();
+        vm.IsReceive = true;
+        vm.LocalPath = "/tmp/out";
+        vm.HostFile = "A.B";
+        session.TransferCompletion = Pending();
+        var run = vm.StartCommand.ExecuteAsync(null);
+        Assert.Null(vm.TotalBytes);
+        Assert.True(vm.IsProgressIndeterminate);
+        Assert.Equal(1, vm.ProgressMaximum);
+        Assert.Equal(["transfer:Receive:A.B"], session.Calls);
+        session.TransferCompletion.SetResult();
+        await run;
+    }
+
+    [Fact]
+    public async Task Cancel_marks_cancelling_cancels_the_token_and_lands_in_done()
+    {
+        var (vm, session, _) = Create();
+        vm.LocalPath = "/nonexistent/a.txt";
+        vm.HostFile = "A.B";
+        session.TransferCompletion = Pending();
+        var run = vm.StartCommand.ExecuteAsync(null);
+
+        vm.CancelTransferCommand.Execute(null);
+
+        Assert.True(vm.IsCancelling);
+        Assert.Equal("Cancelling...", vm.StatusText);
+        Assert.True(session.TransferToken.IsCancellationRequested);
+        Assert.False(vm.CancelTransferCommand.CanExecute(null));
+        session.TransferProgress!.Report(4096);
+        Assert.Equal("Cancelling...", vm.StatusText);
+        Assert.Equal(4096, vm.BytesTransferred);
+
+        session.TransferException = new OperationCanceledException();
+        session.TransferCompletion.SetResult();
+        await run;
+
+        Assert.True(vm.IsDone);
+        Assert.False(vm.Succeeded);
+        Assert.Equal("Transfer cancelled.", vm.ResultMessage);
+    }
+
+    [Fact]
+    public async Task A_failed_result_and_an_exception_both_land_in_done_as_failures_and_back_keeps_the_form()
+    {
+        var (vm, session, _) = Create();
+        vm.LocalPath = "/nonexistent/a.txt";
+        vm.HostFile = "A.B";
+        session.TransferResult = new FileTransferResult(false, "TRANS17 Miscellaneous I/O error", 0);
+
+        await vm.StartCommand.ExecuteAsync(null);
+        Assert.True(vm.IsDone);
+        Assert.False(vm.Succeeded);
+        Assert.True(vm.Failed);
+        Assert.Equal("TRANS17 Miscellaneous I/O error", vm.ResultMessage);
+
+        vm.BackCommand.Execute(null);
+        Assert.True(vm.IsForm);
+        Assert.Equal("/nonexistent/a.txt", vm.LocalPath);
+        Assert.Equal("A.B", vm.HostFile);
+        Assert.True(vm.StartCommand.CanExecute(null));
+
+        session.TransferException = new BackendUnavailableException("The emulator engine (b3270) exited unexpectedly.");
+        await vm.StartCommand.ExecuteAsync(null);
+        Assert.True(vm.IsDone);
+        Assert.False(vm.Succeeded);
+        Assert.Equal("The emulator engine (b3270) exited unexpectedly.", vm.ResultMessage);
+        Assert.Equal(2, session.Calls.Count);
+    }
+
+    [Fact]
+    public async Task Start_with_an_invalid_form_stays_in_form_and_calls_nothing()
+    {
+        var (vm, session, _) = Create();
+        var started = 0;
+        vm.Started += _ => started++;
+        await vm.StartCommand.ExecuteAsync(null);
+        Assert.True(vm.IsForm);
+        Assert.Equal("Choose a local file.", vm.ValidationMessage);
+        Assert.Empty(session.Calls);
+        Assert.Equal(0, started);
+    }
+
+    [Fact]
+    public async Task Progress_reports_are_marshalled_through_the_dispatcher()
+    {
+        var session = new FakeEmulatorSession();
+        var dispatched = new List<Action>();
+        var vm = new FileTransferViewModel(session, new FakeFilePicker(), dispatched.Add, null) { LocalPath = "/nonexistent/a.txt", HostFile = "A.B" };
+        session.TransferCompletion = Pending();
+        var run = vm.StartCommand.ExecuteAsync(null);
+
+        session.TransferProgress!.Report(10);
+        Assert.Equal("Waiting for the host...", vm.StatusText);
+        Assert.Single(dispatched);
+        dispatched[0]();
+        Assert.Equal("10 bytes", vm.StatusText);
+
+        session.TransferCompletion.SetResult();
+        await run;
+    }
+
+    [Fact]
+    public async Task A_failed_result_with_no_message_gets_a_fallback()
+    {
+        var (vm, session, _) = Create();
+        vm.LocalPath = "/nonexistent/a.txt";
+        vm.HostFile = "A.B";
+        session.TransferResult = new FileTransferResult(false, "", 0);
+
+        await vm.StartCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsDone);
+        Assert.True(vm.Failed);
+        Assert.Equal("Transfer failed with no message from the host.", vm.ResultMessage);
     }
 }
