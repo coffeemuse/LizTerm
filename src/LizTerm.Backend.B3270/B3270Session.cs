@@ -22,6 +22,7 @@ public sealed class B3270Session : IEmulatorSession
     private int _tagCounter;
     private volatile bool _shuttingDown;
     private volatile TaskCompletionSource? _disconnected;
+    private TransferContext? _transfer;
 
     /// <summary>How long <see cref="DisconnectAsync"/> waits for b3270 to report the connection closed
     /// after accepting the action. Tests shorten it.</summary>
@@ -300,6 +301,12 @@ public sealed class B3270Session : IEmulatorSession
             case TlsIndication tls:
                 Tls = new TlsInfo(tls.Secure, tls.Verified, tls.Session, tls.HostCert);
                 break;
+            case FtIndication { Bytes: { } bytes } when _transfer is { } transfer:
+                // Progress only. The outcome comes from the Transfer run's run-result, which carries the same
+                // text as the "complete" indication; ft lines with no transfer in flight are dropped.
+                transfer.Bytes = bytes;
+                transfer.Progress?.Report(bytes);
+                break;
             case PopupIndication popup:
                 HostMessage?.Invoke(this, popup.Text);
                 break;
@@ -455,4 +462,51 @@ public sealed class B3270Session : IEmulatorSession
 
     public Task MoveCursorAsync(int row, int column) =>
         RunAsync(new B3270Action("MoveCursor", row.ToString(), column.ToString()));
+
+    // ---- file transfer ----
+
+    /// <summary>True while a Transfer run is pending. Tests use it to check the slot is freed.</summary>
+    internal bool IsTransferInProgress => _transfer is not null;
+
+    public async Task<FileTransferResult> TransferAsync(FileTransferRequest request, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_process is null) throw new InvalidOperationException("The session has not been started.");
+        var context = new TransferContext(progress);
+        if (Interlocked.CompareExchange(ref _transfer, context, null) is not null)
+            throw new InvalidOperationException("A file transfer is already in progress.");
+        try
+        {
+            // b3270 does not answer the Transfer run until the transfer ends, so this run-result is the outcome.
+            var run = RunRawAsync([TransferMapper.ToAction(request)]);
+            using var registration = cancellationToken.Register(() => _ = TryCancelTransferAsync());
+            var result = await run;
+            if (!result.Success && cancellationToken.IsCancellationRequested)
+                throw new OperationCanceledException("The file transfer was cancelled.", cancellationToken);
+            return new FileTransferResult(result.Success, string.Join("\n", result.Text), context.Bytes);
+        }
+        finally
+        {
+            Interlocked.CompareExchange(ref _transfer, null, context);
+        }
+    }
+
+    /// <summary>Transfer(Cancel) is fire-and-forget: b3270 answers "No transfer pending." if the transfer already
+    /// ended, and a dead engine faults the pending Transfer run on its own.</summary>
+    private async Task TryCancelTransferAsync()
+    {
+        try
+        {
+            await RunRawAsync([TransferMapper.CancelAction]);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private sealed class TransferContext(IProgress<long>? progress)
+    {
+        public IProgress<long>? Progress { get; } = progress;
+        public long Bytes;
+    }
 }
