@@ -424,9 +424,9 @@ the password. Wire logs from live runs are never committed.
 
 ### 7.3 Discovery run and fixture
 
-Before the mapper defaults are final, a discovery task connects to the MVS/CE host with the wire
-log on, records the screens from connect through logon to READY, and runs one send and one receive
-with the Text defaults. Its findings: the Hercules TN3270 server answers the connection with its own banner (dismissed with Enter; its
+Before the mapper defaults were finalized, a discovery run connected to the MVS/CE host with the
+wire log on, recorded the screens from connect through logon to READY, and ran one send and one
+receive with the Text defaults. Its findings: the Hercules TN3270 server answers the connection with its own banner (dismissed with Enter; its
 help text contains the word "logon", so the logon predicate has to require `===>` too) before the real
 `TSO Logon ===>` screen; `LOGON <user>` and the password prompt lead straight to READY with no menu and no `***`
 pause; and the host keeps repainting for a moment after `READY` appears, so the navigator waits 500 ms of screen

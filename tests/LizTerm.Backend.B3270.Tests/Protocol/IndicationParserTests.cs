@@ -221,6 +221,7 @@ public class IndicationParserTests
             if (indication is FtIndication ft) states.Add(ft);
         }
         // One send and one receive, each awaiting -> running... -> complete, both successful.
+        Assert.NotEmpty(states);
         Assert.Equal("awaiting", states[0].State);
         Assert.Contains(states, s => s.State == "running" && s.Bytes > 0);
         var completes = states.Where(s => s.State == "complete").ToList();

@@ -135,7 +135,6 @@ public class FileTransferViewModelTests
         Assert.Null(vm.ValidationMessage);
         Assert.Equal(["open", "save:JOB1"], picker.Calls);
         Assert.Equal("/tmp/job.jcl", vm.LocalPath);
-        Assert.Null(vm.ValidationMessage);
     }
 
     [Fact]

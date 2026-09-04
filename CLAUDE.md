@@ -199,9 +199,12 @@ the backend tests.
   modally with a `FileTransferViewModel` from `SessionViewModel.CreateTransfer(IFilePicker)`, which pre-fills it
   from `LastTransferRequest` (the last request started from that window; nothing goes to the profile). The view
   model has Form, Running, and Done phases in one window; Start validates through `TryBuildRequest`, progress is
-  marshalled through the dispatch delegate, Cancel cancels the token, and closing a running dialog cancels instead
-  of closing. OS file dialogs go through `IFilePicker` (`Files/`), injected like the clipboard; `LocalFileNames`
-  suggests the save name (member or last qualifier, VM `FN.FT`). `TransferLabels` labels the combo boxes.
+  marshalled through the dispatch delegate, Cancel cancels the token, and closing a running dialog cancels
+  instead of closing. OS file dialogs go through `IFilePicker` (`Files/`), injected like the clipboard;
+  `LocalFileNames` suggests the save name (member or last qualifier, VM `FN.FT`). `TransferLabels` labels the
+  combo boxes. Avalonia propagates an owned dialog's `Closing` cancel to its owner, so closing the session
+  window (or quitting) while a transfer runs is refused until the engine confirms the cancel and the Done panel
+  shows; a forced shutdown's `DisposeAsync` sends Quit and the pending run faults into the dialog's catch.
 - `StartupArguments.Parse` decides between a saved profile name, `host[:port]`, and `[ipv6]:port` from
   the first command-line argument. `ProfileStore` keeps one JSON file per profile under the per-OS config
   directory and silently skips unreadable files.
