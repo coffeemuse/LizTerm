@@ -10,7 +10,7 @@ public class SessionViewModelTests
     private static (SessionViewModel Vm, FakeEmulatorSession Session) Create()
     {
         var session = new FakeEmulatorSession();
-        return (new SessionViewModel(session, action => action()), session);
+        return (new SessionViewModel(session, action => action(), new FakeTextClipboard()), session);
     }
 
     [Fact]
