@@ -1,7 +1,7 @@
 # LizTerm Milestone 2, Plan 2: IND$FILE File Transfer
 
 Date: 2026-09-04
-Status: approved in discussion on 2026-09-04; to be updated as built
+Status: approved 2026-09-04 and implemented on branch claude/indfile-integration-2b9124; this is the as-built spec
 Parent: `2026-09-03-lizterm-v1-design.md` sections 4.6, 5.2, 5.5, 6.2, 6.8, 7, and 9
 
 ## 1. Purpose
@@ -426,9 +426,13 @@ the password. Wire logs from live runs are never committed.
 
 Before the mapper defaults are final, a discovery task connects to the MVS/CE host with the wire
 log on, records the screens from connect through logon to READY, and runs one send and one receive
-with the Text defaults. Its findings feed the logon sequence in 7.2 and may change defaults, for
-example if the MVS 3.8j IND$FILE port needs a record format on a new dataset or rejects a keyword
-x3270 emits. The inbound lines of that wire log, trimmed to the transfer's `ft` sequence with the
+with the Text defaults. Its findings: the Hercules TN3270 server answers the connection with its own banner (dismissed with Enter; its
+help text contains the word "logon", so the logon predicate has to require `===>` too) before the real
+`TSO Logon ===>` screen; `LOGON <user>` and the password prompt lead straight to READY with no menu and no `***`
+pause; and the host keeps repainting for a moment after `READY` appears, so the navigator waits 500 ms of screen
+quiet before keystrokes and before trusting READY, because IND$FILE typed into a half-painted field fails with
+`INVALID COMMAND NAME SYNTAX`. The host's IND$FILE 2.0.5 accepted the Text defaults (`ASCII CRLF`, remap)
+unchanged, so no `TransferMapper` default changed. The inbound lines of that wire log, trimmed to the transfer's `ft` sequence with the
 surrounding `oia` and run-result lines, become
 `tests/LizTerm.Backend.B3270.Tests/Fixtures/indfile-tso-roundtrip.jsonl`, documented in the
 fixtures README.
