@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "avalonia_devtools": {
+      "command": "avdt",
+      "args": ["mcp"],
+      "env": {
+        "AVALONIA_TOOLS_LICENSE_KEY": "${AVALONIA_TOOLS_LICENSE_KEY:-}"
+      }
+    }
+  }
+}

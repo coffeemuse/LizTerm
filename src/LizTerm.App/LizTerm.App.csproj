@@ -16,6 +16,8 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.Fonts.Inter" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <!-- Debug only: lets the AvaloniaUI Developer Tools (avdt, also the avalonia_devtools MCP server in .mcp.json) attach to a running app. -->
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Condition="'$(Configuration)' == 'Debug'" />
   </ItemGroup>
 
   <ItemGroup>
