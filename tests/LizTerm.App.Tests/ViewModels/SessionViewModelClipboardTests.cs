@@ -123,4 +123,18 @@ public class SessionViewModelClipboardTests
         Assert.Equal("Could not read the clipboard: clipboard busy", vm.ErrorMessage);
         Assert.Empty(session.Calls);
     }
+
+    [Fact]
+    public async Task Paste_executed_directly_while_disconnected_does_nothing()
+    {
+        var (vm, session, clipboard) = Create();
+        clipboard.Text = "text";
+        vm.Selection = ScreenRegion.FromCorners(0, 0, 0, 0);
+
+        await vm.PasteCommand.ExecuteAsync(null);
+
+        Assert.Empty(session.Calls);
+        Assert.Equal(ScreenRegion.FromCorners(0, 0, 0, 0), vm.Selection);
+        Assert.Null(vm.ErrorMessage);
+    }
 }

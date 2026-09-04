@@ -168,6 +168,8 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand(CanExecute = nameof(IsConnected))]
     private async Task PasteAsync()
     {
+        // Hotkeys execute commands without consulting CanExecute, so the guard lives here too.
+        if (!IsConnected) return;
         string? text;
         try
         {
