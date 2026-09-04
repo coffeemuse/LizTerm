@@ -167,7 +167,7 @@ the backend tests.
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the
   text and before the cursor, clears it when the screen size changes, and raises `CopyRequested`,
-  `PasteRequested`, and `SelectAllRequested` from `PlatformSettings.HotkeyConfiguration` (Cmd on macOS, Ctrl
+  `PasteRequested`, and `SelectAllRequested` from `GetPlatformSettings().HotkeyConfiguration` (Cmd on macOS, Ctrl
   elsewhere; Ctrl fallback). A plain click moves the cursor on release; a double-click selects the run of
   non-space cells. `SessionViewModel` owns Copy (trimmed rows joined by `\n`), Paste (CRLF normalized, one
   `PasteTextAsync`), and Select All, and nulls `Selection` on every path that sends input to the host. Clipboard
