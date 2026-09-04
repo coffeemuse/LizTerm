@@ -42,6 +42,30 @@ public sealed class ScreenSnapshot
         return string.Join('\n', lines);
     }
 
+    /// <summary>Text of a rectangular region: one line per row, trailing spaces trimmed, rows joined by '\n'
+    /// with no trailing newline. The region is clamped to the screen; nothing left means "".</summary>
+    public string GetText(ScreenRegion region)
+    {
+        if (region.Clamp(Rows, Columns) is not { } r) return "";
+        var lines = new string[r.Rows];
+        for (var row = r.Top; row <= r.Bottom; row++)
+            lines[row - r.Top] = GetText(row, r.Left, r.Columns).TrimEnd(' ');
+        return string.Join('\n', lines);
+    }
+
+    /// <summary>The maximal run of non-space cells on the row containing the cell, or null when the cell is a
+    /// space or off the screen. Non-space is the whole rule, so SYS1.PROCLIB(IEFBR14) is one word.</summary>
+    public ScreenRegion? WordAt(int row, int column)
+    {
+        if ((uint)row >= (uint)Rows || (uint)column >= (uint)Columns) return null;
+        if (this[row, column].Character == Cell.Space) return null;
+        var left = column;
+        while (left > 0 && this[row, left - 1].Character != Cell.Space) left--;
+        var right = column;
+        while (right < Columns - 1 && this[row, right + 1].Character != Cell.Space) right++;
+        return ScreenRegion.FromCorners(row, left, row, right);
+    }
+
     public static ScreenSnapshot Empty(int rows, int columns)
     {
         var cells = new Cell[rows * columns];
