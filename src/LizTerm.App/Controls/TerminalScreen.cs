@@ -65,8 +65,18 @@ public sealed class TerminalScreen : Control
     public event EventHandler<string>? TextEntered;
     public event EventHandler<(int Row, int Column)>? CellClicked;
 
+    /// <summary>Raised for the platform's Copy, Paste, and Select All hotkeys. The control never touches the clipboard.</summary>
+    public event EventHandler? CopyRequested;
+    public event EventHandler? PasteRequested;
+    public event EventHandler? SelectAllRequested;
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (TryHandleClipboardKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
         if (DefaultKeymap.TryMap(e.Key, e.KeyModifiers, DestructiveBackspace, out var key))
         {
             KeyRequested?.Invoke(this, key);
@@ -75,6 +85,22 @@ public sealed class TerminalScreen : Control
         }
         base.OnKeyDown(e);
     }
+
+    private bool TryHandleClipboardKey(KeyEventArgs e)
+    {
+        var app = Application.Current;
+        var hotkeys = app?.PlatformSettings?.HotkeyConfiguration;
+        if (Matches(hotkeys?.Copy, e, Key.C)) { CopyRequested?.Invoke(this, EventArgs.Empty); return true; }
+        if (Matches(hotkeys?.Paste, e, Key.V)) { PasteRequested?.Invoke(this, EventArgs.Empty); return true; }
+        if (Matches(hotkeys?.SelectAll, e, Key.A)) { SelectAllRequested?.Invoke(this, EventArgs.Empty); return true; }
+        return false;
+    }
+
+    /// <summary>The platform's gestures when available (Cmd on macOS, Ctrl elsewhere); Ctrl+key as the fallback.</summary>
+    private static bool Matches(List<KeyGesture>? gestures, KeyEventArgs e, Key fallbackKey) =>
+        gestures is { Count: > 0 }
+            ? gestures.Any(gesture => gesture.Matches(e))
+            : e.Key == fallbackKey && e.KeyModifiers == KeyModifiers.Control;
 
     protected override void OnTextInput(TextInputEventArgs e)
     {
