@@ -19,14 +19,16 @@ Environment variables:
   test project use the bundled b3270 when built after `native/build/build-macos.sh` has run;
   otherwise set this.
 - `LIZTERM_WIRE_LOG`: append every protocol line in both directions to this file (attach to bug reports).
-- `LIZTERM_TEST_HOST`: `host[:port]` for the opt-in integration tests.
+- `LIZTERM_TEST_HOST`: `host[:port]` for the opt-in integration tests. Add `LIZTERM_TEST_TLS=1` for a TLS host
+  and `LIZTERM_TEST_VERIFY_CERT=0` to accept a self-signed certificate.
 
 `native/build/build-playback.sh` builds x3270's `playback` tool, for replaying a captured host
 trace against a live b3270 during local development.
 
 ## Recording protocol fixtures
 
-`tools/record-fixture.sh <trace.trc> <out.jsonl>` replays an x3270 host trace through b3270 and saves its output;
+`tools/record-fixture.sh <trace.trc> <out.jsonl>` replays an x3270 host trace through b3270 and saves its output, and
+`tools/wirelog-to-fixture.sh <wire.log> <out.jsonl>` trims a `LIZTERM_WIRE_LOG` file from a real session to the same format;
 see `tests/LizTerm.Backend.B3270.Tests/Fixtures/README.md`.
 
 ## Licenses of bundled components

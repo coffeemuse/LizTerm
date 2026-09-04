@@ -26,11 +26,20 @@ public class ProfileStoreTests : IDisposable
         var profile = new SessionProfile
         {
             Name = "TK5", Host = "mvs.local", Port = 3270, UseTls = true, VerifyCertificate = false,
-            Model = 4, Extended = false, CodePage = "bracket", LuName = "LU01",
+            Model = 4, Extended = false, CodePage = "bracket", LuName = "LU01", DestructiveBackspace = true,
         };
         store.Save(profile);
         var loaded = Assert.Single(store.LoadAll());
         Assert.Equal(profile, loaded);
+    }
+
+    [Fact]
+    public void LoadAll_reads_older_files_with_destructive_backspace_off()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "old.json"), """{"name":"old","host":"h","port":23}""");
+        var loaded = Assert.Single(new ProfileStore(_dir).LoadAll());
+        Assert.False(loaded.DestructiveBackspace);
     }
 
     [Fact]

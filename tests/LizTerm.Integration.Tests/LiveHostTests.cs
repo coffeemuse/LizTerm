@@ -5,8 +5,10 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.Integration.Tests;
 
-/// <summary>Runs only when LIZTERM_TEST_HOST=host[:port] is set. Uses the bundled b3270 when this
-/// project was built after native/build/build-macos.sh; otherwise set LIZTERM_B3270_PATH.</summary>
+/// <summary>Runs only when LIZTERM_TEST_HOST=host[:port] is set. LIZTERM_TEST_TLS=1 connects over TLS and
+/// LIZTERM_TEST_VERIFY_CERT=0 accepts an unverifiable certificate; both default the way a profile does.
+/// Uses the bundled b3270 when this project was built after native/build/build-macos.sh; otherwise set
+/// LIZTERM_B3270_PATH.</summary>
 public class LiveHostTests
 {
     [Fact]
@@ -18,7 +20,14 @@ public class LiveHostTests
         var colon = target!.LastIndexOf(':');
         var host = colon > 0 ? target[..colon] : target;
         var port = colon > 0 ? int.Parse(target[(colon + 1)..]) : 23;
-        var profile = new SessionProfile { Name = "integration", Host = host, Port = port };
+        var profile = new SessionProfile
+        {
+            Name = "integration",
+            Host = host,
+            Port = port,
+            UseTls = Flag("LIZTERM_TEST_TLS", fallback: false),
+            VerifyCertificate = Flag("LIZTERM_TEST_VERIFY_CERT", fallback: true),
+        };
 
         await using var session = new B3270Session(profile, () => new B3270ChildProcess(B3270Locator.Find()), WireLog.FromEnvironment());
         var gotText = new TaskCompletionSource<ScreenSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -32,5 +41,14 @@ public class LiveHostTests
 
         Assert.True(session.ConnectionState.IsConnected(), $"state was {session.ConnectionState}");
         Assert.True(screen.ToText().Any(char.IsLetter), "screen has no letters");
+        if (profile.UseTls) Assert.True(session.Tls?.Secure, "session is not secure");
     }
+
+    private static bool Flag(string variable, bool fallback) =>
+        Environment.GetEnvironmentVariable(variable)?.Trim().ToLowerInvariant() switch
+        {
+            "1" or "true" or "yes" => true,
+            "0" or "false" or "no" => false,
+            _ => fallback,
+        };
 }
