@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LizTerm.App.Clipboard;
 using LizTerm.App.Status;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
@@ -10,6 +11,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly IEmulatorSession _session;
     private readonly Action<Action> _dispatch;
+    private readonly ITextClipboard _clipboard;
     private readonly EventHandler<ScreenSnapshot> _onScreenUpdated;
     private readonly EventHandler<KeyboardStatus> _onStatusChanged;
     private readonly EventHandler<ConnectionState> _onConnectionChanged;
@@ -28,10 +30,12 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [ObservableProperty] private bool _isConnected;
 
     /// <param name="dispatch">Marshals a callback onto the UI thread. Tests pass <c>a => a()</c>.</param>
-    public SessionViewModel(IEmulatorSession session, Action<Action> dispatch)
+    /// <param name="clipboard">Text clipboard; the app passes <see cref="AvaloniaTextClipboard"/>, tests a fake.</param>
+    public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard)
     {
         _session = session;
         _dispatch = dispatch;
+        _clipboard = clipboard;
 
         _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
         _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
