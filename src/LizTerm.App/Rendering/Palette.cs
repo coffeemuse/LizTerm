@@ -9,6 +9,9 @@ public static class Palette
 {
     public static readonly IBrush Background = new ImmutableSolidColorBrush(Color.FromRgb(0, 0, 0));
 
+    /// <summary>Overlay for the mouse selection: muted blue at 40% opacity so host colors stay readable under it.</summary>
+    public static readonly IBrush Selection = new ImmutableSolidColorBrush(Color.FromArgb(0x66, 0x60, 0x90, 0xE0));
+
     private static readonly Dictionary<HostColor, Color> Colors = new()
     {
         [HostColor.Default] = Color.FromRgb(0xF0, 0xF0, 0xF0),
