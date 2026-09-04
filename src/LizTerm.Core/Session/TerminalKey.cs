@@ -16,7 +16,10 @@ public enum TerminalKey
     EraseEof,
     EraseInput,
     Delete,
+    /// <summary>Non-destructive: moves the cursor left one position.</summary>
     Backspace,
+    /// <summary>Destructive backspace: erases the character to the left of the cursor.</summary>
+    Erase,
     Insert,
     Dup,
     FieldMark,
