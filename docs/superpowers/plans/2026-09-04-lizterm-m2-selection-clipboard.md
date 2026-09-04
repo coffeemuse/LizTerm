@@ -19,7 +19,7 @@
 - Lifetime: a selection clears on any input sent to the host (key, typed text, paste, cursor move by click) and on any new mouse press or Select All. It survives host screen updates of the same size and clears when the screen size changes.
 - Appearance: one translucent overlay, `Palette.Selection` = ARGB `0x66, 0x60, 0x90, 0xE0` (muted blue, 40 percent opacity), painted after the text runs and before the cursor.
 - Copy text: one line per row, trailing U+0020 trimmed, rows joined by `\n`, no trailing newline. Paste normalizes `\r\n` and bare `\r` to `\n` and sends one `PasteTextAsync` call.
-- Hotkeys come from `TopLevel.PlatformSettings.HotkeyConfiguration` (Cmd on macOS, Ctrl elsewhere); the fallback when it is unavailable is Ctrl with C, V, A. The screen control raises events; it never touches the clipboard.
+- Hotkeys come from the visual's platform settings, `this.GetPlatformSettings()?.HotkeyConfiguration` (extension method in `Avalonia.VisualTree.VisualExtensions`, resolved through the visual's top level; Avalonia 12 has no `TopLevel.PlatformSettings` property), giving Cmd on macOS and Ctrl elsewhere; the fallback when it is unavailable is Ctrl with C, V, A. The screen control raises events; it never touches the clipboard.
 - Out of scope: Cut, middle-click paste, Shift+arrow selection, any `IEmulatorSession` or backend change.
 - User-visible strings are asserted exactly in tests: `"Could not copy: "` and `"Could not read the clipboard: "` followed by the exception message.
 - Deviation from the spec's file path: the gesture class lives in `src/LizTerm.App/Mouse/` (namespace `LizTerm.App.Mouse`, parallel to the existing `LizTerm.App.Keyboard`) rather than `Selection/`, so no namespace shares the name of the control's `Selection` property.
@@ -901,7 +901,7 @@ Expected: build error, `CopyRequested` does not exist.
 
 - [ ] **Step 3: Write the implementation**
 
-In `src/LizTerm.App/Controls/TerminalScreen.cs`, add the events after `CellClicked`:
+In `src/LizTerm.App/Controls/TerminalScreen.cs`, add `using Avalonia.VisualTree;` to the usings, then add the events after `CellClicked`:
 
 ```csharp
     /// <summary>Raised for the platform's Copy, Paste, and Select All hotkeys. The control never touches the clipboard.</summary>
@@ -931,7 +931,7 @@ Replace `OnKeyDown` with:
 
     private bool TryHandleClipboardKey(KeyEventArgs e)
     {
-        var hotkeys = TopLevel.GetTopLevel(this)?.PlatformSettings?.HotkeyConfiguration;
+        var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
         if (Matches(hotkeys?.Copy, e, Key.C)) { CopyRequested?.Invoke(this, EventArgs.Empty); return true; }
         if (Matches(hotkeys?.Paste, e, Key.V)) { PasteRequested?.Invoke(this, EventArgs.Empty); return true; }
         if (Matches(hotkeys?.SelectAll, e, Key.A)) { SelectAllRequested?.Invoke(this, EventArgs.Empty); return true; }
@@ -1382,7 +1382,7 @@ Replace the `TerminalScreen` element at the bottom with:
 
 - [ ] **Step 2: Wire the events and the gesture text**
 
-Replace the constructor in `src/LizTerm.App/Views/SessionWindow.axaml.cs` with:
+In `src/LizTerm.App/Views/SessionWindow.axaml.cs`, add `using Avalonia.VisualTree;` to the usings, then replace the constructor with:
 
 ```csharp
     public SessionWindow()
@@ -1404,7 +1404,7 @@ Replace the constructor in `src/LizTerm.App/Views/SessionWindow.axaml.cs` with:
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.</summary>
     private void ShowPlatformGestures()
     {
-        var hotkeys = PlatformSettings?.HotkeyConfiguration;
+        var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
         if (hotkeys is null) return;
         CopyMenuItem.InputGesture = hotkeys.Copy.FirstOrDefault();
         PasteMenuItem.InputGesture = hotkeys.Paste.FirstOrDefault();
@@ -1493,7 +1493,7 @@ In the `### App (src/LizTerm.App)` section, add after the `TerminalScreen` bulle
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the
   text and before the cursor, clears it when the screen size changes, and raises `CopyRequested`,
-  `PasteRequested`, and `SelectAllRequested` from `PlatformSettings.HotkeyConfiguration` (Cmd on macOS, Ctrl
+  `PasteRequested`, and `SelectAllRequested` from `GetPlatformSettings().HotkeyConfiguration` (Cmd on macOS, Ctrl
   elsewhere; Ctrl fallback). A plain click moves the cursor on release; a double-click selects the run of
   non-space cells. `SessionViewModel` owns Copy (trimmed rows joined by `\n`), Paste (CRLF normalized, one
   `PasteTextAsync`), and Select All, and nulls `Selection` on every path that sends input to the host. Clipboard
