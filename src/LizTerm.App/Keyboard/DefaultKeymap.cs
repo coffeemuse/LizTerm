@@ -6,7 +6,9 @@ namespace LizTerm.App.Keyboard;
 /// <summary>The built-in physical-key to 3270-key mapping. Not user-editable in v1.</summary>
 public static class DefaultKeymap
 {
-    public static bool TryMap(Key key, KeyModifiers modifiers, out TerminalKey terminalKey)
+    /// <param name="destructiveBackspace">When true, Backspace becomes <see cref="TerminalKey.Erase"/> (erase the
+    /// previous character) instead of <see cref="TerminalKey.Backspace"/> (cursor left), per the profile.</param>
+    public static bool TryMap(Key key, KeyModifiers modifiers, bool destructiveBackspace, out TerminalKey terminalKey)
     {
         terminalKey = default;
         if ((modifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0) return false;
@@ -27,7 +29,7 @@ public static class DefaultKeymap
             Key.Home => TerminalKey.Home,
             Key.End => TerminalKey.EraseEof,
             Key.Delete => TerminalKey.Delete,
-            Key.Back => TerminalKey.Backspace,
+            Key.Back => destructiveBackspace ? TerminalKey.Erase : TerminalKey.Backspace,
             Key.Up => TerminalKey.Up,
             Key.Down => TerminalKey.Down,
             Key.Left => TerminalKey.Left,

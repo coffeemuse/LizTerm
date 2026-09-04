@@ -16,6 +16,10 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<ScreenSnapshot?> SnapshotProperty =
         AvaloniaProperty.Register<TerminalScreen, ScreenSnapshot?>(nameof(Snapshot));
 
+    /// <summary>Mirrors the profile's DestructiveBackspace choice; see <see cref="DefaultKeymap.TryMap"/>.</summary>
+    public static readonly StyledProperty<bool> DestructiveBackspaceProperty =
+        AvaloniaProperty.Register<TerminalScreen, bool>(nameof(DestructiveBackspace));
+
     public static readonly FontFamily TerminalFont = FontFamily.Parse("avares://LizTerm.App/Assets/Fonts#IBM 3270");
 
     private readonly Typeface _typeface = new(TerminalFont);
@@ -35,6 +39,12 @@ public sealed class TerminalScreen : Control
         set => SetValue(SnapshotProperty, value);
     }
 
+    public bool DestructiveBackspace
+    {
+        get => GetValue(DestructiveBackspaceProperty);
+        set => SetValue(DestructiveBackspaceProperty, value);
+    }
+
     internal CellGeometry LastGeometry { get; private set; }
 
     public event EventHandler<TerminalKey>? KeyRequested;
@@ -43,7 +53,7 @@ public sealed class TerminalScreen : Control
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (DefaultKeymap.TryMap(e.Key, e.KeyModifiers, out var key))
+        if (DefaultKeymap.TryMap(e.Key, e.KeyModifiers, DestructiveBackspace, out var key))
         {
             KeyRequested?.Invoke(this, key);
             e.Handled = true;

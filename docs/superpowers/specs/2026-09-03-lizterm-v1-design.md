@@ -80,7 +80,7 @@ Derived from the OIA, expressed as enums rather than glyphs:
 
 ### 4.5 Session profile
 
-`Name`, `Host`, `Port` (default 23, or 992 when TLS on), `UseTls`, `VerifyCertificate` (default true), `Model` (2..5), `Extended` (default true), `CodePage` (default `cp037`), `LuName` (optional).
+`Name`, `Host`, `Port` (default 23, or 992 when TLS on), `UseTls`, `VerifyCertificate` (default true), `Model` (2..5), `Extended` (default true), `CodePage` (default `cp037`), `LuName` (optional), `DestructiveBackspace` (default false: Backspace only moves the cursor left, the x3270-family default; true makes it erase the previous character, as most PC emulators do).
 
 Stored as one JSON file per profile in the per-user config directory (`~/.config/LizTerm`, `~/Library/Application Support/LizTerm`, `%APPDATA%\LizTerm`). Certificate verification defaults on; a profile may turn it off because hobbyist hosts are almost all self-signed.
 
@@ -105,7 +105,7 @@ IEmulatorSession : IAsyncDisposable
   event Faulted(BackendFault)            // process died, protocol broken
 ```
 
-`TerminalKey` enum: `Enter`, `Clear`, `PF1..PF24`, `PA1..PA3`, `Attn`, `SysReq`, `Reset`, `Tab`, `BackTab`, `Home`, `EraseEof`, `EraseInput`, `Delete`, `Backspace`, `Insert` (toggle), `Dup`, `FieldMark`, `Newline`, `Up`, `Down`, `Left`, `Right`.
+`TerminalKey` enum: `Enter`, `Clear`, `PF1..PF24`, `PA1..PA3`, `Attn`, `SysReq`, `Reset`, `Tab`, `BackTab`, `Home`, `EraseEof`, `EraseInput`, `Delete`, `Backspace` (cursor left), `Erase` (destructive backspace), `Insert` (toggle), `Dup`, `FieldMark`, `Newline`, `Up`, `Down`, `Left`, `Right`.
 
 `FileTransferRequest`: `Direction` (Send, Receive), `LocalPath`, `HostFile`, `HostType` (Tso, Vm, Cics), `Mode` (Text, Binary), `CrLf` bool, `Remap` bool, and TSO allocation fields `Lrecl`, `Blksize`, `Recfm`, `AllocationUnits`, `PrimarySpace`, `SecondarySpace`, all optional.
 
@@ -153,7 +153,7 @@ Unexpected process exit raises `Faulted` with the last stderr lines and drops th
 
 ### 5.8 Diagnostics and fixture recording
 
-A wire log toggle writes every raw line in both directions, timestamped, to a file. It serves as the bug-report mechanism and as the replay fixture recorder: a wire log from a real session becomes a replay test without editing.
+A wire log toggle writes every raw line in both directions, timestamped, to a file. It serves as the bug-report mechanism and as the replay fixture recorder: a wire log from a real session becomes a replay test once `tools/wirelog-to-fixture.sh` has stripped the timestamps and the outbound lines.
 
 ## 6. LizTerm.App
 
@@ -196,7 +196,7 @@ Key events pass through one default keymap table to a `TerminalKey`, else fall t
 | Insert | Insert toggle |
 | Home | Home |
 | End | EraseEof |
-| Delete / Backspace | Delete / Backspace |
+| Delete / Backspace | Delete / Backspace (or Erase when the profile's `DestructiveBackspace` is on) |
 | Arrows | Up, Down, Left, Right |
 | Page Up / Page Down | PA1 / PA2 |
 | Ctrl+C, Ctrl+V (Cmd on macOS) | Copy / Paste |

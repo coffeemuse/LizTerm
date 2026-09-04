@@ -3,7 +3,7 @@
         xmlns:vm="using:LizTerm.App.ViewModels"
         x:Class="LizTerm.App.Views.ProfileEditorWindow"
         x:DataType="vm:ProfileEditorViewModel"
-        Title="Session Profile" Width="440" SizeToContent="Height" CanResize="False"
+        Title="Session Profile" Width="480" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="10">
     <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" >
@@ -27,6 +27,8 @@
       <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding CodePage}" Width="140" HorizontalAlignment="Left" />
       <TextBlock Grid.Row="6" Text="LU name" VerticalAlignment="Center" />
       <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding LuName}" Width="140" HorizontalAlignment="Left" PlaceholderText="optional" />
+      <TextBlock Grid.Row="7" Text="Keyboard" VerticalAlignment="Center" />
+      <CheckBox Grid.Row="7" Grid.Column="1" Content="Backspace erases the previous character" IsChecked="{Binding DestructiveBackspace}" />
     </Grid>
     <TextBlock Text="{Binding ValidationMessage}" Foreground="#FF8080" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

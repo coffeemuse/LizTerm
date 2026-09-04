@@ -28,7 +28,7 @@ public class DefaultKeymapTests
     [InlineData(Key.PageDown, KeyModifiers.None, TerminalKey.PA2)]
     public void Maps_default_keys(Key key, KeyModifiers modifiers, TerminalKey expected)
     {
-        Assert.True(DefaultKeymap.TryMap(key, modifiers, out var actual));
+        Assert.True(DefaultKeymap.TryMap(key, modifiers, destructiveBackspace: false, out var actual));
         Assert.Equal(expected, actual);
     }
 
@@ -39,5 +39,12 @@ public class DefaultKeymapTests
     [InlineData(Key.Enter, KeyModifiers.Meta)]
     [InlineData(Key.LeftShift, KeyModifiers.Shift)]
     public void Leaves_text_and_shortcut_keys_unmapped(Key key, KeyModifiers modifiers) =>
-        Assert.False(DefaultKeymap.TryMap(key, modifiers, out _));
+        Assert.False(DefaultKeymap.TryMap(key, modifiers, destructiveBackspace: false, out _));
+
+    [Fact]
+    public void Backspace_erases_when_the_profile_asks_for_it()
+    {
+        Assert.True(DefaultKeymap.TryMap(Key.Back, KeyModifiers.None, destructiveBackspace: true, out var key));
+        Assert.Equal(TerminalKey.Erase, key);
+    }
 }

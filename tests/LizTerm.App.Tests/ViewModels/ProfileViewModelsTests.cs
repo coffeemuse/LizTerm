@@ -24,6 +24,7 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(2, vm.Model);
         Assert.True(vm.Extended);
         Assert.Equal("cp037", vm.CodePage);
+        Assert.False(vm.DestructiveBackspace);
         vm.UseTls = true;
         Assert.Equal("992", vm.PortText);
         vm.UseTls = false;
@@ -53,7 +54,7 @@ public class ProfileViewModelsTests : IDisposable
     [Fact]
     public void Editor_round_trips_an_existing_profile()
     {
-        var original = new SessionProfile { Name = "TK5", Host = "mvs", Port = 3270, UseTls = true, VerifyCertificate = false, Model = 5, Extended = false, CodePage = "bracket", LuName = "LU1" };
+        var original = new SessionProfile { Name = "TK5", Host = "mvs", Port = 3270, UseTls = true, VerifyCertificate = false, Model = 5, Extended = false, CodePage = "bracket", LuName = "LU1", DestructiveBackspace = true };
         var vm = new ProfileEditorViewModel(original);
         Assert.Equal(original, vm.TryBuild());
     }
