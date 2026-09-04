@@ -1,0 +1,91 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LizTerm.App.ViewModels"
+        xmlns:views="using:LizTerm.App.Views"
+        x:Class="LizTerm.App.Views.FileTransferWindow"
+        x:DataType="vm:FileTransferViewModel"
+        Title="File Transfer" Width="560" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <Panel Margin="16">
+
+    <!-- Form: what to transfer. Stays filled behind the other two panels. -->
+    <StackPanel x:Name="FormPanel" Spacing="10" IsVisible="{Binding IsForm}">
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <RadioButton Content="Send to host" GroupName="Direction" IsChecked="{Binding IsSend}" />
+        <RadioButton Content="Receive from host" GroupName="Direction" IsChecked="{Binding IsReceive}" />
+      </StackPanel>
+      <Grid ColumnDefinitions="110,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+        <TextBlock Grid.Row="0" Text="Local file" VerticalAlignment="Center" />
+        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding LocalPath}" Margin="0,0,8,0" />
+        <Button Grid.Row="0" Grid.Column="2" Content="Browse..." Command="{Binding BrowseCommand}" />
+        <TextBlock Grid.Row="1" Text="Host file" VerticalAlignment="Center" />
+        <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding HostFile}" PlaceholderText="LIZTERM.JCL(JOB1) or 'USER.DATA.SET'" />
+        <TextBlock Grid.Row="2" Text="Host type" VerticalAlignment="Center" />
+        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding HostTypes}" SelectedItem="{Binding HostType}" Width="120" HorizontalAlignment="Left"
+                  DisplayMemberBinding="{ReflectionBinding Converter={x:Static views:TransferLabels.Converter}}" />
+        <TextBlock Grid.Row="3" Text="Mode" VerticalAlignment="Center" />
+        <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="16">
+          <RadioButton Content="Text" GroupName="Mode" IsChecked="{Binding IsText}" />
+          <RadioButton Content="Binary" GroupName="Mode" IsChecked="{Binding IsBinary}" />
+        </StackPanel>
+        <TextBlock Grid.Row="4" Text="Options" VerticalAlignment="Top" Margin="0,6,0,0" />
+        <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Spacing="4">
+          <CheckBox Content="Convert line endings (CRLF)" IsChecked="{Binding CrLf}" IsEnabled="{Binding IsText}" />
+          <CheckBox Content="Remap the character set" IsChecked="{Binding Remap}" IsEnabled="{Binding IsText}" />
+          <CheckBox Content="Append to an existing file" IsChecked="{Binding Append}" />
+        </StackPanel>
+      </Grid>
+      <Expander Header="Advanced (host file allocation)" IsVisible="{Binding ShowAdvanced}">
+        <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,6,0,0">
+          <TextBlock Grid.Row="0" Text="Record format" VerticalAlignment="Center" />
+          <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding RecordFormats}" SelectedItem="{Binding RecordFormat}" Width="130" HorizontalAlignment="Left"
+                    DisplayMemberBinding="{ReflectionBinding Converter={x:Static views:TransferLabels.Converter}}" />
+          <TextBlock Grid.Row="1" Text="LRECL" VerticalAlignment="Center" />
+          <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LreclText}" IsEnabled="{Binding HasRecordFormat}" Width="100" HorizontalAlignment="Left" />
+          <TextBlock Grid.Row="2" Text="BLKSIZE (TSO)" VerticalAlignment="Center" />
+          <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding BlksizeText}" IsEnabled="{Binding CanSetBlksize}" Width="100" HorizontalAlignment="Left" />
+          <TextBlock Grid.Row="3" Text="Allocation (TSO)" VerticalAlignment="Center" />
+          <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding AllocationUnitsList}" SelectedItem="{Binding AllocationUnits}" IsEnabled="{Binding IsTso}" Width="130" HorizontalAlignment="Left"
+                    DisplayMemberBinding="{ReflectionBinding Converter={x:Static views:TransferLabels.Converter}}" />
+          <TextBlock Grid.Row="4" Text="Primary space" VerticalAlignment="Center" />
+          <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding PrimarySpaceText}" IsEnabled="{Binding CanSetSpace}" Width="100" HorizontalAlignment="Left" />
+          <TextBlock Grid.Row="5" Text="Secondary space" VerticalAlignment="Center" />
+          <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding SecondarySpaceText}" IsEnabled="{Binding CanSetSpace}" Width="100" HorizontalAlignment="Left" />
+          <TextBlock Grid.Row="6" Text="Average block" VerticalAlignment="Center" />
+          <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding AverageBlockText}" IsEnabled="{Binding CanSetAverageBlock}" Width="100" HorizontalAlignment="Left" />
+          <TextBlock Grid.Row="7" Text="Buffer size" VerticalAlignment="Center" />
+          <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding BufferSizeText}" Width="100" HorizontalAlignment="Left" PlaceholderText="256-32768" />
+          <TextBlock Grid.Row="8" Text="Extra options" VerticalAlignment="Center" />
+          <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding ExtraOptions}" PlaceholderText="appended to the IND$FILE command" />
+        </Grid>
+      </Expander>
+      <TextBlock Text="The cursor must be at a TSO READY prompt or a command line before you start." Foreground="#A0A0A0" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding ValidationMessage}" Foreground="#FF8080" TextWrapping="Wrap"
+                 IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button Content="Close" Click="OnCloseClick" />
+        <Button x:Name="StartButton" Content="Start" Command="{Binding StartCommand}" IsDefault="True" />
+      </StackPanel>
+    </StackPanel>
+
+    <!-- Running: progress and Cancel. -->
+    <StackPanel x:Name="RunningPanel" Spacing="12" IsVisible="{Binding IsRunning}">
+      <TextBlock Text="{Binding StatusText}" FontSize="16" />
+      <ProgressBar Minimum="0" Maximum="{Binding ProgressMaximum, Mode=OneWay}" Value="{Binding ProgressValue, Mode=OneWay}"
+                   IsIndeterminate="{Binding IsProgressIndeterminate}" Height="18" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button x:Name="CancelButton" Content="Cancel" Command="{Binding CancelTransferCommand}" />
+      </StackPanel>
+    </StackPanel>
+
+    <!-- Done: the engine's or host's message, verbatim. -->
+    <StackPanel x:Name="DonePanel" Spacing="12" IsVisible="{Binding IsDone}">
+      <TextBlock Text="{Binding ResultMessage}" TextWrapping="Wrap" Foreground="#80FF80" IsVisible="{Binding Succeeded}" />
+      <TextBlock Text="{Binding ResultMessage}" TextWrapping="Wrap" Foreground="#FF8080" IsVisible="{Binding Failed}" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button Content="Another transfer" Command="{Binding BackCommand}" />
+        <Button Content="Close" Click="OnCloseClick" IsDefault="True" />
+      </StackPanel>
+    </StackPanel>
+  </Panel>
+</Window>
