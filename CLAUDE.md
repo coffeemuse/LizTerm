@@ -163,6 +163,16 @@ the backend tests.
   first; anything unmapped falls through to Avalonia's text input so dead keys and IMEs work. Backspace maps
   to b3270's non-destructive `BackSpace` unless the profile's `DestructiveBackspace` is on, in which case the
   keymap emits `TerminalKey.Erase`; the control's `DestructiveBackspace` property carries that choice.
+- Mouse selection is a `ScreenRegion` (Core; inclusive, zero-based, always normalized). `SelectionGesture`
+  (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
+  events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the
+  text and before the cursor, clears it when the screen size changes, and raises `CopyRequested`,
+  `PasteRequested`, and `SelectAllRequested` from `PlatformSettings.HotkeyConfiguration` (Cmd on macOS, Ctrl
+  elsewhere; Ctrl fallback). A plain click moves the cursor on release; a double-click selects the run of
+  non-space cells. `SessionViewModel` owns Copy (trimmed rows joined by `\n`), Paste (CRLF normalized, one
+  `PasteTextAsync`), and Select All, and nulls `Selection` on every path that sends input to the host. Clipboard
+  access goes through `ITextClipboard` (`Clipboard/`), injected like the dispatch delegate; the app passes
+  `AvaloniaTextClipboard(window)`, so `App.OpenSession` creates the window before the view model.
 - `StartupArguments.Parse` decides between a saved profile name, `host[:port]`, and `[ipv6]:port` from
   the first command-line argument. `ProfileStore` keeps one JSON file per profile under the per-OS config
   directory and silently skips unreadable files.
@@ -179,6 +189,8 @@ the backend tests.
 - App tests run on Avalonia's headless platform: `TestAppBuilder` is registered with
   `[assembly: AvaloniaTestApplication]`, control tests use `[AvaloniaFact]` and `KeyPressQwerty`,
   view-model tests use plain `[Fact]` with `FakeEmulatorSession`, which records calls as strings such as
-  `key:PF3` and `move:3,9`.
+  `key:PF3` and `move:3,9`. `FakeTextClipboard` holds a `Text` string and an optional `Exception`; control
+  tests drive drags with the headless `MouseDown`/`MouseMove`/`MouseUp` helpers and read
+  `TerminalScreen.Selection` directly.
 - Assertions on user-visible status strings (for example `"✕ Not connected"`) are exact; change
   `StatusFormatter` and its tests together.
