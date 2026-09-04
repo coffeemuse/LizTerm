@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using LizTerm.App.ViewModels;
 
 namespace LizTerm.App.Views;
@@ -12,7 +13,24 @@ public partial class SessionWindow : Window
         Screen.KeyRequested += (_, key) => _ = ViewModel?.SendKeyCommand.ExecuteAsync(key);
         Screen.TextEntered += (_, text) => _ = ViewModel?.TypeTextAsync(text);
         Screen.CellClicked += (_, cell) => _ = ViewModel?.MoveCursorAsync(cell.Row, cell.Column);
-        Opened += (_, _) => Screen.Focus();
+        Screen.CopyRequested += (_, _) => _ = ViewModel?.CopyCommand.ExecuteAsync(null);
+        Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteCommand.ExecuteAsync(null);
+        Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAllCommand.Execute(null);
+        Opened += (_, _) =>
+        {
+            ShowPlatformGestures();
+            Screen.Focus();
+        };
+    }
+
+    /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.</summary>
+    private void ShowPlatformGestures()
+    {
+        var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
+        if (hotkeys is null) return;
+        CopyMenuItem.InputGesture = hotkeys.Copy.FirstOrDefault();
+        PasteMenuItem.InputGesture = hotkeys.Paste.FirstOrDefault();
+        SelectAllMenuItem.InputGesture = hotkeys.SelectAll.FirstOrDefault();
     }
 
     private SessionViewModel? ViewModel => DataContext as SessionViewModel;
