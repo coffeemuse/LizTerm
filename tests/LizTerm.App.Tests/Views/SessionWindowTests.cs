@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using LizTerm.App.Controls;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
@@ -97,5 +98,40 @@ public class SessionWindowTests
 
         Assert.Equal(ScreenRegion.Full(24, 80), vm.Selection);
         Assert.Equal(ScreenRegion.Full(24, 80), screen.Selection);
+    }
+
+    [AvaloniaFact]
+    public void File_transfer_menu_item_follows_the_connection_state()
+    {
+        var (window, _, _, session, _) = Show();
+        var item = window.FindControl<MenuItem>("FileTransferMenuItem")!;
+        Assert.False(item.IsEnabled);
+        session.RaiseConnection(ConnectionState.Connected3270);
+        Assert.True(item.IsEnabled);
+        session.RaiseConnection(ConnectionState.Disconnected);
+        Assert.False(item.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void File_transfer_click_opens_the_dialog_over_the_session_window_only_while_connected()
+    {
+        var (window, _, vm, session, _) = Show();
+        var item = window.FindControl<MenuItem>("FileTransferMenuItem")!;
+
+        item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Empty(window.OwnedWindows);
+
+        session.RaiseConnection(ConnectionState.Connected3270);
+        item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        var dialog = Assert.Single(window.OwnedWindows);
+        var transfer = Assert.IsType<FileTransferViewModel>(dialog.DataContext);
+        Assert.True(transfer.IsForm);
+
+        transfer.LocalPath = "/nonexistent/a.txt";
+        transfer.HostFile = "A.B";
+        transfer.StartCommand.Execute(null);
+        Assert.Equal("A.B", vm.LastTransferRequest?.HostFile);
+        dialog.Close();
+        Assert.Empty(window.OwnedWindows);
     }
 }
