@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using LizTerm.App.Clipboard;
 using LizTerm.App.Startup;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -35,8 +36,9 @@ public partial class App : Application
 
     public void OpenSession(SessionProfile profile)
     {
-        var viewModel = new SessionViewModel(SessionFactory.Create(profile), action => Dispatcher.UIThread.Post(action));
-        var window = new SessionWindow { DataContext = viewModel };
+        var window = new SessionWindow();
+        var viewModel = new SessionViewModel(SessionFactory.Create(profile), action => Dispatcher.UIThread.Post(action), new AvaloniaTextClipboard(window));
+        window.DataContext = viewModel;
         _sessions.Add(window);
         window.Closed += async (_, _) =>
         {

@@ -1,9 +1,12 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using LizTerm.App.Keyboard;
+using LizTerm.App.Mouse;
 using LizTerm.App.Rendering;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
@@ -20,15 +23,21 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<bool> DestructiveBackspaceProperty =
         AvaloniaProperty.Register<TerminalScreen, bool>(nameof(DestructiveBackspace));
 
+    /// <summary>The mouse selection, or null. Two-way by default so the window can bind it to the view model,
+    /// which clears it whenever input is sent to the host.</summary>
+    public static readonly StyledProperty<ScreenRegion?> SelectionProperty =
+        AvaloniaProperty.Register<TerminalScreen, ScreenRegion?>(nameof(Selection), defaultBindingMode: BindingMode.TwoWay);
+
     public static readonly FontFamily TerminalFont = FontFamily.Parse("avares://LizTerm.App/Assets/Fonts#IBM 3270");
 
     private readonly Typeface _typeface = new(TerminalFont);
+    private readonly SelectionGesture _gesture = new();
     private double _advancePerEm;
     private double _lineHeightPerEm;
 
     static TerminalScreen()
     {
-        AffectsRender<TerminalScreen>(SnapshotProperty);
+        AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty);
         AffectsArrange<TerminalScreen>(SnapshotProperty);
         FocusableProperty.OverrideDefaultValue<TerminalScreen>(true);
     }
@@ -45,14 +54,30 @@ public sealed class TerminalScreen : Control
         set => SetValue(DestructiveBackspaceProperty, value);
     }
 
+    public ScreenRegion? Selection
+    {
+        get => GetValue(SelectionProperty);
+        set => SetValue(SelectionProperty, value);
+    }
+
     internal CellGeometry LastGeometry { get; private set; }
 
     public event EventHandler<TerminalKey>? KeyRequested;
     public event EventHandler<string>? TextEntered;
     public event EventHandler<(int Row, int Column)>? CellClicked;
 
+    /// <summary>Raised for the platform's Copy, Paste, and Select All hotkeys. The control never touches the clipboard.</summary>
+    public event EventHandler? CopyRequested;
+    public event EventHandler? PasteRequested;
+    public event EventHandler? SelectAllRequested;
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (TryHandleClipboardKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
         if (DefaultKeymap.TryMap(e.Key, e.KeyModifiers, DestructiveBackspace, out var key))
         {
             KeyRequested?.Invoke(this, key);
@@ -61,6 +86,21 @@ public sealed class TerminalScreen : Control
         }
         base.OnKeyDown(e);
     }
+
+    private bool TryHandleClipboardKey(KeyEventArgs e)
+    {
+        var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
+        if (Matches(hotkeys?.Copy, e, Key.C)) { CopyRequested?.Invoke(this, EventArgs.Empty); return true; }
+        if (Matches(hotkeys?.Paste, e, Key.V)) { PasteRequested?.Invoke(this, EventArgs.Empty); return true; }
+        if (Matches(hotkeys?.SelectAll, e, Key.A)) { SelectAllRequested?.Invoke(this, EventArgs.Empty); return true; }
+        return false;
+    }
+
+    /// <summary>The platform's gestures when available (Cmd on macOS, Ctrl elsewhere); Ctrl+key as the fallback.</summary>
+    private static bool Matches(List<KeyGesture>? gestures, KeyEventArgs e, Key fallbackKey) =>
+        gestures is { Count: > 0 }
+            ? gestures.Any(gesture => gesture.Matches(e))
+            : e.Key == fallbackKey && e.KeyModifiers == KeyModifiers.Control;
 
     protected override void OnTextInput(TextInputEventArgs e)
     {
@@ -81,11 +121,61 @@ public sealed class TerminalScreen : Control
         var snapshot = Snapshot;
         if (snapshot is null) return;
         var position = e.GetPosition(this);
-        if (LastGeometry.HitTest(position.X, position.Y, snapshot.Rows, snapshot.Columns) is { } cell)
+        if (LastGeometry.HitTest(position.X, position.Y, snapshot.Rows, snapshot.Columns) is not { } cell) return;
+        PressAt(cell, e.ClickCount);
+        e.Pointer.Capture(this);
+        e.Handled = true;
+    }
+
+    /// <summary>The cell-level half of a press, split out so tests can drive a double-click directly if the
+    /// headless platform does not report click counts.</summary>
+    internal void PressAt((int Row, int Column) cell, int clickCount)
+    {
+        var snapshot = Snapshot;
+        if (snapshot is null) return;
+        if (clickCount == 2)
+            _gesture.DoubleClick(cell.Row, cell.Column, snapshot);
+        else
+            _gesture.Press(cell.Row, cell.Column);
+        Selection = _gesture.Region;
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        if (!ReferenceEquals(e.Pointer.Captured, this)) return;
+        var snapshot = Snapshot;
+        if (snapshot is null) return;
+        var position = e.GetPosition(this);
+        if (LastGeometry.NearestCell(position.X, position.Y, snapshot.Rows, snapshot.Columns) is not { } cell) return;
+        _gesture.Move(cell.Row, cell.Column);
+        Selection = _gesture.Region;
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        if (e.InitialPressMouseButton != MouseButton.Left) return;
+        if (ReferenceEquals(e.Pointer.Captured, this)) e.Pointer.Capture(null);
+        if (_gesture.Release() != ReleaseResult.Click) return;
+        var snapshot = Snapshot;
+        if (snapshot is null) return;
+        var position = e.GetPosition(this);
+        if (LastGeometry.NearestCell(position.X, position.Y, snapshot.Rows, snapshot.Columns) is { } cell)
         {
             CellClicked?.Invoke(this, cell);
             e.Handled = true;
         }
+    }
+
+    /// <summary>A screen of a different size makes the old coordinates meaningless; same size keeps them.</summary>
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property != SnapshotProperty || Selection is null) return;
+        var (oldValue, newValue) = change.GetOldAndNewValue<ScreenSnapshot?>();
+        if (oldValue is null || newValue is null || oldValue.Rows != newValue.Rows || oldValue.Columns != newValue.Columns)
+            Selection = null;
     }
 
     protected override Size ArrangeOverride(Size finalSize)
@@ -117,6 +207,7 @@ public sealed class TerminalScreen : Control
                 DrawRun(context, snapshot, row, start, col - start, style, g);
             }
         }
+        DrawSelection(context, snapshot, g);
         DrawCursor(context, snapshot, g);
     }
 
@@ -163,6 +254,14 @@ public sealed class TerminalScreen : Control
             var y = Math.Round(rect.Bottom) - 1.5;
             context.DrawLine(new Pen(Palette.Brush(fg, false)), new Point(rect.Left, y), new Point(rect.Right, y));
         }
+    }
+
+    private void DrawSelection(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
+    {
+        if (Selection?.Clamp(snapshot.Rows, snapshot.Columns) is not { } region) return;
+        var topLeft = g.CellRect(region.Top, region.Left);
+        var bottomRight = g.CellRect(region.Bottom, region.Right);
+        context.FillRectangle(Palette.Selection, new Rect(topLeft.TopLeft, bottomRight.BottomRight));
     }
 
     private void DrawCursor(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)

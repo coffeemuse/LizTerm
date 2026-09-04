@@ -29,6 +29,16 @@ public readonly record struct CellGeometry(double CellWidth, double CellHeight, 
         return (row, column);
     }
 
+    /// <summary>Like <see cref="HitTest"/>, but a point outside the grid clamps to the nearest edge cell, so a drag
+    /// that leaves the screen extends the selection to the edge. Null only without geometry or with an empty grid.</summary>
+    public (int Row, int Column)? NearestCell(double x, double y, int rows, int columns)
+    {
+        if (CellWidth <= 0 || CellHeight <= 0 || rows <= 0 || columns <= 0) return null;
+        var column = (int)Math.Floor((x - OriginX) / CellWidth);
+        var row = (int)Math.Floor((y - OriginY) / CellHeight);
+        return (Math.Clamp(row, 0, rows - 1), Math.Clamp(column, 0, columns - 1));
+    }
+
     public Rect CellRect(int row, int column) =>
         new(OriginX + column * CellWidth, OriginY + row * CellHeight, CellWidth, CellHeight);
 }
