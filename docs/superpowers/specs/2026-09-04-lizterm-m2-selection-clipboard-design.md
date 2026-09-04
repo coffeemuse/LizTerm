@@ -1,7 +1,7 @@
 # LizTerm Milestone 2, Plan 1: Selection and Clipboard
 
 Date: 2026-09-04
-Status: approved in discussion, pending written review
+Status: approved and implemented on branch claude/milestone-2-status-98a063 (2026-09-04); this is the as-built spec
 Parent: `2026-09-03-lizterm-v1-design.md` sections 6.2, 6.3, 6.5, and 6.6
 
 ## 1. Purpose
@@ -71,8 +71,9 @@ field, copies blanks.
 
 ### 4.1 SelectionGesture (pure)
 
-Lives in `src/LizTerm.App/Selection/SelectionGesture.cs`. Consumes cell coordinates, never pixels
-or pointer types.
+Lives in `src/LizTerm.App/Mouse/SelectionGesture.cs`. The namespace is LizTerm.App.Mouse, parallel
+to LizTerm.App.Keyboard; a namespace named Selection would collide with the control's Selection
+property. Consumes cell coordinates, never pixels or pointer types.
 
 - `Press(row, column)`: records the anchor, clears the current region, marks no drag yet.
 - `Move(row, column)`: with an anchor set, and either the cell differing from the anchor or a drag
@@ -107,7 +108,8 @@ unit tested.
   `Palette.Selection`, then the cursor, so the cursor stays crisp. `Palette.Selection` is a muted
   blue at roughly 40 percent opacity, defined once beside the existing brushes.
 - Hotkeys. Before consulting `DefaultKeymap`, key-down reads the platform hotkey configuration
-  from the control's top level and raises `CopyRequested`, `PasteRequested`, or
+  from the control's top level (through the visual's GetPlatformSettings() extension; Avalonia 12
+  has no TopLevel.PlatformSettings property) and raises `CopyRequested`, `PasteRequested`, or
   `SelectAllRequested` when a gesture in the Copy, Paste, or Select All lists matches, marking the
   event handled. When the configuration is unavailable, Control with C, V, and A are the fallback.
   This gives Cmd on macOS and Ctrl elsewhere without platform code in LizTerm.
@@ -158,8 +160,9 @@ as empty and writes are dropped. Tests use a fake with a string field.
 - Clipboard read or write failure sets `ErrorMessage` to a plain "Could not read the clipboard" or
   "Could not copy" followed by the reason. Nothing fails silently.
 - Paste while the keyboard is locked is rejected by b3270 and swallowed like any other rejected
-  action; the status bar already shows the lock. Paste while disconnected cannot happen because the
-  command is disabled.
+  action; the status bar already shows the lock. Paste while disconnected is a no-op: the menu item
+  is disabled, and because the hotkey path executes commands without consulting CanExecute, the
+  paste command also checks the connection itself.
 - A double-click on a space selects nothing. Copy of a region that is all spaces writes empty
   lines, matching what the screen shows.
 - Selection state is per window; two session windows never share one.
@@ -216,5 +219,7 @@ tests.
 ## 7. Out of scope
 
 Cut; middle-click paste; keyboard-driven selection with Shift and arrows; Ctrl+Insert and
-Shift+Insert; a selection that follows content across host updates; any change to the b3270
-backend or to `IEmulatorSession`.
+Shift+Insert as LizTerm mappings (on Windows, Avalonia's platform hotkey table lists them for Copy
+and Paste, so they work there and Shift+Insert no longer reaches the keymap's Insert mapping); a
+selection that follows content across host updates; any change to the b3270 backend or to
+`IEmulatorSession`.
