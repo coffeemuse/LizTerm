@@ -49,8 +49,12 @@ line in both directions to this file; the fault message tells users to set it), 
 `WithDeveloperTools()` in `Program.BuildAvaloniaApp`, so an app started with `dotnet run` can be inspected
 through the server's `attach-to-app`, `tree`, `props`, `screenshot`, and `input` tools. Release builds
 carry none of it, and the headless test builder never calls it. Every tool call is refused until
-`AVALONIA_TOOLS_LICENSE_KEY` is present in the environment the MCP server is spawned from; put it in
-`.claude/settings.local.json` under `env` (gitignored), never in `.mcp.json`.
+`AVALONIA_TOOLS_LICENSE_KEY` is present in the MCP server's environment. Put it in
+`.claude/settings.local.json` under `env` (gitignored), never in `.mcp.json`: settings `env` is inherited by
+MCP child processes, but `${VAR}` placeholders in `.mcp.json` expand only from Claude Code's startup
+environment (the desktop app does not source `~/.zshrc`), so an `env` entry for the key in `.mcp.json`
+overrides the inherited value with an empty string. Stdio MCP servers are never restarted mid-session, so a
+new key takes effect on the next session.
 
 ### Recording a replay fixture
 
