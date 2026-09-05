@@ -21,25 +21,25 @@ public class B3270LocatorTests : IDisposable
     }
 
     [Fact]
-    public void Override_path_wins()
+    public void Override_path_wins_and_is_reported_as_override()
     {
         var path = MakeExecutable("custom/b3270");
-        Assert.Equal(path, B3270Locator.Find(path, _dir));
+        Assert.Equal(new B3270Location(path, EngineSource.Override), B3270Locator.Find(path, _dir));
     }
 
     [Fact]
-    public void Finds_runtime_native_folder()
+    public void Finds_runtime_native_folder_as_bundled()
     {
         var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
         var path = MakeExecutable(Path.Combine("runtimes", rid, "native", B3270Locator.FileName));
-        Assert.Equal(path, B3270Locator.Find(null, _dir));
+        Assert.Equal(new B3270Location(path, EngineSource.Bundled), B3270Locator.Find(null, _dir));
     }
 
     [Fact]
-    public void Falls_back_to_base_directory()
+    public void Falls_back_to_base_directory_as_bundled()
     {
         var path = MakeExecutable(B3270Locator.FileName);
-        Assert.Equal(path, B3270Locator.Find(null, _dir));
+        Assert.Equal(new B3270Location(path, EngineSource.Bundled), B3270Locator.Find(null, _dir));
     }
 
     [Fact]
