@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using LizTerm.App.Clipboard;
+using LizTerm.App.Dialogs;
 using LizTerm.App.Startup;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -26,18 +27,27 @@ public partial class App : Application
         {
             // Closing the last session window returns to the picker; only Quit ends the process.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            _store = new ProfileStore(ProfileStore.DefaultDirectory());
-            var profile = StartupArguments.Parse(desktop.Args ?? []).Resolve(_store.LoadAll());
-            if (profile is not null) OpenSession(profile);
+            _store = new ProfileStore(AppPaths.ProfilesDirectory());
+            var startupArguments = StartupArguments.Parse(desktop.Args ?? []);
+            var profile = startupArguments.Resolve(_store.LoadAll());
+            if (profile is not null) OpenSession(profile, fromStore: startupArguments.ProfileName is not null);
             else ShowPicker();
         }
         base.OnFrameworkInitializationCompleted();
     }
 
-    public void OpenSession(SessionProfile profile)
+    /// <param name="fromStore">True for a saved profile, whose "Always allow" choice can be written back; false for
+    /// an ad hoc command-line profile.</param>
+    public void OpenSession(SessionProfile profile, bool fromStore)
     {
         var window = new SessionWindow();
-        var viewModel = new SessionViewModel(SessionFactory.Create(profile), action => Dispatcher.UIThread.Post(action), new AvaloniaTextClipboard(window));
+        var store = _store ??= new ProfileStore(AppPaths.ProfilesDirectory());
+        var viewModel = new SessionViewModel(
+            SessionFactory.Create(profile),
+            action => Dispatcher.UIThread.Post(action),
+            new AvaloniaTextClipboard(window),
+            new AvaloniaCertificatePrompt(window),
+            fromStore ? store.Save : null);
         window.DataContext = viewModel;
         _sessions.Add(window);
         window.Closed += async (_, _) =>
@@ -59,7 +69,7 @@ public partial class App : Application
             _picker.Activate();
             return;
         }
-        _picker = new ProfilePickerWindow(_store ?? new ProfileStore(ProfileStore.DefaultDirectory()), OpenSession, Quit);
+        _picker = new ProfilePickerWindow(_store ?? new ProfileStore(AppPaths.ProfilesDirectory()), profile => OpenSession(profile, fromStore: true), Quit);
         _picker.Closed += (_, _) => { if (_sessions.Count == 0 && !_quitting) { /* picker closed with the X: treat as quit */ Quit(); } };
         _picker.Show();
     }
