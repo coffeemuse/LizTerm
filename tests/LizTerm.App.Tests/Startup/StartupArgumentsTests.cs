@@ -44,4 +44,51 @@ public class StartupArgumentsTests
         Assert.Equal(3270, profile.Port);
         Assert.Equal(23, StartupArguments.Parse(["mvs.local"]).Resolve([])!.Port);
     }
+
+    [Theory]
+    [InlineData("L:mvs.local", true, true, null, "mvs.local", 992)]
+    [InlineData("L:mvs.local:4270", true, true, null, "mvs.local", 4270)]
+    [InlineData("Y:L:mvs.local:4270", true, false, null, "mvs.local", 4270)]
+    [InlineData("L:Y:mvs.local", true, false, null, "mvs.local", 992)]
+    [InlineData("Y:mvs.local", false, false, null, "mvs.local", 23)]
+    [InlineData("CONS01@mvs.local:3270", false, true, "CONS01", "mvs.local", 3270)]
+    [InlineData("LU1,LU2@mvs.local", false, true, "LU1,LU2", "mvs.local", 23)]
+    [InlineData("L:CONS01@[fe80::1]:4270", true, true, "CONS01", "fe80::1", 4270)]
+    public void Prefixes_and_lu_names_are_parsed(string arg, bool tls, bool verify, string? lu, string host, int port)
+    {
+        var parsed = StartupArguments.Parse([arg]);
+        Assert.Null(parsed.Error);
+        Assert.Null(parsed.ProfileName);
+        Assert.Equal(tls, parsed.UseTls);
+        Assert.Equal(verify, parsed.VerifyCertificate);
+        Assert.Equal(lu, parsed.LuName);
+        Assert.Equal(host, parsed.Host);
+        var profile = parsed.Resolve([])!;
+        Assert.Equal(port, profile.Port);
+        Assert.Equal(tls, profile.UseTls);
+        Assert.Equal(verify, profile.VerifyCertificate);
+        Assert.Equal(lu, profile.LuName);
+    }
+
+    [Theory]
+    [InlineData("X:mvs.local")]
+    [InlineData("L:L:mvs.local")]
+    [InlineData("@mvs.local")]
+    [InlineData("L:@mvs.local:23")]
+    public void Bad_syntax_is_an_error_with_usage(string arg)
+    {
+        var parsed = StartupArguments.Parse([arg]);
+        Assert.Equal(StartupArguments.Usage, parsed.Error);
+        Assert.Null(parsed.Host);
+        Assert.Null(parsed.ProfileName);
+        Assert.Null(parsed.Resolve([]));
+    }
+
+    [Fact]
+    public void Ad_hoc_profile_name_is_the_address_without_prefixes()
+    {
+        Assert.Equal("mvs.local:4270", StartupArguments.Parse(["L:Y:mvs.local:4270"]).Resolve([])!.Name);
+        Assert.Equal("CONS01@mvs.local:3270", StartupArguments.Parse(["CONS01@mvs.local:3270"]).Resolve([])!.Name);
+        Assert.Equal("mvs.local:992", StartupArguments.Parse(["L:mvs.local"]).Resolve([])!.Name);
+    }
 }
