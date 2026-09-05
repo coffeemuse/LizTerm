@@ -312,4 +312,34 @@ public class B3270SessionLifecycleTests
         Assert.Contains(fake.InputLines, l => l.Contains("\"Quit\""));
         Assert.Equal(0, await fake.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
     }
+
+    /// <summary>Regression: StartProcessAsync never consulted the shutdown flag, and DisposeAsync clears the
+    /// process slot, so a connect arriving after disposal (a modal dialog's continuation outliving its window)
+    /// spawned a fresh engine that nothing owned and nothing would ever dispose.</summary>
+    [Fact]
+    public async Task A_connect_after_dispose_is_refused_rather_than_spawning_another_engine()
+    {
+        var spawned = 0;
+        var session = new B3270Session(Profile, () => { spawned++; return new FakeB3270Process(); });
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+        await session.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(1, spawned);
+    }
+
+    /// <summary>Disposing a session that was never started has no process to tear down, so it must still mark
+    /// itself disposed rather than leaving the next connect free to spawn one.</summary>
+    [Fact]
+    public async Task A_connect_after_disposing_an_unstarted_session_is_refused_too()
+    {
+        var spawned = 0;
+        var session = new B3270Session(Profile, () => { spawned++; return new FakeB3270Process(); });
+        await session.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(0, spawned);
+    }
 }

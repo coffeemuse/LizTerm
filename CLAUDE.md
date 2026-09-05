@@ -142,7 +142,9 @@ the backend tests.
   `OperationCanceledException` (the backend sends one `Disconnect`; b3270 then fails the pending Connect run,
   which is not reported) and leaves the session reusable; `ConnectOptions.VerifyCertificate` overrides the
   profile for one attempt; `ConnectionFailedException.CertificateVerificationFailed` marks the text b3270 sends
-  for an unverifiable certificate. Every wait a cancel then depends on is bounded by `DisconnectTimeout`, so a
+  for an unverifiable certificate. After disposal it throws `ObjectDisposedException` rather than starting a new
+  engine, so a call that outlives its window cannot leave one running unowned (`FakeEmulatorSession` mirrors
+  that). Every wait a cancel then depends on is bounded by `DisconnectTimeout`, so a
   wedged engine cannot hold the attempt open past its own cancellation. After a failed or cancelled Connect run,
   `ConnectAsync` waits for the `Disconnected` state, bounded by the same `DisconnectTimeout` (5 s), before
   throwing, the same wait `DisconnectAsync` uses; b3270 answers the run before it reports `not-connected`, and on the real gateway that
@@ -185,7 +187,11 @@ the backend tests.
   `Disconnected`, and clears the process so a later `ConnectAsync` spawns a fresh one. `OnProcessEnded`
   runs on the raw reader thread and must never throw, and it ignores a process that is no longer `_process`:
   a start that fails (`TearDown`) clears the slot before killing the process, so the old reader thread cannot
-  disturb a retried start, and only `DisposeAsync` sets `_shuttingDown`, which lasts for the session's life.
+  disturb a retried start, and only `DisposeAsync` sets `_shuttingDown`, which lasts for the session's life and
+  does two jobs: it silences the fault report for the shutdown it is causing, and it closes the session to any
+  later start, so `StartProcessAsync` throws `ObjectDisposedException` instead of spawning an engine nothing
+  owns. It is set before the process slot is read, so a session disposed without ever being started is closed
+  too.
   `TearDown` also covers a `process.Start` that throws (a binary deleted after the locator found it), so a retry
   spawns a fresh process instead of short-circuiting on a slot holding one that never started. `DisposeAsync`
   works from a snapshot of that slot and tolerates a kill or dispose failing, because the reader thread may

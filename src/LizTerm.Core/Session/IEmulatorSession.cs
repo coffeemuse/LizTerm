@@ -30,7 +30,9 @@ public interface IEmulatorSession : IAsyncDisposable
 
     /// <summary>Connects as the profile says, with <paramref name="options"/> overriding it for this attempt only.
     /// Cancelling the token ends the attempt with <see cref="OperationCanceledException"/> and leaves the session
-    /// disconnected and reusable. A refused connection throws <see cref="ConnectionFailedException"/>.</summary>
+    /// disconnected and reusable. A refused connection throws <see cref="ConnectionFailedException"/>. After
+    /// disposal it throws <see cref="ObjectDisposedException"/> rather than starting a new engine, so a call that
+    /// outlives its window (a modal dialog's continuation) cannot leave one running unowned.</summary>
     Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default);
     /// <summary>Completes once the session reports <see cref="ConnectionState.Disconnected"/>, or after a
     /// short backend-defined timeout if that report never comes. Does nothing when not connected.</summary>
