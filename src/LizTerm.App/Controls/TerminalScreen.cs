@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LizTerm.App.Keyboard;
 using LizTerm.App.Mouse;
@@ -40,6 +41,63 @@ public sealed class TerminalScreen : Control
         AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty);
         AffectsArrange<TerminalScreen>(SnapshotProperty);
         FocusableProperty.OverrideDefaultValue<TerminalScreen>(true);
+    }
+
+    /// <summary>Half a blink cycle. 750 ms is two flashes every three seconds, well under WCAG 2.3.1's limit of
+    /// three per second; never take it below 500 ms without revisiting that (spec section 8).</summary>
+    public static readonly TimeSpan BlinkInterval = TimeSpan.FromMilliseconds(750);
+
+    private readonly DispatcherTimer _blinkTimer = new() { Interval = BlinkInterval };
+    private bool _attached;
+
+    internal bool BlinkTimerRunning => _blinkTimer.IsEnabled;
+    /// <summary>True during the phase in which blinking text is not drawn.</summary>
+    internal bool BlinkHidden { get; private set; }
+
+    public TerminalScreen()
+    {
+        _blinkTimer.Tick += (_, _) =>
+        {
+            BlinkHidden = !BlinkHidden;
+            InvalidateVisual();
+        };
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _attached = true;
+        UpdateBlinkTimer(Snapshot);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _attached = false;
+        UpdateBlinkTimer(null);
+    }
+
+    private void UpdateBlinkTimer(ScreenSnapshot? snapshot)
+    {
+        var wanted = _attached && snapshot is not null && HasBlink(snapshot);
+        if (wanted == _blinkTimer.IsEnabled) return;
+        if (wanted)
+        {
+            _blinkTimer.Start();
+        }
+        else
+        {
+            _blinkTimer.Stop();
+            BlinkHidden = false;
+        }
+    }
+
+    private static bool HasBlink(ScreenSnapshot snapshot)
+    {
+        for (var row = 0; row < snapshot.Rows; row++)
+            foreach (var cell in snapshot.Row(row))
+                if (cell.Rendition.HasFlag(CellRendition.Blink)) return true;
+        return false;
     }
 
     public ScreenSnapshot? Snapshot
@@ -172,8 +230,10 @@ public sealed class TerminalScreen : Control
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property != SnapshotProperty || Selection is null) return;
+        if (change.Property != SnapshotProperty) return;
         var (oldValue, newValue) = change.GetOldAndNewValue<ScreenSnapshot?>();
+        UpdateBlinkTimer(newValue);
+        if (Selection is null) return;
         if (oldValue is null || newValue is null || oldValue.Rows != newValue.Rows || oldValue.Columns != newValue.Columns)
             Selection = null;
     }
@@ -241,15 +301,17 @@ public sealed class TerminalScreen : Control
         if (bg != HostColor.NeutralBlack)
             context.FillRectangle(Palette.Brush(bg, false), rect);
 
+        var hidden = BlinkHidden && style.Rendition.HasFlag(CellRendition.Blink);
+
         var text = snapshot.GetText(row, start, length);
-        if (!string.IsNullOrWhiteSpace(text))
+        if (!hidden && !string.IsNullOrWhiteSpace(text))
         {
             var bright = style.Rendition.HasFlag(CellRendition.Highlight);
             var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, Palette.Brush(fg, bright));
             context.DrawText(formatted, rect.TopLeft);
         }
 
-        if (style.Rendition.HasFlag(CellRendition.Underline))
+        if (!hidden && style.Rendition.HasFlag(CellRendition.Underline))
         {
             var y = Math.Round(rect.Bottom) - 1.5;
             context.DrawLine(new Pen(Palette.Brush(fg, false)), new Point(rect.Left, y), new Point(rect.Right, y));
