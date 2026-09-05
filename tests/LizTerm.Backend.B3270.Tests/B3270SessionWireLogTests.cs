@@ -110,4 +110,46 @@ public class B3270SessionWireLogTests : IDisposable
             await Task.Delay(5, TestContext.Current.CancellationToken);
         }
     }
+
+    /// <summary>Reads the log while the session still holds it open, so a test can see what had been written at
+    /// a given moment.</summary>
+    private static string ReadWhileOpen(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    /// <summary>Regression: the outbound line was logged after the flush that sends it, and the reader thread
+    /// logs inbound lines without the write lock, so b3270's answer could be timestamped and written ahead of
+    /// the run that provoked it — the exact ordering a reader uses to attribute a failure.</summary>
+    [Fact]
+    public async Task An_outbound_line_reaches_the_log_before_it_reaches_the_engine()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Profile, () => fake, new WireLog(LogPath()));
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+
+        string? logWhenTheEngineSawIt = null;
+        fake.BeforeWrite = () => logWhenTheEngineSawIt ??= ReadWhileOpen(LogPath());
+        await session.SendKeyAsync(TerminalKey.Enter);
+
+        Assert.NotNull(logWhenTheEngineSawIt);
+        Assert.Contains("Enter", logWhenTheEngineSawIt);
+    }
+
+    /// <summary>Regression: DisposeAsync closed the log before writing Quit, so a report about a hang on close
+    /// ended before the one exchange that would show whether LizTerm ever asked the engine to stop.</summary>
+    [Fact]
+    public async Task Dispose_logs_the_quit_before_it_closes_the_log()
+    {
+        var fake = new FakeB3270Process();
+        var session = new B3270Session(Profile, () => fake, new WireLog(LogPath()));
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+
+        await session.DisposeAsync();
+
+        Assert.Null(session.WireLogPath);
+        Assert.Contains("\"Quit\"", File.ReadAllText(LogPath()));
+    }
 }
