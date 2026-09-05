@@ -96,6 +96,14 @@ public sealed partial class FakeB3270Process : IB3270Process
     private void OnInputLine(string line)
     {
         lock (_lock) _stdin.Add(line);
+        // The real engine exits on Quit rather than answering it. Without that, every DisposeAsync waits out its
+        // whole two-second timeout and then kills the process: slow across the suite, and not the shutdown path
+        // the app actually takes.
+        if (line.Contains("\"Quit\"", StringComparison.Ordinal))
+        {
+            Exit(0);
+            return;
+        }
         if (RunResponder is not null)
         {
             foreach (var reply in RunResponder(line)) Emit(reply);

@@ -113,7 +113,7 @@ public class B3270SessionLifecycleTests
         await session.StartProcessAsync(CancellationToken.None);
         var faulted = false;
         session.Faulted += (_, _) => faulted = true;
-        fake.RunResponder = line => { if (line.Contains("Quit")) fake.Exit(0); return []; };
+        fake.RunResponder = _ => [];
         await session.DisposeAsync();
         Assert.Contains(fake.InputLines, l => l.Contains("\"Quit\""));
         await Task.Delay(50, TestContext.Current.CancellationToken);
@@ -160,7 +160,7 @@ public class B3270SessionLifecycleTests
         await session.StartProcessAsync(CancellationToken.None);
         var faulted = false;
         session.Faulted += (_, _) => faulted = true;
-        fake.RunResponder = line => { if (line.Contains("Quit")) fake.Exit(0); return []; };
+        fake.RunResponder = _ => [];
 
         await session.DisposeAsync();
 
@@ -295,5 +295,21 @@ public class B3270SessionLifecycleTests
 
         await session.DisposeAsync();
         Assert.False(session.HasProcess);
+    }
+
+    /// <summary>The real engine exits on Quit rather than answering it. When the fake did not, every DisposeAsync
+    /// waited out its full two-second timeout and then killed the process, which is both slow across the suite
+    /// and a different shutdown path from the one the app actually takes.</summary>
+    [Fact]
+    public async Task Dispose_quits_the_engine_instead_of_killing_it_after_the_timeout()
+    {
+        var fake = new FakeB3270Process();
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+
+        await session.DisposeAsync();
+
+        Assert.Contains(fake.InputLines, l => l.Contains("\"Quit\""));
+        Assert.Equal(0, await fake.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
     }
 }
