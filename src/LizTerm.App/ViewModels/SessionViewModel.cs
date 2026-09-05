@@ -20,6 +20,16 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly EventHandler<string> _onHostMessage;
     private bool _disposed;
 
+    public static readonly TimeSpan DefaultConnectTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>How long one connect attempt may take before it is cancelled. An instance property so tests can
+    /// shorten it without racing each other on a static.</summary>
+    public TimeSpan ConnectTimeout { get; set; } = DefaultConnectTimeout;
+
+    private CancellationTokenSource? _connectCts;
+    private bool _connectCancelledByUser;
+    private ConnectionState _furthestState;
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CopyCommand))]
     [NotifyCanExecuteChangedFor(nameof(SelectAllCommand))]
@@ -118,15 +128,27 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         IsConnected = state.IsConnected();
         ConnectionText = StatusFormatter.Connection(state, Profile.Host);
         TlsText = StatusFormatter.Tls(_session.Tls);
+        if (state > _furthestState) _furthestState = state;
     }
 
     [RelayCommand]
-    private async Task ConnectAsync()
+    private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions());
+
+    private async Task ConnectWithAsync(ConnectOptions options)
     {
         ErrorMessage = null;
+        _furthestState = ConnectionState.Disconnected;
+        _connectCancelledByUser = false;
+        using var cts = new CancellationTokenSource(ConnectTimeout);
+        _connectCts = cts;
         try
         {
-            await _session.ConnectAsync();
+            await _session.ConnectAsync(options, cts.Token);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            if (!_connectCancelledByUser)
+                ErrorMessage = StatusFormatter.ConnectTimeout(Profile, ConnectTimeout, _furthestState >= ConnectionState.TelnetPending);
         }
         catch (ConnectionFailedException ex)
         {
@@ -140,10 +162,24 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         {
             ErrorMessage = "Unexpected error: " + ex.Message;
         }
+        finally
+        {
+            if (ReferenceEquals(_connectCts, cts)) _connectCts = null;
+        }
     }
 
+    /// <summary>While a connect is pending this cancels it (the backend sends the Disconnect); otherwise it disconnects.</summary>
     [RelayCommand]
-    private Task DisconnectAsync() => Guard(_session.DisconnectAsync());
+    private Task DisconnectAsync()
+    {
+        if (_connectCts is { } pending)
+        {
+            _connectCancelledByUser = true;
+            pending.Cancel();
+            return Task.CompletedTask;
+        }
+        return Guard(_session.DisconnectAsync());
+    }
 
     [RelayCommand]
     private Task SendKeyAsync(TerminalKey key)
