@@ -14,7 +14,18 @@ public sealed class ScreenSnapshot
         Columns = columns;
         _cells = cells;
         Cursor = cursor;
+        foreach (var cell in cells)
+        {
+            if (!cell.Rendition.HasFlag(CellRendition.Blink)) continue;
+            HasBlink = true;
+            break;
+        }
     }
+
+    /// <summary>Whether any cell carries <see cref="CellRendition.Blink"/>. Answered once here, where the cells
+    /// are already in hand, so the UI does not rescan the grid on every published screen to decide whether a
+    /// blink timer should run.</summary>
+    public bool HasBlink { get; }
 
     public int Rows { get; }
     public int Columns { get; }
