@@ -1,7 +1,7 @@
 # LizTerm Milestone 2, Plan 3a: Polish Bundle (Features)
 
 Date: 2026-09-05
-Status: approved in discussion 2026-09-05; awaiting implementation plan
+Status: approved 2026-09-05 and implemented on branch claude/project-status-next-234e6b; this is the as-built spec
 Parent: `2026-09-03-lizterm-v1-design.md` sections 5.5, 6.1, 6.2, 6.3, 6.8, and 7
 
 ## 1. Purpose
@@ -399,3 +399,55 @@ with TLS afterwards.
 A preferences UI (the future "engine path" preference is anticipated only by `EngineSource`), an
 About item in the picker or the macOS application menu, a per-user blink or animation switch, an
 image asset for the splash, and any change to the profile editor.
+
+## 12. Deviations from this spec (as-built)
+
+Rulings the executor made while implementing sections 3 through 9, recorded here rather than edited
+into the sections above so the discussion in those sections still reads as it was approved:
+
+1. `SessionViewModel.ConnectTimeout` (section 5.1) is an instance property with a 30 s default, not
+   a static, so parallel test classes cannot race on it.
+2. `StartupPlan.OpenSession` (section 7) carries `FromStore` in addition to the profile, so the app
+   knows whether the certificate override the connect flow discovers can be saved back to a stored
+   profile or only offered ad hoc.
+3. The About engine line (section 6.3) ends in `, from LIZTERM_B3270_PATH` (the override's origin)
+   with no path appended; the path is shown on its own second line (`EnginePathText`) for both
+   sources, rather than inline after a colon as the section's example string showed. Bundled reads
+   `, bundled`.
+4. The integration timeout test (section 9) reuses one `B3270Session` for both connect attempts
+   instead of switching to TLS afterwards, because a session is bound to one profile for its life
+   (section 3); the test proves the session survives a cancelled connect by attempting twice, not
+   by attempting once and then reconnecting differently.
+5. `SessionFactory.Create` catches the locator's `BackendUnavailableException`, records
+   `B3270Location.Unknown`, and hands the session a process factory that rethrows it, so a missing
+   engine is reported by the first connect (as it was before this plan) rather than crashing
+   `App.OpenSession`. `SessionFactory.CheckBackend` at startup (section 7) is the user-facing gate
+   that shows `StartupErrorWindow`; a profile opened directly still fails at connect time if the
+   engine has gone missing since startup.
+6. `B3270Session.StartWireLog` wraps `UnauthorizedAccessException`, `ArgumentException`,
+   `NotSupportedException`, and `IOException` subclasses into a plain `IOException`, so
+   `SessionViewModel`'s catch (section 6.2) only needs to handle the one exception type.
+7. The cancel's `Disconnect` run (section 4.2) is held on the connect attempt and awaited before the
+   attempt ends, rather than fired and forgotten: a cancel that races a successful Connect still
+   disconnects and reports cancellation instead of leaving a connected session the caller believes
+   it cancelled.
+8. Avalonia 12.1.2 has no `SystemDecorations` enum; the splash (section 7) uses
+   `WindowDecorations="None"` for the borderless window instead.
+9. The `Launcher.LaunchDirectoryInfoAsync` call in `ShowWireLogsCommand` (section 6.2) needs
+   `using Avalonia.Platform.Storage;`, which the section's description omitted.
+10. The splash (section 7) stops its timer on `Closed`; its dismiss (click/key) and self-close
+    (timeout) paths are both tested headlessly rather than only the timing math.
+11. `FakeEmulatorSession.Profile` (section 9) is settable, not fixed at construction, so tests can
+    swap the bound profile without building a new fake.
+12. The live checks this plan asked for of the certificate dialog, the splash, and About (an
+    Avalonia DevTools pass against the running app) could not run on this machine: no active
+    display was available in this session. They are pending a manual pass.
+13. The two live tests added for Task 17 (`Verify_on_connect_to_a_self_signed_host_is_flagged` and
+    `Plain_connect_to_a_tls_port_is_cancelled_by_the_token_and_the_session_recovers`) check
+    `ConnectionState` immediately after the failed or cancelled `ConnectAsync` returns, matching the
+    unit-test replay of `gateway-cert-failure.jsonl` in section 9. Against the real TLS gateway from
+    this machine, b3270 answers the failing `Connect` run before it reports the following
+    `connection: not-connected` indication, so the state is briefly `TlsPending` / `TelnetPending`
+    right after the throw and only settles to `Disconnected` a few seconds later (confirmed with a
+    wire log and a manual delay); both tests failed on that assertion in this environment. The
+    assertions were not weakened to match; see the Task 17 report for the exact failures.
