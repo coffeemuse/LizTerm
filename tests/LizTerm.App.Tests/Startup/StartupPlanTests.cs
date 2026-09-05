@@ -35,4 +35,15 @@ public class StartupPlanTests
         var args = arg.Length == 0 ? Array.Empty<string>() : [arg];
         Assert.Equal(new StartupPlan.OpenPicker(), StartupPlan.Decide(null, StartupArguments.Parse(args), Profiles));
     }
+
+    /// <summary>A profile whose name looks like an ad hoc host still comes from the store, so its certificate
+    /// choice can be written back.</summary>
+    [Fact]
+    public void A_saved_profile_named_like_a_host_is_still_from_the_store()
+    {
+        SessionProfile[] profiles = [new() { Name = "CONS01@tk5", Host = "10.0.0.1", Port = 3270 }];
+        var plan = Assert.IsType<StartupPlan.OpenSession>(StartupPlan.Decide(null, StartupArguments.Parse(["CONS01@tk5"]), profiles));
+        Assert.Same(profiles[0], plan.Profile);
+        Assert.True(plan.FromStore);
+    }
 }
