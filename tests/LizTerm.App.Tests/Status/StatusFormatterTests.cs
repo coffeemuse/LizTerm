@@ -65,6 +65,36 @@ public class StatusFormatterTests
         var text = StatusFormatter.Fault(new BackendFault("The emulator engine (b3270) exited unexpectedly.", ["a", "b", "c", "d"], 137));
         Assert.Contains("exit code 137", text);
         Assert.Contains("b | c | d", text);
-        Assert.Contains("LIZTERM_WIRE_LOG", text);
+        Assert.EndsWith("Turn on Help > Wire Log and reproduce to capture a log.", text);
+    }
+
+    [Fact]
+    public void Connect_timeout_names_the_host_and_hints_at_tls_only_when_it_applies()
+    {
+        var plain = new SessionProfile { Name = "p", Host = "mvs.local", Port = 4270 };
+        Assert.Equal("Connection to mvs.local:4270 timed out after 30 seconds. The host may require TLS. Enable it in the profile.",
+            StatusFormatter.ConnectTimeout(plain, TimeSpan.FromSeconds(30), reachedTelnet: true));
+        Assert.Equal("Connection to mvs.local:4270 timed out after 30 seconds.",
+            StatusFormatter.ConnectTimeout(plain, TimeSpan.FromSeconds(30), reachedTelnet: false));
+        Assert.Equal("Connection to mvs.local:4270 timed out after 5 seconds.",
+            StatusFormatter.ConnectTimeout(plain with { UseTls = true }, TimeSpan.FromSeconds(5), reachedTelnet: true));
+    }
+
+    [Fact]
+    public void Wire_log_indicator()
+    {
+        Assert.Equal("● wire log", StatusFormatter.WireLog(true));
+        Assert.Equal("", StatusFormatter.WireLog(false));
+    }
+
+    [Fact]
+    public void Engine_line_names_version_and_source()
+    {
+        var bundled = new EngineInfo("b3270", "4.5.6 (b3270 v4.5ga6)", "/app/b3270", EngineSource.Bundled);
+        Assert.Equal("b3270 4.5.6 (b3270 v4.5ga6), bundled", StatusFormatter.Engine(bundled, "LIZTERM_B3270_PATH"));
+        var overridden = bundled with { Source = EngineSource.Override };
+        Assert.Equal("b3270 4.5.6 (b3270 v4.5ga6), from LIZTERM_B3270_PATH", StatusFormatter.Engine(overridden, "LIZTERM_B3270_PATH"));
+        Assert.Equal("b3270, not started, bundled", StatusFormatter.Engine(bundled with { Version = null }, "LIZTERM_B3270_PATH"));
+        Assert.Equal("b3270, not started, from LIZTERM_B3270_PATH", StatusFormatter.Engine(overridden with { Version = null }, "LIZTERM_B3270_PATH"));
     }
 }

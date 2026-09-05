@@ -66,6 +66,23 @@ public static class StatusFormatter
         var tail = string.Join(" | ", fault.StderrTail.TakeLast(3));
         var code = fault.ExitCode?.ToString() ?? "unknown";
         var detail = tail.Length > 0 ? $" Last output: {tail}." : "";
-        return $"{fault.Message} (exit code {code}).{detail} Set LIZTERM_WIRE_LOG to a file path and reproduce to capture a log.";
+        return $"{fault.Message} (exit code {code}).{detail} Turn on Help > Wire Log and reproduce to capture a log.";
+    }
+
+    /// <summary>The attempt never completed. A plain connect to a TLS listener reaches telnet-pending and then
+    /// waits forever, so that exact signature earns the TLS hint.</summary>
+    public static string ConnectTimeout(SessionProfile profile, TimeSpan timeout, bool reachedTelnet)
+    {
+        var text = $"Connection to {profile.Host}:{profile.Port} timed out after {timeout.TotalSeconds:0} seconds.";
+        return reachedTelnet && !profile.UseTls ? text + " The host may require TLS. Enable it in the profile." : text;
+    }
+
+    public static string WireLog(bool active) => active ? "● wire log" : "";
+
+    /// <param name="overrideOrigin">What pointed at an Override binary, named by the app (today the environment variable).</param>
+    public static string Engine(EngineInfo engine, string overrideOrigin)
+    {
+        var name = engine.Version is null ? $"{engine.Name}, not started" : $"{engine.Name} {engine.Version}";
+        return engine.Source == EngineSource.Bundled ? $"{name}, bundled" : $"{name}, from {overrideOrigin}";
     }
 }
