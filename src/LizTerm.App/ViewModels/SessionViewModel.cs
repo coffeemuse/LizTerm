@@ -104,6 +104,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     public SessionProfile Profile => _session.Profile;
     public string Title => $"{Profile.Name} - {Profile.Host}";
+    public EngineInfo Engine => _session.Engine;
 
     /// <summary>Where new wire logs go; the app uses the per-OS logs folder, tests a temp directory.</summary>
     public string WireLogDirectory { get; set; } = AppPaths.LogsDirectory();
