@@ -189,7 +189,8 @@ the backend tests.
   `TearDown` also covers a `process.Start` that throws (a binary deleted after the locator found it), so a retry
   spawns a fresh process instead of short-circuiting on a slot holding one that never started. `DisposeAsync`
   works from a snapshot of that slot and tolerates a kill or dispose failing, because the reader thread may
-  already have torn the same process down.
+  already have torn the same process down; it closes the wire log in a `finally`, after the Quit exchange and on
+  every path, including the early return when a fault has already cleared the slot.
 - Protocol details that are easy to get wrong: `String()` interprets backslash escapes so literal
   backslashes are doubled; `PasteString` takes **hex-encoded UTF-8**, not text, and is margin-aware
   where `String` is not; certificate verification is a `Set verifyHostCert` action sent before `Connect`,
@@ -209,7 +210,10 @@ the backend tests.
 - `WireLog` is the bug-report mechanism and the fixture recorder: one file, every line, both directions,
   timestamped. `WireLog.TryFromEnvironment(out error)` returns null when the variable is unset or the file
   cannot be opened; the session raises the open error once as a `HostMessage`. The log is a swappable field
-  on the session, written under the write lock; `B3270Locator.Find` returns a `B3270Location` with the source.
+  on the session, written under the write lock, and an outbound line is logged *before* the bytes go out: stdin
+  auto-flushes, so b3270 can answer at once, and the reader thread logs inbound lines under the log's own lock
+  rather than the write lock — logging afterwards let a run-result be written ahead of its run. `DisposeAsync`
+  closes the log last, so the Quit and the engine's parting output are in the file. `B3270Locator.Find` returns a `B3270Location` with the source.
 
 ### App (src/LizTerm.App)
 

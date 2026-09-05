@@ -246,28 +246,35 @@ public sealed class B3270Session : IEmulatorSession
 
     public async ValueTask DisposeAsync()
     {
-        // Stop the wire log unconditionally: a fault (see OnProcessEnded) may already have
-        // cleared _process, but the log still needs to be closed.
-        StopWireLog();
-        // Snapshot the slot: OnProcessEnded clears it from the reader thread after publishing Disconnected, so
-        // re-reading the field here can hand back null between the check and the kill (as TearDown already does).
-        var process = _process;
-        if (process is null) return;
-        _shuttingDown = true;
         try
         {
-            WriteLine(RunOperation.Serialize("quit", [new B3270Action("Quit")]));
-            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
+            // Snapshot the slot: OnProcessEnded clears it from the reader thread after publishing Disconnected,
+            // so re-reading the field here can hand back null between the check and the kill (as TearDown does).
+            var process = _process;
+            if (process is null) return;
+            _shuttingDown = true;
+            try
+            {
+                WriteLine(RunOperation.Serialize("quit", [new B3270Action("Quit")]));
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception)
+            {
+                // OnProcessEnded may already have killed and disposed this process, so the kill can fail too.
+                try { process.Kill(); }
+                catch (Exception) { /* already gone; nothing left to stop */ }
+            }
+            try { process.Dispose(); }
+            catch (Exception) { /* already disposed by OnProcessEnded */ }
+            Interlocked.CompareExchange(ref _process, null, process);
         }
-        catch (Exception)
+        finally
         {
-            // OnProcessEnded may already have killed and disposed this process, so the kill can fail too.
-            try { process.Kill(); }
-            catch (Exception) { /* already gone; nothing left to stop */ }
+            // Closed last, and on every path: a fault (see OnProcessEnded) may already have cleared _process, but
+            // the log still needs closing — and the Quit, plus whatever b3270 says on its way out, are exactly
+            // the lines a report about a hang on close turns on.
+            StopWireLog();
         }
-        try { process.Dispose(); }
-        catch (Exception) { /* already disposed by OnProcessEnded */ }
-        Interlocked.CompareExchange(ref _process, null, process);
     }
 
     // ---- running actions ----
@@ -327,10 +334,15 @@ public sealed class B3270Session : IEmulatorSession
         var process = RequireProcess();
         lock (_writeLock)
         {
+            // Logged before the bytes go out, not after: stdin auto-flushes, so b3270 can answer the moment the
+            // newline lands, and the reader thread logs inbound lines under the log's own lock rather than this
+            // one. Logging afterwards let a run-result be written ahead of the run that provoked it, which is the
+            // ordering a reader uses to attribute a failure. The cost is that a write which then throws leaves a
+            // line in the log that never reached the engine — visible anyway, because nothing answers it.
+            _wireLog?.Outbound(line);
             process.StandardInput.Write(line);
             process.StandardInput.Write('\n');
             process.StandardInput.Flush();
-            _wireLog?.Outbound(line);
         }
     }
 
