@@ -38,10 +38,10 @@
       <Expander Header="Advanced (host file allocation)" IsVisible="{Binding ShowAdvanced}">
         <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,6,0,0">
           <TextBlock Grid.Row="0" Text="Record format" VerticalAlignment="Center" />
-          <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding RecordFormats}" SelectedItem="{Binding RecordFormat}" Width="130" HorizontalAlignment="Left"
+          <ComboBox x:Name="RecordFormatBox" Grid.Row="0" Grid.Column="1" ItemsSource="{Binding RecordFormats}" SelectedItem="{Binding RecordFormat}" IsEnabled="{Binding CanSetRecordFormat}" Width="130" HorizontalAlignment="Left"
                     DisplayMemberBinding="{ReflectionBinding Converter={x:Static views:TransferLabels.Converter}}" />
           <TextBlock Grid.Row="1" Text="LRECL" VerticalAlignment="Center" />
-          <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LreclText}" IsEnabled="{Binding HasRecordFormat}" Width="100" HorizontalAlignment="Left" />
+          <TextBox x:Name="LreclBox" Grid.Row="1" Grid.Column="1" Text="{Binding LreclText}" IsEnabled="{Binding CanSetLrecl}" Width="100" HorizontalAlignment="Left" />
           <TextBlock Grid.Row="2" Text="BLKSIZE (TSO)" VerticalAlignment="Center" />
           <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding BlksizeText}" IsEnabled="{Binding CanSetBlksize}" Width="100" HorizontalAlignment="Left" />
           <TextBlock Grid.Row="3" Text="Allocation (TSO)" VerticalAlignment="Center" />

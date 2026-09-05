@@ -107,6 +107,30 @@ public class FileTransferViewModelTests
     }
 
     [Fact]
+    public void Record_format_and_lrecl_are_only_settable_for_tso_and_vm()
+    {
+        var (vm, _, _) = Create();
+        vm.RecordFormat = RecordFormat.Fixed;
+        Assert.True(vm.CanSetRecordFormat);
+        Assert.True(vm.CanSetLrecl);
+
+        vm.HostType = TransferHostType.Vm;
+        Assert.True(vm.CanSetRecordFormat);
+        Assert.True(vm.CanSetLrecl);
+
+        // The mapper sends neither keyword to CICS, so the form must not offer them.
+        vm.HostType = TransferHostType.Cics;
+        Assert.False(vm.CanSetRecordFormat);
+        Assert.False(vm.CanSetLrecl);
+        Assert.False(vm.CanSetBlksize);
+
+        vm.HostType = TransferHostType.Tso;
+        vm.RecordFormat = RecordFormat.Default;
+        Assert.True(vm.CanSetRecordFormat);
+        Assert.False(vm.CanSetLrecl);
+    }
+
+    [Fact]
     public void Switching_to_vm_drops_an_undefined_record_format()
     {
         var (vm, _, _) = Create();

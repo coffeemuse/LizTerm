@@ -94,6 +94,25 @@ public class FileTransferWindowTests
     }
 
     [AvaloniaFact]
+    public void Record_format_and_lrecl_controls_are_disabled_for_cics()
+    {
+        var (window, vm, _) = Show();
+        var recordFormat = window.FindControl<ComboBox>("RecordFormatBox")!;
+        var lrecl = window.FindControl<TextBox>("LreclBox")!;
+        vm.RecordFormat = RecordFormat.Fixed;
+        Assert.True(recordFormat.IsEnabled);
+        Assert.True(lrecl.IsEnabled);
+
+        vm.HostType = TransferHostType.Cics;
+        Assert.False(recordFormat.IsEnabled);
+        Assert.False(lrecl.IsEnabled);
+
+        vm.HostType = TransferHostType.Vm;
+        Assert.True(recordFormat.IsEnabled);
+        Assert.True(lrecl.IsEnabled);
+    }
+
+    [AvaloniaFact]
     public async Task Closing_again_while_the_cancel_is_unanswered_closes_the_window()
     {
         var (window, vm, session) = Show();
