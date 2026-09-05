@@ -71,7 +71,7 @@ public partial class FileTransferViewModel : ObservableObject
     [ObservableProperty] private string _hostFile = "";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTso), nameof(RecordFormats), nameof(CanSetBlksize), nameof(CanSetSpace), nameof(CanSetAverageBlock))]
+    [NotifyPropertyChangedFor(nameof(IsTso), nameof(RecordFormats), nameof(CanSetRecordFormat), nameof(CanSetLrecl), nameof(CanSetBlksize), nameof(CanSetSpace), nameof(CanSetAverageBlock))]
     private TransferHostType _hostType = TransferHostType.Tso;
 
     [ObservableProperty]
@@ -90,7 +90,7 @@ public partial class FileTransferViewModel : ObservableObject
     [ObservableProperty] private bool _append;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasRecordFormat), nameof(CanSetBlksize))]
+    [NotifyPropertyChangedFor(nameof(HasRecordFormat), nameof(CanSetLrecl), nameof(CanSetBlksize))]
     private RecordFormat _recordFormat = RecordFormat.Default;
 
     [ObservableProperty] private string _lreclText = "";
@@ -113,7 +113,11 @@ public partial class FileTransferViewModel : ObservableObject
     public bool HasRecordFormat => RecordFormat != RecordFormat.Default;
     public bool HasAllocation => AllocationUnits != AllocationUnits.Default;
     public bool IsAvBlock => AllocationUnits == AllocationUnits.AvBlock;
-    /// <summary>b3270 emits LRECL and BLKSIZE only with a RECFM, and BLKSIZE and SPACE only for TSO.</summary>
+    /// <summary>Mirrors what <c>TransferMapper</c> puts on the wire, so the form never accepts a value it would
+    /// drop: RECFM goes to TSO and VM only, LRECL and BLKSIZE only with a RECFM, and BLKSIZE and SPACE only to
+    /// TSO. A value entered for one host type stays in the (disabled) control when another is chosen.</summary>
+    public bool CanSetRecordFormat => HostType != TransferHostType.Cics;
+    public bool CanSetLrecl => HasRecordFormat && CanSetRecordFormat;
     public bool CanSetBlksize => HasRecordFormat && IsTso;
     public bool CanSetSpace => HasAllocation && IsTso;
     public bool CanSetAverageBlock => IsAvBlock && IsTso;

@@ -272,10 +272,13 @@ Form properties (all observable): `IsSend` (radio; receive is its negation), `Lo
 `HostFile`, `HostType` with a `HostTypes` list, `IsText` (radio; binary is its negation), `CrLf`,
 `Remap`, `Append`, `RecordFormat` with a `RecordFormats` list, `LreclText`, `BlksizeText`,
 `AllocationUnits` with a list, `PrimarySpaceText`, `SecondarySpaceText`, `AverageBlockText`,
-`BufferSizeText`, `ExtraOptions`, `ValidationMessage`. Derived read-only properties drive enabling:
-`IsTso`, `HasRecordFormat` (LRECL and BLKSIZE enabled), `HasAllocation` (space fields enabled),
-`IsAvBlock` (average block enabled). The Advanced expander is visible only when sending; its
-TSO-only fields are disabled for VM and CICS; for VM the Undefined record format is not offered.
+`BufferSizeText`, `ExtraOptions`, `ValidationMessage`. Derived read-only properties drive enabling
+and mirror what `TransferMapper` puts on the wire, so the form never accepts a value the mapper
+would drop: `CanSetRecordFormat` (TSO and VM; CICS has no RECFM), `CanSetLrecl` (a record format
+on TSO or VM), `CanSetBlksize` (a record format on TSO), `CanSetSpace` and `CanSetAverageBlock`
+(allocation units on TSO). The Advanced expander is visible only when sending; a value entered for
+one host type stays in its disabled control when another is chosen; for VM the Undefined record
+format is not offered.
 Numeric fields are text boxes: blank means unset, a non-integer produces "<Field> must be a whole
 number." before Core validation runs.
 
