@@ -35,3 +35,8 @@ The traces come from the x3270 source distribution (BSD-3-Clause, Copyright Paul
   pause in between. TSO keeps writing for a moment after `READY` appears, and IND$FILE typed into a
   half-painted screen reaches the host as garbage (`INVALID COMMAND NAME SYNTAX`), so the integration lane
   waits for the screen to stand still before it treats `READY` as a prompt.
+- `gateway-cert-failure.jsonl`: raw b3270 4.5ga6 stdout from a verify-on TLS connect to the same hobbyist
+  gateway on 2026-09-05, recorded with run tags `set` and `connect` (the replay substitutes the session's own
+  tags). The Connect run fails with `Connection failed:`, `TLS: Host certificate verification failed:`, and the
+  OpenSSL reason `self-signed certificate (18)`; the states run `tcp-pending`, `telnet-pending`, `tls-pending`,
+  `not-connected`, and no `tls` indication is ever sent. The address was replaced with `gateway.test`.

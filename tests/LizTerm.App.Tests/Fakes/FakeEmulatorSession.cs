@@ -5,13 +5,21 @@ namespace LizTerm.App.Tests.Fakes;
 
 public sealed class FakeEmulatorSession : IEmulatorSession
 {
-    public SessionProfile Profile { get; init; } = new() { Name = "Fake", Host = "fake.host", Port = 3270 };
+    public SessionProfile Profile { get; set; } = new() { Name = "Fake", Host = "fake.host", Port = 3270 };
     public ScreenSnapshot CurrentScreen { get; set; } = ScreenSnapshot.Empty(24, 80);
     public ConnectionState ConnectionState { get; set; }
     public TlsInfo? Tls { get; set; }
     public KeyboardStatus KeyboardStatus { get; set; } = KeyboardStatus.Initial;
+    public EngineInfo Engine { get; set; } = new("fake", null, "/fake/engine", EngineSource.Bundled);
+    public string? WireLogPath { get; set; }
+    /// <summary>When set, StartWireLog throws it.</summary>
+    public Exception? WireLogException { get; set; }
     public List<string> Calls { get; } = [];
     public Exception? ConnectException { get; set; }
+    public CancellationToken ConnectToken { get; private set; }
+    /// <summary>When set, ConnectAsync waits for it, faulting with the token's cancellation if that comes first,
+    /// so a test can drive a pending attempt through the view model's timeout or Disconnect.</summary>
+    public TaskCompletionSource? ConnectCompletion { get; set; }
     public Exception? ActionException { get; set; }
     public FileTransferRequest? LastTransferRequest { get; private set; }
     public IProgress<long>? TransferProgress { get; private set; }
@@ -29,10 +37,32 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public event EventHandler<BackendFault>? Faulted;
     public event EventHandler<string>? HostMessage;
 
-    public Task ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default)
     {
-        Calls.Add("connect");
-        return ConnectException is null ? Task.CompletedTask : Task.FromException(ConnectException);
+        ObjectDisposedException.ThrowIf(Disposed, this);
+        Calls.Add(options?.VerifyCertificate == false ? "connect:noverify" : "connect");
+        ConnectToken = cancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (ConnectCompletion is { } completion)
+        {
+            using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
+            await completion.Task;
+        }
+        if (ConnectException is not null) throw ConnectException;
+    }
+
+    public void StartWireLog(string path)
+    {
+        Calls.Add("wirelog:start:" + path);
+        if (WireLogException is not null) throw WireLogException;
+        if (WireLogPath is not null) throw new InvalidOperationException("A wire log is already active.");
+        WireLogPath = path;
+    }
+
+    public void StopWireLog()
+    {
+        Calls.Add("wirelog:stop");
+        WireLogPath = null;
     }
 
     public Task DisconnectAsync() => Record("disconnect");
@@ -52,9 +82,14 @@ public sealed class FakeEmulatorSession : IEmulatorSession
         return TransferResult;
     }
 
+    /// <summary>Mirrors the interface's contract that a connect after disposal is refused rather than starting
+    /// a new engine, so App code that lets one outlive its window fails here too.</summary>
+    public bool Disposed { get; private set; }
+
     public ValueTask DisposeAsync()
     {
         Calls.Add("dispose");
+        Disposed = true;
         return ValueTask.CompletedTask;
     }
 

@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using LizTerm.App.Controls;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
@@ -134,5 +135,63 @@ public class SessionWindowTests
         Assert.True(transfer.IsDone);
         dialog.Close();
         Assert.Empty(window.OwnedWindows);
+    }
+
+    [AvaloniaFact]
+    public void Help_menu_has_the_wire_log_toggle_bound_to_the_view_model()
+    {
+        var (window, _, vm, _, _) = Show();
+        var item = window.FindControl<MenuItem>("WireLogMenuItem")!;
+        Assert.Equal(MenuItemToggleType.CheckBox, item.ToggleType);
+        Assert.False(item.IsChecked);
+        var directory = Path.Combine(Path.GetTempPath(), "lizterm-win-" + Guid.NewGuid().ToString("N"));
+        vm.WireLogDirectory = directory;
+        try
+        {
+            vm.IsWireLogging = true;
+            Assert.True(item.IsChecked);
+            Assert.Equal("● wire log", window.FindControl<TextBlock>("WireLogStatus")!.Text);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>Regression: correcting IsWireLogging from inside its own change notification is invisible to the
+    /// two-way binding, which is mid-write, so the menu kept a check mark for a log that never started and the
+    /// next click was swallowed as a no-op. Uses the real dispatcher, as the app does.</summary>
+    [AvaloniaFact]
+    public void A_wire_log_that_fails_to_start_leaves_the_menu_unchecked_and_retryable()
+    {
+        var session = new FakeEmulatorSession { WireLogException = new IOException("disk on fire") };
+        var vm = new SessionViewModel(session, a => Dispatcher.UIThread.Post(a), new FakeTextClipboard());
+        var directory = Path.Combine(Path.GetTempPath(), "lizterm-menu-" + Guid.NewGuid().ToString("N"));
+        vm.WireLogDirectory = directory;
+        var window = new SessionWindow { DataContext = vm };
+        window.Show();
+        var item = window.FindControl<MenuItem>("WireLogMenuItem")!;
+        try
+        {
+            // The user ticks the item: the binding writes true into the view model, and the start fails.
+            item.IsChecked = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.IsWireLogging);
+            Assert.False(item.IsChecked);
+            Assert.Equal("Could not open the wire log: disk on fire", vm.ErrorMessage);
+            Assert.Equal("", vm.WireLogText);
+
+            // The next tick must try again rather than being swallowed as a no-op.
+            session.WireLogException = null;
+            item.IsChecked = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.IsWireLogging);
+            Assert.True(item.IsChecked);
+            Assert.Equal("● wire log", vm.WireLogText);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
     }
 }

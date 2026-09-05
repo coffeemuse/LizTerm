@@ -10,9 +10,12 @@ namespace LizTerm.Backend.B3270;
 public sealed class B3270Session : IEmulatorSession
 {
     public static readonly Version MinimumVersion = new(4, 2, 0);
+    public const string CertificateFailurePrefix = "TLS: Host certificate verification failed";
 
     private readonly Func<IB3270Process> _processFactory;
-    private readonly WireLog? _wireLog;
+    private WireLog? _wireLog;
+    private readonly string? _wireLogError;
+    private readonly B3270Location _location;
     private readonly object _writeLock = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<RunResultIndication>> _pending = new();
     private readonly ScreenBuffer _buffer = new(24, 80);
@@ -32,11 +35,17 @@ public sealed class B3270Session : IEmulatorSession
     internal TimeSpan DisconnectTimeout { get; set; } = TimeSpan.FromSeconds(5);
     private bool _wireLogWarningRaised;
 
-    public B3270Session(SessionProfile profile, Func<IB3270Process> processFactory, WireLog? wireLog = null)
+    /// <param name="wireLog">A log already open (from the environment), or null.</param>
+    /// <param name="wireLogError">Why the environment's log could not be opened; reported once as a HostMessage.</param>
+    /// <param name="location">The binary this session's processes run; null (tests) reads as unknown.</param>
+    public B3270Session(SessionProfile profile, Func<IB3270Process> processFactory, WireLog? wireLog = null, string? wireLogError = null, B3270Location? location = null)
     {
         Profile = profile;
         _processFactory = processFactory;
         _wireLog = wireLog;
+        _wireLogError = wireLogError;
+        _location = location ?? B3270Location.Unknown;
+        Engine = new EngineInfo("b3270", null, _location.Path, _location.Source);
         CurrentScreen = _buffer.Snapshot();
     }
 
@@ -47,6 +56,39 @@ public sealed class B3270Session : IEmulatorSession
     public ConnectionState ConnectionState { get; private set; } = ConnectionState.Disconnected;
     public TlsInfo? Tls { get; private set; }
     public KeyboardStatus KeyboardStatus { get; private set; } = KeyboardStatus.Initial;
+    public EngineInfo Engine { get; private set; }
+
+    public string? WireLogPath => Volatile.Read(ref _wireLog)?.Path;
+
+    public void StartWireLog(string path)
+    {
+        lock (_writeLock)
+        {
+            if (_wireLog is not null) throw new InvalidOperationException("A wire log is already active.");
+            try
+            {
+                _wireLog = new WireLog(path);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException or NotSupportedException or IOException)
+            {
+                // DirectoryNotFoundException (an IOException subclass), ArgumentException (e.g. an empty path),
+                // and NotSupportedException (a malformed path) are all wrapped into the exact IOException type
+                // so callers can catch one type for every unopenable path.
+                throw new IOException(ex.Message, ex);
+            }
+        }
+    }
+
+    public void StopWireLog()
+    {
+        WireLog? old;
+        lock (_writeLock)
+        {
+            old = _wireLog;
+            _wireLog = null;
+        }
+        old?.Dispose();
+    }
 
     public event EventHandler<ScreenSnapshot>? ScreenUpdated;
     public event EventHandler<KeyboardStatus>? StatusChanged;
@@ -59,15 +101,32 @@ public sealed class B3270Session : IEmulatorSession
 
     // ---- lifecycle ----
 
+    /// <summary>Whether a process slot is filled. Test seam, like <see cref="PendingCount"/>.</summary>
+    internal bool HasProcess => _process is not null;
+
     internal async Task StartProcessAsync(CancellationToken cancellationToken)
     {
+        // DisposeAsync clears the process slot, so without this a connect arriving afterwards — a modal dialog's
+        // continuation outliving its window — would spawn an engine nothing owns and nothing will ever dispose.
+        // ObjectDisposedException is an InvalidOperationException, so callers already catching that still do.
+        ObjectDisposedException.ThrowIf(_shuttingDown, this);
         if (_process is not null) return;
         var process = _processFactory();
         var helloSource = new TaskCompletionSource<HelloIndication>(TaskCreationOptions.RunContinuationsAsynchronously);
         _hello = helloSource;
         _process = process;
         _fault = null;
-        process.Start(BuildArguments(Profile));
+        try
+        {
+            process.Start(BuildArguments(Profile));
+        }
+        catch
+        {
+            // The slot is already filled, so a Start that throws would otherwise make every later attempt
+            // short-circuit on `_process is not null` and then trip over a process that was never started.
+            TearDown();
+            throw;
+        }
         _readerThread = new Thread(ReadLoop) { IsBackground = true, Name = "b3270-reader" };
         _readerThread.Start();
 
@@ -86,6 +145,11 @@ public sealed class B3270Session : IEmulatorSession
             TearDown();
             throw;
         }
+        catch (OperationCanceledException)
+        {
+            TearDown();
+            throw;
+        }
 
         if (!Version.TryParse(hello.Version, out var version) || version < MinimumVersion)
         {
@@ -93,7 +157,9 @@ public sealed class B3270Session : IEmulatorSession
             throw new BackendUnavailableException($"b3270 version {hello.Version} is too old; {MinimumVersion} or newer is required.");
         }
 
-        if (_wireLog is null && WireLog.LastOpenError is { } wireLogError && !_wireLogWarningRaised)
+        Engine = Engine with { Version = $"{hello.Version} ({hello.Build})" };
+
+        if (_wireLogError is { } wireLogError && !_wireLogWarningRaised)
         {
             _wireLogWarningRaised = true;
             HostMessage?.Invoke(this, "Wire log disabled: " + wireLogError);
@@ -107,7 +173,7 @@ public sealed class B3270Session : IEmulatorSession
         {
             while (process.StandardOutput.ReadLine() is { } line)
             {
-                _wireLog?.Inbound(line);
+                Volatile.Read(ref _wireLog)?.Inbound(line);
                 if (!IndicationParser.TryParse(line, out var indication)) continue;
                 try { Handle(indication); }
                 catch (Exception ex) { HostMessage?.Invoke(this, "Internal error handling emulator output: " + ex.Message); }
@@ -171,8 +237,9 @@ public sealed class B3270Session : IEmulatorSession
     }
 
     /// <summary>Drops a process that failed to start. Only <see cref="DisposeAsync"/> sets <c>_shuttingDown</c>:
-    /// that flag is for the session's life, and a start that fails must leave the next attempt able to report
-    /// its own faults. The reader thread of the old process tells it apart by identity instead.</summary>
+    /// that flag is for the session's life — it closes the session to any later start as well as silencing the
+    /// fault report — and a start that fails must leave the next attempt able to report its own faults. The
+    /// reader thread of the old process tells it apart by identity instead.</summary>
     private void TearDown()
     {
         var process = _process;
@@ -184,33 +251,56 @@ public sealed class B3270Session : IEmulatorSession
 
     public async ValueTask DisposeAsync()
     {
-        // Dispose the wire log unconditionally: a fault (see OnProcessEnded) may already have
-        // cleared _process, but the log still needs to be closed.
-        _wireLog?.Dispose();
-        if (_process is null) return;
+        // Set before the slot is even read, so a session disposed without ever being started is still closed to
+        // a later connect; it also stops OnProcessEnded reporting the shutdown it is about to cause as a fault.
         _shuttingDown = true;
         try
         {
-            WriteLine(RunOperation.Serialize("quit", [new B3270Action("Quit")]));
-            await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
+            // Snapshot the slot: OnProcessEnded clears it from the reader thread after publishing Disconnected,
+            // so re-reading the field here can hand back null between the check and the kill (as TearDown does).
+            var process = _process;
+            if (process is null) return;
+            try
+            {
+                WriteLine(RunOperation.Serialize("quit", [new B3270Action("Quit")]));
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception)
+            {
+                // OnProcessEnded may already have killed and disposed this process, so the kill can fail too.
+                try { process.Kill(); }
+                catch (Exception) { /* already gone; nothing left to stop */ }
+            }
+            try { process.Dispose(); }
+            catch (Exception) { /* already disposed by OnProcessEnded */ }
+            Interlocked.CompareExchange(ref _process, null, process);
         }
-        catch (Exception)
+        finally
         {
-            _process.Kill();
+            // Closed last, and on every path: a fault (see OnProcessEnded) may already have cleared _process, but
+            // the log still needs closing — and the Quit, plus whatever b3270 says on its way out, are exactly
+            // the lines a report about a hang on close turns on.
+            StopWireLog();
         }
-        _process.Dispose();
-        _process = null;
     }
 
     // ---- running actions ----
 
     internal Task<RunResultIndication> RunAsync(params B3270Action[] actions) => RunAsync(actions, throwOnFailure: true);
 
-    internal Task<RunResultIndication> RunRawAsync(IReadOnlyList<B3270Action> actions) => RunAsync(actions, throwOnFailure: false);
+    /// <param name="timeout">A bound on b3270's answer, for runs that must not outlive their caller.</param>
+    /// <param name="cancellationToken">Gives up on the answer, releasing the pending slot.</param>
+    internal Task<RunResultIndication> RunRawAsync(IReadOnlyList<B3270Action> actions, TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(actions, throwOnFailure: false, timeout, cancellationToken);
 
     internal int PendingCount => _pending.Count;
 
-    private async Task<RunResultIndication> RunAsync(IReadOnlyList<B3270Action> actions, bool throwOnFailure)
+    /// <param name="timeout">Bounds the wait for b3270's answer. Most runs pass none: b3270 answers at once, and
+    /// Transfer deliberately does not answer until the transfer has ended.</param>
+    /// <param name="cancellationToken">Ends the wait when the caller's own attempt is over.</param>
+    private async Task<RunResultIndication> RunAsync(IReadOnlyList<B3270Action> actions, bool throwOnFailure,
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
         RequireProcess();
         var tag = Interlocked.Increment(ref _tagCounter).ToString();
@@ -225,7 +315,22 @@ public sealed class B3270Session : IEmulatorSession
             _pending.TryRemove(tag, out _);
             throw;
         }
-        var result = await tcs.Task;
+        RunResultIndication result;
+        try
+        {
+            var wait = tcs.Task;
+            if (timeout is { } limit) wait = wait.WaitAsync(limit, cancellationToken);
+            else if (cancellationToken.CanBeCanceled) wait = wait.WaitAsync(cancellationToken);
+            result = await wait;
+        }
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+        {
+            // Nothing will complete this tag now, and Handle drops a run-result whose tag is gone, so release
+            // the slot instead of holding it for the session's life.
+            _pending.TryRemove(tag, out _);
+            throw;
+        }
+
         if (throwOnFailure && !result.Success)
             throw new EmulatorActionException(string.Join("\n", result.Text));
         return result;
@@ -236,11 +341,16 @@ public sealed class B3270Session : IEmulatorSession
         var process = RequireProcess();
         lock (_writeLock)
         {
+            // Logged before the bytes go out, not after: stdin auto-flushes, so b3270 can answer the moment the
+            // newline lands, and the reader thread logs inbound lines under the log's own lock rather than this
+            // one. Logging afterwards let a run-result be written ahead of the run that provoked it, which is the
+            // ordering a reader uses to attribute a failure. The cost is that a write which then throws leaves a
+            // line in the log that never reached the engine — visible anyway, because nothing answers it.
+            _wireLog?.Outbound(line);
             process.StandardInput.Write(line);
             process.StandardInput.Write('\n');
             process.StandardInput.Flush();
         }
-        _wireLog?.Outbound(line);
     }
 
     /// <summary>The live process, or the reason there is none: the engine's last fault when it died, otherwise a
@@ -437,12 +547,79 @@ public sealed class B3270Session : IEmulatorSession
 
     // ---- IEmulatorSession actions ----
 
-    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default)
     {
         await StartProcessAsync(cancellationToken);
-        await RunAsync(new B3270Action("Set", "verifyHostCert", Profile.VerifyCertificate ? "true" : "false"));
-        var result = await RunRawAsync([new B3270Action("Connect", HostStringBuilder.Build(Profile))]);
-        if (!result.Success) throw new ConnectionFailedException(result.Text);
+        var verify = options?.VerifyCertificate ?? Profile.VerifyCertificate;
+        // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
+        // open before the Connect has even gone out.
+        await RunAsync([new B3270Action("Set", "verifyHostCert", verify ? "true" : "false")], throwOnFailure: true,
+            cancellationToken: cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // b3270 answers a Disconnect while a Connect is pending (verified against 4.5ga6): the Disconnect run
+        // succeeds at once and the Connect run then fails with "Connection failed", which is the cancel's own
+        // consequence rather than an error to report. Its own token lets that wait be given up on if the engine
+        // never says so, which releases the pending slot rather than abandoning it.
+        using var runCts = new CancellationTokenSource();
+        var run = RunRawAsync([new B3270Action("Connect", HostStringBuilder.Build(Profile))], cancellationToken: runCts.Token);
+        Task? disconnect = null;
+        RunResultIndication? result = null;
+        try
+        {
+            using (cancellationToken.Register(() =>
+            {
+                Volatile.Write(ref disconnect, Task.Run(TryDisconnectQuietlyAsync));
+                // The Disconnect is what makes b3270 fail the pending Connect run, so allow that long for it to
+                // arrive and no longer: a wedged engine must not hold the attempt open past its cancellation.
+                runCts.CancelAfter(DisconnectTimeout);
+            }))
+                result = await run;
+        }
+        catch (OperationCanceledException) when (runCts.IsCancellationRequested)
+        {
+            // The engine never failed the Connect run after the cancel. The cancellation below is the outcome.
+        }
+        finally
+        {
+            // The registration is disposed by now, so the slot is final. Awaiting here rather than only on the
+            // cancelled path below is what keeps that promise when the Connect run faults instead of returning —
+            // the engine dying mid-cancel — which would otherwise let the Disconnect land on the next attempt.
+            // TransferAsync holds its own cancel the same way.
+            if (Volatile.Read(ref disconnect) is { } started) await started;
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            // A cancel that raced the outcome still wins: the run may even have succeeded, so make sure a Disconnect
+            // went out and was answered before reporting the cancellation.
+            if (Volatile.Read(ref disconnect) is null) await TryDisconnectQuietlyAsync();
+            // b3270 answers the Connect run before it reports the connection closed; wait for that report so the
+            // session is actually reusable by the time the caller sees the exception (spec 4.1).
+            await WaitForDisconnectedAsync();
+            throw new OperationCanceledException(cancellationToken);
+        }
+
+        // Not cancelled, so the run above answered.
+        var outcome = result!;
+        if (outcome.Success) return;
+        // Same lag as above: the failing run-result arrives before b3270's own not-connected indication.
+        await WaitForDisconnectedAsync();
+        var certificate = outcome.Text.Any(line => line.StartsWith(CertificateFailurePrefix, StringComparison.Ordinal));
+        throw new ConnectionFailedException(outcome.Text, certificate);
+    }
+
+    private async Task TryDisconnectQuietlyAsync()
+    {
+        try
+        {
+            await RunRawAsync([new B3270Action("Disconnect")], DisconnectTimeout);
+        }
+        catch (Exception)
+        {
+            // The process may be gone, or the engine may accept the Disconnect and never answer it. Neither can
+            // be allowed to hold the cancel open: the pending Connect run faults or is abandoned alongside it.
+        }
     }
 
     /// <summary>Completes once b3270 has reported the connection closed (or the process has ended), not
@@ -450,20 +627,28 @@ public sealed class B3270Session : IEmulatorSession
     public async Task DisconnectAsync()
     {
         if (_process is null) return;
+        if (ConnectionState == ConnectionState.Disconnected) return;
+        await RunRawAsync([new B3270Action("Disconnect")]);
+        await WaitForDisconnectedAsync();
+    }
+
+    /// <summary>Waits until b3270 reports the connection closed, or until <see cref="DisconnectTimeout"/> passes.
+    /// The source is installed before the state is checked so a report that lands in between is not missed.</summary>
+    private async Task WaitForDisconnectedAsync()
+    {
         var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _disconnected = disconnected;
         try
         {
             if (ConnectionState == ConnectionState.Disconnected) return;
-            await RunRawAsync([new B3270Action("Disconnect")]);
             try
             {
                 await disconnected.Task.WaitAsync(DisconnectTimeout);
             }
             catch (TimeoutException)
             {
-                // b3270 accepted the action but never reported the state; the ConnectionChanged
-                // event still fires if it does later. Hanging the caller would be worse.
+                // b3270 accepted the action but never reported the state; the ConnectionChanged event still
+                // fires if it does later. Hanging the caller would be worse.
             }
         }
         finally

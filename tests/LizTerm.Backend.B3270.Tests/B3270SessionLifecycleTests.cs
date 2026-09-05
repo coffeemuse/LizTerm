@@ -1,3 +1,4 @@
+using LizTerm.Backend.B3270.Process;
 using LizTerm.Backend.B3270.Protocol;
 using LizTerm.Backend.B3270.Tests.Fakes;
 using LizTerm.Core.Session;
@@ -112,7 +113,7 @@ public class B3270SessionLifecycleTests
         await session.StartProcessAsync(CancellationToken.None);
         var faulted = false;
         session.Faulted += (_, _) => faulted = true;
-        fake.RunResponder = line => { if (line.Contains("Quit")) fake.Exit(0); return []; };
+        fake.RunResponder = _ => [];
         await session.DisposeAsync();
         Assert.Contains(fake.InputLines, l => l.Contains("\"Quit\""));
         await Task.Delay(50, TestContext.Current.CancellationToken);
@@ -159,7 +160,7 @@ public class B3270SessionLifecycleTests
         await session.StartProcessAsync(CancellationToken.None);
         var faulted = false;
         session.Faulted += (_, _) => faulted = true;
-        fake.RunResponder = line => { if (line.Contains("Quit")) fake.Exit(0); return []; };
+        fake.RunResponder = _ => [];
 
         await session.DisposeAsync();
 
@@ -194,14 +195,14 @@ public class B3270SessionLifecycleTests
             return fake;
         });
 
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
         session.Faulted += (_, f) => faulted.TrySetResult(f);
 
         fake1!.Exit(137);
         await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, calls);
         Assert.True(fake2!.Started);
@@ -225,14 +226,120 @@ public class B3270SessionLifecycleTests
         session.Faulted += (_, f) => { faults.Add(f); faulted.TrySetResult(f); };
 
         await Assert.ThrowsAsync<BackendUnavailableException>(() => session.StartProcessAsync(CancellationToken.None));
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Empty(faults);
 
         fake2!.Exit(137);
         var fault = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         Assert.Equal(137, fault.ExitCode);
 
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(3, calls);
+    }
+
+    [Fact]
+    public async Task Engine_reports_the_location_before_start_and_the_version_after_hello()
+    {
+        var fake = new FakeB3270Process();
+        var location = new B3270Location("/opt/x/b3270", EngineSource.Override);
+        await using var session = new B3270Session(Profile, () => fake, location: location);
+        Assert.Equal(new EngineInfo("b3270", null, "/opt/x/b3270", EngineSource.Override), session.Engine);
+        await session.StartProcessAsync(CancellationToken.None);
+        Assert.Equal("4.5.6 (fake b3270)", session.Engine.Version);
+        Assert.Equal(EngineSource.Override, session.Engine.Source);
+    }
+
+    /// <summary>Regression: the locator now runs once in SessionFactory, so a binary that vanishes afterwards fails
+    /// inside process.Start() rather than in the factory. Start must not leave the slot filled, or every later
+    /// attempt short-circuits on a process that was never started.</summary>
+    [Fact]
+    public async Task A_failed_process_start_leaves_the_session_able_to_try_again()
+    {
+        var first = new FakeB3270Process { FaultStart = new BackendUnavailableException("Could not start /gone/b3270") };
+        var second = new FakeB3270Process();
+        var queue = new Queue<FakeB3270Process>([first, second]);
+        await using var session = new B3270Session(Profile, () => queue.Dequeue());
+
+        await Assert.ThrowsAsync<BackendUnavailableException>(() => session.StartProcessAsync(CancellationToken.None));
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(second.Started, "the retry must spawn a fresh process");
+        Assert.Equal("4.5.6 (fake b3270)", session.Engine.Version);
+    }
+
+    /// <summary>Regression: OnProcessEnded clears the process slot from the reader thread after it has published
+    /// Disconnected, so DisposeAsync must work from its own snapshot rather than re-reading the field.</summary>
+    [Fact]
+    public async Task Dispose_survives_the_engine_dying_part_way_through_the_quit_write()
+    {
+        var fake = new FakeB3270Process();
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+
+        // Faulted is raised on the reader thread from inside OnProcessEnded, after Disconnected is published and
+        // before the process slot is cleared. Park it there so DisposeAsync passes its null check with the slot
+        // still filled, then let it clear the slot while DisposeAsync is mid-write.
+        var parked = new ManualResetEventSlim();
+        var release = new ManualResetEventSlim();
+        session.Faulted += (_, _) => { parked.Set(); release.Wait(TimeSpan.FromSeconds(5)); };
+        fake.Exit(1);
+        Assert.True(parked.Wait(TimeSpan.FromSeconds(5)), "the reader thread never reached Faulted");
+
+        fake.BeforeWrite = () =>
+        {
+            fake.BeforeWrite = null;
+            fake.FaultWrite = true;
+            release.Set();
+            SpinWait.SpinUntil(() => !session.HasProcess, TimeSpan.FromSeconds(5));
+        };
+
+        await session.DisposeAsync();
+        Assert.False(session.HasProcess);
+    }
+
+    /// <summary>The real engine exits on Quit rather than answering it. When the fake did not, every DisposeAsync
+    /// waited out its full two-second timeout and then killed the process, which is both slow across the suite
+    /// and a different shutdown path from the one the app actually takes.</summary>
+    [Fact]
+    public async Task Dispose_quits_the_engine_instead_of_killing_it_after_the_timeout()
+    {
+        var fake = new FakeB3270Process();
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+
+        await session.DisposeAsync();
+
+        Assert.Contains(fake.InputLines, l => l.Contains("\"Quit\""));
+        Assert.Equal(0, await fake.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Regression: StartProcessAsync never consulted the shutdown flag, and DisposeAsync clears the
+    /// process slot, so a connect arriving after disposal (a modal dialog's continuation outliving its window)
+    /// spawned a fresh engine that nothing owned and nothing would ever dispose.</summary>
+    [Fact]
+    public async Task A_connect_after_dispose_is_refused_rather_than_spawning_another_engine()
+    {
+        var spawned = 0;
+        var session = new B3270Session(Profile, () => { spawned++; return new FakeB3270Process(); });
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+        await session.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(1, spawned);
+    }
+
+    /// <summary>Disposing a session that was never started has no process to tear down, so it must still mark
+    /// itself disposed rather than leaving the next connect free to spawn one.</summary>
+    [Fact]
+    public async Task A_connect_after_disposing_an_unstarted_session_is_refused_too()
+    {
+        var spawned = 0;
+        var session = new B3270Session(Profile, () => { spawned++; return new FakeB3270Process(); });
+        await session.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(0, spawned);
     }
 }

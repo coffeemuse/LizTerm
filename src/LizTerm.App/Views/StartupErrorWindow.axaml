@@ -1,0 +1,11 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LizTerm.App.Views.StartupErrorWindow"
+        Title="LizTerm cannot start" Width="560" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterScreen">
+  <StackPanel Margin="16" Spacing="12">
+    <TextBlock Text="The emulator engine could not be used." FontWeight="SemiBold" />
+    <TextBox x:Name="MessageText" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" />
+    <Button Content="Quit" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" Click="OnQuitClick" />
+  </StackPanel>
+</Window>
