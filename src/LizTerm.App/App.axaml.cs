@@ -55,19 +55,36 @@ public partial class App : Application
 
     private void Execute(StartupPlan plan)
     {
-        switch (plan)
+        try
         {
-            case StartupPlan.ShowError error:
-                var window = new StartupErrorWindow(error.Message);
-                window.Closed += (_, _) => Quit();
-                window.Show();
-                break;
-            case StartupPlan.OpenSession open:
-                OpenSession(open.Profile, open.FromStore);
-                break;
-            default:
-                ShowPicker();
-                break;
+            switch (plan)
+            {
+                case StartupPlan.ShowError error:
+                    var window = new StartupErrorWindow(error.Message);
+                    window.Closed += (_, _) => Quit();
+                    window.Show();
+                    break;
+                case StartupPlan.OpenSession open:
+                    OpenSession(open.Profile, open.FromStore);
+                    break;
+                default:
+                    ShowPicker();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Guards against a plan opening no window at all: with ShutdownMode.OnExplicitShutdown, a stranded
+            // process with no window and no way to quit would keep running invisibly. A ShowError plan already
+            // tried its own window, so retrying it here would risk the same failure; just quit.
+            if (plan is StartupPlan.ShowError)
+            {
+                Quit();
+                return;
+            }
+            var window = new StartupErrorWindow("LizTerm could not open its first window: " + ex.Message);
+            window.Closed += (_, _) => Quit();
+            window.Show();
         }
     }
 

@@ -19,6 +19,8 @@ public class AboutWindowTests
         var notices = window.FindControl<TextBox>("NoticesText")!.Text!;
         Assert.Contains("Paul Mattes", notices);
         Assert.Contains("3270font", notices);
+        Assert.Contains("Avalonia", notices);
+        Assert.Contains("CommunityToolkit", notices);
         Assert.DoesNotContain("LizTerm is licensed", notices);
     }
 }
