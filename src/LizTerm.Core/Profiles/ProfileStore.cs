@@ -8,18 +8,7 @@ public sealed class ProfileStore(string directory)
 {
     public string Directory { get; } = directory;
 
-    public static string DefaultDirectory()
-    {
-        string root;
-        if (OperatingSystem.IsMacOS())
-            root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support");
-        else if (OperatingSystem.IsWindows())
-            root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        else
-            root = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
-                   ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
-        return Path.Combine(root, "LizTerm", "profiles");
-    }
+    public static string DefaultDirectory() => AppPaths.ProfilesDirectory();
 
     public IReadOnlyList<SessionProfile> LoadAll()
     {
