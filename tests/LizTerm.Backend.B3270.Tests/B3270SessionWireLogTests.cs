@@ -89,7 +89,7 @@ public class B3270SessionWireLogTests : IDisposable
         await Task.Delay(50, TestContext.Current.CancellationToken);
         await session.StartProcessAsync(CancellationToken.None);
 
-        Assert.Single(messages.Where(m => m == "Wire log disabled: boom"));
+        Assert.Single(messages, m => m == "Wire log disabled: boom");
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, string what)
