@@ -64,7 +64,7 @@ public class B3270SessionConnectTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt);
-        Assert.Contains(fake.InputLines, l => l.Contains("\"Disconnect\""));
+        Assert.Equal(1, fake.InputLines.Count(l => l.Contains("\"Disconnect\"")));
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
 
         // The same process connects again.
@@ -83,5 +83,75 @@ public class B3270SessionConnectTests
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ConnectAsync(cancellationToken: cts.Token));
         Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"Connect\""));
+    }
+
+    [Fact]
+    public async Task Cancel_waits_for_the_disconnect_to_be_answered_and_sends_exactly_one()
+    {
+        string? connectTag = null;
+        string? disconnectLine = null;
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\"")) { connectTag = Tag(line); return []; }
+            if (line.Contains("\"Disconnect\""))
+            {
+                // Fail the Connect and drop the line, but do not answer the Disconnect yet.
+                disconnectLine = line;
+                return [Failed(connectTag!, "Connection failed"), """{"connection":{"state":"not-connected"}}"""];
+            }
+            return [Ok(line)];
+        };
+        await using var session = new B3270Session(Verifying, () => fake);
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(1));
+        cts.Cancel();
+        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""), TimeSpan.FromSeconds(1));
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(attempt.IsCompleted, "the attempt must wait for the Disconnect to be answered");
+
+        fake.Emit(Ok(disconnectLine!));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt);
+        Assert.Equal(1, fake.InputLines.Count(l => l.Contains("\"Disconnect\"")));
+    }
+
+    [Fact]
+    public async Task Cancel_that_races_a_successful_connect_still_disconnects_and_reports_cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\""))
+            {
+                // Cancel on the writer's thread before the success is even emitted.
+                cts.Cancel();
+                return [Ok(line), """{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}"""];
+            }
+            if (line.Contains("\"Disconnect\"")) return [Ok(line), """{"connection":{"state":"not-connected"}}"""];
+            return [Ok(line)];
+        };
+        await using var session = new B3270Session(Verifying, () => fake);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ConnectAsync(cancellationToken: cts.Token));
+        Assert.Equal(1, fake.InputLines.Count(l => l.Contains("\"Disconnect\"")));
+        cts.Dispose();
+    }
+
+    [Fact]
+    public async Task Cancelled_cold_start_tears_the_process_down_and_the_next_connect_starts_fresh()
+    {
+        var first = new FakeB3270Process { AutoInitialize = false };
+        var second = new FakeB3270Process();
+        var processes = new Queue<FakeB3270Process>([first, second]);
+        await using var session = new B3270Session(Verifying, () => processes.Dequeue());
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ConnectAsync(cancellationToken: cts.Token));
+        Assert.True(first.Started);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(second.Started);
+        Assert.Contains(second.InputLines, l => l.Contains("\"Connect\""));
     }
 }

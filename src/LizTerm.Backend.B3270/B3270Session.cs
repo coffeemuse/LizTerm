@@ -494,15 +494,23 @@ public sealed class B3270Session : IEmulatorSession
         cancellationToken.ThrowIfCancellationRequested();
 
         var run = RunRawAsync([new B3270Action("Connect", HostStringBuilder.Build(Profile))]);
+        Task? disconnect = null;
         RunResultIndication result;
         // b3270 answers a Disconnect while a Connect is pending (verified against 4.5ga6): the Disconnect run
         // succeeds at once and the Connect run then fails with "Connection failed", which is the cancel's own
-        // consequence rather than an error to report.
-        using (cancellationToken.Register(() => _ = Task.Run(TryDisconnectQuietlyAsync)))
+        // consequence rather than an error to report. The Disconnect is kept and awaited below so it can never
+        // outlive this attempt and land on the next one.
+        using (cancellationToken.Register(() => Volatile.Write(ref disconnect, Task.Run(TryDisconnectQuietlyAsync))))
             result = await run;
 
+        if (cancellationToken.IsCancellationRequested)
+        {
+            // A cancel that raced the outcome still wins: the run may even have succeeded, so make sure a Disconnect
+            // went out and was answered before reporting the cancellation.
+            await (Volatile.Read(ref disconnect) ?? TryDisconnectQuietlyAsync());
+            throw new OperationCanceledException(cancellationToken);
+        }
         if (result.Success) return;
-        cancellationToken.ThrowIfCancellationRequested();
         var certificate = result.Text.Any(line => line.StartsWith(CertificateFailurePrefix, StringComparison.Ordinal));
         throw new ConnectionFailedException(result.Text, certificate);
     }
