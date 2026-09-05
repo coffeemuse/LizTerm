@@ -1,3 +1,4 @@
+using LizTerm.Backend.B3270.Process;
 using LizTerm.Backend.B3270.Protocol;
 using LizTerm.Backend.B3270.Tests.Fakes;
 using LizTerm.Core.Session;
@@ -234,5 +235,17 @@ public class B3270SessionLifecycleTests
 
         await session.ConnectAsync(TestContext.Current.CancellationToken);
         Assert.Equal(3, calls);
+    }
+
+    [Fact]
+    public async Task Engine_reports_the_location_before_start_and_the_version_after_hello()
+    {
+        var fake = new FakeB3270Process();
+        var location = new B3270Location("/opt/x/b3270", EngineSource.Override);
+        await using var session = new B3270Session(Profile, () => fake, location: location);
+        Assert.Equal(new EngineInfo("b3270", null, "/opt/x/b3270", EngineSource.Override), session.Engine);
+        await session.StartProcessAsync(CancellationToken.None);
+        Assert.Equal("4.5.6 (fake b3270)", session.Engine.Version);
+        Assert.Equal(EngineSource.Override, session.Engine.Source);
     }
 }
