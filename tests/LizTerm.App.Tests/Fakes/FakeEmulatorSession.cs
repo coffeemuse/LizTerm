@@ -5,7 +5,7 @@ namespace LizTerm.App.Tests.Fakes;
 
 public sealed class FakeEmulatorSession : IEmulatorSession
 {
-    public SessionProfile Profile { get; init; } = new() { Name = "Fake", Host = "fake.host", Port = 3270 };
+    public SessionProfile Profile { get; set; } = new() { Name = "Fake", Host = "fake.host", Port = 3270 };
     public ScreenSnapshot CurrentScreen { get; set; } = ScreenSnapshot.Empty(24, 80);
     public ConnectionState ConnectionState { get; set; }
     public TlsInfo? Tls { get; set; }
