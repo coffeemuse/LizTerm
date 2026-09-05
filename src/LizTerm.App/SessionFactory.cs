@@ -9,8 +9,22 @@ public static class SessionFactory
 {
     public static IEmulatorSession Create(SessionProfile profile)
     {
-        var location = B3270Locator.Find();
+        B3270Location location;
+        Func<IB3270Process> processFactory;
+        try
+        {
+            var found = B3270Locator.Find();
+            location = found;
+            processFactory = () => new B3270ChildProcess(found.Path);
+        }
+        catch (BackendUnavailableException ex)
+        {
+            // Nothing to run: let the first connect fail the way the view model already reports, with the
+            // locator's own explanation of where it looked.
+            location = B3270Location.Unknown;
+            processFactory = () => throw ex;
+        }
         var wireLog = WireLog.TryFromEnvironment(out var wireLogError);
-        return new B3270Session(profile, () => new B3270ChildProcess(location.Path), wireLog, wireLogError, location);
+        return new B3270Session(profile, processFactory, wireLog, wireLogError, location);
     }
 }

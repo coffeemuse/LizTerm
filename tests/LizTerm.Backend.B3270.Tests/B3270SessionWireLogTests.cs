@@ -59,6 +59,15 @@ public class B3270SessionWireLogTests : IDisposable
     }
 
     [Fact]
+    public async Task Start_on_an_empty_path_throws_IOException()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Profile, () => fake);
+        Assert.Throws<IOException>(() => session.StartWireLog(""));
+        Assert.Null(session.WireLogPath);
+    }
+
+    [Fact]
     public async Task Environment_log_is_active_from_construction_and_survives_a_restart()
     {
         var fake = new FakeB3270Process();
