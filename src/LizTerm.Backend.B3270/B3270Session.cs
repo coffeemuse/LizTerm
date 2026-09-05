@@ -274,11 +274,19 @@ public sealed class B3270Session : IEmulatorSession
 
     internal Task<RunResultIndication> RunAsync(params B3270Action[] actions) => RunAsync(actions, throwOnFailure: true);
 
-    internal Task<RunResultIndication> RunRawAsync(IReadOnlyList<B3270Action> actions) => RunAsync(actions, throwOnFailure: false);
+    /// <param name="timeout">A bound on b3270's answer, for runs that must not outlive their caller.</param>
+    /// <param name="cancellationToken">Gives up on the answer, releasing the pending slot.</param>
+    internal Task<RunResultIndication> RunRawAsync(IReadOnlyList<B3270Action> actions, TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(actions, throwOnFailure: false, timeout, cancellationToken);
 
     internal int PendingCount => _pending.Count;
 
-    private async Task<RunResultIndication> RunAsync(IReadOnlyList<B3270Action> actions, bool throwOnFailure)
+    /// <param name="timeout">Bounds the wait for b3270's answer. Most runs pass none: b3270 answers at once, and
+    /// Transfer deliberately does not answer until the transfer has ended.</param>
+    /// <param name="cancellationToken">Ends the wait when the caller's own attempt is over.</param>
+    private async Task<RunResultIndication> RunAsync(IReadOnlyList<B3270Action> actions, bool throwOnFailure,
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
         RequireProcess();
         var tag = Interlocked.Increment(ref _tagCounter).ToString();
@@ -293,7 +301,22 @@ public sealed class B3270Session : IEmulatorSession
             _pending.TryRemove(tag, out _);
             throw;
         }
-        var result = await tcs.Task;
+        RunResultIndication result;
+        try
+        {
+            var wait = tcs.Task;
+            if (timeout is { } limit) wait = wait.WaitAsync(limit, cancellationToken);
+            else if (cancellationToken.CanBeCanceled) wait = wait.WaitAsync(cancellationToken);
+            result = await wait;
+        }
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+        {
+            // Nothing will complete this tag now, and Handle drops a run-result whose tag is gone, so release
+            // the slot instead of holding it for the session's life.
+            _pending.TryRemove(tag, out _);
+            throw;
+        }
+
         if (throwOnFailure && !result.Success)
             throw new EmulatorActionException(string.Join("\n", result.Text));
         return result;
@@ -509,45 +532,74 @@ public sealed class B3270Session : IEmulatorSession
     {
         await StartProcessAsync(cancellationToken);
         var verify = options?.VerifyCertificate ?? Profile.VerifyCertificate;
-        await RunAsync(new B3270Action("Set", "verifyHostCert", verify ? "true" : "false"));
+        // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
+        // open before the Connect has even gone out.
+        await RunAsync([new B3270Action("Set", "verifyHostCert", verify ? "true" : "false")], throwOnFailure: true,
+            cancellationToken: cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var run = RunRawAsync([new B3270Action("Connect", HostStringBuilder.Build(Profile))]);
-        Task? disconnect = null;
-        RunResultIndication result;
         // b3270 answers a Disconnect while a Connect is pending (verified against 4.5ga6): the Disconnect run
         // succeeds at once and the Connect run then fails with "Connection failed", which is the cancel's own
-        // consequence rather than an error to report. The Disconnect is kept and awaited below so it can never
-        // outlive this attempt and land on the next one.
-        using (cancellationToken.Register(() => Volatile.Write(ref disconnect, Task.Run(TryDisconnectQuietlyAsync))))
-            result = await run;
+        // consequence rather than an error to report. Its own token lets that wait be given up on if the engine
+        // never says so, which releases the pending slot rather than abandoning it.
+        using var runCts = new CancellationTokenSource();
+        var run = RunRawAsync([new B3270Action("Connect", HostStringBuilder.Build(Profile))], cancellationToken: runCts.Token);
+        Task? disconnect = null;
+        RunResultIndication? result = null;
+        try
+        {
+            using (cancellationToken.Register(() =>
+            {
+                Volatile.Write(ref disconnect, Task.Run(TryDisconnectQuietlyAsync));
+                // The Disconnect is what makes b3270 fail the pending Connect run, so allow that long for it to
+                // arrive and no longer: a wedged engine must not hold the attempt open past its cancellation.
+                runCts.CancelAfter(DisconnectTimeout);
+            }))
+                result = await run;
+        }
+        catch (OperationCanceledException) when (runCts.IsCancellationRequested)
+        {
+            // The engine never failed the Connect run after the cancel. The cancellation below is the outcome.
+        }
+        finally
+        {
+            // The registration is disposed by now, so the slot is final. Awaiting here rather than only on the
+            // cancelled path below is what keeps that promise when the Connect run faults instead of returning —
+            // the engine dying mid-cancel — which would otherwise let the Disconnect land on the next attempt.
+            // TransferAsync holds its own cancel the same way.
+            if (Volatile.Read(ref disconnect) is { } started) await started;
+        }
 
         if (cancellationToken.IsCancellationRequested)
         {
             // A cancel that raced the outcome still wins: the run may even have succeeded, so make sure a Disconnect
             // went out and was answered before reporting the cancellation.
-            await (Volatile.Read(ref disconnect) ?? TryDisconnectQuietlyAsync());
+            if (Volatile.Read(ref disconnect) is null) await TryDisconnectQuietlyAsync();
             // b3270 answers the Connect run before it reports the connection closed; wait for that report so the
             // session is actually reusable by the time the caller sees the exception (spec 4.1).
             await WaitForDisconnectedAsync();
             throw new OperationCanceledException(cancellationToken);
         }
-        if (result.Success) return;
+
+        // Not cancelled, so the run above answered.
+        var outcome = result!;
+        if (outcome.Success) return;
         // Same lag as above: the failing run-result arrives before b3270's own not-connected indication.
         await WaitForDisconnectedAsync();
-        var certificate = result.Text.Any(line => line.StartsWith(CertificateFailurePrefix, StringComparison.Ordinal));
-        throw new ConnectionFailedException(result.Text, certificate);
+        var certificate = outcome.Text.Any(line => line.StartsWith(CertificateFailurePrefix, StringComparison.Ordinal));
+        throw new ConnectionFailedException(outcome.Text, certificate);
     }
 
     private async Task TryDisconnectQuietlyAsync()
     {
         try
         {
-            await RunRawAsync([new B3270Action("Disconnect")]);
+            await RunRawAsync([new B3270Action("Disconnect")], DisconnectTimeout);
         }
         catch (Exception)
         {
-            // The process may be gone; the pending Connect run faults on its own in that case.
+            // The process may be gone, or the engine may accept the Disconnect and never answer it. Neither can
+            // be allowed to hold the cancel open: the pending Connect run faults or is abandoned alongside it.
         }
     }
 

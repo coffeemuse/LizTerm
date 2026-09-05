@@ -192,6 +192,74 @@ public class B3270SessionConnectTests
         Assert.Equal(ConnectionState.TcpPending, session.ConnectionState);
     }
 
+    /// <summary>Regression: the cancel's Disconnect run was awaited with no bound, so an engine that accepted it
+    /// and never answered left ConnectAsync pending past its own cancellation, with nothing to unwedge it.</summary>
+    [Fact]
+    public async Task A_cancel_gives_up_on_an_unanswered_disconnect_instead_of_hanging()
+    {
+        // Answers the verify setting, then nothing: neither the Connect nor the cancel's Disconnect.
+        var fake = new FakeB3270Process { RunResponder = line => line.Contains("\"Set\"") ? [Ok(line)] : [] };
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(200) };
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Regression: the verify setting was awaited with no bound and observed no token, so a wedged engine
+    /// held the attempt open before the Connect had even gone out.</summary>
+    [Fact]
+    public async Task A_cancel_while_the_verify_setting_is_unanswered_ends_the_attempt()
+    {
+        var fake = new FakeB3270Process { RunResponder = _ => [] };
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(200) };
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("verifyHostCert"), TimeSpan.FromSeconds(2));
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"Connect\""));
+    }
+
+    /// <summary>Regression: the cancel's Disconnect was awaited only where the Connect run returned normally, so a
+    /// Connect that faulted (the engine dying mid-cancel) let it outlive the attempt and land on the next one.
+    /// TransferAsync already awaits its cancel in a finally for the same reason.</summary>
+    [Fact]
+    public async Task A_cancel_whose_connect_run_faults_still_waits_for_its_disconnect()
+    {
+        var fake = new FakeB3270Process { RunResponder = line => line.Contains("\"Set\"") ? [Ok(line)] : [] };
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(200) };
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+
+        // Hold the cancel's Disconnect inside its write, then kill the engine so the pending Connect run faults.
+        var reached = new ManualResetEventSlim();
+        var release = new ManualResetEventSlim();
+        fake.BeforeWrite = () => { reached.Set(); release.Wait(TimeSpan.FromSeconds(5)); };
+        try
+        {
+            await cts.CancelAsync();
+            Assert.True(reached.Wait(TimeSpan.FromSeconds(5)), "the cancel never sent a Disconnect");
+            fake.Exit(1);
+
+            var settled = await Task.WhenAny(attempt, Task.Delay(500, TestContext.Current.CancellationToken));
+            Assert.NotSame(attempt, settled);
+        }
+        finally
+        {
+            // Always release: the blocked write holds the session's write lock, and disposal needs it.
+            release.Set();
+        }
+        await Assert.ThrowsAnyAsync<Exception>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, string what)
     {
         var deadline = DateTime.UtcNow.AddSeconds(2);
