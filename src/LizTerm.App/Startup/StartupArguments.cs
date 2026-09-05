@@ -5,9 +5,13 @@ namespace LizTerm.App.Startup;
 /// <summary>Command line: no argument opens the picker; a saved profile name connects to it; x3270's ad hoc host
 /// syntax <c>[L:][Y:][lu@]host[:port]</c> (IPv6 hosts bracketed) connects without a profile. <c>L:</c> is TLS,
 /// <c>Y:</c> turns certificate verification off, and the LU part is passed to the engine verbatim, comma lists
-/// included. A syntax error sets <see cref="Error"/> to <see cref="Usage"/> and resolves to the picker.</summary>
+/// included. A syntax error sets <see cref="Error"/> to <see cref="Usage"/> and resolves to the picker.
+/// <para>The two readings overlap — <c>CONS01@mvs</c> and <c>a:b</c> are legal profile names as well as legal ad
+/// hoc hosts — so <see cref="Parse"/> does not choose between them. It records the argument as typed in
+/// <see cref="Argument"/> and, when the text also reads as a host, the ad hoc fields beside it;
+/// <see cref="Resolve"/> is the one that has the saved list and picks.</para></summary>
 public sealed record StartupArguments(
-    string? ProfileName,
+    string? Argument,
     string? Host,
     int? Port,
     bool UseTls = false,
@@ -17,23 +21,26 @@ public sealed record StartupArguments(
 {
     public const string Usage = "Usage: LizTerm [profile | [L:][Y:][lu@]host[:port] | [L:][Y:][lu@][ipv6][:port]]";
 
-    private static readonly StartupArguments Invalid = new(null, null, null, Error: Usage);
+    /// <summary>A malformed argument still carries its text, so it can name a saved profile even when it is not a
+    /// legal host: "a:b" is a usage error as a host and a perfectly good profile name.</summary>
+    private static StartupArguments Invalid(string argument) => new(argument, null, null, Error: Usage);
 
     public static StartupArguments Parse(IReadOnlyList<string> args)
     {
         if (args.Count == 0 || string.IsNullOrWhiteSpace(args[0])) return new StartupArguments(null, null, null);
-        var arg = args[0].Trim();
+        var argument = args[0].Trim();
+        var arg = argument;
 
         var tls = false;
         var verify = true;
         var sawPrefix = false;
-        while (arg.Length >= 2 && char.IsAsciiLetter(arg[0]) && arg[1] == ':')
+        while (arg.Length >= 2 && char.IsAsciiLetter(arg[0]) && arg[1] == ':' && CouldBeHost(arg[2..]))
         {
             switch (char.ToUpperInvariant(arg[0]))
             {
                 case 'L' when !tls: tls = true; break;
                 case 'Y' when verify: verify = false; break;
-                default: return Invalid;
+                default: return Invalid(argument);
             }
             sawPrefix = true;
             arg = arg[2..];
@@ -43,15 +50,21 @@ public sealed record StartupArguments(
         var at = arg.IndexOf('@');
         if (at >= 0)
         {
-            if (at == 0) return Invalid;
+            if (at == 0) return Invalid(argument);
             lu = arg[..at];
             arg = arg[(at + 1)..];
         }
 
-        var (host, port) = ParseHostPort(arg, sawPrefix || lu is not null);
-        if (host is null) return sawPrefix || lu is not null ? Invalid : new StartupArguments(arg, null, null);
-        return new StartupArguments(null, host, port, tls, verify, lu);
+        var forceHost = sawPrefix || lu is not null;
+        var (host, port) = ParseHostPort(arg, forceHost);
+        if (host is null) return forceHost ? Invalid(argument) : new StartupArguments(argument, null, null);
+        return new StartupArguments(argument, host, port, tls, verify, lu);
     }
+
+    /// <summary>Whether what follows a <c>&lt;letter&gt;:</c> head could be a host, which is what makes that head a
+    /// prefix at all. An all-digit remainder cannot be one, so <c>l:3270</c> is the one-letter host <c>l</c> on port
+    /// 3270 rather than TLS to a host called <c>3270</c>.</summary>
+    private static bool CouldBeHost(string rest) => rest.Length > 0 && !rest.All(char.IsAsciiDigit);
 
     /// <summary>Host and optional port. Without a prefix or LU, a bare word with no dot is a profile name, so this
     /// returns a null host for it; with one, any non-empty word is a host.</summary>
@@ -79,12 +92,17 @@ public sealed record StartupArguments(
         return (null, null);
     }
 
+    /// <summary>The saved profile the argument names, else the ad hoc profile it describes, else null. An exact
+    /// name match always wins: the ad hoc forms overlap legal profile names, and only this call has the list that
+    /// tells them apart, so a profile called "CONS01@tk5" stays reachable by its own name.</summary>
     public SessionProfile? Resolve(IReadOnlyList<SessionProfile> profiles)
     {
-        if (Error is not null) return null;
-        if (ProfileName is not null)
-            return profiles.FirstOrDefault(p => p.Name.Equals(ProfileName, StringComparison.OrdinalIgnoreCase));
-        if (Host is null) return null;
+        if (Argument is { } argument)
+        {
+            var saved = profiles.FirstOrDefault(p => p.Name.Equals(argument, StringComparison.OrdinalIgnoreCase));
+            if (saved is not null) return saved;
+        }
+        if (Error is not null || Host is null) return null;
         var port = Port ?? (UseTls ? 992 : 23);
         var address = $"{Host}:{port}";
         return new SessionProfile

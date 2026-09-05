@@ -249,8 +249,12 @@ the backend tests.
   engine is missing, else the session for a resolved argument, else the picker. The gate fires once the splash has
   closed *and* the plan is known, in whichever order — a splash already past its maximum closes from inside
   `Show()`, so `Closed` is subscribed before it and a missed plan would strand the process with no window.
-  `StartupArguments` accepts `[L:][Y:][lu@]host[:port]`; a syntax error prints the usage line and opens the
-  picker. `SessionViewModel` times out a connect after `ConnectTimeout` (30 s; the Disconnect item cancels a
+  `StartupArguments.Parse` records the argument as typed in `Argument` and, when the text also reads as a host,
+  the ad hoc `[L:][Y:][lu@]host[:port]` fields beside it; it does not choose between the two, because the ad hoc
+  forms overlap legal profile names (`CONS01@tk5`, `a:b`) and only `Resolve` has the saved list — an exact name
+  match there always wins, including for an argument that is a usage error as a host. A `<letter>:` head counts
+  as a prefix only when what follows could be a host at all, so `l:3270` is the host `l` on port 3270 rather than
+  TLS to a host named `3270`. A syntax error prints the usage line and opens the picker. `SessionViewModel` times out a connect after `ConnectTimeout` (30 s; the Disconnect item cancels a
   pending one), offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard;
   `saveProfile` is null for ad hoc profiles so the checkbox is hidden; the prompt and the save run after the
   connect's catch clauses, never inside one, so their own failures reach the error banner instead of faulting the

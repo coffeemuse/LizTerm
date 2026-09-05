@@ -15,6 +15,8 @@ public abstract record StartupPlan
         if (backendError is not null) return new ShowError(backendError);
         var profile = arguments.Resolve(profiles);
         if (profile is null) return new OpenPicker();
-        return new OpenSession(profile, FromStore: arguments.ProfileName is not null);
+        // Resolve hands back the saved instance itself when the argument named one, which is what makes the
+        // certificate choice writable back to it; anything else is the ad hoc profile it just built.
+        return new OpenSession(profile, FromStore: profiles.Any(p => ReferenceEquals(p, profile)));
     }
 }
