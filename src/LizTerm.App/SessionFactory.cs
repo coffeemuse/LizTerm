@@ -8,5 +8,5 @@ namespace LizTerm.App;
 public static class SessionFactory
 {
     public static IEmulatorSession Create(SessionProfile profile) =>
-        new B3270Session(profile, () => new B3270ChildProcess(B3270Locator.Find()), WireLog.FromEnvironment());
+        new B3270Session(profile, () => new B3270ChildProcess(B3270Locator.Find().Path), WireLog.FromEnvironment());
 }
