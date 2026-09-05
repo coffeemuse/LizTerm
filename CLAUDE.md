@@ -260,8 +260,11 @@ the backend tests.
   pending one), offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard;
   `saveProfile` is null for ad hoc profiles so the checkbox is hidden; the prompt and the save run after the
   connect's catch clauses, never inside one, so their own failures reach the error banner instead of faulting the
-  command), and owns the Help menu's wire log toggle (`IsWireLogging`, `ShowWireLogsCommand` through
-  `IFolderOpener`) and `Engine` for `AboutWindow`.
+  command), and owns the Help menu's wire log toggle and `Engine` for `AboutWindow`. When `IsWireLogging` cannot
+  start a log it marshals its own correction back to false through `dispatch` rather than assigning inline: a
+  value corrected from inside its own change notification is invisible to the menu item's two-way binding, which
+  is still writing target to source, so the item would keep a check mark for a log that never started and swallow
+  the next click. `ShowWireLogsCommand` opens the folder through `IFolderOpener`.
   `TerminalScreen` blinks cells with the Blink rendition at a 750 ms phase, never below 500 ms.
 
 ### Tests

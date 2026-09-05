@@ -134,7 +134,11 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
                 or ArgumentException or NotSupportedException)
             {
                 ErrorMessage = "Could not open the wire log: " + ex.Message;
-                IsWireLogging = false;
+                // Correcting the property from inside its own change notification is invisible to the menu's
+                // two-way binding, which is still writing target to source: the item would keep a check mark for
+                // a log that never started, and the next click would write the value the property already holds
+                // and be swallowed. Marshalling puts the correction after that write, where it is honoured.
+                _dispatch(() => IsWireLogging = false);
                 return;
             }
         }
