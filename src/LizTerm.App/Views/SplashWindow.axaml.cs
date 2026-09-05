@@ -23,6 +23,7 @@ public partial class SplashWindow : Window
         Opened += (_, _) => Arm(null);
         PointerPressed += (_, _) => Dismiss();
         KeyDown += (_, _) => Dismiss();
+        Closed += (_, _) => _timer.Stop();
     }
 
     private void Dismiss()
