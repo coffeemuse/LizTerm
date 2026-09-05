@@ -143,8 +143,17 @@ public class SessionWindowTests
         var item = window.FindControl<MenuItem>("WireLogMenuItem")!;
         Assert.Equal(MenuItemToggleType.CheckBox, item.ToggleType);
         Assert.False(item.IsChecked);
-        vm.IsWireLogging = true;
-        Assert.True(item.IsChecked);
-        Assert.Equal("● wire log", window.FindControl<TextBlock>("WireLogStatus")!.Text);
+        var directory = Path.Combine(Path.GetTempPath(), "lizterm-win-" + Guid.NewGuid().ToString("N"));
+        vm.WireLogDirectory = directory;
+        try
+        {
+            vm.IsWireLogging = true;
+            Assert.True(item.IsChecked);
+            Assert.Equal("● wire log", window.FindControl<TextBlock>("WireLogStatus")!.Text);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
     }
 }

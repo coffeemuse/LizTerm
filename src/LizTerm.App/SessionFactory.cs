@@ -7,6 +7,8 @@ namespace LizTerm.App;
 /// <summary>The only place the app names the b3270 backend.</summary>
 public static class SessionFactory
 {
+    public static string OverrideOrigin => B3270Locator.EnvironmentOverride;
+
     public static IEmulatorSession Create(SessionProfile profile)
     {
         B3270Location location;

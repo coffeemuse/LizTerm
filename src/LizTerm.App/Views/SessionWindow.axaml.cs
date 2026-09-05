@@ -40,7 +40,19 @@ public partial class SessionWindow : Window
 
     private void OnNewSessionClick(object? sender, RoutedEventArgs e) => (Avalonia.Application.Current as App)?.ShowPicker();
 
-    private void OnAboutClick(object? sender, RoutedEventArgs e) { }
+    private async void OnAboutClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        try
+        {
+            await new AboutWindow(AppVersion.Current, vm.Engine, SessionFactory.OverrideOrigin).ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            vm.ErrorMessage = "Could not open About: " + ex.Message;
+        }
+        Screen.Focus();
+    }
 
     /// <summary>Opens the File Transfer dialog modally over this window. The dialog's own picker parents the OS
     /// file dialogs; the view model comes from the session view model so the last request is remembered.</summary>
