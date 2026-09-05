@@ -51,6 +51,8 @@ public sealed class TerminalScreen : Control
     private bool _attached;
 
     internal bool BlinkTimerRunning => _blinkTimer.IsEnabled;
+    /// <summary>How many times the per-run draw list has been prepared. Test seam, like BlinkTimerRunning.</summary>
+    internal int RunPlanBuilds { get; private set; }
     /// <summary>True during the phase in which blinking text is not drawn.</summary>
     internal bool BlinkHidden { get; private set; }
 
@@ -79,7 +81,7 @@ public sealed class TerminalScreen : Control
 
     private void UpdateBlinkTimer(ScreenSnapshot? snapshot)
     {
-        var wanted = _attached && snapshot is not null && HasBlink(snapshot);
+        var wanted = _attached && snapshot is { HasBlink: true };
         if (wanted == _blinkTimer.IsEnabled) return;
         if (wanted)
         {
@@ -92,13 +94,6 @@ public sealed class TerminalScreen : Control
         }
     }
 
-    private static bool HasBlink(ScreenSnapshot snapshot)
-    {
-        for (var row = 0; row < snapshot.Rows; row++)
-            foreach (var cell in snapshot.Row(row))
-                if (cell.Rendition.HasFlag(CellRendition.Blink)) return true;
-        return false;
-    }
 
     public ScreenSnapshot? Snapshot
     {
@@ -255,16 +250,16 @@ public sealed class TerminalScreen : Control
         var g = LastGeometry;
         if (g.FontSize <= 0) return;
 
-        for (var row = 0; row < snapshot.Rows; row++)
+        foreach (var run in EnsureRunPlan(snapshot, g))
         {
-            var cells = snapshot.Row(row);
-            var col = 0;
-            while (col < cells.Length)
+            // The background is painted through a hidden blink phase; only the glyphs and the underline go away.
+            if (run.Background is { } background) context.FillRectangle(background, run.Rect);
+            if (BlinkHidden && run.Blink) continue;
+            if (run.Text is { } text) context.DrawText(text, run.Rect.TopLeft);
+            if (run.Underline is { } pen)
             {
-                var start = col;
-                var style = cells[col];
-                while (col < cells.Length && SameStyle(cells[col], style)) col++;
-                DrawRun(context, snapshot, row, start, col - start, style, g);
+                var y = Math.Round(run.Rect.Bottom) - 1.5;
+                context.DrawLine(pen, new Point(run.Rect.Left, y), new Point(run.Rect.Right, y));
             }
         }
         DrawSelection(context, snapshot, g);
@@ -291,31 +286,60 @@ public sealed class TerminalScreen : Control
     private static bool SameStyle(in Cell a, in Cell b) =>
         a.Foreground == b.Foreground && a.Background == b.Background && a.Rendition == b.Rendition;
 
-    private void DrawRun(DrawingContext context, ScreenSnapshot snapshot, int row, int start, int length, Cell style, CellGeometry g)
+    /// <summary>One run of identically styled cells, with its text already shaped. Held for as long as the
+    /// snapshot and the cell geometry are unchanged, so a blink phase flip — a full repaint twice a second, for
+    /// as long as anything on screen blinks — redraws these instead of re-segmenting and re-shaping every cell.
+    /// </summary>
+    private readonly record struct RunVisual(Rect Rect, IBrush? Background, FormattedText? Text, IPen? Underline, bool Blink);
+
+    private List<RunVisual>? _runPlan;
+    private ScreenSnapshot? _runPlanSnapshot;
+    private CellGeometry _runPlanGeometry;
+
+    private List<RunVisual> EnsureRunPlan(ScreenSnapshot snapshot, CellGeometry g)
+    {
+        if (_runPlan is not null && ReferenceEquals(_runPlanSnapshot, snapshot) && _runPlanGeometry == g) return _runPlan;
+
+        var plan = new List<RunVisual>();
+        for (var row = 0; row < snapshot.Rows; row++)
+        {
+            var cells = snapshot.Row(row);
+            var col = 0;
+            while (col < cells.Length)
+            {
+                var start = col;
+                var style = cells[col];
+                while (col < cells.Length && SameStyle(cells[col], style)) col++;
+                plan.Add(BuildRun(snapshot, row, start, col - start, style, g));
+            }
+        }
+
+        _runPlan = plan;
+        _runPlanSnapshot = snapshot;
+        _runPlanGeometry = g;
+        RunPlanBuilds++;
+        return plan;
+    }
+
+    private RunVisual BuildRun(ScreenSnapshot snapshot, int row, int start, int length, Cell style, CellGeometry g)
     {
         var rect = new Rect(g.OriginX + start * g.CellWidth, g.OriginY + row * g.CellHeight, length * g.CellWidth, g.CellHeight);
         var reverse = style.Rendition.HasFlag(CellRendition.Reverse);
         var fg = ResolveForeground(reverse ? style.Background : style.Foreground);
         var bg = ResolveBackground(reverse ? style.Foreground : style.Background);
 
-        if (bg != HostColor.NeutralBlack)
-            context.FillRectangle(Palette.Brush(bg, false), rect);
-
-        var hidden = BlinkHidden && style.Rendition.HasFlag(CellRendition.Blink);
+        var background = bg != HostColor.NeutralBlack ? Palette.Brush(bg, false) : null;
 
         var text = snapshot.GetText(row, start, length);
-        if (!hidden && !string.IsNullOrWhiteSpace(text))
+        FormattedText? formatted = null;
+        if (!string.IsNullOrWhiteSpace(text))
         {
             var bright = style.Rendition.HasFlag(CellRendition.Highlight);
-            var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, Palette.Brush(fg, bright));
-            context.DrawText(formatted, rect.TopLeft);
+            formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, Palette.Brush(fg, bright));
         }
 
-        if (!hidden && style.Rendition.HasFlag(CellRendition.Underline))
-        {
-            var y = Math.Round(rect.Bottom) - 1.5;
-            context.DrawLine(new Pen(Palette.Brush(fg, false)), new Point(rect.Left, y), new Point(rect.Right, y));
-        }
+        var underline = style.Rendition.HasFlag(CellRendition.Underline) ? new Pen(Palette.Brush(fg, false)) : null;
+        return new RunVisual(rect, background, formatted, underline, style.Rendition.HasFlag(CellRendition.Blink));
     }
 
     private void DrawSelection(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)

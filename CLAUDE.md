@@ -231,7 +231,11 @@ the backend tests.
   thread; the app passes `Dispatcher.UIThread.Post`, tests pass `a => a()`. Rejected actions
   (`EmulatorActionException`) are deliberately swallowed because b3270 already explains them through the
   keyboard lock; only unexpected and backend-unavailable errors set `ErrorMessage`.
-- `TerminalScreen` is a custom `Control` that draws each row as runs of identical style, scaled to fit
+- `TerminalScreen` prepares each row as runs of identical style — rectangle, brushes, and shaped `FormattedText`
+  — and keeps that list for as long as the snapshot instance and the `CellGeometry` are unchanged, so a blink
+  phase flip (a full `InvalidateVisual` twice a second, for as long as anything blinks) redraws the prepared runs
+  instead of re-segmenting and re-shaping every cell. A new snapshot or a new geometry rebuilds it; `RunPlanBuilds`
+  is the test seam for that. It is a custom `Control` that draws those runs scaled to fit
   via `CellGeometry.Fit` (pure math, unit tested). It raises `KeyRequested`, `TextEntered`, and
   `CellClicked`; `SessionWindow` wires those to the view model. Key events go through `DefaultKeymap`
   first; anything unmapped falls through to Avalonia's text input so dead keys and IMEs work. Backspace maps
@@ -292,7 +296,9 @@ the backend tests.
   value corrected from inside its own change notification is invisible to the menu item's two-way binding, which
   is still writing target to source, so the item would keep a check mark for a log that never started and swallow
   the next click. `ShowWireLogsCommand` opens the folder through `IFolderOpener`.
-  `TerminalScreen` blinks cells with the Blink rendition at a 750 ms phase, never below 500 ms.
+  `TerminalScreen` blinks cells with the Blink rendition at a 750 ms phase, never below 500 ms, and asks
+  `ScreenSnapshot.HasBlink` — computed once where the cells are already in hand — rather than rescanning the grid
+  on every published screen.
 
 ### Tests
 
