@@ -184,13 +184,26 @@ asserted exactly, like every other status string.
 
 ### 5.2 Command-line prefixes
 
-`StartupArguments.Parse` accepts x3270's host prefixes ahead of the host: `L:` turns TLS on, `Y:`
-turns certificate verification off, in either order, each at most once. A hostname cannot contain a
-colon, so any leading `<letter>:` is a prefix; a letter other than L or Y is an error. On error the
-app writes one usage line to stderr (`Usage: LizTerm [profile | [L:][Y:]host[:port] | [L:][Y:][ipv6][:port]]`)
-and opens the picker. With `L:` and no port the port is 992, b3270's own TLS default; otherwise 23.
-The resulting record gains `bool UseTls` and `bool VerifyCertificate`; `Resolve` copies them to the
-ad hoc profile. The ad hoc profile's `Name` stays `host:port` without prefixes.
+`StartupArguments.Parse` accepts x3270's full ad hoc host syntax, `[L:][Y:][lu@]host[:port]`:
+
+- Prefixes ahead of the host: `L:` turns TLS on, `Y:` turns certificate verification off, in
+  either order, each at most once. A hostname cannot contain a colon, so any leading `<letter>:` is
+  a prefix; a letter other than L or Y is an error.
+- An LU name ahead of the host, ended by `@`: it goes to the ad hoc profile's `LuName` verbatim.
+  x3270 accepts a comma-separated list there and tries the names in order, which is how a Hercules
+  operator console or another special-purpose terminal group is reached; the profile, the editor's
+  LU name field, and `HostStringBuilder` already pass such a list through unchanged, so the command
+  line does the same and nothing validates the names. The first `@` ends the LU part; an empty LU
+  part (`@host`) is an error.
+- Then the host, bracketed when IPv6, and the optional port. With `L:` and no port the port is 992,
+  b3270's own TLS default; otherwise 23.
+
+On error the app writes one usage line to stderr
+(`Usage: LizTerm [profile | [L:][Y:][lu@]host[:port] | [L:][Y:][lu@][ipv6][:port]]`) and opens the
+picker. The resulting record gains `bool UseTls`, `bool VerifyCertificate`, and `string? LuName`;
+`Resolve` copies them to the ad hoc profile. The ad hoc profile's `Name` is the address without
+prefixes, `host:port` or `lu@host:port`, so two ad hoc windows to the same host through different
+LU names are told apart by title.
 
 ### 5.3 Certificate prompt
 
@@ -334,8 +347,9 @@ Backend (`FakeB3270Process`):
 - `B3270Locator` returns `Override` for the environment path and `Bundled` for the other two.
 
 Core: `AppPaths` per-OS roots (the OS branches that can run on the host), `SplashTiming`,
-`StartupPlan`, `StartupArguments` prefixes (`L:`, `Y:`, `Y:L:`, duplicate prefix, unknown letter,
-default port 992 with `L:`, IPv6 with prefixes), `ConnectOptions` defaults.
+`StartupPlan`, `StartupArguments` syntax (`L:`, `Y:`, `Y:L:`, duplicate prefix, unknown letter,
+default port 992 with `L:`, `lu@host`, `lu1,lu2@host:port`, `L:lu@[ipv6]:port`, empty LU part,
+the profile name for each form), `ConnectOptions` defaults.
 
 App view model (`FakeEmulatorSession`, which records `connect` / `connect:noverify`, honors the token
 by faulting a pending connect with `OperationCanceledException` when `ConnectCompletion` is set,
