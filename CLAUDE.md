@@ -138,7 +138,10 @@ the backend tests.
   `OperationCanceledException` (the backend sends one `Disconnect`; b3270 then fails the pending Connect run,
   which is not reported) and leaves the session reusable; `ConnectOptions.VerifyCertificate` overrides the
   profile for one attempt; `ConnectionFailedException.CertificateVerificationFailed` marks the text b3270 sends
-  for an unverifiable certificate. `Engine` names the binary, its source (`Bundled` or `Override`), and after
+  for an unverifiable certificate. After a failed or cancelled Connect run, `ConnectAsync` waits for the
+  `Disconnected` state, bounded by the backend's `DisconnectTimeout` (5 s), before throwing, the same wait
+  `DisconnectAsync` uses; b3270 answers the run before it reports `not-connected`, and on the real gateway that
+  report lags by up to a few seconds. `Engine` names the binary, its source (`Bundled` or `Override`), and after
   the hello its version. `WireLogPath`, `StartWireLog`, `StopWireLog` make the wire log a session capability
   that survives an engine restart. `AppPaths` owns the per-OS config root with `profiles` and `logs` beneath it.
 
@@ -160,7 +163,9 @@ the backend tests.
   completes it. `RunAsync` throws `EmulatorActionException` on failure; `RunRawAsync` returns the result
   so Connect can turn it into `ConnectionFailedException` instead. `DisconnectAsync` sends Disconnect and then
   waits for the `not-connected` state (or process end), capped by the internal `DisconnectTimeout` of 5 s; it
-  sends nothing when already disconnected. `ConnectAsync` has no timeout of its own: a plain connect to a TLS
+  sends nothing when already disconnected. That wait is factored into `WaitForDisconnectedAsync`, which
+  `ConnectAsync` also calls after a failed or cancelled Connect run so it never throws while the session is
+  still reported as pending. `ConnectAsync` has no timeout of its own: a plain connect to a TLS
   listener sits in `telnet-pending` forever because b3270's Connect action never completes.
 - Startup waits for the `hello` indication (default 10 s) and rejects versions below
   `B3270Session.MinimumVersion` (4.2.0). Process death raises `Faulted` with the stderr tail, drops to

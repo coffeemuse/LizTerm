@@ -154,4 +154,51 @@ public class B3270SessionConnectTests
         Assert.True(second.Started);
         Assert.Contains(second.InputLines, l => l.Contains("\"Connect\""));
     }
+
+    [Fact]
+    public async Task A_failed_connect_waits_for_the_engine_to_report_not_connected()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"Connect\"")
+            ? [Failed(Tag(line), "Connection failed:", "Connection refused")]  // no not-connected yet
+            : [Ok(line)];
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromSeconds(2) };
+        await session.StartProcessAsync(CancellationToken.None);
+        fake.Emit("""{"connection":{"state":"tcp-pending","host":"h","cause":"ui"}}""");
+        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "tcp-pending");
+
+        var attempt = session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(attempt.IsCompleted, "the attempt must wait for not-connected");
+
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await Assert.ThrowsAsync<ConnectionFailedException>(() => attempt);
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
+    [Fact]
+    public async Task A_failed_connect_gives_up_waiting_after_the_disconnect_timeout()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"Connect\"")
+            ? [Failed(Tag(line), "Connection failed:", "Connection refused")]
+            : [Ok(line)];
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(100) };
+        await session.StartProcessAsync(CancellationToken.None);
+        fake.Emit("""{"connection":{"state":"tcp-pending","host":"h","cause":"ui"}}""");
+        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "tcp-pending");
+
+        await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(ConnectionState.TcpPending, session.ConnectionState);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, string what)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(2);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+        }
+    }
 }

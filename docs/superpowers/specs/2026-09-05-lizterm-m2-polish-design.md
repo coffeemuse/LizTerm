@@ -442,12 +442,7 @@ into the sections above so the discussion in those sections still reads as it wa
 12. The live checks this plan asked for of the certificate dialog, the splash, and About (an
     Avalonia DevTools pass against the running app) could not run on this machine: no active
     display was available in this session. They are pending a manual pass.
-13. The two live tests added for Task 17 (`Verify_on_connect_to_a_self_signed_host_is_flagged` and
-    `Plain_connect_to_a_tls_port_is_cancelled_by_the_token_and_the_session_recovers`) check
-    `ConnectionState` immediately after the failed or cancelled `ConnectAsync` returns, matching the
-    unit-test replay of `gateway-cert-failure.jsonl` in section 9. Against the real TLS gateway from
-    this machine, b3270 answers the failing `Connect` run before it reports the following
-    `connection: not-connected` indication, so the state is briefly `TlsPending` / `TelnetPending`
-    right after the throw and only settles to `Disconnected` a few seconds later (confirmed with a
-    wire log and a manual delay); both tests failed on that assertion in this environment. The
-    assertions were not weakened to match; see the Task 17 report for the exact failures.
+13. After a failed or cancelled Connect run, `ConnectAsync` waits for the `Disconnected` state,
+    bounded by the backend's `DisconnectTimeout` (5 s), before throwing, the same wait
+    `DisconnectAsync` uses; b3270 answers the run before it reports `not-connected`, and on the real
+    gateway that report lags by up to a few seconds.
