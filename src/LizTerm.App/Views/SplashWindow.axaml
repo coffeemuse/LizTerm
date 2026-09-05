@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:LizTerm.App.Controls"
+        x:Class="LizTerm.App.Views.SplashWindow"
+        Title="LizTerm" Width="480" Height="300" CanResize="False"
+        WindowDecorations="None" WindowStartupLocation="CenterScreen" Background="Black"
+        ShowInTaskbar="False" Topmost="True">
+  <!-- The mark. To replace it with an image later, put the file at Assets/Splash/liz.png and swap the
+       StackPanel below for <Image Source="avares://LizTerm.App/Assets/Splash/liz.png" Stretch="Uniform" />,
+       keeping the 480x300 window; the version line moves below or over the image as the picture allows. -->
+  <Grid RowDefinitions="*,Auto" Margin="24">
+    <ContentControl x:Name="SplashMark" HorizontalAlignment="Center" VerticalAlignment="Center">
+      <StackPanel>
+        <TextBlock Text="LizTerm" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" FontSize="72" Foreground="#50FF50" HorizontalAlignment="Center" />
+        <TextBlock Text="TN3270 terminal" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" FontSize="20" Foreground="#50FF50" HorizontalAlignment="Center" />
+      </StackPanel>
+    </ContentControl>
+    <TextBlock Grid.Row="1" x:Name="VersionText" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" FontSize="16" Foreground="#A0A0A0" HorizontalAlignment="Center" />
+  </Grid>
+</Window>

@@ -4,6 +4,8 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using LizTerm.App.Clipboard;
+using LizTerm.App.Dialogs;
+using LizTerm.App.Files;
 using LizTerm.App.Startup;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -26,18 +28,84 @@ public partial class App : Application
         {
             // Closing the last session window returns to the picker; only Quit ends the process.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            _store = new ProfileStore(ProfileStore.DefaultDirectory());
-            var profile = StartupArguments.Parse(desktop.Args ?? []).Resolve(_store.LoadAll());
-            if (profile is not null) OpenSession(profile);
-            else ShowPicker();
+
+            // Subscribe before Show(): a splash whose maximum has already elapsed closes from inside Opened, i.e.
+            // inside Show() itself. The gate then runs the plan once the splash has closed and the plan is known,
+            // in whichever order those happen — under OnExplicitShutdown a missed plan would leave the process
+            // running with no window and no way to quit.
+            var gate = new StartupGate(Execute);
+            var splash = new SplashWindow();
+            splash.Closed += (_, _) => gate.SplashClosed();
+            splash.Show();
+            splash.Activate();
+
+            _store = new ProfileStore(AppPaths.ProfilesDirectory());
+            string? backendError = null;
+            try
+            {
+                SessionFactory.CheckBackend();
+            }
+            catch (BackendUnavailableException ex)
+            {
+                backendError = ex.Message;
+            }
+            var arguments = StartupArguments.Parse(desktop.Args ?? []);
+            if (arguments.Error is not null) Console.Error.WriteLine(arguments.Error);
+
+            // Nothing else opens until the splash has closed, so no window renders under it.
+            gate.PlanReady(StartupPlan.Decide(backendError, arguments, _store.LoadAll()));
         }
         base.OnFrameworkInitializationCompleted();
     }
 
-    public void OpenSession(SessionProfile profile)
+    private void Execute(StartupPlan plan)
+    {
+        try
+        {
+            switch (plan)
+            {
+                case StartupPlan.ShowError error:
+                    var window = new StartupErrorWindow(error.Message);
+                    window.Closed += (_, _) => Quit();
+                    window.Show();
+                    break;
+                case StartupPlan.OpenSession open:
+                    OpenSession(open.Profile, open.FromStore);
+                    break;
+                default:
+                    ShowPicker();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Guards against a plan opening no window at all: with ShutdownMode.OnExplicitShutdown, a stranded
+            // process with no window and no way to quit would keep running invisibly. A ShowError plan already
+            // tried its own window, so retrying it here would risk the same failure; just quit.
+            if (plan is StartupPlan.ShowError)
+            {
+                Quit();
+                return;
+            }
+            var window = new StartupErrorWindow("LizTerm could not open its first window: " + ex.Message);
+            window.Closed += (_, _) => Quit();
+            window.Show();
+        }
+    }
+
+    /// <param name="fromStore">True for a saved profile, whose "Always allow" choice can be written back; false for
+    /// an ad hoc command-line profile.</param>
+    public void OpenSession(SessionProfile profile, bool fromStore)
     {
         var window = new SessionWindow();
-        var viewModel = new SessionViewModel(SessionFactory.Create(profile), action => Dispatcher.UIThread.Post(action), new AvaloniaTextClipboard(window));
+        var store = _store ??= new ProfileStore(AppPaths.ProfilesDirectory());
+        var viewModel = new SessionViewModel(
+            SessionFactory.Create(profile),
+            action => Dispatcher.UIThread.Post(action),
+            new AvaloniaTextClipboard(window),
+            new AvaloniaCertificatePrompt(window),
+            fromStore ? store.Save : null,
+            new AvaloniaFolderOpener(window));
         window.DataContext = viewModel;
         _sessions.Add(window);
         window.Closed += async (_, _) =>
@@ -59,7 +127,7 @@ public partial class App : Application
             _picker.Activate();
             return;
         }
-        _picker = new ProfilePickerWindow(_store ?? new ProfileStore(ProfileStore.DefaultDirectory()), OpenSession, Quit);
+        _picker = new ProfilePickerWindow(_store ?? new ProfileStore(AppPaths.ProfilesDirectory()), profile => OpenSession(profile, fromStore: true), Quit);
         _picker.Closed += (_, _) => { if (_sessions.Count == 0 && !_quitting) { /* picker closed with the X: treat as quit */ Quit(); } };
         _picker.Show();
     }

@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <AvaloniaResource Include="../../THIRD-PARTY-NOTICES.txt" Link="Assets/THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
 
   <ItemGroup>

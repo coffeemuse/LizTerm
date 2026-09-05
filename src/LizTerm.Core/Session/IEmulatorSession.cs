@@ -14,7 +14,26 @@ public interface IEmulatorSession : IAsyncDisposable
     TlsInfo? Tls { get; }
     KeyboardStatus KeyboardStatus { get; }
 
-    Task ConnectAsync(CancellationToken cancellationToken = default);
+    /// <summary>The engine binary in use; <see cref="EngineInfo.Version"/> fills in once the engine has started.</summary>
+    EngineInfo Engine { get; }
+
+    /// <summary>Path of the active wire log, or null. Every protocol line in both directions is appended there,
+    /// timestamped. The log belongs to the session, not to one engine process, so it survives an engine restart.</summary>
+    string? WireLogPath { get; }
+
+    /// <summary>Starts logging to <paramref name="path"/> (appending). Throws <see cref="IOException"/> when the
+    /// file cannot be opened and <see cref="InvalidOperationException"/> when a log is already active.</summary>
+    void StartWireLog(string path);
+
+    /// <summary>Stops and closes the active log; does nothing when none is active.</summary>
+    void StopWireLog();
+
+    /// <summary>Connects as the profile says, with <paramref name="options"/> overriding it for this attempt only.
+    /// Cancelling the token ends the attempt with <see cref="OperationCanceledException"/> and leaves the session
+    /// disconnected and reusable. A refused connection throws <see cref="ConnectionFailedException"/>. After
+    /// disposal it throws <see cref="ObjectDisposedException"/> rather than starting a new engine, so a call that
+    /// outlives its window (a modal dialog's continuation) cannot leave one running unowned.</summary>
+    Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default);
     /// <summary>Completes once the session reports <see cref="ConnectionState.Disconnected"/>, or after a
     /// short backend-defined timeout if that report never comes. Does nothing when not connected.</summary>
     Task DisconnectAsync();

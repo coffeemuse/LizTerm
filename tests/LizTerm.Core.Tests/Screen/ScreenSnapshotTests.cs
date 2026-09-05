@@ -76,4 +76,18 @@ public class ScreenSnapshotTests
         Assert.Null(snap.WordAt(0, 32));
         Assert.Null(snap.WordAt(-1, 0));
     }
+
+    /// <summary>The snapshot answers this once, where the cells are already being walked, so the UI does not
+    /// rescan the whole grid on every published screen just to decide whether to run a blink timer.</summary>
+    [Fact]
+    public void Snapshot_knows_whether_any_cell_blinks()
+    {
+        var plain = new ScreenBuffer(4, 8);
+        plain.SetText(0, 0, "hello", null, null, null);
+        Assert.False(plain.Snapshot().HasBlink);
+
+        var blinking = new ScreenBuffer(4, 8);
+        blinking.SetText(1, 2, "X", null, null, CellRendition.Blink);
+        Assert.True(blinking.Snapshot().HasBlink);
+    }
 }

@@ -1,0 +1,16 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:LizTerm.App.Controls"
+        x:Class="LizTerm.App.Views.AboutWindow"
+        Title="About LizTerm" Width="560" Height="480" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="16">
+    <TextBlock DockPanel.Dock="Top" Text="LizTerm" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" FontSize="40" Foreground="#50FF50" />
+    <TextBlock DockPanel.Dock="Top" x:Name="VersionText" Margin="0,4,0,0" />
+    <TextBlock DockPanel.Dock="Top" x:Name="EngineText" Margin="0,12,0,0" TextWrapping="Wrap" />
+    <TextBlock DockPanel.Dock="Top" x:Name="EnginePathText" Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap" />
+    <TextBlock DockPanel.Dock="Top" Text="Third-party notices" Margin="0,16,0,4" FontWeight="SemiBold" />
+    <Button DockPanel.Dock="Bottom" Content="Close" HorizontalAlignment="Right" Margin="0,12,0,0" IsDefault="True" IsCancel="True" Click="OnCloseClick" />
+    <TextBox x:Name="NoticesText" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontSize="11" />
+  </DockPanel>
+</Window>

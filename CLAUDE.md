@@ -15,7 +15,7 @@ TN3270 is the behavioral reference when the spec is silent.
 ## Commands
 
 ```bash
-dotnet test LizTerm.slnx                       # full suite (~15 s cold); integration test skips itself
+dotnet test LizTerm.slnx                       # full suite (~4 s warm, longer on a cold build); integration tests skip themselves
 dotnet test tests/LizTerm.Backend.B3270.Tests  # one project
 dotnet test tests/LizTerm.Core.Tests --filter "FullyQualifiedName~ProfileStoreTests"                      # one class
 dotnet test tests/LizTerm.Backend.B3270.Tests --filter "FullyQualifiedName~ReplayTests.Ibmlink_help_screen_replays_to_expected_state"  # one test
@@ -39,8 +39,10 @@ outside `/usr/lib` or `/System/Library`), then rebuild the .NET projects. Withou
 works) as a development override. `native/cache`, `native/build-tmp`, and `native/out` are gitignored.
 
 Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG` (append every protocol
-line in both directions to this file; the fault message tells users to set it), `LIZTERM_TEST_HOST`
-(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports two skipped tests; add
+line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
+be started from Help > Wire Log in a session window; files go to `<config>/logs/wire-<profile>-<timestamp>.log`,
+and Show Wire Logs opens that folder. `LIZTERM_TEST_HOST`
+(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports four skipped tests; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
 `LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
 which logs on to TSO, sends and receives `LIZTERM.ITEST` under the user's prefix, and deletes it; without them that
@@ -78,7 +80,8 @@ the `dotnet run` pid when done. To connect to a real host without touching real 
 (camelCase fields) under `<scratch>/Library/Application Support/LizTerm/profiles/` and launch the built apphost
 `src/LizTerm.App/bin/Debug/net10.0/LizTerm.App <profile-name>` with `HOME=<scratch>` (the apphost rather than
 `dotnet run`, so the HOME override does not disturb the dotnet CLI). `.claude/settings.local.json` is gitignored, so confirm a new worktree has
-its own copy before expecting the key to reach the server.
+its own copy before expecting the key to reach the server. The splash appears as a root for up to 2.5 s
+before the picker or session window; wait for it to close before `tree`.
 
 ### Recording a replay fixture
 
@@ -109,6 +112,10 @@ the backend tests.
 
 ### Core model (src/LizTerm.Core)
 
+- `ConnectionState` is declared in a convenient order, not b3270's: the fixtures go tcp-pending, telnet-pending,
+  tls-pending, and back to telnet-pending. Group states with `IsConnected()` (safe: the Connected members are
+  declared last) and `HasSocket()` (spelled out, because the states past the TCP connect are not contiguous);
+  do not read the declaration order as a progression.
 - Cells store what b3270 *renders* (foreground, background, `CellRendition` flags), not raw 3270 field
   attributes. Protected/numeric status is not modeled; b3270 enforces field rules and reports violations
   through the keyboard lock (`oerr protected` etc.).
@@ -131,6 +138,20 @@ the backend tests.
   fields that do not apply to the direction, mode, or host type are ignored downstream, never errors.
 - Threading contract: a backend raises all events on one dedicated thread, in order, and knows nothing
   about UI threads. The App layer marshals.
+- `ConnectAsync(ConnectOptions?, CancellationToken)`: a cancelled token ends the attempt with
+  `OperationCanceledException` (the backend sends one `Disconnect`; b3270 then fails the pending Connect run,
+  which is not reported) and leaves the session reusable; `ConnectOptions.VerifyCertificate` overrides the
+  profile for one attempt; `ConnectionFailedException.CertificateVerificationFailed` marks the text b3270 sends
+  for an unverifiable certificate. After disposal it throws `ObjectDisposedException` rather than starting a new
+  engine, so a call that outlives its window cannot leave one running unowned (`FakeEmulatorSession` mirrors
+  that). Every wait a cancel then depends on is bounded by `DisconnectTimeout`, so a
+  wedged engine cannot hold the attempt open past its own cancellation. After a failed or cancelled Connect run,
+  `ConnectAsync` waits for the `Disconnected` state, bounded by the same `DisconnectTimeout` (5 s), before
+  throwing, the same wait `DisconnectAsync` uses; b3270 answers the run before it reports `not-connected`, and on the real gateway that
+  report lags by up to a few seconds. `Engine` names the binary, its source (`Bundled`, `Override`, or `Unknown`
+  when it was never located, which About renders as "not found" rather than borrowing a provenance), and after
+  the hello its version. `WireLogPath`, `StartWireLog`, `StopWireLog` make the wire log a session capability
+  that survives an engine restart. `AppPaths` owns the per-OS config root with `profiles` and `logs` beneath it.
 
 ### Backend (src/LizTerm.Backend.B3270)
 
@@ -150,14 +171,33 @@ the backend tests.
   completes it. `RunAsync` throws `EmulatorActionException` on failure; `RunRawAsync` returns the result
   so Connect can turn it into `ConnectionFailedException` instead. `DisconnectAsync` sends Disconnect and then
   waits for the `not-connected` state (or process end), capped by the internal `DisconnectTimeout` of 5 s; it
-  sends nothing when already disconnected. `ConnectAsync` has no timeout of its own: a plain connect to a TLS
-  listener sits in `telnet-pending` forever because b3270's Connect action never completes.
+  sends nothing when already disconnected. That wait is factored into `WaitForDisconnectedAsync`, which
+  `ConnectAsync` also calls after a failed or cancelled Connect run, so it waits for `not-connected` before
+  throwing, unless the report never comes within `DisconnectTimeout` (5 s). `ConnectAsync` sets no deadline of
+  its own on a connect that is going well — a plain connect to a TLS listener sits in `telnet-pending` forever,
+  because b3270's Connect action never completes, and only the caller's token ends that. Everything a cancel
+  depends on is bounded, though: `RunAsync` takes an optional timeout and token and drops its pending slot when
+  it gives up (`Handle` ignores a run-result whose tag is gone); the `Set verifyHostCert` run observes the
+  caller's token; the cancel's `Disconnect` run is capped by `DisconnectTimeout`; and the cancel gives the
+  pending Connect run that same span to produce the "Connection failed" b3270 sends once the Disconnect lands,
+  then gives up on it. The Disconnect task is awaited in a `finally`, not only where the Connect run returned
+  normally, so an engine dying mid-cancel cannot leave it to land on the next attempt — the shape
+  `TransferAsync` already uses for its own cancel.
 - Startup waits for the `hello` indication (default 10 s) and rejects versions below
   `B3270Session.MinimumVersion` (4.2.0). Process death raises `Faulted` with the stderr tail, drops to
   `Disconnected`, and clears the process so a later `ConnectAsync` spawns a fresh one. `OnProcessEnded`
   runs on the raw reader thread and must never throw, and it ignores a process that is no longer `_process`:
   a start that fails (`TearDown`) clears the slot before killing the process, so the old reader thread cannot
-  disturb a retried start, and only `DisposeAsync` sets `_shuttingDown`, which lasts for the session's life.
+  disturb a retried start, and only `DisposeAsync` sets `_shuttingDown`, which lasts for the session's life and
+  does two jobs: it silences the fault report for the shutdown it is causing, and it closes the session to any
+  later start, so `StartProcessAsync` throws `ObjectDisposedException` instead of spawning an engine nothing
+  owns. It is set before the process slot is read, so a session disposed without ever being started is closed
+  too.
+  `TearDown` also covers a `process.Start` that throws (a binary deleted after the locator found it), so a retry
+  spawns a fresh process instead of short-circuiting on a slot holding one that never started. `DisposeAsync`
+  works from a snapshot of that slot and tolerates a kill or dispose failing, because the reader thread may
+  already have torn the same process down; it closes the wire log in a `finally`, after the Quit exchange and on
+  every path, including the early return when a fault has already cleared the slot.
 - Protocol details that are easy to get wrong: `String()` interprets backslash escapes so literal
   backslashes are doubled; `PasteString` takes **hex-encoded UTF-8**, not text, and is margin-aware
   where `String` is not; certificate verification is a `Set verifyHostCert` action sent before `Connect`,
@@ -175,8 +215,12 @@ the backend tests.
   `BackendUnavailableException` carrying the last fault, and `InvalidOperationException` ("The session has not
   been started.") is reserved for a session that was never started.
 - `WireLog` is the bug-report mechanism and the fixture recorder: one file, every line, both directions,
-  timestamped. `WireLog.FromEnvironment()` returns null when the variable is unset or the file cannot be
-  opened, and the open error is surfaced once as a `HostMessage`.
+  timestamped. `WireLog.TryFromEnvironment(out error)` returns null when the variable is unset or the file
+  cannot be opened; the session raises the open error once as a `HostMessage`. The log is a swappable field
+  on the session, written under the write lock, and an outbound line is logged *before* the bytes go out: stdin
+  auto-flushes, so b3270 can answer at once, and the reader thread logs inbound lines under the log's own lock
+  rather than the write lock — logging afterwards let a run-result be written ahead of its run. `DisposeAsync`
+  closes the log last, so the Quit and the engine's parting output are in the file. `B3270Locator.Find` returns a `B3270Location` with the source.
 
 ### App (src/LizTerm.App)
 
@@ -187,7 +231,11 @@ the backend tests.
   thread; the app passes `Dispatcher.UIThread.Post`, tests pass `a => a()`. Rejected actions
   (`EmulatorActionException`) are deliberately swallowed because b3270 already explains them through the
   keyboard lock; only unexpected and backend-unavailable errors set `ErrorMessage`.
-- `TerminalScreen` is a custom `Control` that draws each row as runs of identical style, scaled to fit
+- `TerminalScreen` prepares each row as runs of identical style — rectangle, brushes, and shaped `FormattedText`
+  — and keeps that list for as long as the snapshot instance and the `CellGeometry` are unchanged, so a blink
+  phase flip (a full `InvalidateVisual` twice a second, for as long as anything blinks) redraws the prepared runs
+  instead of re-segmenting and re-shaping every cell. A new snapshot or a new geometry rebuilds it; `RunPlanBuilds`
+  is the test seam for that. It is a custom `Control` that draws those runs scaled to fit
   via `CellGeometry.Fit` (pure math, unit tested). It raises `KeyRequested`, `TextEntered`, and
   `CellClicked`; `SessionWindow` wires those to the view model. Key events go through `DefaultKeymap`
   first; anything unmapped falls through to Avalonia's text input so dead keys and IMEs work. Backspace maps
@@ -218,18 +266,50 @@ the backend tests.
   labels the combo boxes. Avalonia propagates an owned dialog's `Closing` cancel to its owner, so the first
   close of the session window (or quit) while a transfer runs is refused the same way; a forced shutdown's
   `DisposeAsync` sends Quit and the pending run faults into the dialog's catch.
-- `StartupArguments.Parse` decides between a saved profile name, `host[:port]`, and `[ipv6]:port` from
-  the first command-line argument. `ProfileStore` keeps one JSON file per profile under the per-OS config
-  directory and silently skips unreadable files.
+- `ProfileStore` keeps one JSON file per profile under the per-OS config directory and silently skips
+  unreadable files.
 - The IBM 3270 font is embedded as an Avalonia resource (`avares://LizTerm.App/Assets/Fonts#IBM 3270`)
   and also used for the status bar so it reads as one instrument. Status text comes from
   `StatusFormatter`; the padlock glyph is U+E0A2 because the font's true OIA glyphs are unencoded.
+- `App` shows `SplashWindow` first (1 s minimum, 2.5 s maximum, click or key dismisses; timed on a `Stopwatch`
+  started at `Opened`, so a slow cold start or a clock step cannot skip it), checks the engine through
+  `SessionFactory.CheckBackend`, and runs a `StartupPlan` through `StartupGate`: `StartupErrorWindow` when the
+  engine is missing, else the session for a resolved argument, else the picker. The gate fires once the splash has
+  closed *and* the plan is known, in whichever order — a splash already past its maximum closes from inside
+  `Show()`, so `Closed` is subscribed before it and a missed plan would strand the process with no window.
+  `StartupArguments.Parse` records the argument as typed in `Argument` and, when the text also reads as a host,
+  the ad hoc `[L:][Y:][lu@]host[:port]` fields beside it; it does not choose between the two, because the ad hoc
+  forms overlap legal profile names (`CONS01@tk5`, `a:b`) and only `Resolve` has the saved list — an exact name
+  match there always wins, including for an argument that is a usage error as a host. A `<letter>:` head counts
+  as a prefix only when what follows could be a host at all, so `l:3270` is the host `l` on port 3270 rather than
+  TLS to a host named `3270`, and a port section must be plain digits in 1..65535 (invariant, no sign, no
+  surrounding space), so `mvs.local:abc` and `mvs.local:99999` are usage errors rather than hostnames that happen
+  to contain a colon. A syntax error prints the usage line and opens the picker. `SessionViewModel` times out a connect after `ConnectTimeout` (30 s; the Disconnect item cancels a
+  pending one; the timeout line states only what was observed — an open socket with no 3270 session — and offers
+  TLS as a possibility, because b3270 reports nothing that tells a TLS listener apart from a host that accepted
+  the socket and stopped talking, and confident TLS advice on a host that does not speak it makes things worse),
+  offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard;
+  `saveProfile` is null for ad hoc profiles so the checkbox is hidden; the prompt and the save run after the
+  connect's catch clauses, never inside one, so their own failures reach the error banner instead of faulting the
+  command), and owns the Help menu's wire log toggle and `Engine` for `AboutWindow`. When `IsWireLogging` cannot
+  start a log it marshals its own correction back to false through `dispatch` rather than assigning inline: a
+  value corrected from inside its own change notification is invisible to the menu item's two-way binding, which
+  is still writing target to source, so the item would keep a check mark for a log that never started and swallow
+  the next click. `ShowWireLogsCommand` opens the folder through `IFolderOpener`.
+  `TerminalScreen` blinks cells with the Blink rendition at a 750 ms phase, never below 500 ms, and asks
+  `ScreenSnapshot.HasBlink` — computed once where the cells are already in hand — rather than rescanning the grid
+  on every published screen.
 
 ### Tests
 
 - Backend tests drive `FakeB3270Process`: `Emit(line)` queues stdout, `Exit(code)` ends it, and by
-  default every incoming `r-tag` gets an automatic success `run-result`. Set `RunResponder` to control
-  replies, `AutoInitialize = false` to suppress the canned `initialize` block. `ReplayTests` feeds a
+  default every incoming `r-tag` gets an automatic success `run-result`. A `Quit` run exits the process rather
+  than being answered, as the real engine does, so `DisposeAsync` returns at once instead of waiting out its
+  two-second timeout and killing the process — that wait alone was most of the backend project's runtime, so do
+  not make `RunResponder` swallow Quit. Set `RunResponder` to control replies, `AutoInitialize = false` to
+  suppress the canned `initialize` block, `FaultStart` to make `Start` throw, `FaultWrite` to make stdin writes
+  throw, `FaultWaitForExit` to simulate a process that is already gone, and `BeforeWrite` to run a hook (a test
+  can make the engine die part-way through a write) before each character reaches stdin. `ReplayTests` feeds a
   fixture through `Emit` and asserts on the resulting snapshot, cursor, and connection-state sequence.
 - App tests run on Avalonia's headless platform: `TestAppBuilder` is registered with
   `[assembly: AvaloniaTestApplication]`, control tests use `[AvaloniaFact]` and `KeyPressQwerty`,
@@ -248,3 +328,6 @@ the backend tests.
   `INVALID COMMAND NAME SYNTAX`.
 - Assertions on user-visible status strings (for example `"✕ Not connected"`) are exact; change
   `StatusFormatter` and its tests together.
+- New fakes: `FakeCertificatePrompt` (`Decision`, `OnAsk`, `Calls`), `FakeFolderOpener`, and
+  `FakeEmulatorSession`'s `ConnectCompletion`, `ConnectToken`, `connect:noverify`, `wirelog:start:<path>` /
+  `wirelog:stop`, `WireLogException`, `Engine`.

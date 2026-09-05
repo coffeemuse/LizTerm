@@ -49,16 +49,23 @@
         <MenuItem Header="PF23" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF23}" />
         <MenuItem Header="PF24" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF24}" />
       </MenuItem>
+      <MenuItem Header="_Help">
+        <MenuItem x:Name="WireLogMenuItem" Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=TwoWay}" />
+        <MenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />
+        <Separator />
+        <MenuItem Header="_About LizTerm..." Click="OnAboutClick" />
+      </MenuItem>
     </Menu>
 
     <Border DockPanel.Dock="Bottom" Background="#181818" Padding="10,4">
-      <Grid ColumnDefinitions="Auto,16,Auto,*,Auto,16,Auto,16,Auto,16,Auto">
+      <Grid ColumnDefinitions="Auto,16,Auto,*,Auto,16,Auto,16,Auto,16,Auto,16,Auto">
         <TextBlock Grid.Column="0" Text="{Binding ConnectionText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
         <TextBlock Grid.Column="2" Text="{Binding TlsText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
         <TextBlock Grid.Column="4" Text="{Binding KeyboardText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#E0E0E0" />
         <TextBlock Grid.Column="6" Text="{Binding InsertText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#FFFF80" />
         <TextBlock Grid.Column="8" Text="{Binding CursorText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
         <TextBlock Grid.Column="10" Text="{Binding ModelText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
+        <TextBlock x:Name="WireLogStatus" Grid.Column="12" Text="{Binding WireLogText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#FF8080" />
       </Grid>
     </Border>
 

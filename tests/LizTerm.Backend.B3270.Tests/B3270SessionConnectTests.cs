@@ -1,0 +1,272 @@
+using System.Text.RegularExpressions;
+using LizTerm.Backend.B3270.Tests.Fakes;
+using LizTerm.Core.Session;
+
+namespace LizTerm.Backend.B3270.Tests;
+
+public class B3270SessionConnectTests
+{
+    private static readonly SessionProfile Verifying = new() { Name = "t", Host = "h", Port = 4270, UseTls = true, VerifyCertificate = true };
+
+    private static string Tag(string line) => Regex.Match(line, "\"r-tag\":\"([^\"]+)\"").Groups[1].Value;
+    private static string Ok(string line) => $$$"""{"run-result":{"r-tag":"{{{Tag(line)}}}","success":true,"time":0}}""";
+    private static string Failed(string tag, params string[] text) =>
+        $$$"""{"run-result":{"r-tag":"{{{tag}}}","success":false,"text":[{{{string.Join(",", text.Select(t => "\"" + t + "\""))}}}],"time":0}}""";
+
+    [Fact]
+    public async Task Options_override_the_profile_verify_setting()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Verifying, () => fake);
+        await session.ConnectAsync(new ConnectOptions(VerifyCertificate: false), TestContext.Current.CancellationToken);
+        Assert.Contains(fake.InputLines, l => l.Contains("\"verifyHostCert\",\"false\""));
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains(fake.InputLines, l => l.Contains("\"verifyHostCert\",\"true\""));
+    }
+
+    [Fact]
+    public async Task Certificate_failure_sets_the_flag_and_other_failures_do_not()
+    {
+        var fake = new FakeB3270Process
+        {
+            RunResponder = line => line.Contains("\"Connect\"")
+                ? [Failed(Tag(line), "Connection failed:", "TLS: Host certificate verification failed:", "self-signed certificate (18)")]
+                : [Ok(line)],
+        };
+        await using var session = new B3270Session(Verifying, () => fake);
+        var ex = await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.True(ex.CertificateVerificationFailed);
+        Assert.Equal("self-signed certificate (18)", ex.Lines[^1]);
+
+        fake.RunResponder = line => line.Contains("\"Connect\"") ? [Failed(Tag(line), "Connection failed:", "Connection refused")] : [Ok(line)];
+        var refused = await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.False(refused.CertificateVerificationFailed);
+    }
+
+    [Fact]
+    public async Task Cancel_during_a_pending_connect_sends_disconnect_and_throws_cancellation()
+    {
+        string? connectTag = null;
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\"")) { connectTag = Tag(line); return []; }
+            if (line.Contains("\"Disconnect\""))
+                return [Ok(line), Failed(connectTag!, "Connection failed"), """{"connection":{"state":"not-connected"}}"""];
+            return [Ok(line)];
+        };
+        await using var session = new B3270Session(Verifying, () => fake);
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(1));
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt);
+        Assert.Equal(1, fake.InputLines.Count(l => l.Contains("\"Disconnect\"")));
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+
+        // The same process connects again.
+        fake.RunResponder = null;
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(2, fake.InputLines.Count(l => l.Contains("\"Connect\"")));
+    }
+
+    [Fact]
+    public async Task Cancelled_before_connect_throws_without_sending_connect()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Verifying, () => fake);
+        await session.StartProcessAsync(CancellationToken.None);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ConnectAsync(cancellationToken: cts.Token));
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"Connect\""));
+    }
+
+    [Fact]
+    public async Task Cancel_waits_for_the_disconnect_to_be_answered_and_sends_exactly_one()
+    {
+        string? connectTag = null;
+        string? disconnectLine = null;
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\"")) { connectTag = Tag(line); return []; }
+            if (line.Contains("\"Disconnect\""))
+            {
+                // Fail the Connect and drop the line, but do not answer the Disconnect yet.
+                disconnectLine = line;
+                return [Failed(connectTag!, "Connection failed"), """{"connection":{"state":"not-connected"}}"""];
+            }
+            return [Ok(line)];
+        };
+        await using var session = new B3270Session(Verifying, () => fake);
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(1));
+        cts.Cancel();
+        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""), TimeSpan.FromSeconds(1));
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(attempt.IsCompleted, "the attempt must wait for the Disconnect to be answered");
+
+        fake.Emit(Ok(disconnectLine!));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt);
+        Assert.Equal(1, fake.InputLines.Count(l => l.Contains("\"Disconnect\"")));
+    }
+
+    [Fact]
+    public async Task Cancel_that_races_a_successful_connect_still_disconnects_and_reports_cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\""))
+            {
+                // Cancel on the writer's thread before the success is even emitted.
+                cts.Cancel();
+                return [Ok(line), """{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}"""];
+            }
+            if (line.Contains("\"Disconnect\"")) return [Ok(line), """{"connection":{"state":"not-connected"}}"""];
+            return [Ok(line)];
+        };
+        await using var session = new B3270Session(Verifying, () => fake);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ConnectAsync(cancellationToken: cts.Token));
+        Assert.Equal(1, fake.InputLines.Count(l => l.Contains("\"Disconnect\"")));
+        cts.Dispose();
+    }
+
+    [Fact]
+    public async Task Cancelled_cold_start_tears_the_process_down_and_the_next_connect_starts_fresh()
+    {
+        var first = new FakeB3270Process { AutoInitialize = false };
+        var second = new FakeB3270Process();
+        var processes = new Queue<FakeB3270Process>([first, second]);
+        await using var session = new B3270Session(Verifying, () => processes.Dequeue());
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ConnectAsync(cancellationToken: cts.Token));
+        Assert.True(first.Started);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(second.Started);
+        Assert.Contains(second.InputLines, l => l.Contains("\"Connect\""));
+    }
+
+    [Fact]
+    public async Task A_failed_connect_waits_for_the_engine_to_report_not_connected()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"Connect\"")
+            ? [Failed(Tag(line), "Connection failed:", "Connection refused")]  // no not-connected yet
+            : [Ok(line)];
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromSeconds(2) };
+        await session.StartProcessAsync(CancellationToken.None);
+        fake.Emit("""{"connection":{"state":"tcp-pending","host":"h","cause":"ui"}}""");
+        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "tcp-pending");
+
+        var attempt = session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(attempt.IsCompleted, "the attempt must wait for not-connected");
+
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await Assert.ThrowsAsync<ConnectionFailedException>(() => attempt);
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
+    [Fact]
+    public async Task A_failed_connect_gives_up_waiting_after_the_disconnect_timeout()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"Connect\"")
+            ? [Failed(Tag(line), "Connection failed:", "Connection refused")]
+            : [Ok(line)];
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(100) };
+        await session.StartProcessAsync(CancellationToken.None);
+        fake.Emit("""{"connection":{"state":"tcp-pending","host":"h","cause":"ui"}}""");
+        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "tcp-pending");
+
+        await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(ConnectionState.TcpPending, session.ConnectionState);
+    }
+
+    /// <summary>Regression: the cancel's Disconnect run was awaited with no bound, so an engine that accepted it
+    /// and never answered left ConnectAsync pending past its own cancellation, with nothing to unwedge it.</summary>
+    [Fact]
+    public async Task A_cancel_gives_up_on_an_unanswered_disconnect_instead_of_hanging()
+    {
+        // Answers the verify setting, then nothing: neither the Connect nor the cancel's Disconnect.
+        var fake = new FakeB3270Process { RunResponder = line => line.Contains("\"Set\"") ? [Ok(line)] : [] };
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(200) };
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Regression: the verify setting was awaited with no bound and observed no token, so a wedged engine
+    /// held the attempt open before the Connect had even gone out.</summary>
+    [Fact]
+    public async Task A_cancel_while_the_verify_setting_is_unanswered_ends_the_attempt()
+    {
+        var fake = new FakeB3270Process { RunResponder = _ => [] };
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(200) };
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("verifyHostCert"), TimeSpan.FromSeconds(2));
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"Connect\""));
+    }
+
+    /// <summary>Regression: the cancel's Disconnect was awaited only where the Connect run returned normally, so a
+    /// Connect that faulted (the engine dying mid-cancel) let it outlive the attempt and land on the next one.
+    /// TransferAsync already awaits its cancel in a finally for the same reason.</summary>
+    [Fact]
+    public async Task A_cancel_whose_connect_run_faults_still_waits_for_its_disconnect()
+    {
+        var fake = new FakeB3270Process { RunResponder = line => line.Contains("\"Set\"") ? [Ok(line)] : [] };
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(200) };
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+
+        // Hold the cancel's Disconnect inside its write, then kill the engine so the pending Connect run faults.
+        var reached = new ManualResetEventSlim();
+        var release = new ManualResetEventSlim();
+        fake.BeforeWrite = () => { reached.Set(); release.Wait(TimeSpan.FromSeconds(5)); };
+        try
+        {
+            await cts.CancelAsync();
+            Assert.True(reached.Wait(TimeSpan.FromSeconds(5)), "the cancel never sent a Disconnect");
+            fake.Exit(1);
+
+            var settled = await Task.WhenAny(attempt, Task.Delay(500, TestContext.Current.CancellationToken));
+            Assert.NotSame(attempt, settled);
+        }
+        finally
+        {
+            // Always release: the blocked write holds the session's write lock, and disposal needs it.
+            release.Set();
+        }
+        await Assert.ThrowsAnyAsync<Exception>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, string what)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(2);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+        }
+    }
+}

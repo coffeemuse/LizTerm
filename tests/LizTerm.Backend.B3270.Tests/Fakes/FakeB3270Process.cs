@@ -18,7 +18,7 @@ public sealed partial class FakeB3270Process : IB3270Process
     public FakeB3270Process()
     {
         StandardOutput = new QueueReader(_stdout);
-        StandardInput = new LineWriter(OnInputLine, () => FaultWrite);
+        StandardInput = new LineWriter(OnInputLine, () => FaultWrite, () => BeforeWrite?.Invoke());
     }
 
     public bool AutoInitialize { get; init; } = true;
@@ -37,6 +37,13 @@ public sealed partial class FakeB3270Process : IB3270Process
     /// simulating a closed pipe on a dead process.</summary>
     public bool FaultWrite { get; set; }
 
+    /// <summary>When set, <see cref="Start"/> throws it, simulating a binary that vanished after it was located.</summary>
+    public Exception? FaultStart { get; set; }
+
+    /// <summary>Runs before each character written to <see cref="StandardInput"/>, so a test can make the engine
+    /// die part-way through a write.</summary>
+    public Action? BeforeWrite { get; set; }
+
     public IReadOnlyList<string> InputLines
     {
         get { lock (_lock) return _stdin.ToArray(); }
@@ -44,6 +51,7 @@ public sealed partial class FakeB3270Process : IB3270Process
 
     public void Start(IReadOnlyList<string> arguments)
     {
+        if (FaultStart is not null) throw FaultStart;
         Started = true;
         StartedArguments = arguments;
         if (AutoInitialize) Emit(MinimalInitialize);
@@ -88,6 +96,14 @@ public sealed partial class FakeB3270Process : IB3270Process
     private void OnInputLine(string line)
     {
         lock (_lock) _stdin.Add(line);
+        // The real engine exits on Quit rather than answering it. Without that, every DisposeAsync waits out its
+        // whole two-second timeout and then kills the process: slow across the suite, and not the shutdown path
+        // the app actually takes.
+        if (line.Contains("\"Quit\"", StringComparison.Ordinal))
+        {
+            Exit(0);
+            return;
+        }
         if (RunResponder is not null)
         {
             foreach (var reply in RunResponder(line)) Emit(reply);
@@ -106,13 +122,14 @@ public sealed partial class FakeB3270Process : IB3270Process
         public override string? ReadLine() => queue.TryTake(out var line, Timeout.Infinite) ? line : null;
     }
 
-    private sealed class LineWriter(Action<string> onLine, Func<bool> faultWrite) : TextWriter
+    private sealed class LineWriter(Action<string> onLine, Func<bool> faultWrite, Action beforeWrite) : TextWriter
     {
         private readonly StringBuilder _pending = new();
         public override Encoding Encoding => Encoding.UTF8;
 
         public override void Write(char value)
         {
+            beforeWrite();
             if (faultWrite()) throw new IOException("pipe closed");
             if (value == '\n')
             {

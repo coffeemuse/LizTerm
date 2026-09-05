@@ -66,6 +66,31 @@ public static class StatusFormatter
         var tail = string.Join(" | ", fault.StderrTail.TakeLast(3));
         var code = fault.ExitCode?.ToString() ?? "unknown";
         var detail = tail.Length > 0 ? $" Last output: {tail}." : "";
-        return $"{fault.Message} (exit code {code}).{detail} Set LIZTERM_WIRE_LOG to a file path and reproduce to capture a log.";
+        return $"{fault.Message} (exit code {code}).{detail} Turn on Help > Wire Log and reproduce to capture a log.";
+    }
+
+    /// <summary>The attempt never completed. An open socket with no 3270 session is as far as the engine's own
+    /// reports go: b3270 sends nothing saying why, so a plain connect to a TLS listener and a host that accepted
+    /// the socket and then stopped talking look identical from here. The line therefore states what was observed
+    /// and offers TLS as one explanation, rather than diagnosing it — following a confident TLS instruction on a
+    /// host that does not speak it turns a timeout into an outright failure.</summary>
+    public static string ConnectTimeout(SessionProfile profile, TimeSpan timeout, bool socketOpened)
+    {
+        var text = $"Connection to {profile.Host}:{profile.Port} timed out after {timeout.TotalSeconds:0} seconds.";
+        if (!socketOpened) return text;
+        text += " The host accepted the connection but never started a 3270 session.";
+        return profile.UseTls ? text : text + " If that port expects TLS, turn it on in the profile.";
+    }
+
+    public static string WireLog(bool active) => active ? "● wire log" : "";
+
+    /// <param name="overrideOrigin">What pointed at an Override binary, named by the app (today the environment variable).</param>
+    public static string Engine(EngineInfo engine, string overrideOrigin)
+    {
+        // A binary that was never located has no version and no provenance to report; saying it is bundled would
+        // point the one user who opens About at the app instead of at whatever override actually broke.
+        if (engine.Source == EngineSource.Unknown) return $"{engine.Name}, not found";
+        var name = engine.Version is null ? $"{engine.Name}, not started" : $"{engine.Name} {engine.Version}";
+        return engine.Source == EngineSource.Bundled ? $"{name}, bundled" : $"{name}, from {overrideOrigin}";
     }
 }
