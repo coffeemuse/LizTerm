@@ -1,10 +1,13 @@
 namespace LizTerm.Core.Session;
 
-/// <summary>The host connection could not be established; Lines is the emulator's explanation.</summary>
-public sealed class ConnectionFailedException(IReadOnlyList<string> lines)
+/// <summary>The host connection could not be established; Lines is the emulator's explanation.
+/// <see cref="CertificateVerificationFailed"/> is true when the only obstacle was an unverifiable host
+/// certificate, so the caller can offer to connect without verifying.</summary>
+public sealed class ConnectionFailedException(IReadOnlyList<string> lines, bool certificateVerificationFailed = false)
     : Exception(string.Join(" ", lines))
 {
     public IReadOnlyList<string> Lines { get; } = lines;
+    public bool CertificateVerificationFailed { get; } = certificateVerificationFailed;
 }
 
 /// <summary>An emulator action was rejected (for example, a key while the keyboard is locked).</summary>
