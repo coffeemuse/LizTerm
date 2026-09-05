@@ -173,6 +173,10 @@ the backend tests.
   runs on the raw reader thread and must never throw, and it ignores a process that is no longer `_process`:
   a start that fails (`TearDown`) clears the slot before killing the process, so the old reader thread cannot
   disturb a retried start, and only `DisposeAsync` sets `_shuttingDown`, which lasts for the session's life.
+  `TearDown` also covers a `process.Start` that throws (a binary deleted after the locator found it), so a retry
+  spawns a fresh process instead of short-circuiting on a slot holding one that never started. `DisposeAsync`
+  works from a snapshot of that slot and tolerates a kill or dispose failing, because the reader thread may
+  already have torn the same process down.
 - Protocol details that are easy to get wrong: `String()` interprets backslash escapes so literal
   backslashes are doubled; `PasteString` takes **hex-encoded UTF-8**, not text, and is margin-aware
   where `String` is not; certificate verification is a `Set verifyHostCert` action sent before `Connect`,
@@ -239,14 +243,19 @@ the backend tests.
 - The IBM 3270 font is embedded as an Avalonia resource (`avares://LizTerm.App/Assets/Fonts#IBM 3270`)
   and also used for the status bar so it reads as one instrument. Status text comes from
   `StatusFormatter`; the padlock glyph is U+E0A2 because the font's true OIA glyphs are unencoded.
-- `App` shows `SplashWindow` first (1 s minimum, 2.5 s maximum, click or key dismisses), checks the engine
-  through `SessionFactory.CheckBackend`, and when the splash closes executes a `StartupPlan`:
-  `StartupErrorWindow` when the engine is missing, else the session for a resolved argument, else the picker.
+- `App` shows `SplashWindow` first (1 s minimum, 2.5 s maximum, click or key dismisses; timed on a `Stopwatch`
+  started at `Opened`, so a slow cold start or a clock step cannot skip it), checks the engine through
+  `SessionFactory.CheckBackend`, and runs a `StartupPlan` through `StartupGate`: `StartupErrorWindow` when the
+  engine is missing, else the session for a resolved argument, else the picker. The gate fires once the splash has
+  closed *and* the plan is known, in whichever order — a splash already past its maximum closes from inside
+  `Show()`, so `Closed` is subscribed before it and a missed plan would strand the process with no window.
   `StartupArguments` accepts `[L:][Y:][lu@]host[:port]`; a syntax error prints the usage line and opens the
   picker. `SessionViewModel` times out a connect after `ConnectTimeout` (30 s; the Disconnect item cancels a
   pending one), offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard;
-  `saveProfile` is null for ad hoc profiles so the checkbox is hidden), and owns the Help menu's wire log
-  toggle (`IsWireLogging`, `ShowWireLogsCommand` through `IFolderOpener`) and `Engine` for `AboutWindow`.
+  `saveProfile` is null for ad hoc profiles so the checkbox is hidden; the prompt and the save run after the
+  connect's catch clauses, never inside one, so their own failures reach the error banner instead of faulting the
+  command), and owns the Help menu's wire log toggle (`IsWireLogging`, `ShowWireLogsCommand` through
+  `IFolderOpener`) and `Engine` for `AboutWindow`.
   `TerminalScreen` blinks cells with the Blink rendition at a 750 ms phase, never below 500 ms.
 
 ### Tests

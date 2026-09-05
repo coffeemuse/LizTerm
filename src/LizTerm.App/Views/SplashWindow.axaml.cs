@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using LizTerm.App.Startup;
@@ -8,7 +9,9 @@ namespace LizTerm.App.Views;
 public partial class SplashWindow : Window
 {
     private readonly SplashTiming _timing;
-    private readonly DateTime _shownAt = DateTime.UtcNow;
+    /// <summary>Monotonic and started at Opened, so neither a slow cold start before the window appears nor a
+    /// system clock step can make the splash close the moment it is shown.</summary>
+    private readonly Stopwatch _shownFor = new();
     private readonly DispatcherTimer _timer = new();
     private bool _dismissed;
 
@@ -20,7 +23,7 @@ public partial class SplashWindow : Window
         _timing = timing;
         VersionText.Text = "Version " + version;
         _timer.Tick += (_, _) => { _timer.Stop(); Close(); };
-        Opened += (_, _) => Arm(null);
+        Opened += (_, _) => { _shownFor.Restart(); Arm(null); };
         PointerPressed += (_, _) => Dismiss();
         KeyDown += (_, _) => Dismiss();
         Closed += (_, _) => _timer.Stop();
@@ -30,13 +33,13 @@ public partial class SplashWindow : Window
     {
         if (_dismissed) return;
         _dismissed = true;
-        Arm(DateTime.UtcNow);
+        Arm(_shownFor.Elapsed);
     }
 
-    private void Arm(DateTime? dismissRequestedAt)
+    private void Arm(TimeSpan? dismissRequestedAt)
     {
         _timer.Stop();
-        var delay = _timing.CloseAt(_shownAt, dismissRequestedAt) - DateTime.UtcNow;
+        var delay = _timing.CloseAfter(_shownFor.Elapsed, dismissRequestedAt);
         if (delay <= TimeSpan.Zero)
         {
             Close();

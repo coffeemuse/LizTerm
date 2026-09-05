@@ -29,7 +29,13 @@ public partial class App : Application
             // Closing the last session window returns to the picker; only Quit ends the process.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+            // Subscribe before Show(): a splash whose maximum has already elapsed closes from inside Opened, i.e.
+            // inside Show() itself. The gate then runs the plan once the splash has closed and the plan is known,
+            // in whichever order those happen — under OnExplicitShutdown a missed plan would leave the process
+            // running with no window and no way to quit.
+            var gate = new StartupGate(Execute);
             var splash = new SplashWindow();
+            splash.Closed += (_, _) => gate.SplashClosed();
             splash.Show();
             splash.Activate();
 
@@ -45,10 +51,9 @@ public partial class App : Application
             }
             var arguments = StartupArguments.Parse(desktop.Args ?? []);
             if (arguments.Error is not null) Console.Error.WriteLine(arguments.Error);
-            var plan = StartupPlan.Decide(backendError, arguments, _store.LoadAll());
 
             // Nothing else opens until the splash has closed, so no window renders under it.
-            splash.Closed += (_, _) => Execute(plan);
+            gate.PlanReady(StartupPlan.Decide(backendError, arguments, _store.LoadAll()));
         }
         base.OnFrameworkInitializationCompleted();
     }
