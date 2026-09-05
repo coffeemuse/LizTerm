@@ -15,7 +15,7 @@ TN3270 is the behavioral reference when the spec is silent.
 ## Commands
 
 ```bash
-dotnet test LizTerm.slnx                       # full suite (~15 s cold); integration test skips itself
+dotnet test LizTerm.slnx                       # full suite (~15 s cold); integration tests skip themselves
 dotnet test tests/LizTerm.Backend.B3270.Tests  # one project
 dotnet test tests/LizTerm.Core.Tests --filter "FullyQualifiedName~ProfileStoreTests"                      # one class
 dotnet test tests/LizTerm.Backend.B3270.Tests --filter "FullyQualifiedName~ReplayTests.Ibmlink_help_screen_replays_to_expected_state"  # one test
@@ -39,8 +39,10 @@ outside `/usr/lib` or `/System/Library`), then rebuild the .NET projects. Withou
 works) as a development override. `native/cache`, `native/build-tmp`, and `native/out` are gitignored.
 
 Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG` (append every protocol
-line in both directions to this file; the fault message tells users to set it), `LIZTERM_TEST_HOST`
-(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports two skipped tests; add
+line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
+be started from Help > Wire Log in a session window; files go to `<config>/logs/wire-<profile>-<timestamp>.log`,
+and Show Wire Logs opens that folder. `LIZTERM_TEST_HOST`
+(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports four skipped tests; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
 `LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
 which logs on to TSO, sends and receives `LIZTERM.ITEST` under the user's prefix, and deletes it; without them that
@@ -78,7 +80,8 @@ the `dotnet run` pid when done. To connect to a real host without touching real 
 (camelCase fields) under `<scratch>/Library/Application Support/LizTerm/profiles/` and launch the built apphost
 `src/LizTerm.App/bin/Debug/net10.0/LizTerm.App <profile-name>` with `HOME=<scratch>` (the apphost rather than
 `dotnet run`, so the HOME override does not disturb the dotnet CLI). `.claude/settings.local.json` is gitignored, so confirm a new worktree has
-its own copy before expecting the key to reach the server.
+its own copy before expecting the key to reach the server. The splash appears as a root for up to 2.5 s
+before the picker or session window; wait for it to close before `tree`.
 
 ### Recording a replay fixture
 
@@ -131,6 +134,13 @@ the backend tests.
   fields that do not apply to the direction, mode, or host type are ignored downstream, never errors.
 - Threading contract: a backend raises all events on one dedicated thread, in order, and knows nothing
   about UI threads. The App layer marshals.
+- `ConnectAsync(ConnectOptions?, CancellationToken)`: a cancelled token ends the attempt with
+  `OperationCanceledException` (the backend sends one `Disconnect`; b3270 then fails the pending Connect run,
+  which is not reported) and leaves the session reusable; `ConnectOptions.VerifyCertificate` overrides the
+  profile for one attempt; `ConnectionFailedException.CertificateVerificationFailed` marks the text b3270 sends
+  for an unverifiable certificate. `Engine` names the binary, its source (`Bundled` or `Override`), and after
+  the hello its version. `WireLogPath`, `StartWireLog`, `StopWireLog` make the wire log a session capability
+  that survives an engine restart. `AppPaths` owns the per-OS config root with `profiles` and `logs` beneath it.
 
 ### Backend (src/LizTerm.Backend.B3270)
 
@@ -175,8 +185,9 @@ the backend tests.
   `BackendUnavailableException` carrying the last fault, and `InvalidOperationException` ("The session has not
   been started.") is reserved for a session that was never started.
 - `WireLog` is the bug-report mechanism and the fixture recorder: one file, every line, both directions,
-  timestamped. `WireLog.FromEnvironment()` returns null when the variable is unset or the file cannot be
-  opened, and the open error is surfaced once as a `HostMessage`.
+  timestamped. `WireLog.TryFromEnvironment(out error)` returns null when the variable is unset or the file
+  cannot be opened; the session raises the open error once as a `HostMessage`. The log is a swappable field
+  on the session, written under the write lock; `B3270Locator.Find` returns a `B3270Location` with the source.
 
 ### App (src/LizTerm.App)
 
@@ -224,6 +235,15 @@ the backend tests.
 - The IBM 3270 font is embedded as an Avalonia resource (`avares://LizTerm.App/Assets/Fonts#IBM 3270`)
   and also used for the status bar so it reads as one instrument. Status text comes from
   `StatusFormatter`; the padlock glyph is U+E0A2 because the font's true OIA glyphs are unencoded.
+- `App` shows `SplashWindow` first (1 s minimum, 2.5 s maximum, click or key dismisses), checks the engine
+  through `SessionFactory.CheckBackend`, and when the splash closes executes a `StartupPlan`:
+  `StartupErrorWindow` when the engine is missing, else the session for a resolved argument, else the picker.
+  `StartupArguments` accepts `[L:][Y:][lu@]host[:port]`; a syntax error prints the usage line and opens the
+  picker. `SessionViewModel` times out a connect after `ConnectTimeout` (30 s; the Disconnect item cancels a
+  pending one), offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard;
+  `saveProfile` is null for ad hoc profiles so the checkbox is hidden), and owns the Help menu's wire log
+  toggle (`IsWireLogging`, `ShowWireLogsCommand` through `IFolderOpener`) and `Engine` for `AboutWindow`.
+  `TerminalScreen` blinks cells with the Blink rendition at a 750 ms phase, never below 500 ms.
 
 ### Tests
 
@@ -248,3 +268,6 @@ the backend tests.
   `INVALID COMMAND NAME SYNTAX`.
 - Assertions on user-visible status strings (for example `"✕ Not connected"`) are exact; change
   `StatusFormatter` and its tests together.
+- New fakes: `FakeCertificatePrompt` (`Decision`, `OnAsk`, `Calls`), `FakeFolderOpener`, and
+  `FakeEmulatorSession`'s `ConnectCompletion`, `ConnectToken`, `connect:noverify`, `wirelog:start:<path>` /
+  `wirelog:stop`, `WireLogException`, `Engine`.

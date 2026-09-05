@@ -34,6 +34,41 @@ public class LiveHostTests
         if (profile.UseTls) Assert.True(session.Tls?.Secure, "session is not secure");
     }
 
+    /// <summary>Needs a TLS host whose certificate cannot be verified (LIZTERM_TEST_TLS=1, LIZTERM_TEST_VERIFY_CERT=0);
+    /// connects with verification forced on and expects the flagged failure.</summary>
+    [Fact]
+    public async Task Verify_on_connect_to_a_self_signed_host_is_flagged()
+    {
+        var target = Environment.GetEnvironmentVariable("LIZTERM_TEST_HOST");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(target), "LIZTERM_TEST_HOST is not set");
+        var profile = ProfileFor(target!);
+        Assert.SkipUnless(profile is { UseTls: true, VerifyCertificate: false }, "needs LIZTERM_TEST_TLS=1 and LIZTERM_TEST_VERIFY_CERT=0");
+        await using var session = new B3270Session(profile, () => new B3270ChildProcess(B3270Locator.Find().Path), WireLog.TryFromEnvironment(out _));
+        var ex = await Assert.ThrowsAsync<ConnectionFailedException>(() =>
+            session.ConnectAsync(new ConnectOptions(VerifyCertificate: true), TestContext.Current.CancellationToken));
+        Assert.True(ex.CertificateVerificationFailed, string.Join(" | ", ex.Lines));
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
+    /// <summary>A plain connect to a TLS listener never completes; the token must end it and leave the session usable.</summary>
+    [Fact]
+    public async Task Plain_connect_to_a_tls_port_is_cancelled_by_the_token_and_the_session_recovers()
+    {
+        var target = Environment.GetEnvironmentVariable("LIZTERM_TEST_HOST");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(target), "LIZTERM_TEST_HOST is not set");
+        var profile = ProfileFor(target!);
+        Assert.SkipUnless(profile.UseTls, "needs LIZTERM_TEST_TLS=1");
+        await using var session = new B3270Session(profile with { UseTls = false }, () => new B3270ChildProcess(B3270Locator.Find().Path), WireLog.TryFromEnvironment(out _));
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(2));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ConnectAsync(cancellationToken: cts.Token));
+            Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+        }
+        Assert.NotNull(session.Engine.Version);
+    }
+
     private static SessionProfile ProfileFor(string target)
     {
         var colon = target.LastIndexOf(':');
