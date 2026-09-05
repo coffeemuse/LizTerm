@@ -106,6 +106,10 @@ public sealed class B3270Session : IEmulatorSession
 
     internal async Task StartProcessAsync(CancellationToken cancellationToken)
     {
+        // DisposeAsync clears the process slot, so without this a connect arriving afterwards — a modal dialog's
+        // continuation outliving its window — would spawn an engine nothing owns and nothing will ever dispose.
+        // ObjectDisposedException is an InvalidOperationException, so callers already catching that still do.
+        ObjectDisposedException.ThrowIf(_shuttingDown, this);
         if (_process is not null) return;
         var process = _processFactory();
         var helloSource = new TaskCompletionSource<HelloIndication>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -233,8 +237,9 @@ public sealed class B3270Session : IEmulatorSession
     }
 
     /// <summary>Drops a process that failed to start. Only <see cref="DisposeAsync"/> sets <c>_shuttingDown</c>:
-    /// that flag is for the session's life, and a start that fails must leave the next attempt able to report
-    /// its own faults. The reader thread of the old process tells it apart by identity instead.</summary>
+    /// that flag is for the session's life — it closes the session to any later start as well as silencing the
+    /// fault report — and a start that fails must leave the next attempt able to report its own faults. The
+    /// reader thread of the old process tells it apart by identity instead.</summary>
     private void TearDown()
     {
         var process = _process;
@@ -246,13 +251,15 @@ public sealed class B3270Session : IEmulatorSession
 
     public async ValueTask DisposeAsync()
     {
+        // Set before the slot is even read, so a session disposed without ever being started is still closed to
+        // a later connect; it also stops OnProcessEnded reporting the shutdown it is about to cause as a fault.
+        _shuttingDown = true;
         try
         {
             // Snapshot the slot: OnProcessEnded clears it from the reader thread after publishing Disconnected,
             // so re-reading the field here can hand back null between the check and the kill (as TearDown does).
             var process = _process;
             if (process is null) return;
-            _shuttingDown = true;
             try
             {
                 WriteLine(RunOperation.Serialize("quit", [new B3270Action("Quit")]));

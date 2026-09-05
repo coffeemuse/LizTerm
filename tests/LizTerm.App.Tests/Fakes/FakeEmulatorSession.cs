@@ -39,6 +39,7 @@ public sealed class FakeEmulatorSession : IEmulatorSession
 
     public async Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(Disposed, this);
         Calls.Add(options?.VerifyCertificate == false ? "connect:noverify" : "connect");
         ConnectToken = cancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
@@ -81,9 +82,14 @@ public sealed class FakeEmulatorSession : IEmulatorSession
         return TransferResult;
     }
 
+    /// <summary>Mirrors the interface's contract that a connect after disposal is refused rather than starting
+    /// a new engine, so App code that lets one outlive its window fails here too.</summary>
+    public bool Disposed { get; private set; }
+
     public ValueTask DisposeAsync()
     {
         Calls.Add("dispose");
+        Disposed = true;
         return ValueTask.CompletedTask;
     }
 
