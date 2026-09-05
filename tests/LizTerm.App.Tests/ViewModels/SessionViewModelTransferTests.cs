@@ -1,5 +1,6 @@
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
+using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.Tests.ViewModels;
@@ -10,6 +11,20 @@ public class SessionViewModelTransferTests
     {
         var session = new FakeEmulatorSession();
         return (new SessionViewModel(session, action => action(), new FakeTextClipboard()), session);
+    }
+
+    [Fact]
+    public async Task Starting_a_transfer_clears_the_selection_like_any_other_host_input()
+    {
+        var (vm, _) = Create();
+        vm.Selection = ScreenRegion.FromCorners(0, 0, 0, 3);
+        var transfer = vm.CreateTransfer(new FakeFilePicker());
+        transfer.LocalPath = "/nonexistent/a.txt";
+        transfer.HostFile = "A.B";
+
+        await transfer.StartCommand.ExecuteAsync(null);
+
+        Assert.Null(vm.Selection);
     }
 
     [Fact]

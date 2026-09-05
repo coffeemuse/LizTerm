@@ -16,7 +16,7 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public FileTransferRequest? LastTransferRequest { get; private set; }
     public IProgress<long>? TransferProgress { get; private set; }
     public CancellationToken TransferToken { get; private set; }
-    public FileTransferResult TransferResult { get; set; } = new(true, "Transfer complete, 12 bytes transferred", 12);
+    public FileTransferResult TransferResult { get; set; } = new(true, "Transfer complete, 12 bytes transferred");
     /// <summary>When set, TransferAsync throws it (after TransferCompletion, if that is set too).</summary>
     public Exception? TransferException { get; set; }
     /// <summary>When set, TransferAsync waits for it before answering, so a test can push progress through

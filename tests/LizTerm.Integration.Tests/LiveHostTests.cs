@@ -97,8 +97,7 @@ public class LiveHostTests
             Assert.True(down.Succeeded, "receive failed: " + down.Message);
             await tso.ReachReadyAsync();
 
-            Assert.NotEmpty(progress.Values);
-            Assert.True(down.Bytes > 0, "no bytes were reported for the receive");
+            Assert.True(progress.Values.Any(v => v > 0), "no bytes were reported for the transfers");
             var expected = (await File.ReadAllLinesAsync(sent, ct)).Select(l => l.TrimEnd());
             var actual = (await File.ReadAllLinesAsync(received, ct)).Select(l => l.TrimEnd());
             Assert.Equal(expected, actual);

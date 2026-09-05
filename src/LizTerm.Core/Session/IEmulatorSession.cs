@@ -24,13 +24,15 @@ public interface IEmulatorSession : IAsyncDisposable
     /// <summary>Zero-based row and column.</summary>
     Task MoveCursorAsync(int row, int column);
 
-    /// <summary>Runs one IND$FILE transfer and completes when it ends. A transfer the engine or host refuses or
-    /// aborts is a result with <c>Succeeded</c> false and the message to show verbatim. Throws
-    /// <see cref="InvalidOperationException"/> when the session is not started or a transfer is already running,
-    /// <see cref="OperationCanceledException"/> when the token cancelled it and the engine then reported failure,
-    /// and <see cref="BackendUnavailableException"/> when the engine dies. A success that beats a cancel is
-    /// returned as success. Progress reports bytes so far on the backend thread and may never be called.
-    /// On receive an existing local file is replaced; the caller obtains consent.</summary>
+    /// <summary>Runs one IND$FILE transfer and completes when it ends. A transfer the engine or host refuses,
+    /// aborts, or cancels is a result with <c>Succeeded</c> false and the message to show verbatim: a cancel
+    /// requested through the token comes back as the engine's own text, and a host failure that lands in the
+    /// same moment keeps the host's. Throws <see cref="InvalidOperationException"/> when the session was never
+    /// started or a transfer is already running, <see cref="OperationCanceledException"/> only when the token was
+    /// already cancelled on entry, and <see cref="BackendUnavailableException"/> when the engine has died or
+    /// dies during the transfer. A success that beats a cancel is returned as success. Progress reports bytes so
+    /// far on the backend thread and may never be called. On receive an existing local file is replaced; the
+    /// caller obtains consent.</summary>
     Task<FileTransferResult> TransferAsync(FileTransferRequest request, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
 
     event EventHandler<ScreenSnapshot>? ScreenUpdated;

@@ -53,7 +53,7 @@ public class B3270SessionTransferTests
     }
 
     [Fact]
-    public async Task Sends_the_mapped_action_reports_progress_and_returns_text_and_count()
+    public async Task Sends_the_mapped_action_reports_progress_and_returns_the_text()
     {
         var (session, fake) = await StartAsync();
         var reports = new Reports();
@@ -71,7 +71,6 @@ public class B3270SessionTransferTests
         var result = await transfer.WaitAsync(Wait, TestContext.Current.CancellationToken);
         Assert.True(result.Succeeded);
         Assert.Equal("Transfer complete, 2048 bytes transferred\n2.0 Kbytes/sec in DFT mode", result.Message);
-        Assert.Equal(2048, result.Bytes);
         Assert.Equal([0L, 2048L], reports.Values);
         Assert.False(session.IsTransferInProgress);
     }
@@ -88,12 +87,11 @@ public class B3270SessionTransferTests
         var result = await transfer.WaitAsync(Wait, TestContext.Current.CancellationToken);
         Assert.False(result.Succeeded);
         Assert.Equal("TRANS17 Miscellaneous I/O error", result.Message);
-        Assert.Equal(0, result.Bytes);
         Assert.False(session.IsTransferInProgress);
     }
 
     [Fact]
-    public async Task Cancel_sends_the_cancel_action_and_the_failed_result_becomes_cancellation()
+    public async Task Cancel_sends_the_cancel_action_and_the_failed_result_keeps_the_engine_text()
     {
         var (session, fake) = await StartAsync();
         using var cts = new CancellationTokenSource();
@@ -108,7 +106,67 @@ public class B3270SessionTransferTests
         fake.Emit("""{"ft":{"state":"complete","success":false,"text":"Transfer canceled by user","cause":"ui"}}""");
         fake.Emit(FailureResult(line, "Transfer canceled by user"));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => transfer.WaitAsync(Wait, TestContext.Current.CancellationToken));
+        var result = await transfer.WaitAsync(Wait, TestContext.Current.CancellationToken);
+        Assert.False(result.Succeeded);
+        Assert.Equal("Transfer canceled by user", result.Message);
+        Assert.False(session.IsTransferInProgress);
+    }
+
+    [Fact]
+    public async Task A_host_failure_that_lands_after_a_cancel_keeps_the_host_text()
+    {
+        var (session, fake) = await StartAsync();
+        using var cts = new CancellationTokenSource();
+        var transfer = session.TransferAsync(Request, cancellationToken: cts.Token);
+        var line = await TransferLineAsync(fake);
+
+        cts.Cancel();
+        await fake.WaitForInputAsync(l => l.Contains("\"Cancel\""), Wait);
+        fake.Emit(FailureResult(line, "TRANS17 Miscellaneous I/O error"));
+
+        var result = await transfer.WaitAsync(Wait, TestContext.Current.CancellationToken);
+        Assert.False(result.Succeeded);
+        Assert.Equal("TRANS17 Miscellaneous I/O error", result.Message);
+    }
+
+    [Fact]
+    public async Task The_slot_is_held_until_the_cancel_has_been_answered()
+    {
+        // Hold both the Transfer run and the Cancel run open, so the test controls their order.
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"action\":\"Transfer\"") ? Array.Empty<string>() : new[] { AutoResult(line) };
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(CancellationToken.None);
+        using var cts = new CancellationTokenSource();
+        var transfer = session.TransferAsync(Request, cancellationToken: cts.Token);
+        var line = await TransferLineAsync(fake);
+
+        cts.Cancel();
+        var cancelLine = await fake.WaitForInputAsync(l => l.Contains("\"Cancel\""), Wait);
+        fake.Emit(SuccessResult(line, "Transfer complete, 10 bytes transferred"));
+
+        // The transfer's own run has succeeded, but its cancel is still on the wire unanswered: the slot stays
+        // taken, so a transfer started now cannot be the one that late cancel lands on.
+        Assert.NotSame(transfer, await Task.WhenAny(transfer, Task.Delay(200, TestContext.Current.CancellationToken)));
+        Assert.True(session.IsTransferInProgress);
+
+        fake.Emit(AutoResult(cancelLine));
+        var result = await transfer.WaitAsync(Wait, TestContext.Current.CancellationToken);
+        Assert.True(result.Succeeded);
+        Assert.False(session.IsTransferInProgress);
+    }
+
+    [Fact]
+    public async Task Transfer_after_engine_death_reports_the_fault_not_a_missing_start()
+    {
+        var (session, fake) = await StartAsync();
+        var faulted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, _) => faulted.TrySetResult();
+        fake.Exit(1);
+        await faulted.Task.WaitAsync(Wait, TestContext.Current.CancellationToken);
+
+        var ex = await Assert.ThrowsAsync<BackendUnavailableException>(() => session.TransferAsync(Request, cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Contains("exited unexpectedly", ex.Message);
         Assert.False(session.IsTransferInProgress);
     }
 
@@ -169,7 +227,6 @@ public class B3270SessionTransferTests
         fake.Emit(SuccessResult(line, "Transfer complete, 0 bytes transferred"));
 
         var result = await transfer.WaitAsync(Wait, TestContext.Current.CancellationToken);
-        Assert.Equal(0, result.Bytes);
     }
 
     [Fact]

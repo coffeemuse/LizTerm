@@ -65,5 +65,5 @@ public sealed record FileTransferRequest
 }
 
 /// <summary>Outcome of one transfer. Message is the engine's or host's final text, unaltered, on success and on
-/// failure; Bytes is the last progress count seen, zero if none.</summary>
-public sealed record FileTransferResult(bool Succeeded, string Message, long Bytes);
+/// failure (a cancel included). The byte count travels through the progress callback only.</summary>
+public sealed record FileTransferResult(bool Succeeded, string Message);
