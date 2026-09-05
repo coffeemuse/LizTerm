@@ -14,6 +14,17 @@ public interface IEmulatorSession : IAsyncDisposable
     TlsInfo? Tls { get; }
     KeyboardStatus KeyboardStatus { get; }
 
+    /// <summary>Path of the active wire log, or null. Every protocol line in both directions is appended there,
+    /// timestamped. The log belongs to the session, not to one engine process, so it survives an engine restart.</summary>
+    string? WireLogPath { get; }
+
+    /// <summary>Starts logging to <paramref name="path"/> (appending). Throws <see cref="IOException"/> when the
+    /// file cannot be opened and <see cref="InvalidOperationException"/> when a log is already active.</summary>
+    void StartWireLog(string path);
+
+    /// <summary>Stops and closes the active log; does nothing when none is active.</summary>
+    void StopWireLog();
+
     Task ConnectAsync(CancellationToken cancellationToken = default);
     /// <summary>Completes once the session reports <see cref="ConnectionState.Disconnected"/>, or after a
     /// short backend-defined timeout if that report never comes. Does nothing when not connected.</summary>

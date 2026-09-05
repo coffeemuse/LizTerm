@@ -12,7 +12,9 @@ public sealed class B3270Session : IEmulatorSession
     public static readonly Version MinimumVersion = new(4, 2, 0);
 
     private readonly Func<IB3270Process> _processFactory;
-    private readonly WireLog? _wireLog;
+    private WireLog? _wireLog;
+    private readonly string? _wireLogError;
+    private readonly B3270Location _location;
     private readonly object _writeLock = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<RunResultIndication>> _pending = new();
     private readonly ScreenBuffer _buffer = new(24, 80);
@@ -32,11 +34,16 @@ public sealed class B3270Session : IEmulatorSession
     internal TimeSpan DisconnectTimeout { get; set; } = TimeSpan.FromSeconds(5);
     private bool _wireLogWarningRaised;
 
-    public B3270Session(SessionProfile profile, Func<IB3270Process> processFactory, WireLog? wireLog = null)
+    /// <param name="wireLog">A log already open (from the environment), or null.</param>
+    /// <param name="wireLogError">Why the environment's log could not be opened; reported once as a HostMessage.</param>
+    /// <param name="location">The binary this session's processes run; null (tests) reads as unknown.</param>
+    public B3270Session(SessionProfile profile, Func<IB3270Process> processFactory, WireLog? wireLog = null, string? wireLogError = null, B3270Location? location = null)
     {
         Profile = profile;
         _processFactory = processFactory;
         _wireLog = wireLog;
+        _wireLogError = wireLogError;
+        _location = location ?? B3270Location.Unknown;
         CurrentScreen = _buffer.Snapshot();
     }
 
@@ -47,6 +54,37 @@ public sealed class B3270Session : IEmulatorSession
     public ConnectionState ConnectionState { get; private set; } = ConnectionState.Disconnected;
     public TlsInfo? Tls { get; private set; }
     public KeyboardStatus KeyboardStatus { get; private set; } = KeyboardStatus.Initial;
+
+    public string? WireLogPath => Volatile.Read(ref _wireLog)?.Path;
+
+    public void StartWireLog(string path)
+    {
+        lock (_writeLock)
+        {
+            if (_wireLog is not null) throw new InvalidOperationException("A wire log is already active.");
+            try
+            {
+                _wireLog = new WireLog(path);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException)
+            {
+                // DirectoryNotFoundException is already an IOException; wrap it (and access-denied) into the
+                // exact IOException type so callers can catch one type for every unopenable path.
+                throw new IOException(ex.Message, ex);
+            }
+        }
+    }
+
+    public void StopWireLog()
+    {
+        WireLog? old;
+        lock (_writeLock)
+        {
+            old = _wireLog;
+            _wireLog = null;
+        }
+        old?.Dispose();
+    }
 
     public event EventHandler<ScreenSnapshot>? ScreenUpdated;
     public event EventHandler<KeyboardStatus>? StatusChanged;
@@ -93,7 +131,7 @@ public sealed class B3270Session : IEmulatorSession
             throw new BackendUnavailableException($"b3270 version {hello.Version} is too old; {MinimumVersion} or newer is required.");
         }
 
-        if (_wireLog is null && WireLog.LastOpenError is { } wireLogError && !_wireLogWarningRaised)
+        if (_wireLogError is { } wireLogError && !_wireLogWarningRaised)
         {
             _wireLogWarningRaised = true;
             HostMessage?.Invoke(this, "Wire log disabled: " + wireLogError);
@@ -107,7 +145,7 @@ public sealed class B3270Session : IEmulatorSession
         {
             while (process.StandardOutput.ReadLine() is { } line)
             {
-                _wireLog?.Inbound(line);
+                Volatile.Read(ref _wireLog)?.Inbound(line);
                 if (!IndicationParser.TryParse(line, out var indication)) continue;
                 try { Handle(indication); }
                 catch (Exception ex) { HostMessage?.Invoke(this, "Internal error handling emulator output: " + ex.Message); }
@@ -184,9 +222,9 @@ public sealed class B3270Session : IEmulatorSession
 
     public async ValueTask DisposeAsync()
     {
-        // Dispose the wire log unconditionally: a fault (see OnProcessEnded) may already have
+        // Stop the wire log unconditionally: a fault (see OnProcessEnded) may already have
         // cleared _process, but the log still needs to be closed.
-        _wireLog?.Dispose();
+        StopWireLog();
         if (_process is null) return;
         _shuttingDown = true;
         try
@@ -239,8 +277,8 @@ public sealed class B3270Session : IEmulatorSession
             process.StandardInput.Write(line);
             process.StandardInput.Write('\n');
             process.StandardInput.Flush();
+            _wireLog?.Outbound(line);
         }
-        _wireLog?.Outbound(line);
     }
 
     /// <summary>The live process, or the reason there is none: the engine's last fault when it died, otherwise a
