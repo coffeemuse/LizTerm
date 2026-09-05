@@ -26,7 +26,7 @@ public class LiveHostTests
             if (s.ToText().Any(char.IsLetterOrDigit)) gotText.TrySetResult(s);
         };
 
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         var screen = await gotText.Task.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
 
         Assert.True(session.ConnectionState.IsConnected(), $"state was {session.ConnectionState}");
@@ -81,7 +81,7 @@ public class LiveHostTests
         var tso = new TsoNavigator(session, screens);
         var dataset = "LIZTERM.ITEST";
 
-        await session.ConnectAsync(ct);
+        await session.ConnectAsync(cancellationToken: ct);
         try
         {
             // Inside the try: the password is accepted partway through LogonAsync, so a failure in the rest of it
