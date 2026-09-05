@@ -138,9 +138,10 @@ the backend tests.
   `OperationCanceledException` (the backend sends one `Disconnect`; b3270 then fails the pending Connect run,
   which is not reported) and leaves the session reusable; `ConnectOptions.VerifyCertificate` overrides the
   profile for one attempt; `ConnectionFailedException.CertificateVerificationFailed` marks the text b3270 sends
-  for an unverifiable certificate. After a failed or cancelled Connect run, `ConnectAsync` waits for the
-  `Disconnected` state, bounded by the backend's `DisconnectTimeout` (5 s), before throwing, the same wait
-  `DisconnectAsync` uses; b3270 answers the run before it reports `not-connected`, and on the real gateway that
+  for an unverifiable certificate. Every wait a cancel then depends on is bounded by `DisconnectTimeout`, so a
+  wedged engine cannot hold the attempt open past its own cancellation. After a failed or cancelled Connect run,
+  `ConnectAsync` waits for the `Disconnected` state, bounded by the same `DisconnectTimeout` (5 s), before
+  throwing, the same wait `DisconnectAsync` uses; b3270 answers the run before it reports `not-connected`, and on the real gateway that
   report lags by up to a few seconds. `Engine` names the binary, its source (`Bundled` or `Override`), and after
   the hello its version. `WireLogPath`, `StartWireLog`, `StopWireLog` make the wire log a session capability
   that survives an engine restart. `AppPaths` owns the per-OS config root with `profiles` and `logs` beneath it.
@@ -165,8 +166,16 @@ the backend tests.
   waits for the `not-connected` state (or process end), capped by the internal `DisconnectTimeout` of 5 s; it
   sends nothing when already disconnected. That wait is factored into `WaitForDisconnectedAsync`, which
   `ConnectAsync` also calls after a failed or cancelled Connect run, so it waits for `not-connected` before
-  throwing, unless the report never comes within `DisconnectTimeout` (5 s). `ConnectAsync` has no timeout of its own: a plain connect to a TLS
-  listener sits in `telnet-pending` forever because b3270's Connect action never completes.
+  throwing, unless the report never comes within `DisconnectTimeout` (5 s). `ConnectAsync` sets no deadline of
+  its own on a connect that is going well — a plain connect to a TLS listener sits in `telnet-pending` forever,
+  because b3270's Connect action never completes, and only the caller's token ends that. Everything a cancel
+  depends on is bounded, though: `RunAsync` takes an optional timeout and token and drops its pending slot when
+  it gives up (`Handle` ignores a run-result whose tag is gone); the `Set verifyHostCert` run observes the
+  caller's token; the cancel's `Disconnect` run is capped by `DisconnectTimeout`; and the cancel gives the
+  pending Connect run that same span to produce the "Connection failed" b3270 sends once the Disconnect lands,
+  then gives up on it. The Disconnect task is awaited in a `finally`, not only where the Connect run returned
+  normally, so an engine dying mid-cancel cannot leave it to land on the next attempt — the shape
+  `TransferAsync` already uses for its own cancel.
 - Startup waits for the `hello` indication (default 10 s) and rejects versions below
   `B3270Session.MinimumVersion` (4.2.0). Process death raises `Faulted` with the stderr tail, drops to
   `Disconnected`, and clears the process so a later `ConnectAsync` spawns a fresh one. `OnProcessEnded`
