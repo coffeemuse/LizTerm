@@ -214,60 +214,95 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         ErrorMessage = null;
         _furthestState = ConnectionState.Disconnected;
         _connectCancelledByUser = false;
-        using var cts = new CancellationTokenSource(ConnectTimeout);
-        _connectCts = cts;
-        try
+        ConnectionFailedException? certificateFailure = null;
+        using (var cts = new CancellationTokenSource(ConnectTimeout))
         {
-            await _session.ConnectAsync(options, cts.Token);
+            _connectCts = cts;
+            try
+            {
+                await _session.ConnectAsync(options, cts.Token);
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                if (_disposed) return;
+                if (!_connectCancelledByUser)
+                    ErrorMessage = StatusFormatter.ConnectTimeout(Profile, ConnectTimeout, _furthestState >= ConnectionState.TelnetPending);
+            }
+            catch (ConnectionFailedException ex) when (ex.CertificateVerificationFailed && options.VerifyCertificate != false)
+            {
+                // Only recorded here. C# does not route an exception thrown inside a catch clause to that try's
+                // sibling clauses, so the prompt, the profile save and the retry run after the block instead.
+                certificateFailure = ex;
+            }
+            catch (ConnectionFailedException ex)
+            {
+                ErrorMessage = ex.Message;
+            }
+            catch (BackendUnavailableException ex)
+            {
+                ErrorMessage = ex.Message;
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = "Unexpected error: " + ex.Message;
+            }
+            finally
+            {
+                if (ReferenceEquals(_connectCts, cts)) _connectCts = null;
+            }
         }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested)
-        {
-            if (_disposed) return;
-            if (!_connectCancelledByUser)
-                ErrorMessage = StatusFormatter.ConnectTimeout(Profile, ConnectTimeout, _furthestState >= ConnectionState.TelnetPending);
-        }
-        catch (ConnectionFailedException ex) when (ex.CertificateVerificationFailed && options.VerifyCertificate != false)
-        {
-            await OfferConnectAnywayAsync(ex);
-        }
-        catch (ConnectionFailedException ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-        catch (BackendUnavailableException ex)
-        {
-            ErrorMessage = ex.Message;
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = "Unexpected error: " + ex.Message;
-        }
-        finally
-        {
-            if (ReferenceEquals(_connectCts, cts)) _connectCts = null;
-        }
+        if (certificateFailure is not null && !_disposed) await OfferConnectAnywayAsync(certificateFailure);
     }
 
     /// <summary>Spec 5.3: ask once; on yes reconnect with verification off for this attempt, and with Remember also
     /// save the profile and keep the override for the window's life. The reconnect cannot fail on verification,
-    /// so this never loops.</summary>
+    /// so this never loops. Both the prompt (a modal window) and the save (a file write) can fail, and this runs
+    /// after the connect's catch clauses rather than inside one, so those failures reach the error banner instead
+    /// of faulting the command.</summary>
     private async Task OfferConnectAnywayAsync(ConnectionFailedException failure)
     {
         var reason = failure.Lines.Where(line => line != "Connection failed:").ToList();
-        var decision = _certificatePrompt is null
-            ? CertificateDecision.Declined
-            : await _certificatePrompt.AskAsync(Profile.Host, reason, _saveProfile is not null);
+        CertificateDecision decision;
+        try
+        {
+            decision = _certificatePrompt is null
+                ? CertificateDecision.Declined
+                : await _certificatePrompt.AskAsync(Profile.Host, reason, _saveProfile is not null);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not ask about the certificate: " + ex.Message;
+            return;
+        }
+
+        // The prompt is unbounded, so the window may have closed while it was open.
+        if (_disposed) return;
         if (!decision.ConnectAnyway)
         {
             ErrorMessage = failure.Message;
             return;
         }
+
+        string? saveError = null;
         if (decision.Remember)
         {
             _verifyOverride = false;
-            _saveProfile?.Invoke(Profile with { VerifyCertificate = false });
+            try
+            {
+                _saveProfile?.Invoke(Profile with { VerifyCertificate = false });
+            }
+            catch (Exception ex)
+            {
+                // The choice still holds for this window; only writing it back failed, so the connect goes ahead.
+                saveError = "Could not save the profile: " + ex.Message;
+            }
         }
+
         await ConnectWithAsync(new ConnectOptions(VerifyCertificate: false));
+
+        // ConnectWithAsync clears ErrorMessage on entry, so a save failure is reported after the retry.
+        if (saveError is not null && !_disposed)
+            ErrorMessage = ErrorMessage is null ? saveError : $"{ErrorMessage} {saveError}";
     }
 
     /// <summary>While a connect is pending this cancels it (the backend sends the Disconnect); otherwise it disconnects.</summary>

@@ -169,4 +169,37 @@ public class SessionViewModelConnectTests
         Assert.Single(prompt.Calls);
         Assert.Equal("Connection failed: Connection refused", vm.ErrorMessage);
     }
+
+    /// <summary>Regression: OfferConnectAnywayAsync was awaited from inside a catch clause, so a failing profile
+    /// save escaped every sibling handler and faulted the command (an unhandled UI-thread exception from the
+    /// File > Connect menu).</summary>
+    [Fact]
+    public async Task A_profile_save_that_fails_is_reported_and_does_not_fault_the_command()
+    {
+        var session = new FakeEmulatorSession { ConnectException = CertFailure };
+        var prompt = new FakeCertificatePrompt { Decision = new CertificateDecision(ConnectAnyway: true, Remember: true) };
+        var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard(), prompt,
+            _ => throw new UnauthorizedAccessException("profiles are read-only"));
+        prompt.OnAsk = () => session.ConnectException = null;
+
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(["connect", "connect:noverify"], session.Calls);
+        Assert.Contains("profiles are read-only", vm.ErrorMessage);
+    }
+
+    /// <summary>Regression: the prompt is a modal window, so it can throw when its owner has closed; that must be
+    /// reported rather than escaping the command.</summary>
+    [Fact]
+    public async Task A_prompt_that_fails_is_reported_and_does_not_fault_the_command()
+    {
+        var session = new FakeEmulatorSession { ConnectException = CertFailure };
+        var prompt = new FakeCertificatePrompt { AskException = new InvalidOperationException("Cannot show window with non-visible parent.") };
+        var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard(), prompt);
+
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(["connect"], session.Calls);
+        Assert.Contains("Cannot show window with non-visible parent.", vm.ErrorMessage);
+    }
 }

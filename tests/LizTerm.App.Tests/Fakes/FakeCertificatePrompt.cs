@@ -10,12 +10,15 @@ public sealed class FakeCertificatePrompt : ICertificatePrompt
     /// <summary>"ask:<host>:<canRemember>" per call.</summary>
     public List<string> Calls { get; } = [];
     public IReadOnlyList<string>? LastReason { get; private set; }
+    /// <summary>When set, AskAsync throws it, simulating ShowDialog over an owner that has gone away.</summary>
+    public Exception? AskException { get; set; }
 
     public Task<CertificateDecision> AskAsync(string host, IReadOnlyList<string> reason, bool canRemember)
     {
         Calls.Add($"ask:{host}:{canRemember}");
         LastReason = reason;
         OnAsk?.Invoke();
+        if (AskException is not null) throw AskException;
         return Task.FromResult(Decision);
     }
 }

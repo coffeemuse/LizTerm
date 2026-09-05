@@ -101,6 +101,9 @@ public sealed class B3270Session : IEmulatorSession
 
     // ---- lifecycle ----
 
+    /// <summary>Whether a process slot is filled. Test seam, like <see cref="PendingCount"/>.</summary>
+    internal bool HasProcess => _process is not null;
+
     internal async Task StartProcessAsync(CancellationToken cancellationToken)
     {
         if (_process is not null) return;
@@ -109,7 +112,17 @@ public sealed class B3270Session : IEmulatorSession
         _hello = helloSource;
         _process = process;
         _fault = null;
-        process.Start(BuildArguments(Profile));
+        try
+        {
+            process.Start(BuildArguments(Profile));
+        }
+        catch
+        {
+            // The slot is already filled, so a Start that throws would otherwise make every later attempt
+            // short-circuit on `_process is not null` and then trip over a process that was never started.
+            TearDown();
+            throw;
+        }
         _readerThread = new Thread(ReadLoop) { IsBackground = true, Name = "b3270-reader" };
         _readerThread.Start();
 
@@ -236,19 +249,25 @@ public sealed class B3270Session : IEmulatorSession
         // Stop the wire log unconditionally: a fault (see OnProcessEnded) may already have
         // cleared _process, but the log still needs to be closed.
         StopWireLog();
-        if (_process is null) return;
+        // Snapshot the slot: OnProcessEnded clears it from the reader thread after publishing Disconnected, so
+        // re-reading the field here can hand back null between the check and the kill (as TearDown already does).
+        var process = _process;
+        if (process is null) return;
         _shuttingDown = true;
         try
         {
             WriteLine(RunOperation.Serialize("quit", [new B3270Action("Quit")]));
-            await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
         }
         catch (Exception)
         {
-            _process.Kill();
+            // OnProcessEnded may already have killed and disposed this process, so the kill can fail too.
+            try { process.Kill(); }
+            catch (Exception) { /* already gone; nothing left to stop */ }
         }
-        _process.Dispose();
-        _process = null;
+        try { process.Dispose(); }
+        catch (Exception) { /* already disposed by OnProcessEnded */ }
+        Interlocked.CompareExchange(ref _process, null, process);
     }
 
     // ---- running actions ----
