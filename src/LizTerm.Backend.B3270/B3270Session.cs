@@ -10,6 +10,7 @@ namespace LizTerm.Backend.B3270;
 public sealed class B3270Session : IEmulatorSession
 {
     public static readonly Version MinimumVersion = new(4, 2, 0);
+    public const string CertificateFailurePrefix = "TLS: Host certificate verification failed";
 
     private readonly Func<IB3270Process> _processFactory;
     private WireLog? _wireLog;
@@ -123,6 +124,11 @@ public sealed class B3270Session : IEmulatorSession
             throw new BackendUnavailableException($"b3270 did not answer within {StartupTimeout.TotalSeconds:0} seconds. stderr: {string.Join(" | ", process.StderrTail)}");
         }
         catch (BackendUnavailableException)
+        {
+            TearDown();
+            throw;
+        }
+        catch (OperationCanceledException)
         {
             TearDown();
             throw;
@@ -480,12 +486,37 @@ public sealed class B3270Session : IEmulatorSession
 
     // ---- IEmulatorSession actions ----
 
-    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default)
     {
         await StartProcessAsync(cancellationToken);
-        await RunAsync(new B3270Action("Set", "verifyHostCert", Profile.VerifyCertificate ? "true" : "false"));
-        var result = await RunRawAsync([new B3270Action("Connect", HostStringBuilder.Build(Profile))]);
-        if (!result.Success) throw new ConnectionFailedException(result.Text);
+        var verify = options?.VerifyCertificate ?? Profile.VerifyCertificate;
+        await RunAsync(new B3270Action("Set", "verifyHostCert", verify ? "true" : "false"));
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var run = RunRawAsync([new B3270Action("Connect", HostStringBuilder.Build(Profile))]);
+        RunResultIndication result;
+        // b3270 answers a Disconnect while a Connect is pending (verified against 4.5ga6): the Disconnect run
+        // succeeds at once and the Connect run then fails with "Connection failed", which is the cancel's own
+        // consequence rather than an error to report.
+        using (cancellationToken.Register(() => _ = Task.Run(TryDisconnectQuietlyAsync)))
+            result = await run;
+
+        if (result.Success) return;
+        cancellationToken.ThrowIfCancellationRequested();
+        var certificate = result.Text.Any(line => line.StartsWith(CertificateFailurePrefix, StringComparison.Ordinal));
+        throw new ConnectionFailedException(result.Text, certificate);
+    }
+
+    private async Task TryDisconnectQuietlyAsync()
+    {
+        try
+        {
+            await RunRawAsync([new B3270Action("Disconnect")]);
+        }
+        catch (Exception)
+        {
+            // The process may be gone; the pending Connect run faults on its own in that case.
+        }
     }
 
     /// <summary>Completes once b3270 has reported the connection closed (or the process has ended), not

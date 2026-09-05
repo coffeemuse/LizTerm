@@ -28,7 +28,10 @@ public interface IEmulatorSession : IAsyncDisposable
     /// <summary>Stops and closes the active log; does nothing when none is active.</summary>
     void StopWireLog();
 
-    Task ConnectAsync(CancellationToken cancellationToken = default);
+    /// <summary>Connects as the profile says, with <paramref name="options"/> overriding it for this attempt only.
+    /// Cancelling the token ends the attempt with <see cref="OperationCanceledException"/> and leaves the session
+    /// disconnected and reusable. A refused connection throws <see cref="ConnectionFailedException"/>.</summary>
+    Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default);
     /// <summary>Completes once the session reports <see cref="ConnectionState.Disconnected"/>, or after a
     /// short backend-defined timeout if that report never comes. Does nothing when not connected.</summary>
     Task DisconnectAsync();

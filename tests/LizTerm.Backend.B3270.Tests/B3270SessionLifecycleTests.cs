@@ -195,14 +195,14 @@ public class B3270SessionLifecycleTests
             return fake;
         });
 
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
         session.Faulted += (_, f) => faulted.TrySetResult(f);
 
         fake1!.Exit(137);
         await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, calls);
         Assert.True(fake2!.Started);
@@ -226,14 +226,14 @@ public class B3270SessionLifecycleTests
         session.Faulted += (_, f) => { faults.Add(f); faulted.TrySetResult(f); };
 
         await Assert.ThrowsAsync<BackendUnavailableException>(() => session.StartProcessAsync(CancellationToken.None));
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Empty(faults);
 
         fake2!.Exit(137);
         var fault = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         Assert.Equal(137, fault.ExitCode);
 
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(3, calls);
     }
 

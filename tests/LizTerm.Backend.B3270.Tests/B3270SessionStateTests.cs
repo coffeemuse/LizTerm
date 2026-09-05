@@ -156,7 +156,7 @@ public class B3270SessionStateTests
     public async Task Connect_sets_verify_then_connects_with_host_string()
     {
         var (session, fake) = await StartAsync();
-        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         var lines = fake.InputLines;
         Assert.Contains(lines, l => l.Contains("\"Set\"") && l.Contains("\"verifyHostCert\",\"false\""));
         Assert.Contains(lines, l => l.Contains("\"Connect\"") && l.Contains("\"L:h:23\""));
@@ -174,7 +174,7 @@ public class B3270SessionStateTests
                 : [$$$"""{"run-result":{"r-tag":"{{{tag}}}","success":true,"time":0}}"""];
         };
         var session = new B3270Session(Profile, () => fake);
-        var ex = await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal(["Connection failed:", "h/23:", "Connection refused"], ex.Lines);
     }
 

@@ -15,7 +15,7 @@ public class SessionFactoryTests
         {
             Environment.SetEnvironmentVariable("LIZTERM_B3270_PATH", bogus);
             await using var session = SessionFactory.Create(new SessionProfile { Name = "t", Host = "h" });
-            var ex = await Assert.ThrowsAsync<BackendUnavailableException>(() => session.ConnectAsync(TestContext.Current.CancellationToken));
+            var ex = await Assert.ThrowsAsync<BackendUnavailableException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
             Assert.Contains("Looked in", ex.Message);
             Assert.Contains(bogus, ex.Message);
         }

@@ -16,6 +16,10 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public Exception? WireLogException { get; set; }
     public List<string> Calls { get; } = [];
     public Exception? ConnectException { get; set; }
+    public CancellationToken ConnectToken { get; private set; }
+    /// <summary>When set, ConnectAsync waits for it, faulting with the token's cancellation if that comes first,
+    /// so a test can drive a pending attempt through the view model's timeout or Disconnect.</summary>
+    public TaskCompletionSource? ConnectCompletion { get; set; }
     public Exception? ActionException { get; set; }
     public FileTransferRequest? LastTransferRequest { get; private set; }
     public IProgress<long>? TransferProgress { get; private set; }
@@ -33,10 +37,17 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public event EventHandler<BackendFault>? Faulted;
     public event EventHandler<string>? HostMessage;
 
-    public Task ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default)
     {
-        Calls.Add("connect");
-        return ConnectException is null ? Task.CompletedTask : Task.FromException(ConnectException);
+        Calls.Add(options?.VerifyCertificate == false ? "connect:noverify" : "connect");
+        ConnectToken = cancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (ConnectCompletion is { } completion)
+        {
+            using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
+            await completion.Task;
+        }
+        if (ConnectException is not null) throw ConnectException;
     }
 
     public void StartWireLog(string path)
