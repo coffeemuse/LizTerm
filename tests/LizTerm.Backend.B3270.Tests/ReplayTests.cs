@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using LizTerm.Backend.B3270.Tests.Fakes;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
@@ -100,5 +101,36 @@ public class ReplayTests
         Assert.Contains(KeyboardLock.Unlocked, locks);
         Assert.Equal(KeyboardLock.NotConnected, session.KeyboardStatus.Lock);
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
+    /// <summary>The fixture was recorded with run tags "set" and "connect"; the responder replays the engine's
+    /// answers against the tags this session actually sends, so ConnectAsync sees the real failure text.</summary>
+    [Fact]
+    public async Task Gateway_certificate_failure_replays_to_a_flagged_connection_failure()
+    {
+        var lines = File.ReadAllLines(Fixture("gateway-cert-failure.jsonl"));
+        var fake = new FakeB3270Process { AutoInitialize = false, RunResponder = input => Respond(input, lines) };
+        fake.Emit(lines[0]);
+
+        var profile = new SessionProfile { Name = "replay", Host = "gateway.test", Port = 4270, UseTls = true, VerifyCertificate = true };
+        var session = new B3270Session(profile, () => fake);
+        var states = new List<ConnectionState>();
+        session.ConnectionChanged += (_, s) => states.Add(s);
+
+        var ex = await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.True(ex.CertificateVerificationFailed);
+        Assert.Contains("self-signed certificate", ex.Lines[^1]);
+        Assert.Equal([ConnectionState.TcpPending, ConnectionState.TelnetPending, ConnectionState.TlsPending, ConnectionState.Disconnected], states);
+        Assert.Null(session.Tls);
+    }
+
+    private static IReadOnlyList<string> Respond(string input, string[] fixture)
+    {
+        var tag = Regex.Match(input, "\"r-tag\":\"([^\"]+)\"").Groups[1].Value;
+        if (input.Contains("\"Set\""))
+            return fixture.Where(l => l.Contains("\"r-tag\":\"set\"")).Select(l => l.Replace("\"r-tag\":\"set\"", $"\"r-tag\":\"{tag}\"")).ToList();
+        if (input.Contains("\"Connect\""))
+            return fixture.SkipWhile(l => !l.Contains("connect-attempt")).Select(l => l.Replace("\"r-tag\":\"connect\"", $"\"r-tag\":\"{tag}\"")).ToList();
+        return [];
     }
 }
