@@ -19,7 +19,7 @@ public class LiveHostTests
 
         var profile = ProfileFor(target!);
 
-        await using var session = new B3270Session(profile, () => new B3270ChildProcess(B3270Locator.Find().Path), WireLog.FromEnvironment());
+        await using var session = new B3270Session(profile, () => new B3270ChildProcess(B3270Locator.Find().Path), WireLog.TryFromEnvironment(out _));
         var gotText = new TaskCompletionSource<ScreenSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
         session.ScreenUpdated += (_, s) =>
         {
@@ -76,7 +76,7 @@ public class LiveHostTests
         var received = Path.Combine(dir.FullName, "received.txt");
         await File.WriteAllTextAsync(sent, "LizTerm IND$FILE round trip\nsecond line with lowercase text\nthird line has trailing spaces   \n//JOB1 JOB (ACCT),'LIZTERM',CLASS=A\nEND\n", ct);
 
-        await using var session = new B3270Session(ProfileFor(target!), () => new B3270ChildProcess(B3270Locator.Find().Path), WireLog.FromEnvironment());
+        await using var session = new B3270Session(ProfileFor(target!), () => new B3270ChildProcess(B3270Locator.Find().Path), WireLog.TryFromEnvironment(out _));
         using var screens = new ScreenWaiter(session);
         var tso = new TsoNavigator(session, screens);
         var dataset = "LIZTERM.ITEST";

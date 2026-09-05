@@ -10,6 +10,9 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public ConnectionState ConnectionState { get; set; }
     public TlsInfo? Tls { get; set; }
     public KeyboardStatus KeyboardStatus { get; set; } = KeyboardStatus.Initial;
+    public string? WireLogPath { get; set; }
+    /// <summary>When set, StartWireLog throws it.</summary>
+    public Exception? WireLogException { get; set; }
     public List<string> Calls { get; } = [];
     public Exception? ConnectException { get; set; }
     public Exception? ActionException { get; set; }
@@ -33,6 +36,20 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     {
         Calls.Add("connect");
         return ConnectException is null ? Task.CompletedTask : Task.FromException(ConnectException);
+    }
+
+    public void StartWireLog(string path)
+    {
+        Calls.Add("wirelog:start:" + path);
+        if (WireLogException is not null) throw WireLogException;
+        if (WireLogPath is not null) throw new InvalidOperationException("A wire log is already active.");
+        WireLogPath = path;
+    }
+
+    public void StopWireLog()
+    {
+        Calls.Add("wirelog:stop");
+        WireLogPath = null;
     }
 
     public Task DisconnectAsync() => Record("disconnect");

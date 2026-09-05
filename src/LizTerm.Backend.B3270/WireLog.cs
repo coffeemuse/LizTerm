@@ -3,30 +3,36 @@ using System.Globalization;
 namespace LizTerm.Backend.B3270;
 
 /// <summary>Records every protocol line in both directions. Used for bug reports and as replay fixtures.</summary>
-public sealed class WireLog(TextWriter writer) : IDisposable
+public sealed class WireLog(TextWriter writer, string? path = null) : IDisposable
 {
     public const string EnvironmentVariable = "LIZTERM_WIRE_LOG";
     private readonly object _lock = new();
     private bool _disposed;
 
-    /// <summary>Set by <see cref="FromEnvironment"/> when the environment variable names a path
-    /// that could not be opened for writing, so the caller can surface it instead of silently
-    /// running without a wire log. Cleared on a subsequent successful open.</summary>
-    public static string? LastOpenError { get; private set; }
-
-    public static WireLog? FromEnvironment()
+    /// <summary>Opens <paramref name="path"/> for appending. Throws <see cref="IOException"/> (a missing
+    /// directory included) or <see cref="UnauthorizedAccessException"/> when it cannot.</summary>
+    public WireLog(string path) : this(new StreamWriter(path, append: true), path)
     {
+    }
+
+    /// <summary>The file being written, when known.</summary>
+    public string? Path { get; } = path;
+
+    /// <summary>The log named by <see cref="EnvironmentVariable"/>, or null. <paramref name="error"/> is set only
+    /// when the variable names a path that could not be opened, so the caller can say so once instead of
+    /// silently running without a log.</summary>
+    public static WireLog? TryFromEnvironment(out string? error)
+    {
+        error = null;
         var path = Environment.GetEnvironmentVariable(EnvironmentVariable);
         if (string.IsNullOrWhiteSpace(path)) return null;
         try
         {
-            var log = new WireLog(new StreamWriter(path, append: true));
-            LastOpenError = null;
-            return log;
+            return new WireLog(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            LastOpenError = ex.Message;
+            error = ex.Message;
             return null;
         }
     }
