@@ -8,8 +8,9 @@ namespace LizTerm.Backend.B3270.Process;
 /// an Override.</summary>
 public sealed record B3270Location(string Path, EngineSource Source)
 {
-    /// <summary>For tests that never spawn a real process.</summary>
-    public static readonly B3270Location Unknown = new("", EngineSource.Bundled);
+    /// <summary>No binary was located: the production not-found path in <c>SessionFactory.Create</c> as well as
+    /// tests that never spawn a process. Its source says so rather than borrowing one it does not have.</summary>
+    public static readonly B3270Location Unknown = new("", EngineSource.Unknown);
 }
 
 public static class B3270Locator

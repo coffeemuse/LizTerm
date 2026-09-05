@@ -96,5 +96,8 @@ public class StatusFormatterTests
         Assert.Equal("b3270 4.5.6 (b3270 v4.5ga6), from LIZTERM_B3270_PATH", StatusFormatter.Engine(overridden, "LIZTERM_B3270_PATH"));
         Assert.Equal("b3270, not started, bundled", StatusFormatter.Engine(bundled with { Version = null }, "LIZTERM_B3270_PATH"));
         Assert.Equal("b3270, not started, from LIZTERM_B3270_PATH", StatusFormatter.Engine(overridden with { Version = null }, "LIZTERM_B3270_PATH"));
+        // Never located: claiming a provenance it does not have is what misleads the user who opened About.
+        Assert.Equal("b3270, not found",
+            StatusFormatter.Engine(new EngineInfo("b3270", null, "", EngineSource.Unknown), "LIZTERM_B3270_PATH"));
     }
 }

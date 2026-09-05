@@ -4,6 +4,8 @@ namespace LizTerm.Core.Session;
 /// bundle), or pointed to from outside it (today an environment variable; a preference later).</summary>
 public enum EngineSource
 {
+    /// <summary>Never located. The default, so a half-built <see cref="EngineInfo"/> claims no provenance.</summary>
+    Unknown,
     Bundled,
     Override,
 }

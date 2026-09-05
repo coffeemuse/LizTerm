@@ -10,7 +10,9 @@ public partial class AboutWindow : Window
 {
     private static readonly Uri NoticesUri = new("avares://LizTerm.App/Assets/THIRD-PARTY-NOTICES.txt");
 
-    public AboutWindow() : this(AppVersion.Current, new EngineInfo("b3270", null, "", EngineSource.Bundled), "") { }
+    /// <summary>Design-time only. A plausible located engine rather than a blank path calling itself bundled,
+    /// which is the pairing <see cref="EngineSource.Unknown"/> exists to avoid.</summary>
+    public AboutWindow() : this(AppVersion.Current, new EngineInfo("b3270", "4.5.6", "/path/to/b3270", EngineSource.Bundled), "") { }
 
     public AboutWindow(string version, EngineInfo engine, string overrideOrigin)
     {

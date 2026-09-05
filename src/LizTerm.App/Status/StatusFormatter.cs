@@ -87,6 +87,9 @@ public static class StatusFormatter
     /// <param name="overrideOrigin">What pointed at an Override binary, named by the app (today the environment variable).</param>
     public static string Engine(EngineInfo engine, string overrideOrigin)
     {
+        // A binary that was never located has no version and no provenance to report; saying it is bundled would
+        // point the one user who opens About at the app instead of at whatever override actually broke.
+        if (engine.Source == EngineSource.Unknown) return $"{engine.Name}, not found";
         var name = engine.Version is null ? $"{engine.Name}, not started" : $"{engine.Name} {engine.Version}";
         return engine.Source == EngineSource.Bundled ? $"{name}, bundled" : $"{name}, from {overrideOrigin}";
     }
