@@ -9,6 +9,14 @@ public static class SessionFactory
 {
     public static string OverrideOrigin => B3270Locator.EnvironmentOverride;
 
+    /// <summary>Locates the engine without starting it. Throws <see cref="BackendUnavailableException"/> with the
+    /// locator's explanation when it is missing or not executable.</summary>
+    public static EngineInfo CheckBackend()
+    {
+        var location = B3270Locator.Find();
+        return new EngineInfo("b3270", null, location.Path, location.Source);
+    }
+
     public static IEmulatorSession Create(SessionProfile profile)
     {
         B3270Location location;

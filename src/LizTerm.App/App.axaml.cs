@@ -28,13 +28,47 @@ public partial class App : Application
         {
             // Closing the last session window returns to the picker; only Quit ends the process.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+            var splash = new SplashWindow();
+            splash.Show();
+            splash.Activate();
+
             _store = new ProfileStore(AppPaths.ProfilesDirectory());
-            var startupArguments = StartupArguments.Parse(desktop.Args ?? []);
-            var profile = startupArguments.Resolve(_store.LoadAll());
-            if (profile is not null) OpenSession(profile, fromStore: startupArguments.ProfileName is not null);
-            else ShowPicker();
+            string? backendError = null;
+            try
+            {
+                SessionFactory.CheckBackend();
+            }
+            catch (BackendUnavailableException ex)
+            {
+                backendError = ex.Message;
+            }
+            var arguments = StartupArguments.Parse(desktop.Args ?? []);
+            if (arguments.Error is not null) Console.Error.WriteLine(arguments.Error);
+            var plan = StartupPlan.Decide(backendError, arguments, _store.LoadAll());
+
+            // Nothing else opens until the splash has closed, so no window renders under it.
+            splash.Closed += (_, _) => Execute(plan);
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private void Execute(StartupPlan plan)
+    {
+        switch (plan)
+        {
+            case StartupPlan.ShowError error:
+                var window = new StartupErrorWindow(error.Message);
+                window.Closed += (_, _) => Quit();
+                window.Show();
+                break;
+            case StartupPlan.OpenSession open:
+                OpenSession(open.Profile, open.FromStore);
+                break;
+            default:
+                ShowPicker();
+                break;
+        }
     }
 
     /// <param name="fromStore">True for a saved profile, whose "Always allow" choice can be written back; false for
