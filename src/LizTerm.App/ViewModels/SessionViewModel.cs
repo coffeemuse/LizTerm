@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LizTerm.App.Clipboard;
+using LizTerm.App.Files;
 using LizTerm.App.Status;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
@@ -76,6 +77,25 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     public SessionProfile Profile => _session.Profile;
     public string Title => $"{Profile.Name} - {Profile.Host}";
+
+    /// <summary>The last request a File Transfer dialog started from this window, so the next dialog opens as the
+    /// user left it. Lives as long as the window; nothing is saved to the profile.</summary>
+    public FileTransferRequest? LastTransferRequest { get; private set; }
+
+    /// <summary>Builds the File Transfer dialog's view model around this session, pre-filled from
+    /// <see cref="LastTransferRequest"/>. The window passes a picker over the dialog; tests pass a fake.</summary>
+    public FileTransferViewModel CreateTransfer(IFilePicker picker)
+    {
+        var transfer = new FileTransferViewModel(_session, picker, _dispatch, LastTransferRequest);
+        transfer.Started += request =>
+        {
+            // A transfer types the IND$FILE command into the screen: host input, so the selection goes like it
+            // does for every other path that sends input.
+            Selection = null;
+            LastTransferRequest = request;
+        };
+        return transfer;
+    }
 
     private void ApplyScreen(ScreenSnapshot snapshot)
     {

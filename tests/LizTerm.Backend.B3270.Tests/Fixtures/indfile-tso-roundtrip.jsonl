@@ -1,0 +1,32 @@
+{"oia":{"field":"not-undera","value":true}}
+{"oia":{"field":"lock","value":"twait"}}
+{"oia":{"field":"not-undera","value":false}}
+{"ft":{"state":"awaiting","cause":"ui"}}
+{"screen":{"cursor":{"enabled":true,"row":12,"column":46},"rows":[{"row":12,"changes":[{"column":9,"text":"IND$FILE PUT LIZTERM.ITEST ASCII CRLF"}]}]}}
+{"thumb":{"top":0.0290698,"shown":0.97093,"saved":120,"screen":24,"back":0}}
+{"oia":{"field":"lock","value":"file-transfer"}}
+{"erase":{"fg":"blue","bg":"neutralBlack"}}
+{"screen":{"cursor":{"enabled":true,"row":1,"column":1}}}
+{"ft":{"state":"running","bytes":0,"cause":"ui"}}
+{"stats":{"bytes-received":3163,"records-received":22,"bytes-sent":489,"records-sent":6}}
+{"ft":{"state":"running","bytes":139,"cause":"ui"}}
+{"ft":{"state":"running","bytes":139,"cause":"ui"}}
+{"oia":{"field":"lock"}}
+{"ft":{"state":"complete","success":true,"text":"Transfer complete, 139 bytes transferred\n276 bytes/sec in DFT mode","cause":"ui"}}
+{"run-result":{"r-tag":"7","success":true,"text":["Transfer complete, 139 bytes transferred","276 bytes/sec in DFT mode"],"text-err":[false,false],"time":0.62}}
+{"formatted":{"state":true}}
+{"screen":{"cursor":{"enabled":true,"row":2,"column":1},"rows":[{"row":1,"changes":[{"column":1,"fg":"red","gr":"highlight,selectable","text":" READY "},{"column":8,"fg":"green","count":73}]},{"row":2,"changes":[{"column":1,"fg":"green","count":80}]},{"row":3,"changes":[{"column":1,"fg":"green","count":80}]},{"row":4,"changes":[{"column":1,"fg":"green","count":80}]},{"row":5,"changes":[{"column":1,"fg":"green","count":80}]},{"row":6,"changes":[{"column":1,"fg":"green","count":80}]},{"row":7,"changes":[{"column":1,"fg":"green","count":80}]},{"row":8,"changes":[{"column":1,"fg":"green","count":80}]},{"row":9,"changes":[{"column":1,"fg":"green","count":80}]},{"row":10,"changes":[{"column":1,"fg":"green","count":80}]},{"row":11,"changes":[{"column":1,"fg":"green","count":80}]},{"row":12,"changes":[{"column":1,"fg":"green","count":80}]},{"row":13,"changes":[{"column":1,"fg":"green","count":80}]},{"row":14,"changes":[{"column":1,"fg":"green","count":80}]},{"row":15,"changes":[{"column":1,"fg":"green","count":80}]},{"row":16,"changes":[{"column":1,"fg":"green","count":80}]},{"row":17,"changes":[{"column":1,"fg":"green","count":80}]},{"row":18,"changes":[{"column":1,"fg":"green","count":80}]},{"row":19,"changes":[{"column":1,"fg":"green","count":80}]},{"row":20,"changes":[{"column":1,"fg":"green","count":80}]},{"row":21,"changes":[{"column":1,"fg":"green","count":80}]},{"row":22,"changes":[{"column":1,"fg":"green","count":80}]},{"row":23,"changes":[{"column":1,"fg":"green","count":80}]},{"row":24,"changes":[{"column":1,"fg":"green","count":80}]}]}}
+{"oia":{"field":"not-undera","value":true}}
+{"oia":{"field":"lock","value":"twait"}}
+{"oia":{"field":"not-undera","value":false}}
+{"ft":{"state":"awaiting","cause":"ui"}}
+{"screen":{"cursor":{"enabled":true,"row":1,"column":46},"rows":[{"row":1,"changes":[{"column":9,"text":"IND$FILE GET LIZTERM.ITEST ASCII CRLF"}]}]}}
+{"thumb":{"top":0.0348837,"shown":0.965116,"saved":144,"screen":24,"back":0}}
+{"oia":{"field":"lock","value":"file-transfer"}}
+{"erase":{"fg":"blue","bg":"neutralBlack"}}
+{"screen":{"cursor":{"enabled":true,"row":1,"column":1}}}
+{"ft":{"state":"running","bytes":0,"cause":"ui"}}
+{"ft":{"state":"running","bytes":134,"cause":"ui"}}
+{"oia":{"field":"lock"}}
+{"ft":{"state":"complete","success":true,"text":"Transfer complete, 134 bytes transferred\n16.9 Kbytes/sec in DFT mode","cause":"ui"}}
+{"run-result":{"r-tag":"8","success":true,"text":["Transfer complete, 134 bytes transferred","16.9 Kbytes/sec in DFT mode"],"text-err":[false,false],"time":0.023}}

@@ -22,6 +22,10 @@ public sealed class B3270Session : IEmulatorSession
     private int _tagCounter;
     private volatile bool _shuttingDown;
     private volatile TaskCompletionSource? _disconnected;
+    private TransferContext? _transfer;
+    /// <summary>Why there is no process after there was one: set when the engine dies, cleared by the next start,
+    /// so an action sent to a dead engine reports the fault rather than a session that was never started.</summary>
+    private volatile BackendFault? _fault;
 
     /// <summary>How long <see cref="DisconnectAsync"/> waits for b3270 to report the connection closed
     /// after accepting the action. Tests shorten it.</summary>
@@ -59,8 +63,10 @@ public sealed class B3270Session : IEmulatorSession
     {
         if (_process is not null) return;
         var process = _processFactory();
-        _hello = new TaskCompletionSource<HelloIndication>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var helloSource = new TaskCompletionSource<HelloIndication>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _hello = helloSource;
         _process = process;
+        _fault = null;
         process.Start(BuildArguments(Profile));
         _readerThread = new Thread(ReadLoop) { IsBackground = true, Name = "b3270-reader" };
         _readerThread.Start();
@@ -68,7 +74,7 @@ public sealed class B3270Session : IEmulatorSession
         HelloIndication hello;
         try
         {
-            hello = await _hello.Task.WaitAsync(StartupTimeout, cancellationToken);
+            hello = await helloSource.Task.WaitAsync(StartupTimeout, cancellationToken);
         }
         catch (TimeoutException)
         {
@@ -107,9 +113,9 @@ public sealed class B3270Session : IEmulatorSession
                 catch (Exception ex) { HostMessage?.Invoke(this, "Internal error handling emulator output: " + ex.Message); }
             }
         }
-        catch (Exception ex) when (_shuttingDown || ex is ObjectDisposedException or IOException)
+        catch (Exception ex) when (_shuttingDown || !ReferenceEquals(process, _process) || ex is ObjectDisposedException or IOException)
         {
-            // Stream closed during shutdown.
+            // Stream closed during shutdown, or by TearDown after the process was already replaced.
         }
         OnProcessEnded(process);
     }
@@ -121,6 +127,12 @@ public sealed class B3270Session : IEmulatorSession
         // process. WaitForExitAsync() can already be faulted (e.g. the process was disposed by
         // TearDown/DisposeAsync before the reader thread noticed EOF), and Faulted/ConnectionChanged
         // are external event handlers we don't control.
+        //
+        // TearDown clears _process before killing the old one, so a torn-down process arrives here
+        // after the slot has moved on and must not touch the pending runs, hello, or fault state
+        // that belong to its successor.
+        if (!ReferenceEquals(process, _process)) return;
+
         int? exitCode = null;
         try
         {
@@ -143,6 +155,7 @@ public sealed class B3270Session : IEmulatorSession
             SetConnectionState(ConnectionState.Disconnected);
             if (!_shuttingDown)
             {
+                _fault = fault;
                 Faulted?.Invoke(this, fault);
                 // Let a later ConnectAsync spawn a fresh process through the factory instead of
                 // being stuck thinking the dead one is still usable.
@@ -157,12 +170,16 @@ public sealed class B3270Session : IEmulatorSession
         }
     }
 
+    /// <summary>Drops a process that failed to start. Only <see cref="DisposeAsync"/> sets <c>_shuttingDown</c>:
+    /// that flag is for the session's life, and a start that fails must leave the next attempt able to report
+    /// its own faults. The reader thread of the old process tells it apart by identity instead.</summary>
     private void TearDown()
     {
-        _shuttingDown = true;
-        _process?.Kill();
-        _process?.Dispose();
+        var process = _process;
         _process = null;
+        _hello = null;
+        process?.Kill();
+        process?.Dispose();
     }
 
     public async ValueTask DisposeAsync()
@@ -195,7 +212,7 @@ public sealed class B3270Session : IEmulatorSession
 
     private async Task<RunResultIndication> RunAsync(IReadOnlyList<B3270Action> actions, bool throwOnFailure)
     {
-        if (_process is null) throw new InvalidOperationException("The session has not been started.");
+        RequireProcess();
         var tag = Interlocked.Increment(ref _tagCounter).ToString();
         var tcs = new TaskCompletionSource<RunResultIndication>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[tag] = tcs;
@@ -216,7 +233,7 @@ public sealed class B3270Session : IEmulatorSession
 
     private void WriteLine(string line)
     {
-        var process = _process ?? throw new InvalidOperationException("The session has not been started.");
+        var process = RequireProcess();
         lock (_writeLock)
         {
             process.StandardInput.Write(line);
@@ -225,6 +242,13 @@ public sealed class B3270Session : IEmulatorSession
         }
         _wireLog?.Outbound(line);
     }
+
+    /// <summary>The live process, or the reason there is none: the engine's last fault when it died, otherwise a
+    /// session that was never started.</summary>
+    private IB3270Process RequireProcess() =>
+        _process ?? throw (_fault is { } fault
+            ? new BackendUnavailableException(fault.Message)
+            : new InvalidOperationException("The session has not been started."));
 
     // ---- indications ----
 
@@ -299,6 +323,11 @@ public sealed class B3270Session : IEmulatorSession
                 break;
             case TlsIndication tls:
                 Tls = new TlsInfo(tls.Secure, tls.Verified, tls.Session, tls.HostCert);
+                break;
+            case FtIndication { Bytes: { } bytes } when Volatile.Read(ref _transfer) is { } transfer:
+                // Progress only. The outcome comes from the Transfer run's run-result, which carries the same
+                // text as the "complete" indication; ft lines with no transfer in flight are dropped.
+                transfer.Progress?.Report(bytes);
                 break;
             case PopupIndication popup:
                 HostMessage?.Invoke(this, popup.Text);
@@ -455,4 +484,55 @@ public sealed class B3270Session : IEmulatorSession
 
     public Task MoveCursorAsync(int row, int column) =>
         RunAsync(new B3270Action("MoveCursor", row.ToString(), column.ToString()));
+
+    // ---- file transfer ----
+
+    /// <summary>True while a Transfer run is pending. Tests use it to check the slot is freed.</summary>
+    internal bool IsTransferInProgress => _transfer is not null;
+
+    public async Task<FileTransferResult> TransferAsync(FileTransferRequest request, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RequireProcess();
+        var context = new TransferContext(progress);
+        if (Interlocked.CompareExchange(ref _transfer, context, null) is not null)
+            throw new InvalidOperationException("A file transfer is already in progress.");
+        try
+        {
+            // b3270 does not answer the Transfer run until the transfer ends, so this run-result is the outcome,
+            // a cancel included: the engine reports a cancelled transfer as a failure carrying its own text, and a
+            // host failure that lands in the same moment keeps the host's text instead of being rewritten.
+            var run = RunRawAsync([TransferMapper.ToAction(request)]);
+            using var registration = cancellationToken.Register(() => context.Cancel = Task.Run(TryCancelTransferAsync));
+            var result = await run;
+            return new FileTransferResult(result.Success, string.Join("\n", result.Text));
+        }
+        finally
+        {
+            // The registration is disposed by now, so Cancel is final. A cancel that went out stays on this
+            // slot's watch until b3270 has answered it, so it can never land on a transfer started after this one.
+            if (Volatile.Read(ref context.Cancel) is { } cancel) await cancel;
+            Interlocked.CompareExchange(ref _transfer, null, context);
+        }
+    }
+
+    /// <summary>Sends Transfer(Cancel) off the cancelling thread and swallows the answer: b3270 says "No transfer
+    /// pending." if the transfer already ended, and a dead engine faults the pending Transfer run on its own.</summary>
+    private async Task TryCancelTransferAsync()
+    {
+        try
+        {
+            await RunRawAsync([TransferMapper.CancelAction]);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private sealed class TransferContext(IProgress<long>? progress)
+    {
+        public IProgress<long>? Progress { get; } = progress;
+        /// <summary>The Transfer(Cancel) run once the token fired; awaited before the slot is released.</summary>
+        public Task? Cancel;
+    }
 }
