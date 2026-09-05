@@ -152,7 +152,9 @@ the backend tests.
 - Startup waits for the `hello` indication (default 10 s) and rejects versions below
   `B3270Session.MinimumVersion` (4.2.0). Process death raises `Faulted` with the stderr tail, drops to
   `Disconnected`, and clears the process so a later `ConnectAsync` spawns a fresh one. `OnProcessEnded`
-  runs on the raw reader thread and must never throw.
+  runs on the raw reader thread and must never throw, and it ignores a process that is no longer `_process`:
+  a start that fails (`TearDown`) clears the slot before killing the process, so the old reader thread cannot
+  disturb a retried start, and only `DisposeAsync` sets `_shuttingDown`, which lasts for the session's life.
 - Protocol details that are easy to get wrong: `String()` interprets backslash escapes so literal
   backslashes are doubled; `PasteString` takes **hex-encoded UTF-8**, not text, and is margin-aware
   where `String` is not; certificate verification is a `Set verifyHostCert` action sent before `Connect`,
@@ -198,13 +200,18 @@ the backend tests.
 - File transfer: `SessionWindow`'s "File Transfer..." item (enabled while connected) opens `FileTransferWindow`
   modally with a `FileTransferViewModel` from `SessionViewModel.CreateTransfer(IFilePicker)`, which pre-fills it
   from `LastTransferRequest` (the last request started from that window; nothing goes to the profile). The view
-  model has Form, Running, and Done phases in one window; Start validates through `TryBuildRequest`, progress is
-  marshalled through the dispatch delegate, Cancel cancels the token, and closing a running dialog cancels
-  instead of closing. OS file dialogs go through `IFilePicker` (`Files/`), injected like the clipboard;
-  `LocalFileNames` suggests the save name (member or last qualifier, VM `FN.FT`). `TransferLabels` labels the
-  combo boxes. Avalonia propagates an owned dialog's `Closing` cancel to its owner, so closing the session
-  window (or quitting) while a transfer runs is refused until the engine confirms the cancel and the Done panel
-  shows; a forced shutdown's `DisposeAsync` sends Quit and the pending run faults into the dialog's catch.
+  model has Form, Running, and Done phases in one window; Start validates through `TryBuildRequest`, then refuses
+  a receive into an existing local file unless Append is on or the path is the one the OS Save dialog last
+  returned (that dialog asks about overwriting; a typed or remembered path never did). Progress is marshalled
+  through the dispatch delegate and Cancel cancels the token. The window's `Closing` defers to
+  `FileTransferViewModel.TryClose`: the first close of a running transfer cancels it and keeps the window so
+  the outcome shows, and a second close while the engine has still not answered lets the window go, because
+  b3270 only aborts a running transfer on the host's next turn and a stalled host must not pin the dialog, the
+  session window, and Quit behind it. OS file dialogs go through `IFilePicker` (`Files/`), injected like the
+  clipboard; `LocalFileNames` suggests the save name (member or last qualifier, VM `FN.FT`). `TransferLabels`
+  labels the combo boxes. Avalonia propagates an owned dialog's `Closing` cancel to its owner, so the first
+  close of the session window (or quit) while a transfer runs is refused the same way; a forced shutdown's
+  `DisposeAsync` sends Quit and the pending run faults into the dialog's catch.
 - `StartupArguments.Parse` decides between a saved profile name, `host[:port]`, and `[ipv6]:port` from
   the first command-line argument. `ProfileStore` keeps one JSON file per profile under the per-OS config
   directory and silently skips unreadable files.

@@ -382,4 +382,148 @@ public class FileTransferViewModelTests
         Assert.True(vm.Failed);
         Assert.Equal("Transfer failed with no message from the host.", vm.ResultMessage);
     }
+
+    // ---- closing ----
+
+    [Fact]
+    public async Task Closing_a_running_transfer_cancels_first_and_lets_a_second_close_through()
+    {
+        var (vm, session, _) = Create();
+        vm.LocalPath = "/nonexistent/a.txt";
+        vm.HostFile = "A.B";
+        session.TransferCompletion = Pending();
+        var run = vm.StartCommand.ExecuteAsync(null);
+
+        Assert.False(vm.TryClose());
+        Assert.True(vm.IsCancelling);
+        Assert.True(session.TransferToken.IsCancellationRequested);
+
+        // The engine has not answered the cancel; the user may still leave rather than wait forever.
+        Assert.True(vm.TryClose());
+        Assert.True(vm.IsRunning);
+
+        session.TransferException = new OperationCanceledException();
+        session.TransferCompletion.SetResult();
+        await run;
+        Assert.True(vm.IsDone);
+    }
+
+    [Fact]
+    public async Task Closing_outside_running_is_always_allowed()
+    {
+        var (vm, session, _) = Create();
+        Assert.True(vm.TryClose());
+
+        vm.LocalPath = "/nonexistent/a.txt";
+        vm.HostFile = "A.B";
+        await vm.StartCommand.ExecuteAsync(null);
+        Assert.True(vm.IsDone);
+        Assert.True(vm.TryClose());
+        Assert.False(vm.IsCancelling);
+    }
+
+    // ---- overwrite consent on receive ----
+
+    private static string ExistingFile() => Path.GetTempFileName();
+
+    [Fact]
+    public async Task Receiving_into_an_existing_file_that_was_typed_is_refused()
+    {
+        var existing = ExistingFile();
+        try
+        {
+            var (vm, session, _) = Create();
+            vm.IsReceive = true;
+            vm.LocalPath = existing;
+            vm.HostFile = "A.B";
+
+            await vm.StartCommand.ExecuteAsync(null);
+
+            Assert.True(vm.IsForm);
+            Assert.Contains("already exists", vm.ValidationMessage);
+            Assert.Empty(session.Calls);
+        }
+        finally { File.Delete(existing); }
+    }
+
+    [Fact]
+    public async Task Receiving_into_an_existing_file_remembered_from_the_last_request_is_refused()
+    {
+        var existing = ExistingFile();
+        try
+        {
+            var initial = new FileTransferRequest { Direction = TransferDirection.Receive, LocalPath = existing, HostFile = "A.B" };
+            var (vm, session, _) = Create(initial);
+
+            await vm.StartCommand.ExecuteAsync(null);
+
+            Assert.True(vm.IsForm);
+            Assert.Contains("already exists", vm.ValidationMessage);
+            Assert.Empty(session.Calls);
+        }
+        finally { File.Delete(existing); }
+    }
+
+    [Fact]
+    public async Task Receiving_into_an_existing_file_chosen_in_the_save_dialog_replaces_it()
+    {
+        var existing = ExistingFile();
+        try
+        {
+            var (vm, session, picker) = Create();
+            vm.IsReceive = true;
+            vm.HostFile = "A.B";
+            picker.Result = existing;
+            await vm.BrowseCommand.ExecuteAsync(null);
+
+            await vm.StartCommand.ExecuteAsync(null);
+
+            Assert.Equal(["transfer:Receive:A.B"], session.Calls);
+            Assert.True(vm.IsDone);
+        }
+        finally { File.Delete(existing); }
+    }
+
+    [Fact]
+    public async Task Editing_the_path_after_the_save_dialog_drops_its_consent()
+    {
+        var chosen = ExistingFile();
+        var typed = ExistingFile();
+        try
+        {
+            var (vm, session, picker) = Create();
+            vm.IsReceive = true;
+            vm.HostFile = "A.B";
+            picker.Result = chosen;
+            await vm.BrowseCommand.ExecuteAsync(null);
+            vm.LocalPath = typed;
+
+            await vm.StartCommand.ExecuteAsync(null);
+
+            Assert.True(vm.IsForm);
+            Assert.Contains("already exists", vm.ValidationMessage);
+            Assert.Empty(session.Calls);
+        }
+        finally { File.Delete(chosen); File.Delete(typed); }
+    }
+
+    [Fact]
+    public async Task Appending_to_an_existing_typed_file_needs_no_consent()
+    {
+        var existing = ExistingFile();
+        try
+        {
+            var (vm, session, _) = Create();
+            vm.IsReceive = true;
+            vm.LocalPath = existing;
+            vm.HostFile = "A.B";
+            vm.Append = true;
+
+            await vm.StartCommand.ExecuteAsync(null);
+
+            Assert.Equal(["transfer:Receive:A.B"], session.Calls);
+            Assert.True(vm.IsDone);
+        }
+        finally { File.Delete(existing); }
+    }
 }
