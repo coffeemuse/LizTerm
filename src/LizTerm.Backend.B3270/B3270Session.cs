@@ -66,10 +66,11 @@ public sealed class B3270Session : IEmulatorSession
             {
                 _wireLog = new WireLog(path);
             }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException)
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException or NotSupportedException or IOException)
             {
-                // DirectoryNotFoundException is already an IOException; wrap it (and access-denied) into the
-                // exact IOException type so callers can catch one type for every unopenable path.
+                // DirectoryNotFoundException (an IOException subclass), ArgumentException (e.g. an empty path),
+                // and NotSupportedException (a malformed path) are all wrapped into the exact IOException type
+                // so callers can catch one type for every unopenable path.
                 throw new IOException(ex.Message, ex);
             }
         }
