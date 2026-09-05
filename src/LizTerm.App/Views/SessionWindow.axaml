@@ -16,6 +16,8 @@
         <MenuItem Header="_Connect" Command="{Binding ConnectCommand}" />
         <MenuItem Header="_Disconnect" Command="{Binding DisconnectCommand}" />
         <Separator />
+        <MenuItem x:Name="FileTransferMenuItem" Header="File _Transfer..." Click="OnFileTransferClick" IsEnabled="{Binding IsConnected}" />
+        <Separator />
         <MenuItem Header="C_lose" Click="OnCloseClick" />
       </MenuItem>
       <MenuItem Header="_Edit">

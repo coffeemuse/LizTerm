@@ -13,6 +13,15 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public List<string> Calls { get; } = [];
     public Exception? ConnectException { get; set; }
     public Exception? ActionException { get; set; }
+    public FileTransferRequest? LastTransferRequest { get; private set; }
+    public IProgress<long>? TransferProgress { get; private set; }
+    public CancellationToken TransferToken { get; private set; }
+    public FileTransferResult TransferResult { get; set; } = new(true, "Transfer complete, 12 bytes transferred");
+    /// <summary>When set, TransferAsync throws it (after TransferCompletion, if that is set too).</summary>
+    public Exception? TransferException { get; set; }
+    /// <summary>When set, TransferAsync waits for it before answering, so a test can push progress through
+    /// TransferProgress and cancel through TransferToken while the dialog is in its Running phase.</summary>
+    public TaskCompletionSource? TransferCompletion { get; set; }
 
     public event EventHandler<ScreenSnapshot>? ScreenUpdated;
     public event EventHandler<KeyboardStatus>? StatusChanged;
@@ -31,6 +40,17 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public Task TypeTextAsync(string text) => Record("type:" + text);
     public Task PasteTextAsync(string text) => Record("paste:" + text);
     public Task MoveCursorAsync(int row, int column) => Record($"move:{row},{column}");
+
+    public async Task<FileTransferResult> TransferAsync(FileTransferRequest request, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"transfer:{request.Direction}:{request.HostFile}");
+        LastTransferRequest = request;
+        TransferProgress = progress;
+        TransferToken = cancellationToken;
+        if (TransferCompletion is { } completion) await completion.Task;
+        if (TransferException is not null) throw TransferException;
+        return TransferResult;
+    }
 
     public ValueTask DisposeAsync()
     {

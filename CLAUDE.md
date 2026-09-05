@@ -40,8 +40,14 @@ works) as a development override. `native/cache`, `native/build-tmp`, and `nativ
 
 Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG` (append every protocol
 line in both directions to this file; the fault message tells users to set it), `LIZTERM_TEST_HOST`
-(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports one skipped test; add
-`LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate).
+(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports two skipped tests; add
+`LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
+`LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
+which logs on to TSO, sends and receives `LIZTERM.ITEST` under the user's prefix, and deletes it; without them that
+test skips. The credentials are typed through the session, so a wire log of that run holds the password on its
+outbound side and is never committed. On Robert's Mac the three live-lane variables are kept in
+`~/.config/lizterm-test.env` (outside the repo); `source` it in the shell that runs `dotnet test` rather than
+exporting values on a command line.
 
 ### Avalonia Developer Tools MCP
 
@@ -62,8 +68,9 @@ background with `LIZTERM_B3270_PATH=/opt/homebrew/bin/b3270 nohup dotnet run --p
 --no-build &` (a fresh worktree has no `native/out`, so the override is required), then `attach-to-app` with
 no arguments to list apps and again with `id` set to the pid. `tree` with no node returns the window roots;
 a dialog opened by `input` Click appears there as a new root, but `search` does not find windows opened
-after its first query, so re-list roots instead. Menu popups never appear as roots, so menus cannot be driven through the
-inspector; to reach the picker and the profile editor, launch a second instance with no profile argument. `props` returns `bindingExpression` next to each value,
+after its first query, so re-list roots instead. Menu popups never appear as roots, but a menu item can still be reached: `input` Click on the top-level menu
+header, then Click on the item (verified 2026-09-04 by opening the File Transfer dialog, which then appears as a
+new root). To reach the picker and the profile editor, launch a second instance with no profile argument. `props` returns `bindingExpression` next to each value,
 which is the quickest check that a control reached the view model; `IsEnabled` on a command-bound button
 reads `True` even while the tree shows `:disabled`, so check `IsEffectivelyEnabled`. The app writes real
 profiles to the per-OS config directory, so Cancel any editor dialog you drove rather than Save, and kill
@@ -80,6 +87,8 @@ its own copy before expecting the key to reach the server.
 `tools/wirelog-to-fixture.sh <wire.log> <out.jsonl>` turns a `LIZTERM_WIRE_LOG` file from a real session into
 the same format (inbound lines only, prefix stripped); `gateway-login-tls.jsonl` was made that way and covers TLS,
 plain `connected-3270`, and a host-initiated disconnect.
+`indfile-tso-roundtrip.jsonl` is the inbound side of the live IND$FILE round trip against MVS/CE, trimmed to the two
+transfers; `IndicationParserTests` asserts its `ft` sequence.
 Fixtures live in `tests/LizTerm.Backend.B3270.Tests/Fixtures/` and its README documents each one,
 including why `ibmlink-help.jsonl` was recorded with step `4r` instead of play-to-EOF. Every field bug is
 supposed to add a trimmed fixture.
@@ -111,6 +120,15 @@ the backend tests.
   zero-origin, so `MoveCursorAsync` passes coordinates through unchanged.)
 - `IEmulatorSession` is bound to one `SessionProfile` at construction; `ConnectAsync` takes no host.
   One window = one session = one profile.
+- File transfer is one call: `TransferAsync(FileTransferRequest, IProgress<long>?, CancellationToken)` completes when
+  the transfer ends and returns a `FileTransferResult` whose `Message` is the engine's or host's final text
+  verbatim: success, failure, or cancel (b3270 reports a cancelled transfer as a failure reading "Transfer canceled
+  by user", and a host failure that lands in the same moment keeps the host's text). The byte count travels only
+  through the progress callback. It throws only for non-outcomes: `InvalidOperationException` (never started, or a
+  transfer already running), `OperationCanceledException` (only a token already cancelled on entry), and
+  `BackendUnavailableException` (the engine has died, or dies mid-transfer). `FileTransferRequest.Validate()`
+  checks only what would be refused outright;
+  fields that do not apply to the direction, mode, or host type are ignored downstream, never errors.
 - Threading contract: a backend raises all events on one dedicated thread, in order, and knows nothing
   about UI threads. The App layer marshals.
 
@@ -137,13 +155,25 @@ the backend tests.
 - Startup waits for the `hello` indication (default 10 s) and rejects versions below
   `B3270Session.MinimumVersion` (4.2.0). Process death raises `Faulted` with the stderr tail, drops to
   `Disconnected`, and clears the process so a later `ConnectAsync` spawns a fresh one. `OnProcessEnded`
-  runs on the raw reader thread and must never throw.
+  runs on the raw reader thread and must never throw, and it ignores a process that is no longer `_process`:
+  a start that fails (`TearDown`) clears the slot before killing the process, so the old reader thread cannot
+  disturb a retried start, and only `DisposeAsync` sets `_shuttingDown`, which lasts for the session's life.
 - Protocol details that are easy to get wrong: `String()` interprets backslash escapes so literal
   backslashes are doubled; `PasteString` takes **hex-encoded UTF-8**, not text, and is margin-aware
   where `String` is not; certificate verification is a `Set verifyHostCert` action sent before `Connect`,
   not a host-string prefix; the host string is `[L:][lu@]host:port` with IPv6 hosts bracketed; the model
   argument is `3279-<n>[-E]`; the cursor is nested inside `screen` indications and `enabled:false` hides
   it while keeping its position.
+- `TransferMapper` builds the `Transfer` action's `keyword=value` arguments and omits what b3270 would reject
+  (`cr`/`remap` in binary mode, allocation keywords on receive or on non-TSO hosts) or ignore (`lrecl`/`blksize`
+  without a `recfm`, space fields without `allocation`); receive adds `exist=replace` unless appending. b3270 does
+  not answer the Transfer run until the transfer ends, so that run-result is the outcome; `ft` indications only
+  feed progress (`running` with `bytes`) to the one in-flight `TransferContext`, and stray `ft` lines are dropped.
+  Cancel is a `Transfer(Cancel)` run sent from the token's registration; the slot is held until b3270 has answered
+  it, so a late cancel can never land on the next transfer, and the transfer's own result comes back verbatim (a
+  success is still a success). Every action goes through `RequireProcess`: after the engine dies it throws
+  `BackendUnavailableException` carrying the last fault, and `InvalidOperationException` ("The session has not
+  been started.") is reserved for a session that was never started.
 - `WireLog` is the bug-report mechanism and the fixture recorder: one file, every line, both directions,
   timestamped. `WireLog.FromEnvironment()` returns null when the variable is unset or the file cannot be
   opened, and the open error is surfaced once as a `HostMessage`.
@@ -173,6 +203,21 @@ the backend tests.
   `PasteTextAsync`), and Select All, and nulls `Selection` on every path that sends input to the host. Clipboard
   access goes through `ITextClipboard` (`Clipboard/`), injected like the dispatch delegate; the app passes
   `AvaloniaTextClipboard(window)`, so `App.OpenSession` creates the window before the view model.
+- File transfer: `SessionWindow`'s "File Transfer..." item (enabled while connected) opens `FileTransferWindow`
+  modally with a `FileTransferViewModel` from `SessionViewModel.CreateTransfer(IFilePicker)`, which pre-fills it
+  from `LastTransferRequest` (the last request started from that window; nothing goes to the profile). The view
+  model has Form, Running, and Done phases in one window; Start validates through `TryBuildRequest`, then refuses
+  a receive into an existing local file unless Append is on or the path is the one the OS Save dialog last
+  returned (that dialog asks about overwriting; a typed or remembered path never did). Progress is marshalled
+  through the dispatch delegate and Cancel cancels the token. The window's `Closing` defers to
+  `FileTransferViewModel.TryClose`: the first close of a running transfer cancels it and keeps the window so
+  the outcome shows, and a second close while the engine has still not answered lets the window go, because
+  b3270 only aborts a running transfer on the host's next turn and a stalled host must not pin the dialog, the
+  session window, and Quit behind it. OS file dialogs go through `IFilePicker` (`Files/`), injected like the
+  clipboard; `LocalFileNames` suggests the save name (member or last qualifier, VM `FN.FT`). `TransferLabels`
+  labels the combo boxes. Avalonia propagates an owned dialog's `Closing` cancel to its owner, so the first
+  close of the session window (or quit) while a transfer runs is refused the same way; a forced shutdown's
+  `DisposeAsync` sends Quit and the pending run faults into the dialog's catch.
 - `StartupArguments.Parse` decides between a saved profile name, `host[:port]`, and `[ipv6]:port` from
   the first command-line argument. `ProfileStore` keeps one JSON file per profile under the per-OS config
   directory and silently skips unreadable files.
@@ -191,6 +236,15 @@ the backend tests.
   view-model tests use plain `[Fact]` with `FakeEmulatorSession`, which records calls as strings such as
   `key:PF3` and `move:3,9`. `FakeTextClipboard` holds a `Text` string and an optional `Exception`; control
   tests drive drags with the headless `MouseDown`/`MouseMove`/`MouseUp` helpers and read
-  `TerminalScreen.Selection` directly.
+  `TerminalScreen.Selection` directly. `FakeFilePicker` returns `Result` and records `open` / `save:<name>`;
+  `FakeEmulatorSession.TransferAsync` records `transfer:<Direction>:<HostFile>`, keeps `LastTransferRequest`,
+  exposes `TransferProgress` and `TransferToken`, and waits on `TransferCompletion` when set so a test can drive
+  the Running phase.
+- The integration project's `ScreenWaiter` and `TsoNavigator` drive a TSO logon to READY by screen text only
+  (LOGON, PASSWORD, `***` pauses answered with Enter, menus left with PF3, READY = last non-blank line); extend
+  them with text rules, never coordinates, when a host's screens differ. On MVS/CE the flow is a Hercules banner
+  (Enter), the `===>` logon screen, the password prompt, then READY; the navigator waits 500 ms of screen quiet
+  before keystrokes and before trusting READY, because IND$FILE typed into a half-repainted field fails with
+  `INVALID COMMAND NAME SYNTAX`.
 - Assertions on user-visible status strings (for example `"✕ Not connected"`) are exact; change
   `StatusFormatter` and its tests together.

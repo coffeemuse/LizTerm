@@ -206,4 +206,33 @@ public class B3270SessionLifecycleTests
         Assert.Equal(2, calls);
         Assert.True(fake2!.Started);
     }
+
+    [Fact]
+    public async Task Fault_after_a_failed_start_and_a_retry_is_still_reported()
+    {
+        var calls = 0;
+        FakeB3270Process? fake2 = null;
+        var session = new B3270Session(Profile, () =>
+        {
+            calls++;
+            // The first process never says hello; the second is healthy.
+            var fake = new FakeB3270Process { AutoInitialize = calls != 1 };
+            if (calls == 2) fake2 = fake;
+            return fake;
+        }) { StartupTimeout = TimeSpan.FromMilliseconds(200) };
+        var faults = new List<BackendFault>();
+        var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, f) => { faults.Add(f); faulted.TrySetResult(f); };
+
+        await Assert.ThrowsAsync<BackendUnavailableException>(() => session.StartProcessAsync(CancellationToken.None));
+        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        Assert.Empty(faults);
+
+        fake2!.Exit(137);
+        var fault = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.Equal(137, fault.ExitCode);
+
+        await session.ConnectAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(3, calls);
+    }
 }
