@@ -69,12 +69,17 @@ public static class StatusFormatter
         return $"{fault.Message} (exit code {code}).{detail} Turn on Help > Wire Log and reproduce to capture a log.";
     }
 
-    /// <summary>The attempt never completed. A plain connect to a TLS listener reaches telnet-pending and then
-    /// waits forever, so that exact signature earns the TLS hint.</summary>
-    public static string ConnectTimeout(SessionProfile profile, TimeSpan timeout, bool reachedTelnet)
+    /// <summary>The attempt never completed. An open socket with no 3270 session is as far as the engine's own
+    /// reports go: b3270 sends nothing saying why, so a plain connect to a TLS listener and a host that accepted
+    /// the socket and then stopped talking look identical from here. The line therefore states what was observed
+    /// and offers TLS as one explanation, rather than diagnosing it — following a confident TLS instruction on a
+    /// host that does not speak it turns a timeout into an outright failure.</summary>
+    public static string ConnectTimeout(SessionProfile profile, TimeSpan timeout, bool socketOpened)
     {
         var text = $"Connection to {profile.Host}:{profile.Port} timed out after {timeout.TotalSeconds:0} seconds.";
-        return reachedTelnet && !profile.UseTls ? text + " The host may require TLS. Enable it in the profile." : text;
+        if (!socketOpened) return text;
+        text += " The host accepted the connection but never started a 3270 session.";
+        return profile.UseTls ? text : text + " If that port expects TLS, turn it on in the profile.";
     }
 
     public static string WireLog(bool active) => active ? "● wire log" : "";

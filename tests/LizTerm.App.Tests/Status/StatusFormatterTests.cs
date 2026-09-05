@@ -69,15 +69,15 @@ public class StatusFormatterTests
     }
 
     [Fact]
-    public void Connect_timeout_names_the_host_and_hints_at_tls_only_when_it_applies()
+    public void Connect_timeout_states_what_was_observed_and_offers_tls_only_as_a_possibility()
     {
         var plain = new SessionProfile { Name = "p", Host = "mvs.local", Port = 4270 };
-        Assert.Equal("Connection to mvs.local:4270 timed out after 30 seconds. The host may require TLS. Enable it in the profile.",
-            StatusFormatter.ConnectTimeout(plain, TimeSpan.FromSeconds(30), reachedTelnet: true));
+        Assert.Equal("Connection to mvs.local:4270 timed out after 30 seconds. The host accepted the connection but never started a 3270 session. If that port expects TLS, turn it on in the profile.",
+            StatusFormatter.ConnectTimeout(plain, TimeSpan.FromSeconds(30), socketOpened: true));
         Assert.Equal("Connection to mvs.local:4270 timed out after 30 seconds.",
-            StatusFormatter.ConnectTimeout(plain, TimeSpan.FromSeconds(30), reachedTelnet: false));
-        Assert.Equal("Connection to mvs.local:4270 timed out after 5 seconds.",
-            StatusFormatter.ConnectTimeout(plain with { UseTls = true }, TimeSpan.FromSeconds(5), reachedTelnet: true));
+            StatusFormatter.ConnectTimeout(plain, TimeSpan.FromSeconds(30), socketOpened: false));
+        Assert.Equal("Connection to mvs.local:4270 timed out after 5 seconds. The host accepted the connection but never started a 3270 session.",
+            StatusFormatter.ConnectTimeout(plain with { UseTls = true }, TimeSpan.FromSeconds(5), socketOpened: true));
     }
 
     [Fact]

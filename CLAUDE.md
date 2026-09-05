@@ -112,6 +112,10 @@ the backend tests.
 
 ### Core model (src/LizTerm.Core)
 
+- `ConnectionState` is declared in a convenient order, not b3270's: the fixtures go tcp-pending, telnet-pending,
+  tls-pending, and back to telnet-pending. Group states with `IsConnected()` (safe: the Connected members are
+  declared last) and `HasSocket()` (spelled out, because the states past the TCP connect are not contiguous);
+  do not read the declaration order as a progression.
 - Cells store what b3270 *renders* (foreground, background, `CellRendition` flags), not raw 3270 field
   attributes. Protected/numeric status is not modeled; b3270 enforces field rules and reports violations
   through the keyboard lock (`oerr protected` etc.).
@@ -266,7 +270,10 @@ the backend tests.
   TLS to a host named `3270`, and a port section must be plain digits in 1..65535 (invariant, no sign, no
   surrounding space), so `mvs.local:abc` and `mvs.local:99999` are usage errors rather than hostnames that happen
   to contain a colon. A syntax error prints the usage line and opens the picker. `SessionViewModel` times out a connect after `ConnectTimeout` (30 s; the Disconnect item cancels a
-  pending one), offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard;
+  pending one; the timeout line states only what was observed — an open socket with no 3270 session — and offers
+  TLS as a possibility, because b3270 reports nothing that tells a TLS listener apart from a host that accepted
+  the socket and stopped talking, and confident TLS advice on a host that does not speak it makes things worse),
+  offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard;
   `saveProfile` is null for ad hoc profiles so the checkbox is hidden; the prompt and the save run after the
   connect's catch clauses, never inside one, so their own failures reach the error banner instead of faulting the
   command), and owns the Help menu's wire log toggle and `Engine` for `AboutWindow`. When `IsWireLogging` cannot
