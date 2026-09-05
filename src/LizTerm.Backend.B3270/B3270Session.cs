@@ -508,9 +508,14 @@ public sealed class B3270Session : IEmulatorSession
             // A cancel that raced the outcome still wins: the run may even have succeeded, so make sure a Disconnect
             // went out and was answered before reporting the cancellation.
             await (Volatile.Read(ref disconnect) ?? TryDisconnectQuietlyAsync());
+            // b3270 answers the Connect run before it reports the connection closed; wait for that report so the
+            // session is actually reusable by the time the caller sees the exception (spec 4.1).
+            await WaitForDisconnectedAsync();
             throw new OperationCanceledException(cancellationToken);
         }
         if (result.Success) return;
+        // Same lag as above: the failing run-result arrives before b3270's own not-connected indication.
+        await WaitForDisconnectedAsync();
         var certificate = result.Text.Any(line => line.StartsWith(CertificateFailurePrefix, StringComparison.Ordinal));
         throw new ConnectionFailedException(result.Text, certificate);
     }
@@ -532,20 +537,28 @@ public sealed class B3270Session : IEmulatorSession
     public async Task DisconnectAsync()
     {
         if (_process is null) return;
+        if (ConnectionState == ConnectionState.Disconnected) return;
+        await RunRawAsync([new B3270Action("Disconnect")]);
+        await WaitForDisconnectedAsync();
+    }
+
+    /// <summary>Waits until b3270 reports the connection closed, or until <see cref="DisconnectTimeout"/> passes.
+    /// The source is installed before the state is checked so a report that lands in between is not missed.</summary>
+    private async Task WaitForDisconnectedAsync()
+    {
         var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _disconnected = disconnected;
         try
         {
             if (ConnectionState == ConnectionState.Disconnected) return;
-            await RunRawAsync([new B3270Action("Disconnect")]);
             try
             {
                 await disconnected.Task.WaitAsync(DisconnectTimeout);
             }
             catch (TimeoutException)
             {
-                // b3270 accepted the action but never reported the state; the ConnectionChanged
-                // event still fires if it does later. Hanging the caller would be worse.
+                // b3270 accepted the action but never reported the state; the ConnectionChanged event still
+                // fires if it does later. Hanging the caller would be worse.
             }
         }
         finally
