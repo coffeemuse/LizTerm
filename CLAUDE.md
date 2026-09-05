@@ -148,7 +148,8 @@ the backend tests.
   wedged engine cannot hold the attempt open past its own cancellation. After a failed or cancelled Connect run,
   `ConnectAsync` waits for the `Disconnected` state, bounded by the same `DisconnectTimeout` (5 s), before
   throwing, the same wait `DisconnectAsync` uses; b3270 answers the run before it reports `not-connected`, and on the real gateway that
-  report lags by up to a few seconds. `Engine` names the binary, its source (`Bundled` or `Override`), and after
+  report lags by up to a few seconds. `Engine` names the binary, its source (`Bundled`, `Override`, or `Unknown`
+  when it was never located, which About renders as "not found" rather than borrowing a provenance), and after
   the hello its version. `WireLogPath`, `StartWireLog`, `StopWireLog` make the wire log a session capability
   that survives an engine restart. `AppPaths` owns the per-OS config root with `profiles` and `logs` beneath it.
 
