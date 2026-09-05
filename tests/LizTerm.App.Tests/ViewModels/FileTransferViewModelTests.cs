@@ -250,7 +250,7 @@ public class FileTransferViewModelTests
         Assert.Equal(2048, vm.BytesTransferred);
         Assert.Equal(2048, vm.ProgressValue);
 
-        session.TransferResult = new FileTransferResult(true, "Transfer complete, 2048 bytes transferred", 2048);
+        session.TransferResult = new FileTransferResult(true, "Transfer complete, 2048 bytes transferred");
         session.TransferCompletion.SetResult();
         await run;
 
@@ -275,6 +275,7 @@ public class FileTransferViewModelTests
             vm.HostFile = "A.B";
             session.TransferCompletion = Pending();
             var run = vm.StartCommand.ExecuteAsync(null);
+            await WaitUntilAsync(() => vm.TotalBytes is not null, "the file length");
             Assert.Equal(11, vm.TotalBytes);
             Assert.False(vm.IsProgressIndeterminate);
             Assert.Equal(11, vm.ProgressMaximum);
@@ -284,6 +285,48 @@ public class FileTransferViewModelTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    /// <summary>The length is read off the calling thread, so a slow volume holds up neither the request nor the
+    /// UI; the request is therefore already on its way when the length arrives.</summary>
+    [Fact]
+    public async Task The_send_is_requested_before_the_local_file_length_is_known()
+    {
+        var path = Path.GetTempFileName();
+        await File.WriteAllTextAsync(path, "hello world", TestContext.Current.CancellationToken);
+        try
+        {
+            var (vm, session, _) = Create();
+            vm.LocalPath = path;
+            vm.HostFile = "A.B";
+            session.TransferCompletion = Pending();
+            var callsWhenLengthArrived = -1;
+            vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(vm.TotalBytes) && vm.TotalBytes is not null) callsWhenLengthArrived = session.Calls.Count;
+            };
+
+            var run = vm.StartCommand.ExecuteAsync(null);
+            await WaitUntilAsync(() => vm.TotalBytes is not null, "the file length");
+
+            Assert.Equal(1, callsWhenLengthArrived);
+            session.TransferCompletion.SetResult();
+            await run;
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, string what)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
+            await Task.Delay(5, TestContext.Current.CancellationToken);
         }
     }
 
@@ -323,13 +366,13 @@ public class FileTransferViewModelTests
         Assert.Equal("Cancelling...", vm.StatusText);
         Assert.Equal(4096, vm.BytesTransferred);
 
-        session.TransferException = new OperationCanceledException();
+        session.TransferResult = new FileTransferResult(false, "Transfer canceled by user");
         session.TransferCompletion.SetResult();
         await run;
 
         Assert.True(vm.IsDone);
         Assert.False(vm.Succeeded);
-        Assert.Equal("Transfer cancelled.", vm.ResultMessage);
+        Assert.Equal("Transfer canceled by user", vm.ResultMessage);
     }
 
     [Fact]
@@ -338,7 +381,7 @@ public class FileTransferViewModelTests
         var (vm, session, _) = Create();
         vm.LocalPath = "/nonexistent/a.txt";
         vm.HostFile = "A.B";
-        session.TransferResult = new FileTransferResult(false, "TRANS17 Miscellaneous I/O error", 0);
+        session.TransferResult = new FileTransferResult(false, "TRANS17 Miscellaneous I/O error");
 
         await vm.StartCommand.ExecuteAsync(null);
         Assert.True(vm.IsDone);
@@ -398,7 +441,7 @@ public class FileTransferViewModelTests
         var (vm, session, _) = Create();
         vm.LocalPath = "/nonexistent/a.txt";
         vm.HostFile = "A.B";
-        session.TransferResult = new FileTransferResult(false, "", 0);
+        session.TransferResult = new FileTransferResult(false, "");
 
         await vm.StartCommand.ExecuteAsync(null);
 

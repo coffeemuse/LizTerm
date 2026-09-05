@@ -268,7 +268,7 @@ public partial class FileTransferViewModel : ObservableObject
         }
         Started?.Invoke(request);
 
-        TotalBytes = request.Direction == TransferDirection.Send ? TryFileLength(request.LocalPath) : null;
+        TotalBytes = null;
         BytesTransferred = 0;
         StatusText = "Waiting for the host...";
         IsCancelling = false;
@@ -278,7 +278,12 @@ public partial class FileTransferViewModel : ObservableObject
         _cts = cts;
         try
         {
-            var result = await _session.TransferAsync(request, new DispatchedProgress(this), cts.Token);
+            var transfer = _session.TransferAsync(request, new DispatchedProgress(this), cts.Token);
+            // The bar stays indeterminate until the length is known. The stat runs after the request is away and
+            // off this thread, because a path on a sleeping network volume can block it for the mount timeout.
+            if (request.Direction == TransferDirection.Send)
+                TotalBytes = await Task.Run(() => TryFileLength(request.LocalPath));
+            var result = await transfer;
             if (result.Succeeded)
                 Finish(true, result.Message);
             else if (string.IsNullOrWhiteSpace(result.Message))
@@ -288,6 +293,8 @@ public partial class FileTransferViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
+            // Only a token cancelled before the call: a cancel of a running transfer comes back as a failed
+            // result carrying the engine's own text.
             Finish(false, "Transfer cancelled.");
         }
         catch (Exception ex)

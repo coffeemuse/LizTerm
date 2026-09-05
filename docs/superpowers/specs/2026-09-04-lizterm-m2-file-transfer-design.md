@@ -93,7 +93,7 @@ public sealed record FileTransferRequest
     public string? Validate();
 }
 
-public sealed record FileTransferResult(bool Succeeded, string Message, long Bytes);
+public sealed record FileTransferResult(bool Succeeded, string Message);
 ```
 
 `Validate()` checks, in this order, first failure wins:
@@ -113,17 +113,19 @@ Fields that do not apply to the direction, mode, or host type are not errors; th
 them (section 4.1). This lets the dialog keep its Advanced fields filled when the user switches
 from Send to Receive or from TSO to VM.
 
-`FileTransferResult.Message` is the engine's or host's final text, unaltered, on success and on
-failure. `Bytes` is the last progress count seen, zero if none.
+`FileTransferResult.Message` is the engine's or host's final text, unaltered, on success, on
+failure, and on a cancel. The byte count travels through the progress callback only.
 
 `IEmulatorSession` gains `TransferAsync` as shown in section 2. Contract:
 
-- Completes when the transfer ends. A transfer the engine or host refuses or aborts is a result
-  with `Succeeded` false.
-- Throws `InvalidOperationException` when the session has not been started or a transfer is
-  already in progress on this session; `OperationCanceledException` when the token was cancelled
-  and the engine then reported the transfer as failed; `BackendUnavailableException` when the
-  engine dies during the transfer. A success result that arrives after a cancel request is
+- Completes when the transfer ends. A transfer the engine or host refuses, aborts, or cancels is
+  a result with `Succeeded` false: a cancel requested through the token comes back as the engine's
+  own text ("Transfer canceled by user"), and a host failure that lands in the same moment keeps
+  the host's text rather than being rewritten as a cancel.
+- Throws `InvalidOperationException` when the session was never started or a transfer is already
+  in progress on this session; `OperationCanceledException` only when the token was already
+  cancelled on entry; `BackendUnavailableException`, carrying the last fault, when the engine has
+  died or dies during the transfer. A success result that arrives after a cancel request is
   returned as success.
 - `progress.Report(bytes)` is called on the backend thread, in order, like every event. It may be
   called zero times.
@@ -173,25 +175,29 @@ on receive or on the wrong host type, which is why they are omitted rather than 
 ### 4.2 Session state
 
 `B3270Session` holds one nullable in-flight transfer context (`IProgress<long>? Progress`,
-`long Bytes`). `TransferAsync`:
+`Task? Cancel`). `TransferAsync`:
 
-1. `ThrowIfCancellationRequested()`. Throw `InvalidOperationException("The session has not been
-   started.")` if there is no process, and `InvalidOperationException("A file transfer is already in
-   progress.")` if the slot is taken; the slot is claimed atomically.
+1. `ThrowIfCancellationRequested()`. `RequireProcess()`: with no process this throws
+   `BackendUnavailableException` carrying the last fault when the engine died, otherwise
+   `InvalidOperationException("The session has not been started.")`. Throw
+   `InvalidOperationException("A file transfer is already in progress.")` if the slot is taken; the
+   slot is claimed atomically.
 2. Send `TransferMapper.ToAction(request)` through `RunRawAsync`. The run-result arrives when the
    transfer ends.
-3. Register on the token: send `CancelAction` through a fire-and-forget `RunRawAsync`, any
-   exception swallowed. b3270 answers "No transfer pending." when the transfer already ended, which
-   is harmless.
-4. Await the run-result. If it failed and the token is cancelled, throw
-   `OperationCanceledException(token)`. Otherwise return `new FileTransferResult(result.Success,
-   string.Join("\n", result.Text), context.Bytes)`.
-5. Clear the slot in `finally`. Engine death already faults every pending run with
+3. Register on the token: send `CancelAction` through `RunRawAsync` off the cancelling thread, any
+   exception swallowed, and keep that task on the context. b3270 answers "No transfer pending."
+   when the transfer already ended, which is harmless.
+4. Await the run-result and return `new FileTransferResult(result.Success,
+   string.Join("\n", result.Text))` as it is: b3270 reports a cancelled transfer as a failure with
+   its own text, so no rewriting is needed and a host failure that races the cancel keeps its text.
+5. In `finally`, await the cancel task if one was started, then clear the slot: the slot is held
+   until b3270 has answered the cancel, so a late `Transfer(Cancel)` can never land on a transfer
+   started after this one. Engine death already faults every pending run with
    `BackendUnavailableException` (see `OnProcessEnded`), so the exception propagates and the slot
    is freed on the same path.
 
 `HandleStateIndication` gains a case for `FtIndication`: when a transfer is in flight and the
-indication carries `Bytes`, store it and call `Progress?.Report`. Everything else about the
+indication carries `Bytes`, call `Progress?.Report`. Everything else about the
 indication (`awaiting`, `aborting`, `complete`, `Cause`) is ignored, and an `ft` indication with no
 transfer in flight is dropped. `FtIndication` is already parsed by `IndicationParser`.
 
@@ -244,7 +250,9 @@ which method was called and the suggested name. The pair mirrors `ITextClipboard
   memory.
 - `public FileTransferViewModel CreateTransfer(IFilePicker picker)`, which constructs the dialog
   view model around the same `IEmulatorSession` and dispatch delegate, pre-filled from
-  `LastTransferRequest`, and subscribes to its `Started` event to store each started request.
+  `LastTransferRequest`, and subscribes to its `Started` event to store each started request and
+  to clear `Selection`: a transfer types the IND$FILE command into the screen, so it is host input
+  like every other path that nulls the selection.
 
 The session view model does not track the transfer's progress or outcome; the dialog does.
 
@@ -304,9 +312,12 @@ Commands:
   path is not the remembered consented one, shows "<name> already exists. Choose it with Browse...
   to replace it, or turn on Append." and stops; otherwise raises `Started`, enters Running with a fresh
   `CancellationTokenSource`, and awaits `session.TransferAsync(request, progress, token)` where
-  `progress` marshals each report through the dispatch delegate. The result enters Done with its
-  message and success flag. `OperationCanceledException` enters Done failed with "Transfer
-  cancelled."; any other exception enters Done failed with its message.
+  `progress` marshals each report through the dispatch delegate; when sending, the local file's
+  length is read off the calling thread after the request is away (a sleeping network volume can
+  block the stat for the mount timeout), so the bar is indeterminate until it arrives. The result
+  enters Done with its message and success flag, a cancel included (the engine's own "Transfer
+  canceled by user"). `OperationCanceledException` (only a token cancelled before the call) enters
+  Done failed with "Transfer cancelled."; any other exception enters Done failed with its message.
 - `CancelTransferCommand` (can execute in Running and not already cancelling): sets `IsCancelling`
   and cancels the token.
 - `BackCommand` (can execute in Done): returns to Form with every field as it was.
@@ -353,7 +364,10 @@ session window's error bar keeps showing session-level faults only.
   disconnect as today.
 - Engine death: `BackendUnavailableException` reaches Done as a failure; the session window's
   Faulted path shows the stderr tail in its error bar as today.
-- Cancel: "Transfer cancelled." in Done. A success that beats the cancel is shown as success.
+- Cancel: the engine's own "Transfer canceled by user" in Done; a host failure that lands in the
+  same moment shows the host's text instead. A success that beats the cancel is shown as success.
+- Engine death before Start: Done shows the fault ("The emulator engine (b3270) exited
+  unexpectedly.") rather than a message about a session that was never started.
 - Client-side file handling: b3270 reads and writes the local file. LizTerm only reads its length
   for the send progress bar and falls back to an indeterminate bar if that throws.
 - Keyboard lock: b3270 locks the keyboard for the transfer's duration and the status bar renders
@@ -380,13 +394,14 @@ Backend:
   every Advanced field set emits none of them; buffer size and extra options; a path with spaces
   passes through unchanged; `CancelAction`.
 - `B3270SessionTransferTests.cs` on `FakeB3270Process` with `RunResponder` holding the Transfer
-  run open: `running` indications drive `progress` in order and the result carries the last count;
-  a failed run-result with host text is a failed result with that text; cancelling the token sends
-  `Transfer(Cancel)` and a following failed run-result becomes `OperationCanceledException`; a
-  success result after a cancel is returned as success; a second `TransferAsync` while one is
-  pending throws and sends nothing; process exit mid-transfer throws `BackendUnavailableException`
-  and a later transfer is accepted; `ft` indications with no transfer in flight are ignored; a
-  cancelled token before the call throws without sending.
+  run open: `running` indications drive `progress` in order; a failed run-result with host text is
+  a failed result with that text; cancelling the token sends `Transfer(Cancel)` and a following
+  failed run-result keeps the engine's text; a host failure after a cancel keeps the host's text;
+  the slot is held until the cancel run is answered; a success result after a cancel is returned as
+  success; a second `TransferAsync` while one is pending throws and sends nothing; process exit
+  mid-transfer throws `BackendUnavailableException` and a later transfer is accepted; a transfer
+  after engine death throws `BackendUnavailableException` with the fault; `ft` indications with no
+  transfer in flight are ignored; a cancelled token before the call throws without sending.
 - `ReplayTests` or `IndicationParserTests` gains a case that feeds `indfile-tso-roundtrip.jsonl`
   through the parser and asserts the `ft` state sequence `awaiting`, `running`..., `complete` with
   `success` true, and that every line parses.

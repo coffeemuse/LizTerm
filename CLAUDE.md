@@ -122,9 +122,12 @@ the backend tests.
   One window = one session = one profile.
 - File transfer is one call: `TransferAsync(FileTransferRequest, IProgress<long>?, CancellationToken)` completes when
   the transfer ends and returns a `FileTransferResult` whose `Message` is the engine's or host's final text
-  verbatim, success or failure. It throws only for non-outcomes: `InvalidOperationException` (not started, or a
-  transfer already running), `OperationCanceledException` (the token cancelled it and the engine confirmed), and
-  `BackendUnavailableException`. `FileTransferRequest.Validate()` checks only what would be refused outright;
+  verbatim: success, failure, or cancel (b3270 reports a cancelled transfer as a failure reading "Transfer canceled
+  by user", and a host failure that lands in the same moment keeps the host's text). The byte count travels only
+  through the progress callback. It throws only for non-outcomes: `InvalidOperationException` (never started, or a
+  transfer already running), `OperationCanceledException` (only a token already cancelled on entry), and
+  `BackendUnavailableException` (the engine has died, or dies mid-transfer). `FileTransferRequest.Validate()`
+  checks only what would be refused outright;
   fields that do not apply to the direction, mode, or host type are ignored downstream, never errors.
 - Threading contract: a backend raises all events on one dedicated thread, in order, and knows nothing
   about UI threads. The App layer marshals.
@@ -166,8 +169,11 @@ the backend tests.
   without a `recfm`, space fields without `allocation`); receive adds `exist=replace` unless appending. b3270 does
   not answer the Transfer run until the transfer ends, so that run-result is the outcome; `ft` indications only
   feed progress (`running` with `bytes`) to the one in-flight `TransferContext`, and stray `ft` lines are dropped.
-  Cancel is a fire-and-forget `Transfer(Cancel)` registered on the token; a failed result after a cancel becomes
-  `OperationCanceledException`, a success is still a success.
+  Cancel is a `Transfer(Cancel)` run sent from the token's registration; the slot is held until b3270 has answered
+  it, so a late cancel can never land on the next transfer, and the transfer's own result comes back verbatim (a
+  success is still a success). Every action goes through `RequireProcess`: after the engine dies it throws
+  `BackendUnavailableException` carrying the last fault, and `InvalidOperationException` ("The session has not
+  been started.") is reserved for a session that was never started.
 - `WireLog` is the bug-report mechanism and the fixture recorder: one file, every line, both directions,
   timestamped. `WireLog.FromEnvironment()` returns null when the variable is unset or the file cannot be
   opened, and the open error is surfaced once as a `HostMessage`.

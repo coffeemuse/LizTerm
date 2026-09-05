@@ -88,9 +88,8 @@ public class FileTransferRequestTests
     [Fact]
     public void Result_is_a_plain_record()
     {
-        var result = new FileTransferResult(false, "TRANS17 Miscellaneous I/O error", 0);
+        var result = new FileTransferResult(false, "TRANS17 Miscellaneous I/O error");
         Assert.False(result.Succeeded);
         Assert.Equal("TRANS17 Miscellaneous I/O error", result.Message);
-        Assert.Equal(0, result.Bytes);
     }
 }

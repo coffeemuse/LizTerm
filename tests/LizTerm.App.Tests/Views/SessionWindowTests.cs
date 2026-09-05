@@ -113,7 +113,7 @@ public class SessionWindowTests
     }
 
     [AvaloniaFact]
-    public void File_transfer_click_opens_the_dialog_over_the_session_window_only_while_connected()
+    public async Task File_transfer_click_opens_the_dialog_over_the_session_window_only_while_connected()
     {
         var (window, _, vm, session, _) = Show();
         var item = window.FindControl<MenuItem>("FileTransferMenuItem")!;
@@ -129,8 +129,9 @@ public class SessionWindowTests
 
         transfer.LocalPath = "/nonexistent/a.txt";
         transfer.HostFile = "A.B";
-        transfer.StartCommand.Execute(null);
+        await transfer.StartCommand.ExecuteAsync(null);
         Assert.Equal("A.B", vm.LastTransferRequest?.HostFile);
+        Assert.True(transfer.IsDone);
         dialog.Close();
         Assert.Empty(window.OwnedWindows);
     }
