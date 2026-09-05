@@ -254,7 +254,9 @@ the backend tests.
   forms overlap legal profile names (`CONS01@tk5`, `a:b`) and only `Resolve` has the saved list — an exact name
   match there always wins, including for an argument that is a usage error as a host. A `<letter>:` head counts
   as a prefix only when what follows could be a host at all, so `l:3270` is the host `l` on port 3270 rather than
-  TLS to a host named `3270`. A syntax error prints the usage line and opens the picker. `SessionViewModel` times out a connect after `ConnectTimeout` (30 s; the Disconnect item cancels a
+  TLS to a host named `3270`, and a port section must be plain digits in 1..65535 (invariant, no sign, no
+  surrounding space), so `mvs.local:abc` and `mvs.local:99999` are usage errors rather than hostnames that happen
+  to contain a colon. A syntax error prints the usage line and opens the picker. `SessionViewModel` times out a connect after `ConnectTimeout` (30 s; the Disconnect item cancels a
   pending one), offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard;
   `saveProfile` is null for ad hoc profiles so the checkbox is hidden; the prompt and the save run after the
   connect's catch clauses, never inside one, so their own failures reach the error banner instead of faulting the

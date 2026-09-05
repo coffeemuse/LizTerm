@@ -129,4 +129,39 @@ public class StartupArgumentsTests
         Assert.Equal("tk5", profile.Host);
         Assert.Equal("CONS01", profile.LuName);
     }
+
+    /// <summary>Regression: a port that is not a port used to be folded into the hostname, so a typo connected to
+    /// a host the user never named ("mvs.local:abc" became the host "mvs.local:abc"), and out-of-range values
+    /// went to the engine unchecked.</summary>
+    [Theory]
+    [InlineData("mvs.local:abc")]
+    [InlineData("mvs.local:99999")]
+    [InlineData("mvs.local:0")]
+    [InlineData("mvs.local:-1")]
+    [InlineData("mvs.local:+3270")]
+    [InlineData("mvs.local: 3270")]
+    [InlineData("[fe80::1]:abc")]
+    [InlineData("L:mvs.local:3720x")]
+    public void A_port_that_is_not_a_port_is_a_usage_error(string arg)
+    {
+        var parsed = StartupArguments.Parse([arg]);
+        Assert.Equal(StartupArguments.Usage, parsed.Error);
+        Assert.Null(parsed.Host);
+        Assert.Null(parsed.Resolve([]));
+    }
+
+    [Fact]
+    public void Ports_are_accepted_at_both_bounds()
+    {
+        Assert.Equal(1, StartupArguments.Parse(["mvs.local:1"]).Port);
+        Assert.Equal(65535, StartupArguments.Parse(["mvs.local:65535"]).Port);
+    }
+
+    /// <summary>A bad port is only bad as a host; the text can still name a saved profile.</summary>
+    [Fact]
+    public void A_saved_profile_can_be_named_like_a_bad_port()
+    {
+        var saved = new SessionProfile { Name = "mvs.local:abc", Host = "10.0.0.1", Port = 3270 };
+        Assert.Same(saved, StartupArguments.Parse(["mvs.local:abc"]).Resolve([saved]));
+    }
 }

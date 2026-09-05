@@ -1,3 +1,4 @@
+using System.Globalization;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.Startup;
@@ -56,7 +57,8 @@ public sealed record StartupArguments(
         }
 
         var forceHost = sawPrefix || lu is not null;
-        var (host, port) = ParseHostPort(arg, forceHost);
+        var (host, port) = ParseHostPort(arg, forceHost, out var malformed);
+        if (malformed) return Invalid(argument);
         if (host is null) return forceHost ? Invalid(argument) : new StartupArguments(argument, null, null);
         return new StartupArguments(argument, host, port, tls, verify, lu);
     }
@@ -66,10 +68,19 @@ public sealed record StartupArguments(
     /// 3270 rather than TLS to a host called <c>3270</c>.</summary>
     private static bool CouldBeHost(string rest) => rest.Length > 0 && !rest.All(char.IsAsciiDigit);
 
-    /// <summary>Host and optional port. Without a prefix or LU, a bare word with no dot is a profile name, so this
-    /// returns a null host for it; with one, any non-empty word is a host.</summary>
-    private static (string? Host, int? Port) ParseHostPort(string arg, bool forceHost)
+    /// <summary>A port as x3270 writes one: plain digits in range. Culture-independent and without
+    /// <see cref="NumberStyles"/>' default tolerance for surrounding space and a leading sign, so "+3270",
+    /// " 3270", "-1", "0" and "99999" are all rejected rather than reaching the engine.</summary>
+    private static bool TryParsePort(string text, out int port) =>
+        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out port) && port is >= 1 and <= 65535;
+
+    /// <summary>Host and optional port; a null host means the text does not name one.
+    /// <paramref name="malformed"/> is set when the text carries a port section that is not a port
+    /// ("mvs.local:abc", "mvs.local:99999"). That is a usage error, not a hostname that happens to contain a
+    /// colon, which is what it used to become — silently connecting somewhere the user never named.</summary>
+    private static (string? Host, int? Port) ParseHostPort(string arg, bool forceHost, out bool malformed)
     {
+        malformed = false;
         if (arg.Length == 0) return (null, null);
         if (arg.StartsWith('['))
         {
@@ -77,14 +88,20 @@ public sealed record StartupArguments(
             if (close > 1)
             {
                 var rest = arg[(close + 1)..];
-                int? p = rest.StartsWith(':') && int.TryParse(rest[1..], out var parsed) ? parsed : null;
-                return (arg[1..close], p);
+                if (rest.Length == 0) return (arg[1..close], null);
+                if (rest.StartsWith(':') && TryParsePort(rest[1..], out var bracketed)) return (arg[1..close], bracketed);
+                malformed = true;
+                return (null, null);
             }
         }
 
         var lastColon = arg.LastIndexOf(':');
-        if (lastColon > 0 && arg.IndexOf(':') == lastColon && int.TryParse(arg[(lastColon + 1)..], out var port))
-            return (arg[..lastColon], port);
+        if (lastColon > 0 && arg.IndexOf(':') == lastColon)
+        {
+            if (TryParsePort(arg[(lastColon + 1)..], out var port)) return (arg[..lastColon], port);
+            malformed = true;
+            return (null, null);
+        }
 
         if (forceHost || arg.Contains('.') || arg.Equals("localhost", StringComparison.OrdinalIgnoreCase))
             return (arg, null);
