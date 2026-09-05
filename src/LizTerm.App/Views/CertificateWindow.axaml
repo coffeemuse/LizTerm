@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:LizTerm.App.Controls"
+        x:Class="LizTerm.App.Views.CertificateWindow"
+        Title="Certificate not verified" Width="520" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="16" Spacing="12">
+    <TextBlock x:Name="HostText" TextWrapping="Wrap" />
+    <Border Background="#101010" Padding="10">
+      <TextBlock x:Name="ReasonText" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#F0F0F0" TextWrapping="Wrap" />
+    </Border>
+    <CheckBox x:Name="RememberBox" Content="Always allow for this profile" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="ConnectAnywayButton" Content="Connect Anyway" Click="OnConnectAnywayClick" />
+      <Button x:Name="CancelButton" Content="Cancel" IsDefault="True" IsCancel="True" Click="OnCancelClick" />
+    </StackPanel>
+  </StackPanel>
+</Window>
