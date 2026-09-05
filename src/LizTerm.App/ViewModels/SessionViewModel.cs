@@ -34,7 +34,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     private CancellationTokenSource? _connectCts;
     private bool _connectCancelledByUser;
-    private ConnectionState _furthestState;
+    private bool _socketOpened;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CopyCommand))]
@@ -207,7 +207,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         IsConnected = state.IsConnected();
         ConnectionText = StatusFormatter.Connection(state, Profile.Host);
         TlsText = StatusFormatter.Tls(_session.Tls);
-        if (state > _furthestState) _furthestState = state;
+        if (state.HasSocket()) _socketOpened = true;
     }
 
     [RelayCommand]
@@ -216,7 +216,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private async Task ConnectWithAsync(ConnectOptions options)
     {
         ErrorMessage = null;
-        _furthestState = ConnectionState.Disconnected;
+        _socketOpened = false;
         _connectCancelledByUser = false;
         ConnectionFailedException? certificateFailure = null;
         using (var cts = new CancellationTokenSource(ConnectTimeout))
@@ -230,7 +230,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             {
                 if (_disposed) return;
                 if (!_connectCancelledByUser)
-                    ErrorMessage = StatusFormatter.ConnectTimeout(Profile, ConnectTimeout, _furthestState >= ConnectionState.TelnetPending);
+                    ErrorMessage = StatusFormatter.ConnectTimeout(Profile, ConnectTimeout, _socketOpened);
             }
             catch (ConnectionFailedException ex) when (ex.CertificateVerificationFailed && options.VerifyCertificate != false)
             {

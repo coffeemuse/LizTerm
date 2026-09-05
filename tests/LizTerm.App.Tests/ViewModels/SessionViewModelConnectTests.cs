@@ -27,7 +27,7 @@ public class SessionViewModelConnectTests
     }
 
     [Fact]
-    public async Task Timeout_reports_the_host_with_the_tls_hint_after_telnet_pending()
+    public async Task Timeout_after_the_socket_opened_says_so_and_offers_tls()
     {
         var (vm, session) = Create();
         session.ConnectCompletion = Pending();
@@ -36,11 +36,11 @@ public class SessionViewModelConnectTests
         session.RaiseConnection(ConnectionState.TelnetPending);
         await attempt;
         Assert.True(session.ConnectToken.IsCancellationRequested);
-        Assert.Equal("Connection to fake.host:3270 timed out after 0 seconds. The host may require TLS. Enable it in the profile.", vm.ErrorMessage);
+        Assert.Equal("Connection to fake.host:3270 timed out after 0 seconds. The host accepted the connection but never started a 3270 session. If that port expects TLS, turn it on in the profile.", vm.ErrorMessage);
     }
 
     [Fact]
-    public async Task Timeout_without_telnet_pending_has_no_hint()
+    public async Task Timeout_before_the_socket_opened_just_reports_the_timeout()
     {
         var (vm, session) = Create();
         session.ConnectCompletion = Pending();

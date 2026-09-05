@@ -30,4 +30,20 @@ public class ConnectTypesTests
         Assert.Equal(a, a with { });
         Assert.Equal("4.5.6", (a with { Version = "4.5.6" }).Version);
     }
+
+    /// <summary>b3270 does not emit these in declaration order — the fixtures show tcp-pending, telnet-pending,
+    /// then tls-pending, and telnet-pending again after it — so "has the socket opened" is a grouping test, not
+    /// a comparison against a point in the list.</summary>
+    [Theory]
+    [InlineData(ConnectionState.Disconnected, false)]
+    [InlineData(ConnectionState.Reconnecting, false)]
+    [InlineData(ConnectionState.Resolving, false)]
+    [InlineData(ConnectionState.TcpPending, false)]
+    [InlineData(ConnectionState.TelnetPending, true)]
+    [InlineData(ConnectionState.TlsPending, true)]
+    [InlineData(ConnectionState.ProxyPending, true)]
+    [InlineData(ConnectionState.Connected3270, true)]
+    [InlineData(ConnectionState.ConnectedTn3270E, true)]
+    public void Has_socket_covers_every_state_past_the_tcp_connect(ConnectionState state, bool expected) =>
+        Assert.Equal(expected, state.HasSocket());
 }
