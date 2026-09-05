@@ -44,6 +44,7 @@ public sealed class B3270Session : IEmulatorSession
         _wireLog = wireLog;
         _wireLogError = wireLogError;
         _location = location ?? B3270Location.Unknown;
+        Engine = new EngineInfo("b3270", null, _location.Path, _location.Source);
         CurrentScreen = _buffer.Snapshot();
     }
 
@@ -54,6 +55,7 @@ public sealed class B3270Session : IEmulatorSession
     public ConnectionState ConnectionState { get; private set; } = ConnectionState.Disconnected;
     public TlsInfo? Tls { get; private set; }
     public KeyboardStatus KeyboardStatus { get; private set; } = KeyboardStatus.Initial;
+    public EngineInfo Engine { get; private set; }
 
     public string? WireLogPath => Volatile.Read(ref _wireLog)?.Path;
 
@@ -131,6 +133,8 @@ public sealed class B3270Session : IEmulatorSession
             TearDown();
             throw new BackendUnavailableException($"b3270 version {hello.Version} is too old; {MinimumVersion} or newer is required.");
         }
+
+        Engine = Engine with { Version = $"{hello.Version} ({hello.Build})" };
 
         if (_wireLogError is { } wireLogError && !_wireLogWarningRaised)
         {

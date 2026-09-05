@@ -14,6 +14,9 @@ public interface IEmulatorSession : IAsyncDisposable
     TlsInfo? Tls { get; }
     KeyboardStatus KeyboardStatus { get; }
 
+    /// <summary>The engine binary in use; <see cref="EngineInfo.Version"/> fills in once the engine has started.</summary>
+    EngineInfo Engine { get; }
+
     /// <summary>Path of the active wire log, or null. Every protocol line in both directions is appended there,
     /// timestamped. The log belongs to the session, not to one engine process, so it survives an engine restart.</summary>
     string? WireLogPath { get; }
