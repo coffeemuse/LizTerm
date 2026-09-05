@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LizTerm.App.Clipboard;
+using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
 using LizTerm.App.Status;
 using LizTerm.Core.Screen;
@@ -13,6 +14,9 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly IEmulatorSession _session;
     private readonly Action<Action> _dispatch;
     private readonly ITextClipboard _clipboard;
+    private readonly ICertificatePrompt? _certificatePrompt;
+    private readonly Action<SessionProfile>? _saveProfile;
+    private bool? _verifyOverride;
     private readonly EventHandler<ScreenSnapshot> _onScreenUpdated;
     private readonly EventHandler<KeyboardStatus> _onStatusChanged;
     private readonly EventHandler<ConnectionState> _onConnectionChanged;
@@ -54,11 +58,16 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     /// <param name="dispatch">Marshals a callback onto the UI thread. Tests pass <c>a => a()</c>.</param>
     /// <param name="clipboard">Text clipboard; the app passes <see cref="AvaloniaTextClipboard"/>, tests a fake.</param>
-    public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard)
+    /// <param name="certificatePrompt">Asked on a certificate verification failure; null declines.</param>
+    /// <param name="saveProfile">Persists the profile when the user chooses "Always allow"; null for ad hoc profiles.</param>
+    public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
+        ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null)
     {
         _session = session;
         _dispatch = dispatch;
         _clipboard = clipboard;
+        _certificatePrompt = certificatePrompt;
+        _saveProfile = saveProfile;
 
         _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
         _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
@@ -132,7 +141,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     }
 
     [RelayCommand]
-    private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions());
+    private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions(_verifyOverride));
 
     private async Task ConnectWithAsync(ConnectOptions options)
     {
@@ -149,6 +158,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         {
             if (!_connectCancelledByUser)
                 ErrorMessage = StatusFormatter.ConnectTimeout(Profile, ConnectTimeout, _furthestState >= ConnectionState.TelnetPending);
+        }
+        catch (ConnectionFailedException ex) when (ex.CertificateVerificationFailed && options.VerifyCertificate != false)
+        {
+            await OfferConnectAnywayAsync(ex);
         }
         catch (ConnectionFailedException ex)
         {
@@ -168,13 +181,35 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    /// <summary>Spec 5.3: ask once; on yes reconnect with verification off for this attempt, and with Remember also
+    /// save the profile and keep the override for the window's life. The reconnect cannot fail on verification,
+    /// so this never loops.</summary>
+    private async Task OfferConnectAnywayAsync(ConnectionFailedException failure)
+    {
+        var reason = failure.Lines.Where(line => line != "Connection failed:").ToList();
+        var decision = _certificatePrompt is null
+            ? CertificateDecision.Declined
+            : await _certificatePrompt.AskAsync(Profile.Host, reason, _saveProfile is not null);
+        if (!decision.ConnectAnyway)
+        {
+            ErrorMessage = failure.Message;
+            return;
+        }
+        if (decision.Remember)
+        {
+            _verifyOverride = false;
+            _saveProfile?.Invoke(Profile with { VerifyCertificate = false });
+        }
+        await ConnectWithAsync(new ConnectOptions(VerifyCertificate: false));
+    }
+
     /// <summary>While a connect is pending this cancels it (the backend sends the Disconnect); otherwise it disconnects.</summary>
     [RelayCommand]
     private Task DisconnectAsync()
     {
         if (_connectCts is { } pending)
         {
-            _connectCancelledByUser = true;
+            if (!pending.IsCancellationRequested) _connectCancelledByUser = true;
             pending.Cancel();
             return Task.CompletedTask;
         }
@@ -276,6 +311,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        _connectCts?.Cancel();
         _session.ScreenUpdated -= _onScreenUpdated;
         _session.StatusChanged -= _onStatusChanged;
         _session.ConnectionChanged -= _onConnectionChanged;
