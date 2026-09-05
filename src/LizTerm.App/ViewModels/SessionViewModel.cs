@@ -4,6 +4,7 @@ using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
 using LizTerm.App.Status;
+using LizTerm.Core.Profiles;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
 
@@ -16,6 +17,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly ITextClipboard _clipboard;
     private readonly ICertificatePrompt? _certificatePrompt;
     private readonly Action<SessionProfile>? _saveProfile;
+    private readonly IFolderOpener? _folderOpener;
     private bool? _verifyOverride;
     private readonly EventHandler<ScreenSnapshot> _onScreenUpdated;
     private readonly EventHandler<KeyboardStatus> _onStatusChanged;
@@ -60,14 +62,17 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// <param name="clipboard">Text clipboard; the app passes <see cref="AvaloniaTextClipboard"/>, tests a fake.</param>
     /// <param name="certificatePrompt">Asked on a certificate verification failure; null declines.</param>
     /// <param name="saveProfile">Persists the profile when the user chooses "Always allow"; null for ad hoc profiles.</param>
+    /// <param name="folderOpener">Opens the wire log directory for Help &gt; Show Wire Logs; null for tests that don't cover it.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
-        ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null)
+        ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
+        IFolderOpener? folderOpener = null)
     {
         _session = session;
         _dispatch = dispatch;
         _clipboard = clipboard;
         _certificatePrompt = certificatePrompt;
         _saveProfile = saveProfile;
+        _folderOpener = folderOpener;
 
         _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
         _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
@@ -92,10 +97,69 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         ApplyScreen(session.CurrentScreen);
         ApplyStatus(session.KeyboardStatus);
         ApplyConnection(session.ConnectionState);
+
+        _isWireLogging = session.WireLogPath is not null;
+        WireLogText = StatusFormatter.WireLog(_isWireLogging);
     }
 
     public SessionProfile Profile => _session.Profile;
     public string Title => $"{Profile.Name} - {Profile.Host}";
+
+    /// <summary>Where new wire logs go; the app uses the per-OS logs folder, tests a temp directory.</summary>
+    public string WireLogDirectory { get; set; } = AppPaths.LogsDirectory();
+
+    /// <summary>Help &gt; Wire Log. On starts a new timestamped log for this session; off closes it.</summary>
+    [ObservableProperty] private bool _isWireLogging;
+
+    [ObservableProperty] private string _wireLogText = "";
+
+    public static string WireLogFileName(string profileName, DateTime now)
+    {
+        var safe = new string(profileName.Select(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-' ? c : '_').ToArray());
+        return $"wire-{safe}-{now:yyyyMMdd-HHmmss}.log";
+    }
+
+    partial void OnIsWireLoggingChanged(bool value)
+    {
+        var active = _session.WireLogPath is not null;
+        if (value && !active)
+        {
+            try
+            {
+                Directory.CreateDirectory(WireLogDirectory);
+                _session.StartWireLog(Path.Combine(WireLogDirectory, WireLogFileName(Profile.Name, DateTime.Now)));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                ErrorMessage = "Could not open the wire log: " + ex.Message;
+                IsWireLogging = false;
+                return;
+            }
+        }
+        else if (!value && active)
+        {
+            _session.StopWireLog();
+        }
+        WireLogText = StatusFormatter.WireLog(_session.WireLogPath is not null);
+    }
+
+    /// <summary>Help &gt; Show Wire Logs. Opens the wire log directory in the OS file manager, falling back to
+    /// naming the path in the error banner when the platform cannot open it.</summary>
+    [RelayCommand]
+    private async Task ShowWireLogsAsync()
+    {
+        var directory = WireLogDirectory;
+        try
+        {
+            Directory.CreateDirectory(directory);
+            if (_folderOpener is not null && await _folderOpener.OpenAsync(directory)) return;
+        }
+        catch (Exception)
+        {
+            // Fall through to naming the path.
+        }
+        ErrorMessage = $"Could not open the logs folder. Wire logs are in {directory}.";
+    }
 
     /// <summary>The last request a File Transfer dialog started from this window, so the next dialog opens as the
     /// user left it. Lives as long as the window; nothing is saved to the profile.</summary>

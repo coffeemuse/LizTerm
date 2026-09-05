@@ -135,4 +135,16 @@ public class SessionWindowTests
         dialog.Close();
         Assert.Empty(window.OwnedWindows);
     }
+
+    [AvaloniaFact]
+    public void Help_menu_has_the_wire_log_toggle_bound_to_the_view_model()
+    {
+        var (window, _, vm, _, _) = Show();
+        var item = window.FindControl<MenuItem>("WireLogMenuItem")!;
+        Assert.Equal(MenuItemToggleType.CheckBox, item.ToggleType);
+        Assert.False(item.IsChecked);
+        vm.IsWireLogging = true;
+        Assert.True(item.IsChecked);
+        Assert.Equal("● wire log", window.FindControl<TextBlock>("WireLogStatus")!.Text);
+    }
 }

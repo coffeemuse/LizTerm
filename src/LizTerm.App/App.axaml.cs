@@ -5,6 +5,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
+using LizTerm.App.Files;
 using LizTerm.App.Startup;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -47,7 +48,8 @@ public partial class App : Application
             action => Dispatcher.UIThread.Post(action),
             new AvaloniaTextClipboard(window),
             new AvaloniaCertificatePrompt(window),
-            fromStore ? store.Save : null);
+            fromStore ? store.Save : null,
+            new AvaloniaFolderOpener(window));
         window.DataContext = viewModel;
         _sessions.Add(window);
         window.Closed += async (_, _) =>
