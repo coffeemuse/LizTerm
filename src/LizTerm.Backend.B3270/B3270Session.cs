@@ -109,9 +109,9 @@ public sealed class B3270Session : IEmulatorSession
                 catch (Exception ex) { HostMessage?.Invoke(this, "Internal error handling emulator output: " + ex.Message); }
             }
         }
-        catch (Exception ex) when (_shuttingDown || ex is ObjectDisposedException or IOException)
+        catch (Exception ex) when (_shuttingDown || !ReferenceEquals(process, _process) || ex is ObjectDisposedException or IOException)
         {
-            // Stream closed during shutdown.
+            // Stream closed during shutdown, or by TearDown after the process was already replaced.
         }
         OnProcessEnded(process);
     }
@@ -123,6 +123,12 @@ public sealed class B3270Session : IEmulatorSession
         // process. WaitForExitAsync() can already be faulted (e.g. the process was disposed by
         // TearDown/DisposeAsync before the reader thread noticed EOF), and Faulted/ConnectionChanged
         // are external event handlers we don't control.
+        //
+        // TearDown clears _process before killing the old one, so a torn-down process arrives here
+        // after the slot has moved on and must not touch the pending runs, hello, or fault state
+        // that belong to its successor.
+        if (!ReferenceEquals(process, _process)) return;
+
         int? exitCode = null;
         try
         {
@@ -159,12 +165,16 @@ public sealed class B3270Session : IEmulatorSession
         }
     }
 
+    /// <summary>Drops a process that failed to start. Only <see cref="DisposeAsync"/> sets <c>_shuttingDown</c>:
+    /// that flag is for the session's life, and a start that fails must leave the next attempt able to report
+    /// its own faults. The reader thread of the old process tells it apart by identity instead.</summary>
     private void TearDown()
     {
-        _shuttingDown = true;
-        _process?.Kill();
-        _process?.Dispose();
+        var process = _process;
         _process = null;
+        _hello = null;
+        process?.Kill();
+        process?.Dispose();
     }
 
     public async ValueTask DisposeAsync()

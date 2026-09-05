@@ -128,7 +128,9 @@ failure. `Bytes` is the last progress count seen, zero if none.
 - `progress.Report(bytes)` is called on the backend thread, in order, like every event. It may be
   called zero times.
 - On receive, the request always tells the engine to replace an existing local file. Overwrite
-  consent is the caller's job (the dialog gets it from the OS Save dialog).
+  consent is the caller's job: the dialog gets it from the OS Save dialog and refuses to start a
+  receive into an existing file from any other path (typed, remembered, or edited after browsing)
+  unless Append is on.
 
 ## 4. LizTerm.Backend.B3270
 
@@ -292,9 +294,12 @@ Done properties: `ResultMessage`, `Succeeded`.
 Commands:
 
 - `BrowseCommand`: sending calls `PickFileToSendAsync`; receiving calls `PickSaveLocationAsync`
-  with `LocalFileNames.Suggest(HostFile, HostType)`. A non-null result replaces `LocalPath`.
+  with `LocalFileNames.Suggest(HostFile, HostType)`. A non-null result replaces `LocalPath`, and on
+  receive it is remembered as the one path with overwrite consent (the Save dialog asked).
 - `StartCommand` (can execute in Form): builds the request (`TryBuildRequest`), shows the first
-  validation message inline and stops, or raises `Started`, enters Running with a fresh
+  validation message inline and stops; on a non-append receive into an existing local file whose
+  path is not the remembered consented one, shows "<name> already exists. Choose it with Browse...
+  to replace it, or turn on Append." and stops; otherwise raises `Started`, enters Running with a fresh
   `CancellationTokenSource`, and awaits `session.TransferAsync(request, progress, token)` where
   `progress` marshals each report through the dispatch delegate. The result enters Done with its
   message and success flag. `OperationCanceledException` enters Done failed with "Transfer
@@ -321,8 +326,13 @@ three panels toggled by `IsVisible` bindings on the phase flags:
 - Done: the result message, wrapped, in green for success and the error bar's red for failure,
   with "Another transfer" and Close buttons.
 
-Close calls `Close()`. The window's `Closing` handler, while Running, cancels the close and executes
-`CancelTransferCommand`, so a transfer can never be orphaned behind a closed dialog.
+Close calls `Close()`. The window's `Closing` handler defers to the view model's `TryClose()`: while
+Running and not yet cancelling it cancels the close and executes `CancelTransferCommand`, so a
+transfer is never orphaned by a careless close; a second close while the engine has still not
+answered the cancel is allowed, because b3270 aborts a running transfer only on the host's next turn
+and a host that has stalled would otherwise pin the dialog, the session window, and Quit (the
+dialog is modal, so Disconnect is out of reach). The cancel is already on its way; the backend frees
+its transfer slot when the run finally ends or the session disconnects.
 
 ## 6. Error handling
 
@@ -389,13 +399,15 @@ App:
   each Core rule; derived enabling flags; Start records the request and raises `Started`; the
   Running phase shows waiting text then the byte count and a determinate bar for send; Cancel sets
   cancelling and the token; result, cancellation, and exception each land in Done correctly; Back
-  keeps the fields.
+  keeps the fields; `TryClose` cancels first and allows the second close; a receive into an existing
+  file is refused for a typed, remembered, or edited path, and allowed after the Save dialog chose it
+  or when appending.
 - `ViewModels/SessionViewModelTransferTests.cs`: `CreateTransfer` twice, the second is pre-filled
   from the first's started request; the picker instance reaches the dialog view model.
 - `Files/LocalFileNamesTests.cs`: each suggestion rule.
 - `Views/FileTransferWindowTests.cs` (headless): the three panels switch with the phase; Start is
   reachable and shows a validation message on an empty form; Closing while Running cancels instead
-  of closing.
+  of closing, and a second Closing while the cancel is unanswered closes the window.
 - `Views/SessionWindowTests.cs`: the File Transfer menu item is enabled only while connected.
 
 ### 7.2 Live round trip

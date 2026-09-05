@@ -93,6 +93,30 @@ public class FileTransferWindowTests
         Assert.True(closed);
     }
 
+    [AvaloniaFact]
+    public async Task Closing_again_while_the_cancel_is_unanswered_closes_the_window()
+    {
+        var (window, vm, session) = Show();
+        vm.LocalPath = "/nonexistent/a.txt";
+        vm.HostFile = "A.B";
+        session.TransferCompletion = Pending();
+        var run = vm.StartCommand.ExecuteAsync(null);
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+
+        window.Close();
+        Assert.False(closed);
+        Assert.True(vm.IsCancelling);
+
+        window.Close();
+        Assert.True(closed);
+
+        session.TransferException = new OperationCanceledException();
+        session.TransferCompletion.SetResult();
+        await run;
+        Assert.True(vm.IsDone);
+    }
+
     [Theory]
     [InlineData(TransferHostType.Tso, "TSO")]
     [InlineData(TransferHostType.Vm, "VM")]

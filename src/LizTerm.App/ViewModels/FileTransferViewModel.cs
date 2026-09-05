@@ -18,6 +18,9 @@ public partial class FileTransferViewModel : ObservableObject
     private readonly IFilePicker _picker;
     private readonly Action<Action> _dispatch;
     private CancellationTokenSource? _cts;
+    /// <summary>The path the OS Save dialog last returned. That dialog asks before overwriting, so it is the one
+    /// source of consent to replace an existing local file; a typed or remembered path has none.</summary>
+    private string? _replaceConsentPath;
 
     /// <summary>Raised with the request each time Start passes validation, before the transfer begins.</summary>
     public event Action<FileTransferRequest>? Started;
@@ -143,7 +146,19 @@ public partial class FileTransferViewModel : ObservableObject
             ValidationMessage = "Could not open the file dialog: " + ex.Message;
             return;
         }
-        if (path is not null) LocalPath = path;
+        if (path is null) return;
+        LocalPath = path;
+        if (!IsSend) _replaceConsentPath = path;
+    }
+
+    /// <summary>A receive replaces the local file (the request carries exist=replace), so unless the transfer
+    /// appends, an existing file needs the consent the Save dialog collects. Null when the request may go ahead.</summary>
+    private string? CheckOverwriteConsent(FileTransferRequest request)
+    {
+        if (request.Direction != TransferDirection.Receive || request.Append) return null;
+        if (string.Equals(request.LocalPath, _replaceConsentPath, StringComparison.Ordinal)) return null;
+        if (!File.Exists(request.LocalPath)) return null;
+        return Path.GetFileName(request.LocalPath) + " already exists. Choose it with Browse... to replace it, or turn on Append.";
     }
 
     /// <summary>The request the form describes, or null with <see cref="ValidationMessage"/> set. Non-integer text
@@ -242,6 +257,11 @@ public partial class FileTransferViewModel : ObservableObject
     {
         if (!IsForm) return;
         if (TryBuildRequest() is not { } request) return;
+        if (CheckOverwriteConsent(request) is { } refusal)
+        {
+            ValidationMessage = refusal;
+            return;
+        }
         Started?.Invoke(request);
 
         TotalBytes = request.Direction == TransferDirection.Send ? TryFileLength(request.LocalPath) : null;
@@ -311,6 +331,17 @@ public partial class FileTransferViewModel : ObservableObject
     private void Back()
     {
         if (IsDone) Phase = TransferPhase.Form;
+    }
+
+    /// <summary>The window's Closing policy. A running transfer is cancelled and the window kept, so the outcome
+    /// is seen; a second close while the engine has still not answered lets the window go, because a host that
+    /// never answers must not pin the dialog, the session window, and Quit behind it. The cancel is already on
+    /// its way and the backend frees its transfer slot when the run finally ends.</summary>
+    public bool TryClose()
+    {
+        if (!IsRunning || IsCancelling) return true;
+        CancelTransfer();
+        return false;
     }
 
     private void OnProgress(long bytes)

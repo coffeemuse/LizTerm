@@ -16,15 +16,12 @@ public partial class FileTransferWindow : Window
 
     private FileTransferViewModel? ViewModel => DataContext as FileTransferViewModel;
 
-    /// <summary>A running transfer is never orphaned behind a closed dialog: closing asks the engine to cancel and
-    /// keeps the window until the Done panel shows the outcome.</summary>
+    /// <summary>Closing a running transfer asks the engine to cancel and keeps the window until the Done panel
+    /// shows the outcome; closing again while that answer is still pending lets the window go. The policy is
+    /// <see cref="FileTransferViewModel.TryClose"/>.</summary>
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (ViewModel is { IsRunning: true } vm)
-        {
-            e.Cancel = true;
-            vm.CancelTransferCommand.Execute(null);
-        }
+        if (ViewModel is { } vm && !vm.TryClose()) e.Cancel = true;
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
