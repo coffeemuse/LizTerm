@@ -164,8 +164,8 @@ the backend tests.
   so Connect can turn it into `ConnectionFailedException` instead. `DisconnectAsync` sends Disconnect and then
   waits for the `not-connected` state (or process end), capped by the internal `DisconnectTimeout` of 5 s; it
   sends nothing when already disconnected. That wait is factored into `WaitForDisconnectedAsync`, which
-  `ConnectAsync` also calls after a failed or cancelled Connect run so it never throws while the session is
-  still reported as pending. `ConnectAsync` has no timeout of its own: a plain connect to a TLS
+  `ConnectAsync` also calls after a failed or cancelled Connect run, so it waits for `not-connected` before
+  throwing, unless the report never comes within `DisconnectTimeout` (5 s). `ConnectAsync` has no timeout of its own: a plain connect to a TLS
   listener sits in `telnet-pending` forever because b3270's Connect action never completes.
 - Startup waits for the `hello` indication (default 10 s) and rejects versions below
   `B3270Session.MinimumVersion` (4.2.0). Process death raises `Faulted` with the stderr tail, drops to
@@ -234,9 +234,8 @@ the backend tests.
   labels the combo boxes. Avalonia propagates an owned dialog's `Closing` cancel to its owner, so the first
   close of the session window (or quit) while a transfer runs is refused the same way; a forced shutdown's
   `DisposeAsync` sends Quit and the pending run faults into the dialog's catch.
-- `StartupArguments.Parse` decides between a saved profile name, `host[:port]`, and `[ipv6]:port` from
-  the first command-line argument. `ProfileStore` keeps one JSON file per profile under the per-OS config
-  directory and silently skips unreadable files.
+- `ProfileStore` keeps one JSON file per profile under the per-OS config directory and silently skips
+  unreadable files.
 - The IBM 3270 font is embedded as an Avalonia resource (`avares://LizTerm.App/Assets/Fonts#IBM 3270`)
   and also used for the status bar so it reads as one instrument. Status text comes from
   `StatusFormatter`; the padlock glyph is U+E0A2 because the font's true OIA glyphs are unencoded.

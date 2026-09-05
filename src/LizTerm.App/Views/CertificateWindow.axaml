@@ -9,7 +9,7 @@
     <Border Background="#101010" Padding="10">
       <TextBlock x:Name="ReasonText" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#F0F0F0" TextWrapping="Wrap" />
     </Border>
-    <CheckBox x:Name="RememberBox" Content="Always allow for this profile" />
+    <CheckBox x:Name="RememberBox" Content="Always allow for this profile (stops checking its certificate)" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button x:Name="ConnectAnywayButton" Content="Connect Anyway" Click="OnConnectAnywayClick" />
       <Button x:Name="CancelButton" Content="Cancel" IsDefault="True" IsCancel="True" Click="OnCancelClick" />

@@ -236,7 +236,7 @@ that came from the store, `_store.Save`; ad hoc profiles pass null. Flow in `Con
 
 `CertificateWindow` (modal, owner = session window): title "Certificate not verified"; body
 "{host} presented a certificate that could not be verified:" followed by the reason lines in the
-3270 font; a checkbox "Always allow for this profile" visible only when `canRemember`; buttons
+3270 font; a checkbox "Always allow for this profile (stops checking its certificate)" visible only when `canRemember`; buttons
 "Connect Anyway" and "Cancel", with Cancel the default and Escape mapped to it. Nothing about the
 certificate is stored beyond the profile flag.
 
@@ -393,6 +393,15 @@ with TLS afterwards.
   clock; an xunit timeout on the live tests.
 - Keymap cross-check against wc3270 and Vista TN3270 defaults, as a table in the spec and any
   resulting mapping changes.
+- Certificate fingerprint pinning so "always allow" means this certificate (re-prompt when it
+  changes).
+- Hoist `WaitUntilAsync` into a shared backend test helper.
+- The `_disconnected` single slot under overlapping direct API callers.
+- A port range check in `StartupArguments`.
+- Isolate `SessionFactoryTests`' environment-variable mutation.
+- Test-coverage gaps in Tasks 1, 3, 4, 5, 6, 9, 10, 11, 12, 16; `DisposeAsync` stopping the log
+  before `Quit`; same-second wire-log names; `AboutWindow` fixed height; `_shownAt` at construction;
+  unbracketed ad hoc IPv6 names.
 
 ## 11. Out of scope
 
@@ -439,10 +448,19 @@ into the sections above so the discussion in those sections still reads as it wa
     (timeout) paths are both tested headlessly rather than only the timing math.
 11. `FakeEmulatorSession.Profile` (section 9) is settable, not fixed at construction, so tests can
     swap the bound profile without building a new fake.
-12. The live checks this plan asked for of the certificate dialog, the splash, and About (an
-    Avalonia DevTools pass against the running app) could not run on this machine: no active
-    display was available in this session. They are pending a manual pass.
+12. Live pass on 2026-09-05 with the Avalonia DevTools inspector against the TLS gateway: the
+    certificate prompt renders and works end to end (verify on, failure, verify off, connected), the
+    ad hoc profile hides the checkbox, the status bar shows the TLS state and the wire log indicator,
+    Help > Wire Log shows checked and toggles off, About opens with the version, engine line, and
+    notices. Not yet seen on screen: the splash's rendered appearance (it opened and closed before
+    the inspector attached) and a rejected wire-log toggle through the menu; the display was off for
+    the retry.
 13. After a failed or cancelled Connect run, `ConnectAsync` waits for the `Disconnected` state,
     bounded by the backend's `DisconnectTimeout` (5 s), before throwing, the same wait
     `DisconnectAsync` uses; b3270 answers the run before it reports `not-connected`, and on the real
     gateway that report lags by up to a few seconds.
+14. `StatusFormatter.ConnectTimeout` takes the timeout as a parameter (a consequence of deviation 1);
+    `WireLog.TryFromEnvironment` also catches `ArgumentException`; the splash is `Topmost` and not
+    shown in the taskbar; `SessionViewModel.WireLogDirectory` is a public settable seam for tests.
+15. The certificate checkbox reads "Always allow for this profile (stops checking its certificate)";
+    the notices file also carries the Avalonia and CommunityToolkit.Mvvm MIT notices.

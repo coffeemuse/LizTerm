@@ -113,7 +113,7 @@ public class ReplayTests
         fake.Emit(lines[0]);
 
         var profile = new SessionProfile { Name = "replay", Host = "gateway.test", Port = 4270, UseTls = true, VerifyCertificate = true };
-        var session = new B3270Session(profile, () => fake);
+        await using var session = new B3270Session(profile, () => fake);
         var states = new List<ConnectionState>();
         session.ConnectionChanged += (_, s) => states.Add(s);
 

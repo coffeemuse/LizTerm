@@ -130,7 +130,8 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
                 Directory.CreateDirectory(WireLogDirectory);
                 _session.StartWireLog(Path.Combine(WireLogDirectory, WireLogFileName(Profile.Name, DateTime.Now)));
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
+                or ArgumentException or NotSupportedException)
             {
                 ErrorMessage = "Could not open the wire log: " + ex.Message;
                 IsWireLogging = false;
@@ -221,6 +222,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
+            if (_disposed) return;
             if (!_connectCancelledByUser)
                 ErrorMessage = StatusFormatter.ConnectTimeout(Profile, ConnectTimeout, _furthestState >= ConnectionState.TelnetPending);
         }
