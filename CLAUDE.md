@@ -15,7 +15,7 @@ TN3270 is the behavioral reference when the spec is silent.
 ## Commands
 
 ```bash
-dotnet test LizTerm.slnx                       # full suite (~15 s cold); integration tests skip themselves
+dotnet test LizTerm.slnx                       # full suite (~4 s warm, longer on a cold build); integration tests skip themselves
 dotnet test tests/LizTerm.Backend.B3270.Tests  # one project
 dotnet test tests/LizTerm.Core.Tests --filter "FullyQualifiedName~ProfileStoreTests"                      # one class
 dotnet test tests/LizTerm.Backend.B3270.Tests --filter "FullyQualifiedName~ReplayTests.Ibmlink_help_screen_replays_to_expected_state"  # one test
@@ -279,8 +279,13 @@ the backend tests.
 ### Tests
 
 - Backend tests drive `FakeB3270Process`: `Emit(line)` queues stdout, `Exit(code)` ends it, and by
-  default every incoming `r-tag` gets an automatic success `run-result`. Set `RunResponder` to control
-  replies, `AutoInitialize = false` to suppress the canned `initialize` block. `ReplayTests` feeds a
+  default every incoming `r-tag` gets an automatic success `run-result`. A `Quit` run exits the process rather
+  than being answered, as the real engine does, so `DisposeAsync` returns at once instead of waiting out its
+  two-second timeout and killing the process — that wait alone was most of the backend project's runtime, so do
+  not make `RunResponder` swallow Quit. Set `RunResponder` to control replies, `AutoInitialize = false` to
+  suppress the canned `initialize` block, `FaultStart` to make `Start` throw, `FaultWrite` to make stdin writes
+  throw, `FaultWaitForExit` to simulate a process that is already gone, and `BeforeWrite` to run a hook (a test
+  can make the engine die part-way through a write) before each character reaches stdin. `ReplayTests` feeds a
   fixture through `Emit` and asserts on the resulting snapshot, cursor, and connection-state sequence.
 - App tests run on Avalonia's headless platform: `TestAppBuilder` is registered with
   `[assembly: AvaloniaTestApplication]`, control tests use `[AvaloniaFact]` and `KeyPressQwerty`,
