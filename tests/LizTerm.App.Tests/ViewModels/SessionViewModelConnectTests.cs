@@ -202,6 +202,44 @@ public class SessionViewModelConnectTests
         Assert.Empty(saved);
     }
 
+    /// <summary>The reader's verdict and OpenSSL's can differ (a weak key, a SHA-1 signature, an unsuitable
+    /// purpose), so the pin is written only once the engine has accepted it: a refused retry saves nothing, is
+    /// reported as the engine rejecting the pin, and does not hold the pin for the window, so the next prompt can
+    /// offer Remember again.</summary>
+    [Fact]
+    public async Task A_pin_the_engine_refuses_on_the_retry_is_not_saved_and_is_offered_again_later()
+    {
+        var (vm, session, prompt, _, saved) = CreateWithPrompt(saveable: true);
+        prompt.Decision = new CertificateDecision(ConnectAnyway: true, Remember: true);
+        // The second ask (the refused retry's prompt) declines; the first has already read its decision.
+        prompt.OnAsk = () => { if (prompt.Calls.Count == 1) return; prompt.Decision = CertificateDecision.Declined; };
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(["connect", "connect:pin:AA:BB"], session.Calls);
+        Assert.Equal(2, prompt.Calls.Count);
+        Assert.Equal("The engine rejected the pinned certificate; connecting anyway applies to this attempt only.", prompt.LastRequest!.CannotPinReason);
+        Assert.Empty(saved);
+        Assert.Equal(CertFailure.Message, vm.ErrorMessage);
+
+        await vm.ConnectCommand.ExecuteAsync(null);
+        Assert.Equal(["connect", "connect:pin:AA:BB", "connect"], session.Calls);
+        Assert.True(prompt.LastRequest!.CanPin);
+    }
+
+    /// <summary>The window and the view model decide "same certificate" with one comparison, so a profile file whose
+    /// fingerprint was hand-edited to lower case still reads as the pin the engine just rejected.</summary>
+    [Fact]
+    public async Task A_lower_case_pinned_fingerprint_still_counts_as_the_same_certificate()
+    {
+        var current = new CertificatePin("aa:bb", "CN=fake", "pem");
+        var (vm, _, prompt, _, saved) = CreateWithPrompt(saveable: true, pinned: current);
+        await vm.ConnectCommand.ExecuteAsync(null);
+        var request = prompt.LastRequest!;
+        Assert.False(request.CanPin);
+        Assert.Equal("The engine rejected the pinned certificate; connecting anyway applies to this attempt only.", request.CannotPinReason);
+        Assert.Empty(saved);
+    }
+
     [Fact]
     public async Task A_pin_the_engine_rejects_is_not_offered_again()
     {

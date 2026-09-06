@@ -60,9 +60,8 @@ public class TerminalScreenInputTests
         window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.Shift);
         window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.Control);
         window.KeyPressQwerty(PhysicalKey.PageUp, RawInputModifiers.None);
-        // Ctrl+Insert is also DefaultPlatformSettings' alternate Copy gesture, and TryHandleClipboardKey runs
-        // first (spec 6.2), so it wins over the table's PA1 entry on this headless platform; Ctrl+Home (PA2) is
-        // not a Copy/Paste/SelectAll gesture, so it exercises the same "Ctrl+key reaches a PA key" path cleanly.
+        // Ctrl+Insert is a Copy gesture in every Avalonia hotkey table, checked before the keymap (spec 6.2), so
+        // the table has no PA1 entry for it; Ctrl+Home (PA2) exercises the "Ctrl+key reaches a PA key" path.
         window.KeyPressQwerty(PhysicalKey.Home, RawInputModifiers.Control);
         window.KeyPressQwerty(PhysicalKey.Digit1, RawInputModifiers.Alt);
         window.KeyPressQwerty(PhysicalKey.BracketLeft, RawInputModifiers.Control);
@@ -90,6 +89,46 @@ public class TerminalScreenInputTests
         window.KeyReleaseQwerty(PhysicalKey.ControlLeft, RawInputModifiers.None);
 
         Assert.Equal([TerminalKey.Enter, TerminalKey.PF13, TerminalKey.Reset], keys);
+    }
+
+    /// <summary>A Ctrl release is a tap only when nothing at all happened in between: a wheel turn, a click, or a
+    /// focus move ends the candidate, so a Ctrl+wheel, a Ctrl+click, or a Ctrl held across a dialog never submits
+    /// the screen or resets the keyboard.</summary>
+    [AvaloniaFact]
+    public void Pointer_input_or_focus_loss_between_a_ctrl_press_and_its_release_is_not_a_tap()
+    {
+        var screen = new TerminalScreen { Snapshot = ScreenSnapshot.Empty(24, 80), Height = 400 };
+        var other = new Button { Content = "other" };
+        var panel = new StackPanel();
+        panel.Children.Add(screen);
+        panel.Children.Add(other);
+        var window = new Window { Width = 800, Height = 600, Content = panel };
+        window.Show();
+        screen.Focus();
+        var keys = new List<TerminalKey>();
+        screen.KeyRequested += (_, k) => keys.Add(k);
+        var inside = new Avalonia.Point(40, 40);
+
+        window.KeyPressQwerty(PhysicalKey.ControlRight, RawInputModifiers.Control);
+        window.MouseWheel(inside, new Avalonia.Vector(0, -1), RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.ControlRight, RawInputModifiers.None);
+
+        window.KeyPressQwerty(PhysicalKey.ControlRight, RawInputModifiers.Control);
+        window.MouseDown(inside, MouseButton.Left, RawInputModifiers.Control);
+        window.MouseUp(inside, MouseButton.Left, RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.ControlRight, RawInputModifiers.None);
+
+        window.KeyPressQwerty(PhysicalKey.ControlLeft, RawInputModifiers.Control);
+        other.Focus();
+        screen.Focus();
+        window.KeyReleaseQwerty(PhysicalKey.ControlLeft, RawInputModifiers.None);
+
+        Assert.Empty(keys);
+
+        // The detector still works afterwards: a clean tap is still a tap.
+        window.KeyPressQwerty(PhysicalKey.ControlRight, RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.ControlRight, RawInputModifiers.None);
+        Assert.Equal([TerminalKey.Enter], keys);
     }
 
     [AvaloniaFact]

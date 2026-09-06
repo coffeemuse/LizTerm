@@ -18,7 +18,7 @@ public partial class CertificateWindow : Window
     {
         InitializeComponent();
         var changed = request.Previous is not null && request.Presented is not null
-            && !string.Equals(request.Presented.Sha256, request.Previous.Sha256, StringComparison.OrdinalIgnoreCase);
+            && !CertificateReader.SameFingerprint(request.Presented.Sha256, request.Previous.Sha256);
         Title = changed ? "Certificate changed" : "Certificate not verified";
         HostText.Text = changed
             ? $"{request.Host} presented a certificate that is not the one trusted for this profile."
@@ -31,6 +31,10 @@ public partial class CertificateWindow : Window
         {
             PresentedText.Text = $"Presented: SHA-256 {presented.Sha256}";
             SubjectText.Text = $"Subject: {presented.Subject}";
+            // A pin holds every certificate the host sent, and the engine trusts each of them, so a chain pins the
+            // CA as much as the leaf: say so.
+            if (CertificateReader.CountCertificates(presented.Pem) > 1)
+                RememberBox.Content = "Trust this certificate and its issuing CA for this profile";
         }
         FetchErrorText.IsVisible = request.Presented is null && request.FetchError is not null;
         FetchErrorText.Text = request.FetchError is null ? "" : $"The certificate could not be read: {request.FetchError}";

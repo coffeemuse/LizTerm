@@ -29,10 +29,12 @@ public partial class FileTransferWindow : Window
 
     /// <summary>Escape closes the dialog in every phase, through Closing and so through TryClose: on a running
     /// transfer the first Escape cancels and the window stays until the outcome shows, exactly like Close. Handled
-    /// here rather than with IsCancel on a button because the Running panel has no Close button.</summary>
+    /// here rather than with IsCancel on a button because the Running panel has no Close button. While the cancel
+    /// is unanswered Escape does nothing more: a held key auto-repeats, and a repeat must not become the deliberate
+    /// second close that lets the window go before the outcome shows (the title bar still can).</summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && !e.Handled)
+        if (e.Key == Key.Escape && !e.Handled && ViewModel is not { IsRunning: true, IsCancelling: true })
         {
             e.Handled = true;
             Close();

@@ -105,7 +105,7 @@ public partial class App : Application
             action => Dispatcher.UIThread.Post(action),
             new AvaloniaTextClipboard(window),
             new AvaloniaCertificatePrompt(window),
-            fromStore ? store.Save : null,
+            fromStore ? updated => WritePinBack(store, updated) : null,
             new AvaloniaFolderOpener(window),
             new SslStreamCertificateFetcher());
         window.DataContext = viewModel;
@@ -121,6 +121,11 @@ public partial class App : Application
         window.Show();
         _ = viewModel.ConnectCommand.ExecuteAsync(null);
     }
+
+    /// <summary>The session's profile is fixed at construction, so the pin (and the verification it implies) is
+    /// merged into the profile as it is on disk now rather than written over edits saved from the picker since.</summary>
+    private static void WritePinBack(ProfileStore store, SessionProfile updated) =>
+        store.Update(updated, current => current with { PinnedCertificate = updated.PinnedCertificate, VerifyCertificate = updated.VerifyCertificate });
 
     public void ShowPicker()
     {

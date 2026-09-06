@@ -4,10 +4,12 @@ using LizTerm.Core.Session;
 namespace LizTerm.App.Keyboard;
 
 /// <summary>The built-in defaults: Vista TN3270's table, cross-checked against wc3270 (spec 6.2). Clear has a
-/// second home on Ctrl+Escape because Mac keyboards have no Pause key, PA1 to PA3 a second home on Alt+1 to Alt+3
+/// second home on Ctrl+Escape because Mac keyboards have no Pause key, PA2 and PA3 a second home on Alt+2 and Alt+3
 /// because Mac laptops have no Insert key, and Reset a second home on Ctrl+R (wc3270's) in case a platform never
 /// reports the Left Ctrl tap. Copy, paste, and select-all are platform hotkeys checked before this table and are
-/// deliberately absent from it. Not user-editable yet; see <see cref="Keymap.With"/>.</summary>
+/// deliberately absent from it; that includes Vista's Ctrl+Insert for PA1, which Avalonia lists as a Copy gesture
+/// on every platform (the Meta-based macOS table included), so PA1 lives on Alt+1 alone. Not user-editable yet;
+/// see <see cref="Keymap.With"/>.</summary>
 public static class DefaultKeymap
 {
     private static readonly Keymap Erasing = Build(destructiveBackspace: true);
@@ -42,7 +44,6 @@ public static class DefaultKeymap
         }
         Add(Key.PageUp, TerminalKey.PF7);
         Add(Key.PageDown, TerminalKey.PF8);
-        Add(Key.Insert, TerminalKey.PA1, KeyModifiers.Control);
         Add(Key.Home, TerminalKey.PA2, KeyModifiers.Control);
         Add(Key.PageUp, TerminalKey.PA3, KeyModifiers.Control);
         Add(Key.D1, TerminalKey.PA1, KeyModifiers.Alt);

@@ -286,9 +286,9 @@ unchanged.
   `TotalBytes` when CRLF is added.
 - **Focus after Dismiss.** After the error bar's Dismiss runs, `SessionWindow` focuses the screen control, so the
   next keystroke reaches the host.
-- **Hotkeys respect CanExecute.** `CommandRouting.TryExecute` in `src/LizTerm.App/` runs a relay command only when
-  `CanExecute` is true, and the window's copy, paste, select-all, and key-requested handlers go through it,
-  because the toolkit's `ExecuteAsync` ignores the guard.
+- **Hotkeys respect CanExecute.** Superseded after review (section 11, item 16): the window's copy, paste,
+  select-all, and key-requested handlers call the view model's methods directly, each of which carries its own
+  guard; the relay commands serve the menus only.
 - **Selection property hygiene.** `TerminalScreen` writes its own `Selection` with `SetCurrentValue` so a two-way
   binding survives, and overrides `OnPointerCaptureLost` to reset `SelectionGesture` and release the drag.
 
@@ -408,9 +408,11 @@ Rulings made in planning and execution, recorded here rather than edited into th
 15. Section 6.2's table lists Ctrl+Insert as a home for PA1 on every platform. Ctrl+Insert is also an alternate
     Copy gesture in Avalonia's generic `HotkeyConfiguration` (Windows, Linux, and the headless test platform), and
     `TerminalScreen.OnKeyDown` checks the platform copy/paste/select-all hotkeys before the keymap table (section
-    6.2's own ordering rule) — so on those platforms Ctrl+Insert copies, and PA1 is reached through Alt+1 (its
-    other home) or the Keys menu; only on macOS (Cmd-based hotkeys) does Ctrl+Insert reach PA1 as Vista has it.
-    The screen test's Ctrl-chord row uses Ctrl+Home (PA2) instead, which is unaffected. This footnotes section
+    6.2's own ordering rule) — so Ctrl+Insert copies, and PA1 is reached through Alt+1 (its other home) or the
+    Keys menu. Review correction: Avalonia's `PlatformHotkeyConfiguration` constructor puts Ctrl+Insert into Copy
+    whatever the command modifier, the Meta-based macOS table included, so this holds on macOS as well and the
+    table's Ctrl+Insert row was removed as unreachable. The screen test's Ctrl-chord row uses Ctrl+Home (PA2)
+    instead, which is unaffected. This footnotes section
     6.2's table rather than rewriting it.
 16. Section 7's "hotkeys respect `CanExecute`" rule, applied uniformly, broke `SendKeyAsync`, `CopyAsync`, and
     `PasteAsync`: CommunityToolkit's `AsyncRelayCommand.CanExecute` reports false while a previous execution is in
@@ -421,7 +423,9 @@ Rulings made in planning and execution, recorded here rather than edited into th
     serializes writes under its own lock; clipboard calls are independent), which restores the pre-change
     semantics while their explicit `CanExecute` predicates (`CanCopy`, `IsConnected`) still apply. A
     `SendKeyCompletion` seam was added to `FakeEmulatorSession` and a regression test holds one key's round trip
-    open to prove a second one still lands.
+    open to prove a second one still lands. Review correction: since every routed command re-checked its predicate
+    in its body, the routing and the flags cancelled out; `CommandRouting` and the flags were removed and the
+    window's handlers call the view model's methods directly, the regression test unchanged.
 17. Section 7's "selection property hygiene" bullet did not order ending the drag against releasing pointer
     capture. `TerminalScreen.OnPointerReleased` calls `_gesture.Release()` before `e.Pointer.Capture(null)`,
     because `Capture(null)` raises `OnPointerCaptureLost` synchronously and that override itself calls

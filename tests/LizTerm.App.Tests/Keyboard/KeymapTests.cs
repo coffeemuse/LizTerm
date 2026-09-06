@@ -27,7 +27,6 @@ public class KeymapTests
         { Key.F12, KeyModifiers.Control, TerminalKey.PF24 },
         { Key.PageUp, KeyModifiers.None, TerminalKey.PF7 },
         { Key.PageDown, KeyModifiers.None, TerminalKey.PF8 },
-        { Key.Insert, KeyModifiers.Control, TerminalKey.PA1 },
         { Key.Home, KeyModifiers.Control, TerminalKey.PA2 },
         { Key.PageUp, KeyModifiers.Control, TerminalKey.PA3 },
         { Key.D1, KeyModifiers.Alt, TerminalKey.PA1 },

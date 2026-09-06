@@ -44,7 +44,7 @@ Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
 be started from Help > Wire Log in a session window; files go to `<config>/logs/wire-<profile>-<timestamp>.log`,
 and Show Wire Logs opens that folder. `LIZTERM_TEST_HOST`
-(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports four skipped tests; add
+(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports five skipped tests; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
 `LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
 which logs on to TSO, sends and receives `LIZTERM.ITEST` under the user's prefix, and deletes it; without them that
@@ -234,10 +234,12 @@ the backend tests.
   never inherits the previous one's trust settings (verified: empty values clear them in the same engine). A pinned
   attempt writes the PEM to `Path.GetTempPath()/lizterm-pin-<guid>.pem` (owner-only on Unix) just before that Set
   and deletes it in a `finally` once the Connect run has answered, because x3270 loads `caFile` in `sio_init` for
-  each connection; `acceptHostname` is `any` with a pin since the pin already names the certificate.
-  `LastPinFile` is the test seam. `WaitForDisconnectedAsync` shares one completion source between overlapping
-  callers (`CompareExchange` in, conditional clear out); the field is not `volatile` because `Interlocked` on a
-  volatile field is CS0420.
+  each connection. `acceptHostname` is `any` only for a pin that is one self-signed certificate; a pin that also
+  carries CA certificates makes each of them an OpenSSL trust anchor, so the engine's normal name check stays on to
+  keep a certificate that CA issued for another host from verifying (`CertificateReader.CountCertificates` decides).
+  `LastPinFile` is the test seam. `WaitForDisconnectedAsync` awaits a completion source the connection state owns:
+  completed while the connection is down, replaced by a fresh one in `SetConnectionState` when it comes up, so
+  overlapping waiters share it and a waiter that gives up cannot orphan another.
 - `WireLog` is the bug-report mechanism and the fixture recorder: one file, every line, both directions,
   timestamped. `WireLog.TryFromEnvironment(out error)` returns null when the variable is unset or the file
   cannot be opened; the session raises the open error once as a `HostMessage`. The log is a swappable field
@@ -268,19 +270,20 @@ the backend tests.
   of `KeyChord(Key, Modifiers, Tap)` to `TerminalKey`, built by
   `DefaultKeymap.Create(destructiveBackspace)` (two cached instances) from Vista TN3270's defaults, cross-checked
   against wc3270 in the 3b spec's section 6.2: Escape is Attn, Shift+Escape SysReq, Pause and Ctrl+Escape Clear,
-  Page Up/Down PF7/PF8, Ctrl+Insert/Home/PageUp and Alt+1/2/3 the PA keys, Ctrl+F1..12 and Shift+F1..12 PF13..24,
-  Shift+Enter Newline, Ctrl+R Reset. Ctrl+Insert is also an alternate Copy gesture in Avalonia's generic hotkey
-  table (Windows, Linux, and the headless platform), checked before the keymap, so on those platforms it copies
-  and PA1 is reached through Alt+1 or the Keys menu instead; on macOS (Cmd-based hotkeys) Ctrl+Insert reaches PA1
-  as Vista has it. A Left Ctrl tap is Reset and a Right Ctrl tap is Enter: `ModifierTapDetector`
-  sees a Ctrl key down and the same key up with nothing between (`OnKeyUp` looks up `KeyChord.TapOf`), and focus
-  loss resets it. `Keymap.With` is the seam for user remapping later; nothing else about remapping exists. The
+  Page Up/Down PF7/PF8, Alt+1 and Ctrl+Home/PageUp and Alt+2/3 the PA keys, Ctrl+F1..12 and Shift+F1..12 PF13..24,
+  Shift+Enter Newline, Ctrl+R Reset. Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's
+  `PlatformHotkeyConfiguration` constructor puts Ctrl+Insert into Copy whatever the command modifier (the Meta-based
+  macOS table included), and the screen checks the copy/paste/select-all gestures before the keymap, so Ctrl+Insert
+  copies on every platform and PA1 is reached through Alt+1 or the Keys menu. A Left Ctrl tap is Reset and a Right
+  Ctrl tap is Enter: `ModifierTapDetector` sees a Ctrl key down and the same key up with nothing between (`OnKeyUp`
+  looks up `KeyChord.TapOf`); another key, a pointer press, a wheel turn, focus loss, and the window deactivating
+  all reset it. `Keymap.With` is the seam for user remapping later; nothing else about remapping exists. The
   control's `DestructiveBackspace` property (default true, bound to the profile) picks which table.
-  `CommandRouting.TryExecute[Async]` runs a command only when it `CanExecute`, and every command reached from a
-  keystroke goes through it because CommunityToolkit's `ExecuteAsync` ignores the guard. `SendKeyAsync`, `CopyAsync`,
-  and `PasteAsync` carry `AllowConcurrentExecutions = true`, because CommunityToolkit's async commands report
-  `CanExecute` false while an execution is in flight, and routing keys through `CommandRouting` would otherwise
-  drop a key sent during the previous one's round trip.
+  The screen's key, copy, paste, and select-all events call the view model's public methods (`SendKeyAsync`,
+  `CopyAsync`, `PasteAsync`, `SelectAll`) directly, as `TextEntered` and `CellClicked` always did; each method
+  carries its own guard, and a keystroke is never dropped for arriving while the previous one's round trip is
+  still open. The `[RelayCommand]`s on the same methods serve the menus, which keep CommunityToolkit's default of
+  disabling an async command while it runs.
 - Mouse selection is a `ScreenRegion` (Core; inclusive, zero-based, always normalized). `SelectionGesture`
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the
@@ -386,7 +389,7 @@ the backend tests.
   `connect:pin:<sha256>`. The App and backend test projects each have one `Wait.UntilAsync(condition, what, timeout?)` helper (`Wait.cs`) replacing the private copies the tests used to carry.
   `EnvironmentCollection` is a non-parallel xunit collection in each of the App and backend test projects; the App
   one holds `SessionFactoryTests`, which sets `LIZTERM_B3270_PATH`, and the backend one holds `WireLogTests`, which
-  sets `LIZTERM_WIRE_LOG` (its doc comment still names `LIZTERM_B3270_PATH`, which nothing in that project sets).
+  sets `LIZTERM_WIRE_LOG`.
   `TestCertificates` in the Core tests makes self-signed and CA-signed certificates and re-imports through PKCS#12
   so macOS accepts the key for a loopback SslStream server; the live tests carry a 10 minute xunit timeout;
   `gateway-pinned-login.jsonl` replays a verified pinned connect.

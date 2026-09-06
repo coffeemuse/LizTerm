@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using LizTerm.Core.Security;
@@ -37,6 +38,23 @@ public class CertificateReaderTests
             var leafOnly = CertificateReader.Read([leaf]);
             Assert.False(leafOnly.Pinnable);
             Assert.False(string.IsNullOrWhiteSpace(leafOnly.NotPinnableReason));
+        }
+    }
+
+    /// <summary>The verdict comes from the presented certificates alone: the chain engine must not go and fetch the
+    /// issuer named in the leaf's AIA extension, which the engine never does either, and which would take the OS
+    /// fetch timeout (seconds) on the UI thread. 192.0.2.1 is TEST-NET-1: nothing answers there.</summary>
+    [Fact]
+    public void A_missing_issuer_is_not_fetched_over_the_network()
+    {
+        var (root, leaf) = TestCertificates.CaSigned(caIssuersUrl: "http://192.0.2.1/ca.crt");
+        using (root)
+        using (leaf)
+        {
+            var watch = Stopwatch.StartNew();
+            var presented = CertificateReader.Read([leaf]);
+            Assert.False(presented.Pinnable);
+            Assert.True(watch.Elapsed < TimeSpan.FromSeconds(3), $"the chain build took {watch.Elapsed}, as if it tried the network");
         }
     }
 

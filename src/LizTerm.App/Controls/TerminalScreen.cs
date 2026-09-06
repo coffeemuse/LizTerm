@@ -35,6 +35,7 @@ public sealed class TerminalScreen : Control
     private readonly Typeface _typeface = new(TerminalFont);
     private readonly SelectionGesture _gesture = new();
     private readonly ModifierTapDetector _taps = new();
+    private WindowBase? _window;
     private Keymap Keymap => DefaultKeymap.Create(DestructiveBackspace);
     private double _advancePerEm;
     private double _lineHeightPerEm;
@@ -72,6 +73,8 @@ public sealed class TerminalScreen : Control
     {
         base.OnAttachedToVisualTree(e);
         _attached = true;
+        _window = TopLevel.GetTopLevel(this) as WindowBase;
+        if (_window is not null) _window.Deactivated += OnWindowDeactivated;
         UpdateBlinkTimer(Snapshot);
     }
 
@@ -79,6 +82,8 @@ public sealed class TerminalScreen : Control
     {
         base.OnDetachedFromVisualTree(e);
         _attached = false;
+        if (_window is not null) _window.Deactivated -= OnWindowDeactivated;
+        _window = null;
         UpdateBlinkTimer(null);
     }
 
@@ -171,6 +176,17 @@ public sealed class TerminalScreen : Control
         _taps.Reset();
         base.OnLostFocus(e);
     }
+
+    /// <summary>A wheel turn between a Ctrl press and its release makes the release the end of a chord, not a tap
+    /// (a Ctrl+wheel zoom habit must not submit the screen), and so does the window losing activation while Ctrl is
+    /// down, which moves no keyboard focus.</summary>
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        _taps.Reset();
+        base.OnPointerWheelChanged(e);
+    }
+
+    private void OnWindowDeactivated(object? sender, EventArgs e) => _taps.Reset();
 
     private bool TryHandleClipboardKey(KeyEventArgs e)
     {

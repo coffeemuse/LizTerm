@@ -17,8 +17,9 @@ internal static class TestCertificates
         return request.CreateSelfSigned(notBefore ?? DateTimeOffset.UtcNow.AddDays(-1), notAfter ?? DateTimeOffset.UtcNow.AddDays(30));
     }
 
-    /// <summary>A private CA and a leaf it signed. The leaf carries no private key.</summary>
-    public static (X509Certificate2 Root, X509Certificate2 Leaf) CaSigned()
+    /// <summary>A private CA and a leaf it signed. The leaf carries no private key; with
+    /// <paramref name="caIssuersUrl"/> it also says where its issuer could be fetched from.</summary>
+    public static (X509Certificate2 Root, X509Certificate2 Leaf) CaSigned(string? caIssuersUrl = null)
     {
         using var rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var rootRequest = new CertificateRequest("CN=LizTerm Test CA", rootKey, HashAlgorithmName.SHA256);
@@ -31,6 +32,8 @@ internal static class TestCertificates
         var leafRequest = new CertificateRequest("CN=localhost", leafKey, HashAlgorithmName.SHA256);
         leafRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
         leafRequest.CertificateExtensions.Add(LocalhostNames());
+        if (caIssuersUrl is not null)
+            leafRequest.CertificateExtensions.Add(new X509AuthorityInformationAccessExtension(ocspUris: null, caIssuersUris: [caIssuersUrl]));
         var serial = new byte[8];
         RandomNumberGenerator.Fill(serial);
         serial[0] &= 0x7F;
