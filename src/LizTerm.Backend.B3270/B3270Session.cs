@@ -55,6 +55,12 @@ public sealed class B3270Session : IEmulatorSession
 
     public TimeSpan StartupTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>Where the engine's trust anchors come from when no pin is in force. Defaults to none, which leaves
+    /// the engine on whatever trust it was built with; the App injects the real store in SessionFactory. Defaulting
+    /// to the machine's store would make every test that connects with a verifying profile depend on the roots that
+    /// machine happens to hold.</summary>
+    public ITrustAnchorSource TrustAnchors { get; init; } = NoTrustAnchors.Instance;
+
     public SessionProfile Profile { get; }
     public ScreenSnapshot CurrentScreen { get; private set; }
     public ConnectionState ConnectionState { get; private set; } = ConnectionState.Disconnected;
@@ -568,11 +574,12 @@ public sealed class B3270Session : IEmulatorSession
         var verify = options?.VerifyCertificate ?? Profile.VerifyCertificate;
         // Spec 3.1: verification off means no pin; otherwise the one-shot pin wins over the profile's.
         var pin = verify ? options?.Pin ?? Profile.PinnedCertificate : null;
-        // The engine loads caFile when it builds the TLS context for this connection, inside the Connect run, so the
-        // file has to outlive that run and nothing more (spec 4.1). It holds a public certificate, so a leftover
-        // after a crash is harmless.
-        var pinFile = pin is null ? null : WritePinFile(pin.Pem);
-        LastPinFile = pinFile;
+        // Spec 3: verification off means no CA file at all; otherwise a pin is the whole trust store, and without
+        // one the machine's own anchors are, because a statically linked engine has none it can use (spec 1). A
+        // source with nothing to offer leaves caFile empty: an empty *file* fails the connect outright.
+        var pem = pin?.Pem ?? (verify ? TrustAnchors.ExportPem() : null);
+        var caFile = pem is null ? null : WriteCaFile(pem, pin is null ? "roots" : "pin");
+        LastCaFile = caFile;
         // A pin that is one self-signed certificate names the host by itself, so the name check adds nothing. A pin
         // that also carries CA certificates makes each of them a trust anchor (OpenSSL trusts every member of caFile),
         // and only the engine's normal name check then keeps a certificate that CA issued for another host from
@@ -583,28 +590,31 @@ public sealed class B3270Session : IEmulatorSession
             // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
             // open before the Connect has even gone out. All three values are sent every time so an attempt never
             // inherits the previous one's trust settings (spec 2).
-            await RunAsync([TlsSettings(verify, pinFile, anyName)], throwOnFailure: true, cancellationToken: cancellationToken);
+            await RunAsync([TlsSettings(verify, caFile, anyName)], throwOnFailure: true, cancellationToken: cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             await ConnectCoreAsync(cancellationToken);
         }
         finally
         {
-            if (pinFile is not null) TryDeletePinFile(pinFile);
+            if (caFile is not null) TryDeleteCaFile(caFile);
         }
     }
 
     /// <summary>The Set action carrying one attempt's trust settings (spec 4.1). <paramref name="acceptAnyName"/>
     /// turns the engine's host-name check off, which is right only for a pin that is a single self-signed
-    /// certificate; an empty acceptHostname is the engine's normal check against the connect host.</summary>
-    internal static B3270Action TlsSettings(bool verify, string? pinFile, bool acceptAnyName) =>
-        new("Set", "verifyHostCert", verify ? "true" : "false", "caFile", pinFile ?? "", "acceptHostname", pinFile is not null && acceptAnyName ? "any" : "");
+    /// certificate; an empty acceptHostname is the engine's normal check against the connect host. An empty
+    /// caFile leaves the engine on its own default trust.</summary>
+    internal static B3270Action TlsSettings(bool verify, string? caFile, bool acceptAnyName) =>
+        new("Set", "verifyHostCert", verify ? "true" : "false", "caFile", caFile ?? "", "acceptHostname", caFile is not null && acceptAnyName ? "any" : "");
 
-    /// <summary>The path of the last pin file written, deleted or not. Test seam.</summary>
-    internal string? LastPinFile { get; private set; }
+    /// <summary>The path of the last CA file written — a pin or the trust anchors — deleted or not. Test seam.</summary>
+    internal string? LastCaFile { get; private set; }
 
-    internal static string WritePinFile(string pem)
+    /// <param name="kind">"pin" or "roots": the file name says which of the two callers wrote it, which is what a
+    /// leftover in the temp directory and a failing test both have to be read by.</param>
+    internal static string WriteCaFile(string pem, string kind)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"lizterm-pin-{Guid.NewGuid():N}.pem");
+        var path = Path.Combine(Path.GetTempPath(), $"lizterm-{kind}-{Guid.NewGuid():N}.pem");
         var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
         // Owner-only on Unix; the Windows temp directory is already per user.
         if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
@@ -614,7 +624,7 @@ public sealed class B3270Session : IEmulatorSession
         return path;
     }
 
-    private static void TryDeletePinFile(string path)
+    private static void TryDeleteCaFile(string path)
     {
         try
         {

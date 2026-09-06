@@ -49,7 +49,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Verifying with { PinnedCertificate = chain }, () => fake);
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         var set = LastSetLine(fake);
-        Assert.Contains($"\"caFile\",{WireArg(session.LastPinFile!)}", set);
+        Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", set);
         Assert.Contains("\"acceptHostname\",\"\"", set);
     }
 
@@ -65,7 +65,7 @@ public class B3270SessionConnectTests
         {
             if (line.Contains("\"Connect\""))
             {
-                var path = session.LastPinFile!;
+                var path = session.LastCaFile!;
                 existedDuringConnect = File.Exists(path);
                 contentDuringConnect = File.ReadAllText(path);
                 if (!OperatingSystem.IsWindows()) ownerOnly = File.GetUnixFileMode(path) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
@@ -77,15 +77,15 @@ public class B3270SessionConnectTests
 
         var set = LastSetLine(fake);
         Assert.Contains("\"verifyHostCert\",\"true\"", set);
-        Assert.Contains($"\"caFile\",{WireArg(session.LastPinFile!)}", set);
+        Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", set);
         Assert.Contains("\"acceptHostname\",\"any\"", set);
         Assert.True(existedDuringConnect, "the pin file did not exist while the Connect run was pending");
         Assert.Equal(Pin.Pem, contentDuringConnect);
         Assert.True(ownerOnly, "the pin file is not owner-only");
-        Assert.False(File.Exists(session.LastPinFile), "the pin file outlived the Connect run");
-        Assert.StartsWith(Path.GetTempPath(), session.LastPinFile);
-        Assert.StartsWith("lizterm-pin-", Path.GetFileName(session.LastPinFile!));
-        Assert.EndsWith(".pem", session.LastPinFile);
+        Assert.False(File.Exists(session.LastCaFile), "the pin file outlived the Connect run");
+        Assert.StartsWith(Path.GetTempPath(), session.LastCaFile);
+        Assert.StartsWith("lizterm-pin-", Path.GetFileName(session.LastCaFile!));
+        Assert.EndsWith(".pem", session.LastCaFile);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Pinned, () => fake);
         await session.ConnectAsync(new ConnectOptions(VerifyCertificate: false), TestContext.Current.CancellationToken);
         Assert.Contains("\"verifyHostCert\",\"false\",\"caFile\",\"\",\"acceptHostname\",\"\"", LastSetLine(fake));
-        Assert.Null(session.LastPinFile);
+        Assert.Null(session.LastCaFile);
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Verifying, () => fake);
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Contains("\"verifyHostCert\",\"true\",\"caFile\",\"\",\"acceptHostname\",\"\"", LastSetLine(fake));
-        Assert.Null(session.LastPinFile);
+        Assert.Null(session.LastCaFile);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Pinned, () => fake);
         fake.RunResponder = line =>
         {
-            if (line.Contains("\"Connect\"")) content = File.ReadAllText(session.LastPinFile!);
+            if (line.Contains("\"Connect\"")) content = File.ReadAllText(session.LastCaFile!);
             return [Ok(line)];
         };
         await session.ConnectAsync(new ConnectOptions(Pin: oneShot), TestContext.Current.CancellationToken);
@@ -136,8 +136,8 @@ public class B3270SessionConnectTests
         await using (var session = new B3270Session(Pinned, () => failing))
         {
             await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
-            Assert.NotNull(session.LastPinFile);
-            Assert.False(File.Exists(session.LastPinFile));
+            Assert.NotNull(session.LastCaFile);
+            Assert.False(File.Exists(session.LastCaFile));
         }
 
         var dying = new FakeB3270Process();
@@ -149,8 +149,8 @@ public class B3270SessionConnectTests
         await using (var session = new B3270Session(Pinned, () => dying))
         {
             await Assert.ThrowsAsync<BackendUnavailableException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
-            Assert.NotNull(session.LastPinFile);
-            Assert.False(File.Exists(session.LastPinFile));
+            Assert.NotNull(session.LastCaFile);
+            Assert.False(File.Exists(session.LastCaFile));
         }
     }
 
@@ -170,10 +170,10 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
         var connect = session.ConnectAsync(cancellationToken: cts.Token);
         await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
-        Assert.True(File.Exists(session.LastPinFile));
+        Assert.True(File.Exists(session.LastCaFile));
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connect);
-        Assert.False(File.Exists(session.LastPinFile));
+        Assert.False(File.Exists(session.LastCaFile));
     }
 
     [Fact]
@@ -468,5 +468,104 @@ public class B3270SessionConnectTests
 
         fake.Emit("""{"connection":{"state":"not-connected"}}""");
         await second.WaitAsync(TimeSpan.FromMilliseconds(600), TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The row of spec section 3 this whole plan exists for: verifying, no pin, anchors available.</summary>
+    [Fact]
+    public async Task An_unpinned_verifying_connect_names_a_roots_file_holding_the_trust_anchors()
+    {
+        var fake = new FakeB3270Process();
+        var trust = new FakeTrustAnchorSource();
+        string? contentDuringConnect = null;
+        var ownerOnly = true;
+        await using var session = new B3270Session(Verifying, () => fake) { TrustAnchors = trust };
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\""))
+            {
+                contentDuringConnect = File.ReadAllText(session.LastCaFile!);
+                if (!OperatingSystem.IsWindows())
+                    ownerOnly = File.GetUnixFileMode(session.LastCaFile!) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            return [Ok(line)];
+        };
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var set = LastSetLine(fake);
+        Assert.Contains("\"verifyHostCert\",\"true\"", set);
+        Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", set);
+        // Not "any": these anchors sign certificates for hosts other than this one, so the engine's own name
+        // check is the only thing keeping one of those from verifying here.
+        Assert.Contains("\"acceptHostname\",\"\"", set);
+        Assert.Equal(FakeTrustAnchorSource.TwoRoots, contentDuringConnect);
+        Assert.True(ownerOnly, "the roots file is not owner-only");
+        Assert.StartsWith("lizterm-roots-", Path.GetFileName(session.LastCaFile!));
+        Assert.False(File.Exists(session.LastCaFile), "the roots file outlived the Connect run");
+    }
+
+    /// <summary>A pin is a deliberate answer to "trust exactly this"; adding the machine's roots beside it would
+    /// widen it back out to every CA the machine trusts.</summary>
+    [Fact]
+    public async Task A_pin_wins_over_the_trust_anchors()
+    {
+        var fake = new FakeB3270Process();
+        var trust = new FakeTrustAnchorSource();
+        string? contentDuringConnect = null;
+        await using var session = new B3270Session(Pinned, () => fake) { TrustAnchors = trust };
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\"")) contentDuringConnect = File.ReadAllText(session.LastCaFile!);
+            return [Ok(line)];
+        };
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(Pin.Pem, contentDuringConnect);
+        Assert.StartsWith("lizterm-pin-", Path.GetFileName(session.LastCaFile!));
+        Assert.Contains("\"acceptHostname\",\"any\"", LastSetLine(fake));
+    }
+
+    [Fact]
+    public async Task Verification_off_offers_no_trust_anchors()
+    {
+        var fake = new FakeB3270Process();
+        var trust = new FakeTrustAnchorSource();
+        await using var session = new B3270Session(Verifying, () => fake) { TrustAnchors = trust };
+
+        await session.ConnectAsync(new ConnectOptions(VerifyCertificate: false), TestContext.Current.CancellationToken);
+
+        Assert.Contains("\"verifyHostCert\",\"false\",\"caFile\",\"\",\"acceptHostname\",\"\"", LastSetLine(fake));
+        Assert.Null(session.LastCaFile);
+    }
+
+    /// <summary>A machine whose store yields nothing must leave the engine on its own default trust. Writing the
+    /// empty PEM instead would make b3270 answer "CA database load ... failed" and never connect at all — worse
+    /// than the behaviour this plan set out to fix.</summary>
+    [Fact]
+    public async Task A_source_with_no_anchors_leaves_the_engine_on_its_own_default()
+    {
+        var fake = new FakeB3270Process();
+        var trust = new FakeTrustAnchorSource { Pem = null };
+        await using var session = new B3270Session(Verifying, () => fake) { TrustAnchors = trust };
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains("\"verifyHostCert\",\"true\",\"caFile\",\"\",\"acceptHostname\",\"\"", LastSetLine(fake));
+        Assert.Null(session.LastCaFile);
+    }
+
+    /// <summary>Nothing reads the machine's store unless a caller asked for it, so the backend's own tests and any
+    /// embedder that has not chosen a source behave the same on every machine.</summary>
+    [Fact]
+    public async Task The_default_source_offers_nothing()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Verifying, () => fake);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains("\"caFile\",\"\"", LastSetLine(fake));
+        Assert.Null(session.LastCaFile);
     }
 }
