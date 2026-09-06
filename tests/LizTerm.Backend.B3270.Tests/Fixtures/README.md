@@ -40,3 +40,11 @@ The traces come from the x3270 source distribution (BSD-3-Clause, Copyright Paul
   tags). The Connect run fails with `Connection failed:`, `TLS: Host certificate verification failed:`, and the
   OpenSSL reason `self-signed certificate (18)`; the states run `tcp-pending`, `telnet-pending`, `tls-pending`,
   `not-connected`, and no `tls` indication is ever sent. The address was replaced with `gateway.test`.
+
+## gateway-pinned-login.jsonl
+
+Inbound side of `LiveHostTests.A_pinned_certificate_verifies_and_a_decoy_pin_fails` against the TLS gateway
+(2026-09-05), made with `tools/wirelog-to-fixture.sh` and trimmed to the first connection: `Set(verifyHostCert,
+true, caFile, <pin>, acceptHostname, any)` then `Connect`. It is `gateway-login-tls.jsonl` with `verified:true`
+in the `tls` indication, which is what `ReplayTests.Gateway_pinned_login_replays_to_a_verified_tls_connection`
+asserts. The decoy attempt that followed in the live run was cut.
