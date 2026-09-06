@@ -171,7 +171,10 @@ the backend tests.
 - `SessionProfile.PinnedCertificate` is a `CertificatePin` (SHA-256 fingerprint as colon-separated upper-case hex,
   subject, and the PEM chain leaf first) or null; `ConnectOptions(VerifyCertificate, Pin)` overrides either for one
   attempt. The effective rule is in `B3270Session.ConnectAsync`: verify off means no pin; otherwise the one-shot pin
-  wins over the profile's; no pin means the engine's default trust. `DestructiveBackspace` defaults to true (every
+  wins over the profile's; no pin means whatever `TrustAnchors` yields, not the engine's own default trust — for
+  an App session that is the machine's root store, since `SessionFactory` injects `SystemTrustAnchors.Default`;
+  the engine's own trust survives only on a bare `B3270Session` left on `TrustAnchors`' own default,
+  `NoTrustAnchors`. `DestructiveBackspace` defaults to true (every
   x3270-family default keymap erases; the old belief that x3270 defaults to cursor-left came from the `BackSpace()`
   action's name), and the profile JSON writes every field, so a saved false survives. `LizTerm.Core.Security` holds
   `ICertificateFetcher` and `SslStreamCertificateFetcher` (one handshake that captures and accepts the chain,
