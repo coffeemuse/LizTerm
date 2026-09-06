@@ -1,0 +1,126 @@
+name: Platforms
+
+on:
+  push:
+    branches: [main]
+  # Both jobs run the whole solution, so their coverage depends on every source and test file, not just the
+  # native build: a Windows- or macOS-only defect anywhere in src/ or tests/ must be caught before merge, not
+  # by the push-to-main run afterwards.
+  pull_request:
+    paths:
+      - .github/workflows/platforms.yml
+      - native/**
+      - src/**
+      - tests/**
+      - global.json
+      - Directory.Build.props
+      - Directory.Packages.props
+  workflow_dispatch:
+
+concurrency:
+  group: platforms-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  engine-macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      LIZTERM_REQUIRE_ENGINE: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache the pinned x3270 source tarball
+        uses: actions/cache@v6
+        with:
+          path: native/cache
+          key: x3270-src-${{ hashFiles('native/build/fetch-source.sh') }}
+
+      # The compile, not just the download. Keyed on every build script, so any change to how the engine is
+      # built (including the pinned version in fetch-source.sh) forces a real build and a fresh gate run.
+      - name: Cache the built engine
+        id: engine
+        uses: actions/cache@v6
+        with:
+          path: native/out/osx-arm64
+          key: b3270-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/build/*.sh') }}
+
+      - name: Ensure OpenSSL 3 is installed
+        if: steps.engine.outputs.cache-hit != 'true'
+        run: brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+
+      - name: Build b3270 (verify-macos.sh is the gate)
+        if: steps.engine.outputs.cache-hit != 'true'
+        run: native/build/build-macos.sh
+
+      # build-macos.sh redirects configure and make into native/build-tmp/, which is gitignored and never
+      # uploaded, so without this a build failure leaves nothing in the job log but the exit code.
+      - name: Show the build logs
+        if: ${{ failure() }}
+        run: |
+          for log in native/build-tmp/*/configure.log native/build-tmp/*/make.log; do
+            [ -f "$log" ] || continue
+            echo "::group::$log"
+            tail -n 200 "$log"
+            echo "::endgroup::"
+          done
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build (warnings are errors)
+        run: dotnet build LizTerm.slnx --configuration Release -warnaserror
+
+      - name: Test (the engine smoke test must run, not skip)
+        run: dotnet test LizTerm.slnx --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
+
+      # After the smoke test, so a binary that links cleanly but cannot be spawned is never published.
+      - name: Upload b3270
+        uses: actions/upload-artifact@v7
+        with:
+          name: b3270-osx-arm64
+          path: native/out/osx-arm64/b3270
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test results
+        if: ${{ failure() || cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-macos
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/*.dmp
+            TestResults/**/*Sequence*.xml
+          if-no-files-found: ignore
+
+  test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build (warnings are errors)
+        run: dotnet build LizTerm.slnx --configuration Release -warnaserror
+
+      - name: Test
+        run: dotnet test LizTerm.slnx --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: ${{ failure() || cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-windows
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/*.dmp
+            TestResults/**/*Sequence*.xml
+          if-no-files-found: ignore

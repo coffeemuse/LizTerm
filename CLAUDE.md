@@ -15,7 +15,7 @@ TN3270 is the behavioral reference when the spec is silent.
 ## Commands
 
 ```bash
-dotnet test LizTerm.slnx                       # full suite (~4 s warm, longer on a cold build); integration tests skip themselves
+dotnet test LizTerm.slnx                       # full suite (~4 s warm, longer on a cold build); the live host tests skip themselves
 dotnet test tests/LizTerm.Backend.B3270.Tests  # one project
 dotnet test tests/LizTerm.Core.Tests --filter "FullyQualifiedName~ProfileStoreTests"                      # one class
 dotnet test tests/LizTerm.Backend.B3270.Tests --filter "FullyQualifiedName~ReplayTests.Ibmlink_help_screen_replays_to_expected_state"  # one test
@@ -30,10 +30,36 @@ package management: `PackageReference` entries in csproj files carry no `Version
 `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "` is the zero-warning check to run before
 calling anything done; an incremental build hides warnings from projects it does not recompile.
 
+CI is two workflows under `.github/workflows`: `ci.yml` (job `test`, `ubuntu-latest`, pushes to `main`, every PR, and
+dispatch: Release build with `-warnaserror`, then the suite with a 5 minute blame hang timeout) and `platforms.yml`
+(pushes to `main`, dispatch, and PRs touching the workflow, `native/**`, `src/**`, `tests/**`, `global.json`, or the
+`Directory.*.props` files: `engine-macos` on `macos-15` runs `build-macos.sh`, runs the suite with
+`LIZTERM_REQUIRE_ENGINE=1`, and only then uploads `b3270-osx-arm64`, so a binary that links but cannot be spawned is
+never published; `test-windows` runs the suite). Both jobs run the whole solution, which is why the path filter covers
+all of `src/` and `tests/` rather than the native build alone. Runs that fail *or are cancelled* upload
+`test-results-<os>`: `.trx`, plus `*.dmp` (a blame-hang kill writes a hang dump, not a sequence file) and any
+`*Sequence*.xml`. `timeout-minutes` and `cancel-in-progress` both *cancel*, so those uploads are
+`if: ${{ failure() || cancelled() }}` — plain `failure()` would drop the evidence on exactly those runs. `engine-macos`
+caches the built engine (`native/out/osx-arm64`, keyed on every `native/build/*.sh`) as well as the source tarball, and
+dumps `native/build-tmp/*/{configure,make}.log` on failure, because `build-macos.sh` redirects them out of the job log.
+
+`ci.yml` deliberately does *not* carry a bare `push:` trigger: with `pull_request:` beside it, a PR head SHA gets two
+check runs named `test` — one over the branch tip, one over the merge with `main` — and a required check cannot tell
+them apart, so a PR could go green for a tree that does not build when merged. Branch protection on `main` requires
+`test` only; the platform jobs are path-filtered on PRs and would never report on a docs-only PR, so a rule requiring
+them directly would leave those waiting forever (the fix, when it matters, is a `platforms-gate` job with
+`needs: [engine-macos, test-windows]` and `if: always()` that passes when they are skipped).
+
+`global.json` pins the SDK to the 10.0.4xx band; supported builds stay on the current LTS. It rolls forward only
+within that band: when an SDK update replaces it, bump `version`, never widen `rollForward` (the runner and the Mac
+must share one analyzer set for `-warnaserror` to mean the same thing). Keep the pin on the *current* band — a stale
+one means a fresh `.NET 10 SDK` install cannot run `dotnet` in this repo at all.
+
 ### The b3270 binary
 
 The app and the integration test project copy `native/out/<host-rid>/b3270*` into their output as
-`runtimes/<rid>/native/b3270`, but only if that directory exists **at build time**. Build it once with
+`runtimes/<rid>/native/b3270`, but only if that directory exists **at build time**. The App test project inherits that
+copy through its project reference to the App, so a built engine lands in its output too. Build it once with
 `native/build/build-macos.sh` (needs Xcode CLT and Homebrew `openssl@3`; downloads and checksums x3270
 4.5ga6, links OpenSSL statically, and `verify-macos.sh` fails the build if `otool -L` shows anything
 outside `/usr/lib` or `/System/Library`), then rebuild the .NET projects. Without it, connecting throws
@@ -44,7 +70,7 @@ Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
 be started from Help > Wire Log in a session window; files go to `<config>/logs/wire-<profile>-<timestamp>.log`,
 and Show Wire Logs opens that folder. `LIZTERM_TEST_HOST`
-(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports five skipped tests; add
+(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, whose five live tests otherwise skip; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
 `LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
 which logs on to TSO, sends and receives `LIZTERM.ITEST` under the user's prefix, and deletes it; without them that
@@ -52,6 +78,8 @@ test skips. The credentials are typed through the session, so a wire log of that
 outbound side and is never committed. On Robert's Mac the three live-lane variables are kept in
 `~/.config/lizterm-test.env` (outside the repo); `source` it in the shell that runs `dotnet test` rather than
 exporting values on a command line.
+`LIZTERM_REQUIRE_ENGINE` (any non-blank value) makes the engine smoke test in the same project fail rather than skip when
+the test output has no bundled b3270; CI sets it on the macOS job only.
 
 ### Avalonia Developer Tools MCP
 
@@ -387,9 +415,22 @@ the backend tests.
   `wirelog:stop`, `WireLogException`, `Engine`. `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
   `fetch:<host>:<port>`), `FakeCertificatePrompt.LastRequest`, and `FakeEmulatorSession` recording
   `connect:pin:<sha256>`. The App and backend test projects each have one `Wait.UntilAsync(condition, what, timeout?)` helper (`Wait.cs`) replacing the private copies the tests used to carry.
-  `EnvironmentCollection` is a non-parallel xunit collection in each of the App and backend test projects; the App
-  one holds `SessionFactoryTests`, which sets `LIZTERM_B3270_PATH`, and the backend one holds `WireLogTests`, which
-  sets `LIZTERM_WIRE_LOG`.
+  Its default timeout is 5 s (raised from 2 s for CI headroom).
+  `EnvironmentCollection` is a non-parallel xunit collection in the backend test project only, holding `WireLogTests`,
+  which sets `LIZTERM_WIRE_LOG`. `SessionFactoryTests` no longer touches the environment: it calls the internal
+  `SessionFactory.Create(profile, overridePath, baseDirectory)` seam with a bogus override and an empty temp directory,
+  because a bundled engine in the App test output would otherwise satisfy the locator.
   `TestCertificates` in the Core tests makes self-signed and CA-signed certificates and re-imports through PKCS#12
   so macOS accepts the key for a loopback SslStream server; the live tests carry a 10 minute xunit timeout;
   `gateway-pinned-login.jsonl` replays a verified pinned connect.
+- `EngineSmokeTests` (integration project) starts the **bundled** engine from the test output through `B3270Session`
+  and quits; it resolves with `B3270Locator.Find(null, AppContext.BaseDirectory)` so `LIZTERM_B3270_PATH` can never
+  satisfy it. It asserts the resolved path is under `B3270Locator.BundledDirectory` (`runtimes/<rid>/native`), which is
+  what the csproj copy rule fills and the macOS job exists to prove; it does *not* assert `Engine.Source` or re-parse
+  the version, because the constructor supplies the one and `StartProcessAsync` already enforces the other, so both
+  would be unfalsifiable. Without a bundled engine it skips, unless `LIZTERM_REQUIRE_ENGINE` is set, when it fails.
+  A binary that is *present* but did not resolve — the locator's not-executable arm, which is what a downloaded CI
+  artifact looks like before `chmod +x` — always fails, whatever the variable says: that is a broken engine, not an
+  absent one. `EngineRequirement.Decide(found, present, variable)` is that gate, unit tested on its own, and
+  `B3270Locator.Candidates` is how the test tells the two apart (`Find` throws the same type for both). On a Mac that
+  has run `build-macos.sh` the test runs locally and runs against the copied binary.

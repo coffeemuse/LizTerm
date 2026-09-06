@@ -81,16 +81,20 @@ public sealed partial class FakeB3270Process : IB3270Process
         _stdout.Dispose();
     }
 
-    public async Task<string> WaitForInputAsync(Func<string, bool> predicate, TimeSpan timeout)
+    /// <summary>The line matching <paramref name="predicate"/>, waiting up to <paramref name="timeout"/> (5 s by
+    /// default, the same span <see cref="Wait.UntilAsync"/> allows). No test wants this wait to expire, so the
+    /// default is generous: a shared CI runner takes far longer than a warm laptop to get the first run written.</summary>
+    public async Task<string> WaitForInputAsync(Func<string, bool> predicate, TimeSpan? timeout = null)
     {
-        var deadline = DateTime.UtcNow + timeout;
+        var limit = timeout ?? TimeSpan.FromSeconds(5);
+        var deadline = DateTime.UtcNow + limit;
         while (DateTime.UtcNow < deadline)
         {
             var match = InputLines.FirstOrDefault(predicate);
             if (match is not null) return match;
             await Task.Delay(10);
         }
-        throw new TimeoutException("No matching input line within " + timeout);
+        throw new TimeoutException("No matching input line within " + limit);
     }
 
     private void OnInputLine(string line)

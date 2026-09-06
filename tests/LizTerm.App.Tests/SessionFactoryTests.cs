@@ -3,27 +3,26 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.App.Tests;
 
-[Collection(EnvironmentCollection.Name)]
 public class SessionFactoryTests
 {
-    /// <summary>With the override pointed at a file that does not exist and no bundled engine in this test's output,
-    /// the factory must still hand back a session whose first connect reports the locator's explanation.</summary>
+    /// <summary>With the override pointed at a file that does not exist and the factory pointed at an empty
+    /// directory instead of the app's own base directory, the factory must still hand back a session whose first
+    /// connect reports the locator's explanation.</summary>
     [Fact]
     public async Task Missing_engine_is_reported_by_the_first_connect_not_by_Create()
     {
-        var original = Environment.GetEnvironmentVariable("LIZTERM_B3270_PATH");
         var bogus = Path.Combine(Path.GetTempPath(), "lizterm-missing-" + Guid.NewGuid().ToString("N"), "b3270");
+        var emptyDirectory = Directory.CreateTempSubdirectory("lizterm-empty-");
         try
         {
-            Environment.SetEnvironmentVariable("LIZTERM_B3270_PATH", bogus);
-            await using var session = SessionFactory.Create(new SessionProfile { Name = "t", Host = "h" });
+            await using var session = SessionFactory.Create(new SessionProfile { Name = "t", Host = "h" }, bogus, emptyDirectory.FullName);
             var ex = await Assert.ThrowsAsync<BackendUnavailableException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
             Assert.Contains("Looked in", ex.Message);
             Assert.Contains(bogus, ex.Message);
         }
         finally
         {
-            Environment.SetEnvironmentVariable("LIZTERM_B3270_PATH", original);
+            emptyDirectory.Delete(recursive: true);
         }
     }
 
@@ -32,18 +31,33 @@ public class SessionFactoryTests
     [Fact]
     public async Task A_missing_engine_is_not_reported_as_bundled()
     {
-        var original = Environment.GetEnvironmentVariable("LIZTERM_B3270_PATH");
         var bogus = Path.Combine(Path.GetTempPath(), "lizterm-missing-" + Guid.NewGuid().ToString("N"), "b3270");
+        var emptyDirectory = Directory.CreateTempSubdirectory("lizterm-empty-");
         try
         {
-            Environment.SetEnvironmentVariable("LIZTERM_B3270_PATH", bogus);
-            await using var session = SessionFactory.Create(new SessionProfile { Name = "t", Host = "h" });
+            await using var session = SessionFactory.Create(new SessionProfile { Name = "t", Host = "h" }, bogus, emptyDirectory.FullName);
             Assert.Equal(EngineSource.Unknown, session.Engine.Source);
             Assert.Equal("b3270, not found", StatusFormatter.Engine(session.Engine, SessionFactory.OverrideOrigin));
         }
         finally
         {
-            Environment.SetEnvironmentVariable("LIZTERM_B3270_PATH", original);
+            emptyDirectory.Delete(recursive: true);
         }
+    }
+
+    /// <summary>The two tests above drive the seam, so nothing else would notice the public overload drifting off
+    /// the default the app actually ships with — passing Environment.CurrentDirectory, or reading the wrong
+    /// variable. Both public entry points resolve through DefaultLocation; this pins that they agree.</summary>
+    [Fact]
+    public async Task The_public_Create_resolves_through_the_same_default_as_CheckBackend()
+    {
+        var (overridePath, baseDirectory) = SessionFactory.DefaultLocation;
+        Assert.Equal(Environment.GetEnvironmentVariable(SessionFactory.OverrideOrigin), overridePath);
+        Assert.Equal(AppContext.BaseDirectory, baseDirectory);
+
+        var profile = new SessionProfile { Name = "t", Host = "h" };
+        await using var viaDefault = SessionFactory.Create(profile);
+        await using var viaSeam = SessionFactory.Create(profile, overridePath, baseDirectory);
+        Assert.Equal(viaSeam.Engine, viaDefault.Engine);
     }
 }
