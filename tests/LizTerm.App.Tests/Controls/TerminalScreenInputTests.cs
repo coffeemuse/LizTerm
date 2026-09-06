@@ -34,17 +34,62 @@ public class TerminalScreenInputTests
     }
 
     [AvaloniaFact]
-    public void Backspace_raises_Erase_only_when_DestructiveBackspace_is_set()
+    public void Backspace_erases_by_default_and_moves_left_when_the_profile_says_so()
     {
         var (window, screen) = Show();
         var keys = new List<TerminalKey>();
         screen.KeyRequested += (_, k) => keys.Add(k);
 
         window.KeyPressQwerty(PhysicalKey.Backspace, RawInputModifiers.None);
-        screen.DestructiveBackspace = true;
+        screen.DestructiveBackspace = false;
         window.KeyPressQwerty(PhysicalKey.Backspace, RawInputModifiers.None);
 
-        Assert.Equal([TerminalKey.Backspace, TerminalKey.Erase], keys);
+        Assert.Equal([TerminalKey.Erase, TerminalKey.Backspace], keys);
+    }
+
+    [AvaloniaFact]
+    public void Vista_keys_reach_the_host()
+    {
+        var (window, screen) = Show();
+        var keys = new List<TerminalKey>();
+        var text = new List<string>();
+        screen.KeyRequested += (_, k) => keys.Add(k);
+        screen.TextEntered += (_, t) => text.Add(t);
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.Shift);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.Control);
+        window.KeyPressQwerty(PhysicalKey.PageUp, RawInputModifiers.None);
+        // Ctrl+Insert is also DefaultPlatformSettings' alternate Copy gesture, and TryHandleClipboardKey runs
+        // first (spec 6.2), so it wins over the table's PA1 entry on this headless platform; Ctrl+Home (PA2) is
+        // not a Copy/Paste/SelectAll gesture, so it exercises the same "Ctrl+key reaches a PA key" path cleanly.
+        window.KeyPressQwerty(PhysicalKey.Home, RawInputModifiers.Control);
+        window.KeyPressQwerty(PhysicalKey.Digit1, RawInputModifiers.Alt);
+        window.KeyPressQwerty(PhysicalKey.BracketLeft, RawInputModifiers.Control);
+
+        Assert.Equal([TerminalKey.Attn, TerminalKey.SysReq, TerminalKey.Clear, TerminalKey.PF7, TerminalKey.PA2, TerminalKey.PA1], keys);
+        Assert.Equal(["¬"], text);
+    }
+
+    [AvaloniaFact]
+    public void A_right_ctrl_tap_sends_enter_and_a_ctrl_chord_does_not_reset()
+    {
+        var (window, screen) = Show();
+        var keys = new List<TerminalKey>();
+        screen.KeyRequested += (_, k) => keys.Add(k);
+
+        window.KeyPressQwerty(PhysicalKey.ControlRight, RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.ControlRight, RawInputModifiers.None);
+
+        window.KeyPressQwerty(PhysicalKey.ControlLeft, RawInputModifiers.Control);
+        window.KeyPressQwerty(PhysicalKey.F1, RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.F1, RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.ControlLeft, RawInputModifiers.None);
+
+        window.KeyPressQwerty(PhysicalKey.ControlLeft, RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.ControlLeft, RawInputModifiers.None);
+
+        Assert.Equal([TerminalKey.Enter, TerminalKey.PF13, TerminalKey.Reset], keys);
     }
 
     [AvaloniaFact]

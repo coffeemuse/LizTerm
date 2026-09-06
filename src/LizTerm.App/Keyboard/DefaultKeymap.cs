@@ -17,10 +17,6 @@ public static class DefaultKeymap
     /// the default) or as the cursor-left <see cref="TerminalKey.Backspace"/>.</param>
     public static Keymap Create(bool destructiveBackspace) => destructiveBackspace ? Erasing : CursorLeft;
 
-    /// <summary>Shim for the pre-table callers; removed in the task that teaches the screen control taps.</summary>
-    public static bool TryMap(Key key, KeyModifiers modifiers, bool destructiveBackspace, out TerminalKey terminalKey) =>
-        Create(destructiveBackspace).TryMap(new KeyChord(key, modifiers), out terminalKey);
-
     private static Keymap Build(bool destructiveBackspace)
     {
         var keys = new List<KeyValuePair<KeyChord, TerminalKey>>();

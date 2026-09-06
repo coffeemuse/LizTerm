@@ -20,9 +20,10 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<ScreenSnapshot?> SnapshotProperty =
         AvaloniaProperty.Register<TerminalScreen, ScreenSnapshot?>(nameof(Snapshot));
 
-    /// <summary>Mirrors the profile's DestructiveBackspace choice; see <see cref="DefaultKeymap.TryMap"/>.</summary>
+    /// <summary>Mirrors the profile's DestructiveBackspace choice; the window binds it. True (erase) by default,
+    /// like a new profile (spec 3.2).</summary>
     public static readonly StyledProperty<bool> DestructiveBackspaceProperty =
-        AvaloniaProperty.Register<TerminalScreen, bool>(nameof(DestructiveBackspace));
+        AvaloniaProperty.Register<TerminalScreen, bool>(nameof(DestructiveBackspace), defaultValue: true);
 
     /// <summary>The mouse selection, or null. Two-way by default so the window can bind it to the view model,
     /// which clears it whenever input is sent to the host.</summary>
@@ -33,6 +34,8 @@ public sealed class TerminalScreen : Control
 
     private readonly Typeface _typeface = new(TerminalFont);
     private readonly SelectionGesture _gesture = new();
+    private readonly ModifierTapDetector _taps = new();
+    private Keymap Keymap => DefaultKeymap.Create(DestructiveBackspace);
     private double _advancePerEm;
     private double _lineHeightPerEm;
 
@@ -124,20 +127,49 @@ public sealed class TerminalScreen : Control
     public event EventHandler? PasteRequested;
     public event EventHandler? SelectAllRequested;
 
+    /// <summary>Spec 6.2 ordering: the platform's copy, paste, and select-all hotkeys first (they are not in the
+    /// table), then the key table, then the text table, then Avalonia's text input for everything else so dead
+    /// keys and IMEs keep working.</summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        _taps.KeyDown(e.Key);
         if (TryHandleClipboardKey(e))
         {
             e.Handled = true;
             return;
         }
-        if (DefaultKeymap.TryMap(e.Key, e.KeyModifiers, DestructiveBackspace, out var key))
+        var chord = new KeyChord(e.Key, e.KeyModifiers);
+        if (Keymap.TryMap(chord, out var key))
         {
             KeyRequested?.Invoke(this, key);
             e.Handled = true;
             return;
         }
+        if (Keymap.TryText(chord, out var text))
+        {
+            TextEntered?.Invoke(this, text);
+            e.Handled = true;
+            return;
+        }
         base.OnKeyDown(e);
+    }
+
+    /// <summary>A Ctrl key released alone is a tap chord (Right Ctrl is Enter, Left Ctrl is Reset by default).</summary>
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (_taps.KeyUp(e.Key) is { } tapped && Keymap.TryMap(KeyChord.TapOf(tapped), out var key))
+        {
+            KeyRequested?.Invoke(this, key);
+            e.Handled = true;
+            return;
+        }
+        base.OnKeyUp(e);
+    }
+
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        _taps.Reset();
+        base.OnLostFocus(e);
     }
 
     private bool TryHandleClipboardKey(KeyEventArgs e)
