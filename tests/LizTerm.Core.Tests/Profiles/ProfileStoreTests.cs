@@ -147,30 +147,17 @@ public class ProfileStoreTests : IDisposable
         // Save one valid profile
         store.Save(new SessionProfile { Name = "readable", Host = "r" });
 
-        // Create an unreadable file
+        // Create a file the store cannot read. An exclusive handle denies the read on every platform, where a Unix
+        // file mode of None leaves the file plainly readable on Windows, which does not honour it.
         var unreadablePath = Path.Combine(_dir, "unreadable.json");
         File.WriteAllText(unreadablePath, "{ \"name\": \"unreadable\", \"host\": \"u\" }");
 
-        // Make it unreadable on non-Windows platforms
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(unreadablePath, UnixFileMode.None);
-        }
-
-        try
+        using (File.Open(unreadablePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             // LoadAll should return only the readable profile
             var profiles = store.LoadAll();
             var readableProfile = Assert.Single(profiles);
             Assert.Equal("readable", readableProfile.Name);
-        }
-        finally
-        {
-            // Restore file mode so Dispose can clean up the directory
-            if (!OperatingSystem.IsWindows() && File.Exists(unreadablePath))
-            {
-                File.SetUnixFileMode(unreadablePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            }
         }
     }
 }
