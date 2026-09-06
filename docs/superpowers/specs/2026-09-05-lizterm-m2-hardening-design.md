@@ -507,3 +507,15 @@ touched, and `LIZTERM_B3270_PATH` set to the Homebrew b3270 4.5.6 because the wo
 29. Everything else in this pass was observed on the real gateway; nothing was skipped for lack of a host. The
     IND$FILE round trip was not exercised here because the gateway lane carries no credentials — Task 14 ran it
     against MVS/CE — and the same run's four gateway integration tests passed with the IND$FILE test skipping.
+
+Items 30 to 34 record the final-review fix wave of 2026-09-06:
+
+30. `SslStreamCertificateFetcher` was pinning every `X509Chain` element the validation callback saw, including a
+    root the chain engine pulled from the OS trust store while building the chain — for a leaf issued by a public
+    CA, that root was never on the wire. With `acceptHostname any`, pinning it would trust every certificate that
+    CA ever issued, for any name. The fetcher now keeps only what the host actually sent: the leaf, plus the chain
+    elements SslStream had already placed in `chain.ChainPolicy.ExtraStore` before building (the new internal
+    `SslStreamCertificateFetcher.SelectPresented`). A public-CA host whose root the chain engine supplied (not the
+    host) now falls back to the one-time "Connect Anyway" rather than being offered as pinnable — the chain built
+    from ExtraStore members alone is missing its root, so `CertificateReader.CheckPinnable` reports it unpinnable,
+    same as any other chain missing its root.
