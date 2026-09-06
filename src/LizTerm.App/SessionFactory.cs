@@ -17,13 +17,19 @@ public static class SessionFactory
         return new EngineInfo("b3270", null, location.Path, location.Source);
     }
 
-    public static IEmulatorSession Create(SessionProfile profile)
+    public static IEmulatorSession Create(SessionProfile profile) =>
+        Create(profile, Environment.GetEnvironmentVariable(B3270Locator.EnvironmentOverride), AppContext.BaseDirectory);
+
+    /// <summary>Test seam: resolves the engine from an explicit override and base directory instead of the process
+    /// environment and the app's own directory, so a test can stand in an empty directory whatever the build copied
+    /// beside the real app.</summary>
+    internal static IEmulatorSession Create(SessionProfile profile, string? overridePath, string baseDirectory)
     {
         B3270Location location;
         Func<IB3270Process> processFactory;
         try
         {
-            var found = B3270Locator.Find();
+            var found = B3270Locator.Find(overridePath, baseDirectory);
             location = found;
             processFactory = () => new B3270ChildProcess(found.Path);
         }
