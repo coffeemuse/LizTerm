@@ -13,6 +13,9 @@ public class AboutWindowTests
         var engine = new EngineInfo("b3270", "4.5.6 (fake)", "/opt/homebrew/bin/b3270", EngineSource.Override);
         var window = new AboutWindow("0.3.0", engine, "LIZTERM_B3270_PATH");
         window.Show();
+        // Spec 8: the engine path wraps, so the window grows with it instead of clipping at a fixed height.
+        Assert.Equal(SizeToContent.Height, window.SizeToContent);
+        Assert.Equal(220, window.FindControl<TextBox>("NoticesText")!.Height);
         Assert.Equal("Version 0.3.0", window.FindControl<TextBlock>("VersionText")!.Text);
         Assert.Equal("b3270 4.5.6 (fake), from LIZTERM_B3270_PATH", window.FindControl<TextBlock>("EngineText")!.Text);
         Assert.Equal("/opt/homebrew/bin/b3270", window.FindControl<TextBlock>("EnginePathText")!.Text);
