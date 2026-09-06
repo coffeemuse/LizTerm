@@ -478,30 +478,58 @@ public class B3270SessionConnectTests
         var trust = new FakeTrustAnchorSource();
         string? contentDuringConnect = null;
         var ownerOnly = true;
-        await using var session = new B3270Session(Verifying, () => fake) { TrustAnchors = trust };
-        fake.RunResponder = line =>
+        string rootsFile;
+        await using (var session = new B3270Session(Verifying, () => fake) { TrustAnchors = trust })
         {
-            if (line.Contains("\"Connect\""))
+            fake.RunResponder = line =>
             {
-                contentDuringConnect = File.ReadAllText(session.LastCaFile!);
-                if (!OperatingSystem.IsWindows())
-                    ownerOnly = File.GetUnixFileMode(session.LastCaFile!) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            }
-            return [Ok(line)];
-        };
+                if (line.Contains("\"Connect\""))
+                {
+                    contentDuringConnect = File.ReadAllText(session.LastCaFile!);
+                    if (!OperatingSystem.IsWindows())
+                        ownerOnly = File.GetUnixFileMode(session.LastCaFile!) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
+                return [Ok(line)];
+            };
+
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+            var set = LastSetLine(fake);
+            Assert.Contains("\"verifyHostCert\",\"true\"", set);
+            Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", set);
+            // Not "any": these anchors sign certificates for hosts other than this one, so the engine's own name
+            // check is the only thing keeping one of those from verifying here.
+            Assert.Contains("\"acceptHostname\",\"\"", set);
+            Assert.Equal(FakeTrustAnchorSource.TwoRoots, contentDuringConnect);
+            Assert.True(ownerOnly, "the roots file is not owner-only");
+            rootsFile = session.LastCaFile!;
+            Assert.StartsWith("lizterm-roots-", Path.GetFileName(rootsFile));
+            // Kept, unlike a pin file: the bytes are public and identical for every attempt, so a reconnect
+            // reuses this file rather than writing a quarter of a megabyte again.
+            Assert.True(File.Exists(rootsFile), "the roots file was deleted while the session could still reconnect");
+
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal(rootsFile, session.LastCaFile);
+        }
+
+        Assert.False(File.Exists(rootsFile), "the roots file outlived the session");
+    }
+
+    /// <summary>VerifyCertificate defaults to true on a profile whose UseTls defaults to false, so gating the
+    /// store read on verification alone made every plain telnet connect read the OS store and write a roots file
+    /// for a TLS context the engine never builds.</summary>
+    [Fact]
+    public async Task A_plain_connect_asks_the_trust_source_for_nothing()
+    {
+        var fake = new FakeB3270Process();
+        var trust = new FakeTrustAnchorSource();
+        await using var session = new B3270Session(Verifying with { UseTls = false }, () => fake) { TrustAnchors = trust };
 
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var set = LastSetLine(fake);
-        Assert.Contains("\"verifyHostCert\",\"true\"", set);
-        Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", set);
-        // Not "any": these anchors sign certificates for hosts other than this one, so the engine's own name
-        // check is the only thing keeping one of those from verifying here.
-        Assert.Contains("\"acceptHostname\",\"\"", set);
-        Assert.Equal(FakeTrustAnchorSource.TwoRoots, contentDuringConnect);
-        Assert.True(ownerOnly, "the roots file is not owner-only");
-        Assert.StartsWith("lizterm-roots-", Path.GetFileName(session.LastCaFile!));
-        Assert.False(File.Exists(session.LastCaFile), "the roots file outlived the Connect run");
+        Assert.Contains("\"verifyHostCert\",\"true\",\"caFile\",\"\",\"acceptHostname\",\"\"", LastSetLine(fake));
+        Assert.Null(session.LastCaFile);
+        Assert.Equal(0, trust.Calls);
     }
 
     /// <summary>A pin is a deliberate answer to "trust exactly this"; adding the machine's roots beside it would

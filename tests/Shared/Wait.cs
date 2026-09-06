@@ -1,7 +1,8 @@
-namespace LizTerm.Integration.Tests;
+namespace LizTerm.Tests.Shared;
 
-/// <summary>Polls a condition until it holds or the timeout passes. The one copy for this project; the App tests
-/// have their own.</summary>
+/// <summary>Polls a condition until it holds or the timeout passes. The one copy: every test project compiles this
+/// file in (see each csproj) and imports the namespace globally, so a change to the default timeout — raised once
+/// already for CI headroom — cannot land in one project and be missed in another.</summary>
 internal static class Wait
 {
     public static async Task UntilAsync(Func<bool> condition, string what, TimeSpan? timeout = null)

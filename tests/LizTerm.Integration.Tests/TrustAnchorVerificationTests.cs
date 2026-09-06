@@ -21,32 +21,13 @@ public class TrustAnchorVerificationTests
         public string? ExportPem() => pem;
     }
 
-    private static B3270Location RequireEngine()
-    {
-        B3270Location? location = null;
-        string? missing = null;
-        try
-        {
-            location = B3270Locator.Find(overridePath: null, AppContext.BaseDirectory);
-        }
-        catch (BackendUnavailableException e)
-        {
-            missing = e.Message;
-        }
-        var present = B3270Locator.Candidates(overridePath: null, AppContext.BaseDirectory).Any(c => File.Exists(c.Path));
-        var outcome = EngineRequirement.Decide(location is not null, present, Environment.GetEnvironmentVariable(EngineRequirement.Variable));
-        if (outcome == EngineRequirementOutcome.Fail) Assert.Fail(missing ?? "no bundled engine");
-        Assert.SkipWhen(outcome == EngineRequirementOutcome.Skip, missing ?? "no bundled engine");
-        return location!;
-    }
-
     private static SessionProfile Profile(int port) =>
         new(Name: "trust-anchors", Host: "localhost", Port: port, UseTls: true, VerifyCertificate: true);
 
     [Fact(Timeout = 60_000)]
     public async Task The_engine_verifies_a_ca_signed_host_against_the_anchors_we_supply()
     {
-        var location = RequireEngine();
+        var location = BundledEngine.Require();
         var ct = TestContext.Current.CancellationToken;
         var (root, leaf) = TestCertificates.CaSignedServable();
         using (root)
@@ -93,14 +74,16 @@ public class TrustAnchorVerificationTests
     [Fact(Timeout = 60_000)]
     public async Task An_unrelated_anchor_does_not_verify_the_host()
     {
-        var location = RequireEngine();
+        var location = BundledEngine.Require();
         var ct = TestContext.Current.CancellationToken;
         var (root, leaf) = TestCertificates.CaSignedServable();
-        var (decoy, decoyLeaf) = TestCertificates.CaSignedServable();
+        // A different subject, so the decoy is genuinely unrelated: OpenSSL looks an issuer up by subject name,
+        // and a decoy sharing the real CA's name would only prove that a bad signature is rejected. No leaf
+        // either — the anchor is the whole of what is under test here.
+        var decoy = TestCertificates.Ca("CN=LizTerm Decoy CA");
         using (root)
         using (leaf)
         using (decoy)
-        using (decoyLeaf)
         {
             var (host, port) = LoopbackTlsHost.Start(leaf, ct);
             await using var _ = host;

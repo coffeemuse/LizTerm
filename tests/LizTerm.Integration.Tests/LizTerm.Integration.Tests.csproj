@@ -12,6 +12,11 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="LizTerm.Tests.Shared" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The one copy of the polling helper, compiled into each test assembly (see tests/Shared/Wait.cs). -->
+    <Compile Include="../Shared/Wait.cs" Link="Wait.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/LizTerm.Backend.B3270/LizTerm.Backend.B3270.csproj" />
