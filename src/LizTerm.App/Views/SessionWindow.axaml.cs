@@ -11,12 +11,12 @@ public partial class SessionWindow : Window
     public SessionWindow()
     {
         InitializeComponent();
-        Screen.KeyRequested += (_, key) => _ = ViewModel?.SendKeyCommand.ExecuteAsync(key);
+        Screen.KeyRequested += (_, key) => { if (ViewModel is { } vm) _ = CommandRouting.TryExecuteAsync(vm.SendKeyCommand, key); };
         Screen.TextEntered += (_, text) => _ = ViewModel?.TypeTextAsync(text);
         Screen.CellClicked += (_, cell) => _ = ViewModel?.MoveCursorAsync(cell.Row, cell.Column);
-        Screen.CopyRequested += (_, _) => _ = ViewModel?.CopyCommand.ExecuteAsync(null);
-        Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteCommand.ExecuteAsync(null);
-        Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAllCommand.Execute(null);
+        Screen.CopyRequested += (_, _) => { if (ViewModel is { } vm) _ = CommandRouting.TryExecuteAsync(vm.CopyCommand); };
+        Screen.PasteRequested += (_, _) => { if (ViewModel is { } vm) _ = CommandRouting.TryExecuteAsync(vm.PasteCommand); };
+        Screen.SelectAllRequested += (_, _) => { if (ViewModel is { } vm) CommandRouting.TryExecute(vm.SelectAllCommand); };
         Opened += (_, _) =>
         {
             ShowPlatformGestures();
@@ -37,6 +37,10 @@ public partial class SessionWindow : Window
     private SessionViewModel? ViewModel => DataContext as SessionViewModel;
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+    /// <summary>The command clears the message; this puts the keyboard back on the screen, where the next keystroke
+    /// belongs (spec 7).</summary>
+    private void OnDismissClick(object? sender, RoutedEventArgs e) => Screen.Focus();
 
     private void OnNewSessionClick(object? sender, RoutedEventArgs e) => (Avalonia.Application.Current as App)?.ShowPicker();
 

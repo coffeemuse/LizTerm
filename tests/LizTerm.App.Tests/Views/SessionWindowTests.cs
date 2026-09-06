@@ -137,6 +137,21 @@ public class SessionWindowTests
         Assert.Empty(window.OwnedWindows);
     }
 
+    /// <summary>Regression: after Dismiss the button kept focus, so the next keystrokes never reached the host.</summary>
+    [AvaloniaFact]
+    public void Dismiss_returns_focus_to_the_screen()
+    {
+        var (window, screen, vm, _, _) = Show();
+        vm.ErrorMessage = "boom";
+        var dismiss = window.FindControl<Button>("DismissButton")!;
+        dismiss.Focus();
+        Assert.False(screen.IsFocused);
+
+        dismiss.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.True(screen.IsFocused);
+    }
+
     [AvaloniaFact]
     public void Help_menu_has_the_wire_log_toggle_bound_to_the_view_model()
     {
