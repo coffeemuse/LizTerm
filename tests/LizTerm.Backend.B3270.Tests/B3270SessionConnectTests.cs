@@ -13,6 +13,142 @@ public class B3270SessionConnectTests
     private static string Failed(string tag, params string[] text) =>
         $$$"""{"run-result":{"r-tag":"{{{tag}}}","success":false,"text":[{{{string.Join(",", text.Select(t => "\"" + t + "\""))}}}],"time":0}}""";
 
+    private static readonly CertificatePin Pin = new("8C:13:6A:01", "CN=localhost",
+        "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n");
+    private static readonly SessionProfile Pinned = Verifying with { PinnedCertificate = Pin };
+
+    private static string LastSetLine(FakeB3270Process fake) => fake.InputLines.Last(l => l.Contains("\"Set\""));
+
+    [Fact]
+    public void Tls_settings_are_explicit_for_all_three_cases()
+    {
+        Assert.Equal(["verifyHostCert", "true", "caFile", "/tmp/x.pem", "acceptHostname", "any"], B3270Session.TlsSettings(true, "/tmp/x.pem").Args);
+        Assert.Equal(["verifyHostCert", "true", "caFile", "", "acceptHostname", ""], B3270Session.TlsSettings(true, null).Args);
+        Assert.Equal(["verifyHostCert", "false", "caFile", "", "acceptHostname", ""], B3270Session.TlsSettings(false, null).Args);
+        Assert.Equal("Set", B3270Session.TlsSettings(true, null).Name);
+    }
+
+    [Fact]
+    public async Task A_pinned_profile_verifies_against_a_temp_file_that_lives_only_for_the_connect_run()
+    {
+        var fake = new FakeB3270Process();
+        string? contentDuringConnect = null;
+        var existedDuringConnect = false;
+        var ownerOnly = true;
+        await using var session = new B3270Session(Pinned, () => fake);
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\""))
+            {
+                var path = session.LastPinFile!;
+                existedDuringConnect = File.Exists(path);
+                contentDuringConnect = File.ReadAllText(path);
+                if (!OperatingSystem.IsWindows()) ownerOnly = File.GetUnixFileMode(path) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            return [Ok(line)];
+        };
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var set = LastSetLine(fake);
+        Assert.Contains("\"verifyHostCert\",\"true\"", set);
+        Assert.Contains($"\"caFile\",\"{session.LastPinFile}\"", set);
+        Assert.Contains("\"acceptHostname\",\"any\"", set);
+        Assert.True(existedDuringConnect, "the pin file did not exist while the Connect run was pending");
+        Assert.Equal(Pin.Pem, contentDuringConnect);
+        Assert.True(ownerOnly, "the pin file is not owner-only");
+        Assert.False(File.Exists(session.LastPinFile), "the pin file outlived the Connect run");
+        Assert.StartsWith(Path.GetTempPath(), session.LastPinFile);
+        Assert.StartsWith("lizterm-pin-", Path.GetFileName(session.LastPinFile!));
+        Assert.EndsWith(".pem", session.LastPinFile);
+    }
+
+    [Fact]
+    public async Task Verification_off_ignores_the_pin_and_clears_the_trust_settings()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Pinned, () => fake);
+        await session.ConnectAsync(new ConnectOptions(VerifyCertificate: false), TestContext.Current.CancellationToken);
+        Assert.Contains("\"verifyHostCert\",\"false\",\"caFile\",\"\",\"acceptHostname\",\"\"", LastSetLine(fake));
+        Assert.Null(session.LastPinFile);
+    }
+
+    [Fact]
+    public async Task An_unpinned_verifying_profile_clears_the_trust_settings()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Verifying, () => fake);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains("\"verifyHostCert\",\"true\",\"caFile\",\"\",\"acceptHostname\",\"\"", LastSetLine(fake));
+        Assert.Null(session.LastPinFile);
+    }
+
+    [Fact]
+    public async Task A_one_shot_pin_wins_over_the_profile_pin()
+    {
+        var fake = new FakeB3270Process();
+        var oneShot = new CertificatePin("00:11", "CN=new", "-----BEGIN CERTIFICATE-----\nbmV3\n-----END CERTIFICATE-----\n");
+        string? content = null;
+        await using var session = new B3270Session(Pinned, () => fake);
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\"")) content = File.ReadAllText(session.LastPinFile!);
+            return [Ok(line)];
+        };
+        await session.ConnectAsync(new ConnectOptions(Pin: oneShot), TestContext.Current.CancellationToken);
+        Assert.Equal(oneShot.Pem, content);
+    }
+
+    [Fact]
+    public async Task The_pin_file_is_deleted_after_a_failed_connect_and_after_engine_death()
+    {
+        var failing = new FakeB3270Process
+        {
+            RunResponder = line => line.Contains("\"Connect\"")
+                ? [Failed(Tag(line), "Connection failed:", "TLS: Host certificate verification failed:", "self-signed certificate (18)")]
+                : [Ok(line)],
+        };
+        await using (var session = new B3270Session(Pinned, () => failing))
+        {
+            await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+            Assert.False(File.Exists(session.LastPinFile));
+        }
+
+        var dying = new FakeB3270Process();
+        dying.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\"")) { dying.Exit(1); return []; }
+            return [Ok(line)];
+        };
+        await using (var session = new B3270Session(Pinned, () => dying))
+        {
+            await Assert.ThrowsAsync<BackendUnavailableException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+            Assert.False(File.Exists(session.LastPinFile));
+        }
+    }
+
+    [Fact]
+    public async Task The_pin_file_is_deleted_after_a_cancelled_connect()
+    {
+        string? connectTag = null;
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\"")) { connectTag = Tag(line); return []; }
+            if (line.Contains("\"Disconnect\""))
+                return [Ok(line), Failed(connectTag!, "Connection failed"), """{"connection":{"state":"not-connected"}}"""];
+            return [Ok(line)];
+        };
+        await using var session = new B3270Session(Pinned, () => fake);
+        using var cts = new CancellationTokenSource();
+        var connect = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+        Assert.True(File.Exists(session.LastPinFile));
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connect);
+        Assert.False(File.Exists(session.LastPinFile));
+    }
+
     [Fact]
     public async Task Options_override_the_profile_verify_setting()
     {
