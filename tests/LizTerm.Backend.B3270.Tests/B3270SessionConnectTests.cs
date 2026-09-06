@@ -541,12 +541,18 @@ public class B3270SessionConnectTests
 
     /// <summary>A machine whose store yields nothing must leave the engine on its own default trust. Writing the
     /// empty PEM instead would make b3270 answer "CA database load ... failed" and never connect at all — worse
-    /// than the behaviour this plan set out to fix.</summary>
-    [Fact]
-    public async Task A_source_with_no_anchors_leaves_the_engine_on_its_own_default()
+    /// than the behaviour this plan set out to fix. An empty or whitespace-only PEM must be treated the same as
+    /// null: the source's contract is "null, never empty", but this is the one place a violation of that contract
+    /// would actually bite — a `caFile` written from an empty string is a zero-byte file, and b3270 fails every
+    /// connect against it just as it would against the fully-empty store this test's null case models.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task A_source_with_no_anchors_leaves_the_engine_on_its_own_default(string? pem)
     {
         var fake = new FakeB3270Process();
-        var trust = new FakeTrustAnchorSource { Pem = null };
+        var trust = new FakeTrustAnchorSource { Pem = pem };
         await using var session = new B3270Session(Verifying, () => fake) { TrustAnchors = trust };
 
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);

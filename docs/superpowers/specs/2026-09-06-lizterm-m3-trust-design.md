@@ -197,7 +197,10 @@ Rulings made in planning and execution, recorded here rather than edited into th
    `SystemTrustAnchors.ReadStore` to always return `[]` (byte-for-byte the shipped bug) left every test passing.
    `SystemTrustAnchorsTests`'s store-read test now asserts a non-null PEM parses to at least five certificates
    (every platform LizTerm supports ships a root store at least that large) instead of returning silently on
-   null, with an explicit `Assert.Skip` kept for a bare container with no store at all. The positive case of
+   null, deliberately with no `Assert.Skip` for a bare container with no store at all: a skip keyed on "the PEM
+   came back null" is indistinguishable from the exact regression the test exists to catch, so an escape hatch
+   there would turn the guard back into a silent pass. `SystemTrustAnchorsTests` needs no engine and runs on all
+   three CI legs, making it the only cross-platform guard against this bug. The positive case of
    `TrustAnchorVerificationTests` now injects the real OS-store bundle (`SystemTrustAnchors.Default.ExportPem()`)
    plus the test CA, rather than a hand-built PEM holding only the test CA, so CI proves the actual bundle
    `SessionFactory` hands the engine in production is OpenSSL-loadable end to end; the negative control is
