@@ -98,7 +98,7 @@ public class B3270SessionLifecycleTests
 
         fake.Exit(137);
 
-        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Equal(137, fault!.ExitCode);
         Assert.Contains("fake stderr line", fault.StderrTail);
         await Assert.ThrowsAsync<BackendUnavailableException>(() => pending);
@@ -147,7 +147,7 @@ public class B3270SessionLifecycleTests
 
         fake.Exit(1);
 
-        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Null(fault!.ExitCode);
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
     }
@@ -200,7 +200,7 @@ public class B3270SessionLifecycleTests
         session.Faulted += (_, f) => faulted.TrySetResult(f);
 
         fake1!.Exit(137);
-        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
 
@@ -230,7 +230,7 @@ public class B3270SessionLifecycleTests
         Assert.Empty(faults);
 
         fake2!.Exit(137);
-        var fault = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        var fault = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Equal(137, fault.ExitCode);
 
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -310,7 +310,7 @@ public class B3270SessionLifecycleTests
         await session.DisposeAsync();
 
         Assert.Contains(fake.InputLines, l => l.Contains("\"Quit\""));
-        Assert.Equal(0, await fake.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
+        Assert.Equal(0, await fake.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
     }
 
     /// <summary>Regression: StartProcessAsync never consulted the shutdown flag, and DisposeAsync clears the

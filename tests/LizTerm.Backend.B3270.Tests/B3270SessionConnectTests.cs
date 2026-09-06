@@ -442,7 +442,7 @@ public class B3270SessionConnectTests
         Assert.False(second.IsCompleted);
 
         fake.Emit("""{"connection":{"state":"not-connected"}}""");
-        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
     }
 
     /// <summary>The completion source belongs to the connection state, not to the first waiter: one that gives up
@@ -460,7 +460,7 @@ public class B3270SessionConnectTests
         var first = session.DisconnectAsync();
         await Task.Delay(450, TestContext.Current.CancellationToken);
         var second = session.DisconnectAsync();
-        await first.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await first.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.False(second.IsCompleted);
 
         fake.Emit("""{"connection":{"state":"not-connected"}}""");

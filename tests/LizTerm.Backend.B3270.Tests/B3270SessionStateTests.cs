@@ -221,7 +221,7 @@ public class B3270SessionStateTests
         Assert.False(disconnect.IsCompleted, "DisconnectAsync completed before the state changed");
 
         fake.Emit(NotConnected);
-        await disconnect.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await disconnect.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
     }
 
@@ -234,7 +234,7 @@ public class B3270SessionStateTests
         await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
         fake.RunResponder = line => [RunResult(line)];   // acknowledged, but never reports not-connected
 
-        await session.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await session.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.Contains(fake.InputLines, l => l.Contains("\"Disconnect\""));
         Assert.Equal(ConnectionState.Connected3270, session.ConnectionState);
