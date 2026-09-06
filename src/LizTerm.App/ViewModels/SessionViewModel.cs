@@ -366,7 +366,11 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         return Guard(_session.DisconnectAsync());
     }
 
-    [RelayCommand]
+    /// <summary>Keys overlap by nature (auto-repeat, fast typing) and the backend serializes its writes, so a
+    /// key sent while the previous one's round trip is still open must run, not be dropped: the toolkit's async
+    /// commands report CanExecute false while an execution is in flight unless told otherwise, and the window
+    /// reaches this command through CommandRouting, which honours CanExecute.</summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private Task SendKeyAsync(TerminalKey key)
     {
         Selection = null;
@@ -391,7 +395,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private bool CanCopy => Selection is not null && Screen is not null;
 
     /// <summary>Copies the selection as trimmed lines. Copying is not host input, so the selection stays.</summary>
-    [RelayCommand(CanExecute = nameof(CanCopy))]
+    [RelayCommand(CanExecute = nameof(CanCopy), AllowConcurrentExecutions = true)]
     private async Task CopyAsync()
     {
         if (Selection is not { } region || Screen is not { } screen) return;
@@ -406,7 +410,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     }
 
     /// <summary>One margin-aware paste of the clipboard text. b3270 moves to the next row at the paste margin on '\n'.</summary>
-    [RelayCommand(CanExecute = nameof(IsConnected))]
+    [RelayCommand(CanExecute = nameof(IsConnected), AllowConcurrentExecutions = true)]
     private async Task PasteAsync()
     {
         // Hotkeys execute commands without consulting CanExecute, so the guard lives here too.
