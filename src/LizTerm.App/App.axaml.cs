@@ -10,6 +10,7 @@ using LizTerm.App.Startup;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Profiles;
+using LizTerm.Core.Security;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App;
@@ -105,7 +106,8 @@ public partial class App : Application
             new AvaloniaTextClipboard(window),
             new AvaloniaCertificatePrompt(window),
             fromStore ? store.Save : null,
-            new AvaloniaFolderOpener(window));
+            new AvaloniaFolderOpener(window),
+            new SslStreamCertificateFetcher());
         window.DataContext = viewModel;
         _sessions.Add(window);
         window.Closed += async (_, _) =>
