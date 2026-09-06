@@ -1,6 +1,7 @@
 # LizTerm
 
-[![CI](https://github.com/coffeemuse/LizTerm/actions/workflows/ci.yml/badge.svg)](https://github.com/coffeemuse/LizTerm/actions/workflows/ci.yml)
+[![CI](https://github.com/coffeemuse/LizTerm/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/coffeemuse/LizTerm/actions/workflows/ci.yml?query=branch%3Amain)
+[![Platforms](https://github.com/coffeemuse/LizTerm/actions/workflows/platforms.yml/badge.svg?branch=main)](https://github.com/coffeemuse/LizTerm/actions/workflows/platforms.yml?query=branch%3Amain)
 
 A cross-platform TN3270 client for retro mainframe hobbyists: macOS, Linux, and Windows, one UI, no install
 dependencies. Built with .NET 10 and Avalonia on top of the b3270 engine from the x3270 suite.
