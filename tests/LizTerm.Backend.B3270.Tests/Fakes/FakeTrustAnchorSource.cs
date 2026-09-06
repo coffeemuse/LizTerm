@@ -12,5 +12,12 @@ internal sealed class FakeTrustAnchorSource : ITrustAnchorSource
 
     public string? Pem { get; set; } = TwoRoots;
 
-    public string? ExportPem() => Pem;
+    /// <summary>How many times a connect asked for anchors, so a test can assert one never did.</summary>
+    public int Calls { get; private set; }
+
+    public string? ExportPem()
+    {
+        Calls++;
+        return Pem;
+    }
 }
