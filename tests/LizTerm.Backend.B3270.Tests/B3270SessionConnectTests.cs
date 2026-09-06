@@ -1,3 +1,5 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using LizTerm.Backend.B3270.Tests.Fakes;
 using LizTerm.Core.Session;
@@ -18,6 +20,12 @@ public class B3270SessionConnectTests
     private static readonly SessionProfile Pinned = Verifying with { PinnedCertificate = Pin };
 
     private static string LastSetLine(FakeB3270Process fake) => fake.InputLines.Last(l => l.Contains("\"Set\""));
+
+    /// <summary>One action argument as it appears on the wire, quotes included. A Windows pin path's backslashes
+    /// are escaped there (<c>C:\\Users\\...</c>), so an assertion on the path has to escape them the same way.
+    /// RunOperation.Serialize writes with the same relaxed encoder.</summary>
+    private static string WireArg(string value) =>
+        JsonSerializer.Serialize(value, new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
 
     [Fact]
     public void Tls_settings_are_explicit_for_all_three_cases()
@@ -41,7 +49,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Verifying with { PinnedCertificate = chain }, () => fake);
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         var set = LastSetLine(fake);
-        Assert.Contains($"\"caFile\",\"{session.LastPinFile}\"", set);
+        Assert.Contains($"\"caFile\",{WireArg(session.LastPinFile!)}", set);
         Assert.Contains("\"acceptHostname\",\"\"", set);
     }
 
@@ -69,7 +77,7 @@ public class B3270SessionConnectTests
 
         var set = LastSetLine(fake);
         Assert.Contains("\"verifyHostCert\",\"true\"", set);
-        Assert.Contains($"\"caFile\",\"{session.LastPinFile}\"", set);
+        Assert.Contains($"\"caFile\",{WireArg(session.LastPinFile!)}", set);
         Assert.Contains("\"acceptHostname\",\"any\"", set);
         Assert.True(existedDuringConnect, "the pin file did not exist while the Connect run was pending");
         Assert.Equal(Pin.Pem, contentDuringConnect);
