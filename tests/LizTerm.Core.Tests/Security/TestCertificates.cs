@@ -7,7 +7,7 @@ namespace LizTerm.Core.Tests.Security;
 /// <summary>Certificates made on the fly for the reader and fetcher tests. The self-signed one uses RSA because the
 /// fetcher test serves it from an SslStream, and RSA server keys work on every TLS stack .NET runs on; the CA pair
 /// is only ever read, so it uses ECDSA, whose Create overload needs no signature padding.</summary>
-public static class TestCertificates
+internal static class TestCertificates
 {
     public static X509Certificate2 SelfSigned(string subject = "CN=localhost", DateTimeOffset? notBefore = null, DateTimeOffset? notAfter = null)
     {
@@ -73,7 +73,8 @@ public static class TestCertificates
         // certificate alone and throws; an explicit generator for the root's key is required instead.
         using var unkeyed = leafRequest.Create(root.SubjectName, X509SignatureGenerator.CreateForECDsa(rootKey),
             DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(10), serial);
-        return (root, WithUsableKey(unkeyed.CopyWithPrivateKey(leafKey)));
+        using var withKey = unkeyed.CopyWithPrivateKey(leafKey);
+        return (root, WithUsableKey(withKey));
     }
 
     private static X509Extension LocalhostNames()

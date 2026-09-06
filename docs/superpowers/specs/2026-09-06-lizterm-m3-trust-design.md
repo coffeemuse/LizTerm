@@ -154,7 +154,12 @@ folded in here.
 
 Also noted for 3d: the `hello` indication reports version, build and copyright, but not the TLS provider. A
 Windows engine built against Schannel does not take a `caFile` the way an OpenSSL build does, so the Windows
-plan must decide how this rule applies there rather than assuming it carries over.
+plan must decide how this rule applies there rather than assuming it carries over. The specific wrinkle to
+weigh when it does: the Windows Root/`LocalMachine` store is populated on demand by the auto-root-update
+program, not shipped complete, so an export taken at one moment can hold materially fewer anchors than Schannel
+or .NET would actually trust a moment later. A host whose root has not yet been downloaded to this machine
+would fail against our exported bundle while succeeding in a browser that triggers the download itself — a
+false negative this plan's macOS keychain read does not have, because Apple ships that store complete.
 
 ## 7. Out of scope
 
@@ -177,3 +182,23 @@ Rulings made in planning and execution, recorded here rather than edited into th
 3. The milestone renumbering this plan performs (Linux becomes 3c, Windows 3d, publish and release 3e, the
    integration lane 3f) is applied throughout the plan 3a spec, not just its section 1 — every other place in
    that document naming a milestone letter is corrected to match.
+4. A whole-branch review found that `ConnectAsync` decided the trust settings and wrote the CA file on whatever
+   context called it — the Avalonia UI thread for every session, since `App.OpenSession` starts the connect
+   there and nothing in the codebase uses `ConfigureAwait(false)`. `TrustAnchors.ExportPem()` (210 ms on first
+   read) and the 238 KB synchronous write therefore ran on the UI thread on every connect, TLS or not. The
+   decide-and-write step (`B3270Session.DecideCaFile`) now runs inside a `Task.Run`, still honouring the pin
+   short-circuit (a pin in force never calls `ExportPem()` at all) and still leaving the written path reachable
+   by the existing `finally` that deletes it. The same review added a guard against a trust source returning an
+   empty or whitespace-only PEM (treated the same as null, never written to `caFile`, and deliberately not
+   applied to a pin's own PEM, which must keep failing loudly), made a failed `WriteCaFile` write delete its own
+   partial file before rethrowing, and made `SystemTrustAnchors`'s cached read fail safe — returning null rather
+   than caching an exception forever — against one malformed certificate in the store.
+5. The same review found the test suite could not detect the regression this plan exists to prevent: mutating
+   `SystemTrustAnchors.ReadStore` to always return `[]` (byte-for-byte the shipped bug) left every test passing.
+   `SystemTrustAnchorsTests`'s store-read test now asserts a non-null PEM parses to at least five certificates
+   (every platform LizTerm supports ships a root store at least that large) instead of returning silently on
+   null, with an explicit `Assert.Skip` kept for a bare container with no store at all. The positive case of
+   `TrustAnchorVerificationTests` now injects the real OS-store bundle (`SystemTrustAnchors.Default.ExportPem()`)
+   plus the test CA, rather than a hand-built PEM holding only the test CA, so CI proves the actual bundle
+   `SessionFactory` hands the engine in production is OpenSSL-loadable end to end; the negative control is
+   unchanged, since it exists to prove the opposite.

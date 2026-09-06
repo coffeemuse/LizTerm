@@ -426,7 +426,7 @@ the backend tests.
   `FakeEmulatorSession`'s `ConnectCompletion`, `ConnectToken`, `connect:noverify`, `wirelog:start:<path>` /
   `wirelog:stop`, `WireLogException`, `Engine`. `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
   `fetch:<host>:<port>`), `FakeCertificatePrompt.LastRequest`, and `FakeEmulatorSession` recording
-  `connect:pin:<sha256>`. The App and backend test projects each have one `Wait.UntilAsync(condition, what, timeout?)` helper (`Wait.cs`) replacing the private copies the tests used to carry.
+  `connect:pin:<sha256>`. The App, backend, and integration test projects each have one `Wait.UntilAsync(condition, what, timeout?)` helper (`Wait.cs`) replacing the private copies the tests used to carry.
   Its default timeout is 5 s (raised from 2 s for CI headroom).
   `EnvironmentCollection` is a non-parallel xunit collection in the backend test project only, holding `WireLogTests`,
   which sets `LIZTERM_WIRE_LOG`. `SessionFactoryTests` no longer touches the environment: it calls the internal
