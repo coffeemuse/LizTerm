@@ -15,8 +15,23 @@ public sealed class SystemTrustAnchors : ITrustAnchorSource
 
     public string? ExportPem() => _pem.Value;
 
-    private static string? Read() =>
-        TrustAnchorPem.Build([.. ReadStore(StoreLocation.LocalMachine), .. ReadStore(StoreLocation.CurrentUser)]);
+    private static string? Read()
+    {
+        try
+        {
+            return TrustAnchorPem.Build([.. ReadStore(StoreLocation.LocalMachine), .. ReadStore(StoreLocation.CurrentUser)]);
+        }
+        catch (Exception)
+        {
+            // The Lazy field below caches whatever this returns for the process's life, an exception included:
+            // Lazy's default mode re-throws a cached exception on every later access. One malformed certificate
+            // in the store (Fingerprint or ExportCertificatePem inside TrustAnchorPem.Build) would otherwise make
+            // every connect for the rest of the run throw instead of merely losing that machine's anchors — and
+            // fewer anchors is already a recoverable, handled case (ReadStore's own try/catch, and ConnectAsync's
+            // fallback to the engine's own default trust), while a permanently poisoned Lazy is not.
+            return null;
+        }
+    }
 
     /// <summary>Both locations, because a root an administrator installed machine-wide and one the user added
     /// themselves are equally the answer to "what does this machine trust". A store that cannot be opened

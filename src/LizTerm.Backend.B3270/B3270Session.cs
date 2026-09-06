@@ -574,17 +574,14 @@ public sealed class B3270Session : IEmulatorSession
         var verify = options?.VerifyCertificate ?? Profile.VerifyCertificate;
         // Spec 3.1: verification off means no pin; otherwise the one-shot pin wins over the profile's.
         var pin = verify ? options?.Pin ?? Profile.PinnedCertificate : null;
-        // Spec 3: verification off means no CA file at all; otherwise a pin is the whole trust store, and without
-        // one the machine's own anchors are, because a statically linked engine has none it can use (spec 1). A
-        // source with nothing to offer leaves caFile empty: an empty *file* fails the connect outright.
-        var pem = pin?.Pem ?? (verify ? TrustAnchors.ExportPem() : null);
-        var caFile = pem is null ? null : WriteCaFile(pem, pin is null ? "roots" : "pin");
+        // Off the caller's context: App.OpenSession starts every connect from the Avalonia UI thread, and nothing
+        // in this codebase uses ConfigureAwait(false), so without this Task.Run the continuation after
+        // StartProcessAsync — and so TrustAnchors.ExportPem() (measured 210 ms reading the OS store) and the 238 KB
+        // synchronous write below — would run on that thread for every connect, TLS or not. DecideCaFile is the
+        // whole decide-and-write step, so the CA file is fully written (or the source's short-circuit fully
+        // resolved) before the thread pool hop back to the caller.
+        var (caFile, anyName) = await Task.Run(() => DecideCaFile(pin, verify));
         LastCaFile = caFile;
-        // A pin that is one self-signed certificate names the host by itself, so the name check adds nothing. A pin
-        // that also carries CA certificates makes each of them a trust anchor (OpenSSL trusts every member of caFile),
-        // and only the engine's normal name check then keeps a certificate that CA issued for another host from
-        // verifying here.
-        var anyName = pin is not null && CertificateReader.CountCertificates(pin.Pem) == 1;
         try
         {
             // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
@@ -598,6 +595,32 @@ public sealed class B3270Session : IEmulatorSession
         {
             if (caFile is not null) TryDeleteCaFile(caFile);
         }
+    }
+
+    /// <summary>The trust decision for one connect attempt, and the file that carries it: spec 3, verification off
+    /// means no CA file at all; otherwise a pin is the whole trust store, and without one the machine's own anchors
+    /// are, because a statically linked engine has none it can use (spec 1). Evaluated off the caller's context (see
+    /// <see cref="ConnectAsync"/>) since it is the only part of a connect that does real work: reading the trust
+    /// source and writing its PEM to disk.</summary>
+    private (string? CaFile, bool AnyName) DecideCaFile(CertificatePin? pin, bool verify)
+    {
+        // Only reached when there is no pin (pin?.Pem is null iff pin is null: Pem is non-nullable), which is what
+        // keeps a pinned connect from ever calling into the trust-anchor source at all.
+        var anchors = pin is null && verify ? TrustAnchors.ExportPem() : null;
+        // A source with nothing to offer, or only whitespace, leaves caFile empty: an empty *file* fails the
+        // connect outright, so "nothing usable" has to collapse to null before it reaches WriteCaFile. Deliberately
+        // not applied to pin.Pem: a pin with an empty PEM is a broken pin and must keep failing loudly (b3270
+        // rejects the resulting empty caFile) rather than silently falling back to wider trust.
+        var pem = pin?.Pem ?? (string.IsNullOrWhiteSpace(anchors) ? null : anchors);
+        // The engine loads caFile when it builds the TLS context for this connection, inside the Connect run, so
+        // the file has to outlive that run and nothing more.
+        var caFile = pem is null ? null : WriteCaFile(pem, pin is null ? "roots" : "pin");
+        // A pin that is one self-signed certificate names the host by itself, so the name check adds nothing. A pin
+        // that also carries CA certificates makes each of them a trust anchor (OpenSSL trusts every member of caFile),
+        // and only the engine's normal name check then keeps a certificate that CA issued for another host from
+        // verifying here.
+        var anyName = pin is not null && CertificateReader.CountCertificates(pin.Pem) == 1;
+        return (caFile, anyName);
     }
 
     /// <summary>The Set action carrying one attempt's trust settings (spec 4.1). <paramref name="acceptAnyName"/>
@@ -618,9 +641,19 @@ public sealed class B3270Session : IEmulatorSession
         var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
         // Owner-only on Unix; the Windows temp directory is already per user.
         if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        using var stream = new FileStream(path, options);
-        using var writer = new StreamWriter(stream);
-        writer.Write(pem);
+        try
+        {
+            using var stream = new FileStream(path, options);
+            using var writer = new StreamWriter(stream);
+            writer.Write(pem);
+        }
+        catch
+        {
+            // A write that fails partway (disk full, etc.) never hands the path back to the caller, so the
+            // caller's finally can never delete it; clean up the partial file here instead of leaking it.
+            TryDeleteCaFile(path);
+            throw;
+        }
         return path;
     }
 

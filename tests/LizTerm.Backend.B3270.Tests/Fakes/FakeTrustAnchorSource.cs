@@ -11,11 +11,6 @@ internal sealed class FakeTrustAnchorSource : ITrustAnchorSource
         "-----BEGIN CERTIFICATE-----\ncm9vdDI=\n-----END CERTIFICATE-----\n";
 
     public string? Pem { get; set; } = TwoRoots;
-    public int Calls { get; private set; }
 
-    public string? ExportPem()
-    {
-        Calls++;
-        return Pem;
-    }
+    public string? ExportPem() => Pem;
 }

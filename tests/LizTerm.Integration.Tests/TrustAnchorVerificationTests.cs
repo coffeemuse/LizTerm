@@ -54,9 +54,13 @@ public class TrustAnchorVerificationTests
         {
             var (host, port) = LoopbackTlsHost.Start(leaf, ct);
             await using var _ = host;
+            // The real OS-store bundle plus the test CA, not a hand-built PEM: this is what proves the actual
+            // bundle SessionFactory hands the engine in production is OpenSSL-loadable end to end. A single
+            // unparsable root in that bundle would make load_verify_locations fail and take out every connect,
+            // and only this shape of test would catch it.
             await using var session = new B3270Session(Profile(port), () => new B3270ChildProcess(location.Path), location: location)
             {
-                TrustAnchors = new Anchors(root.ExportCertificatePem() + "\n"),
+                TrustAnchors = new Anchors((SystemTrustAnchors.Default.ExportPem() ?? "") + root.ExportCertificatePem() + "\n"),
             };
 
             // ConnectAsync does not return here: the handshake succeeds and the engine then waits out a telnet
@@ -80,6 +84,7 @@ public class TrustAnchorVerificationTests
             }
 
             Assert.True(tls!.Secure);
+            Assert.True(tls.Verified);
         }
     }
 
