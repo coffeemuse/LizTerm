@@ -856,7 +856,7 @@ Then prove the skip is not hiding a failure:
 Run: `LIZTERM_REQUIRE_ENGINE=1 dotnet test tests/LizTerm.Integration.Tests --filter "FullyQualifiedName~TrustAnchorVerificationTests"`
 Expected: PASS with a bundled engine; a clear failure without one.
 
-If the first test times out waiting for `Tls?.Verified`, read the wire with `LIZTERM_WIRE_LOG=/tmp/trust.log` on the same command and look at the `tls` and `run-result` lines — the engine reports the reason verbatim.
+If the first test times out waiting for `Tls?.Verified`, the wire log is not available here: only `src/LizTerm.App/SessionFactory.cs` reads `LIZTERM_WIRE_LOG`, and these tests construct `B3270Session` directly, so the variable is ignored and nothing gets written. Diagnose from the engine's own `run-result` text instead, which the negative control test already asserts on.
 
 - [ ] **Step 6: Commit**
 

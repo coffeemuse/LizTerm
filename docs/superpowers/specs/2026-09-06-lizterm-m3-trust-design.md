@@ -161,3 +161,19 @@ plan must decide how this rule applies there rather than assuming it carries ove
 Linux and Windows engines; anything about publishing or releases; shipping a CA bundle of our own, which this
 design exists to avoid; a profile field for extra CA certificates, which pinning already covers; the SNI gap;
 revocation checking; and any change to the certificate prompt, the pin format, or the profile file.
+
+## 8. Deviations from this spec (as-built)
+
+Rulings made in planning and execution, recorded here rather than edited into the sections above:
+
+1. `TestCertificates.CaSignedServable()` (Task 5) could not sign the leaf the way `CaSigned()` does: an ECDSA
+   root signing an RSA leaf is unsupported through the `CertificateRequest.Create(X509Certificate2, ...)`
+   convenience overload, which only infers a signer from the issuer certificate when the two keys share an
+   algorithm. It uses the explicit `Create(X500DistinguishedName, X509SignatureGenerator, ...)` overload instead,
+   with `X509SignatureGenerator.CreateForECDsa(rootKey)` standing in for the inferred signer.
+2. The positive integration test (Task 5) originally read `session.Tls` after cancelling the connect, which threw
+   `NullReferenceException` every time: `ConnectAsync`'s cancellation path waits for the Disconnected state before
+   returning, and that state clears `Tls`. The test now captures `Tls` into a local before cancelling.
+3. The milestone renumbering this plan performs (Linux becomes 3c, Windows 3d, publish and release 3e, the
+   integration lane 3f) is applied only to the plan 3a spec's section 1, not to the other places in that document
+   that still name the old letters.
