@@ -27,6 +27,8 @@ Tests use xunit.v3 in VSTest mode, so `--filter` takes the usual `FullyQualified
 no separate lint or format step; `Nullable` and `ImplicitUsings` are on solution-wide via
 `Directory.Build.props`, and every package version lives only in `Directory.Packages.props` (central
 package management: `PackageReference` entries in csproj files carry no `Version`).
+`dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "` is the zero-warning check to run before
+calling anything done; an incremental build hides warnings from projects it does not recompile.
 
 ### The b3270 binary
 
@@ -42,7 +44,7 @@ Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
 be started from Help > Wire Log in a session window; files go to `<config>/logs/wire-<profile>-<timestamp>.log`,
 and Show Wire Logs opens that folder. `LIZTERM_TEST_HOST`
-(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports four skipped tests; add
+(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports five skipped tests; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
 `LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
 which logs on to TSO, sends and receives `LIZTERM.ITEST` under the user's prefix, and deletes it; without them that
@@ -91,7 +93,9 @@ before the picker or session window; wait for it to close before `tree`.
 the same format (inbound lines only, prefix stripped); `gateway-login-tls.jsonl` was made that way and covers TLS,
 plain `connected-3270`, and a host-initiated disconnect.
 `indfile-tso-roundtrip.jsonl` is the inbound side of the live IND$FILE round trip against MVS/CE, trimmed to the two
-transfers; `IndicationParserTests` asserts its `ft` sequence.
+transfers; `IndicationParserTests` asserts its `ft` sequence. `gateway-pinned-login.jsonl` was made the same way
+from the pinning live test run alone (`LiveHostTests.A_pinned_certificate_verifies_and_a_decoy_pin_fails`), trimmed
+to the first connection; it is `gateway-login-tls.jsonl` with `verified:true`.
 Fixtures live in `tests/LizTerm.Backend.B3270.Tests/Fixtures/` and its README documents each one,
 including why `ibmlink-help.jsonl` was recorded with step `4r` instead of play-to-EOF. Every field bug is
 supposed to add a trimmed fixture.
@@ -136,6 +140,18 @@ the backend tests.
   `BackendUnavailableException` (the engine has died, or dies mid-transfer). `FileTransferRequest.Validate()`
   checks only what would be refused outright;
   fields that do not apply to the direction, mode, or host type are ignored downstream, never errors.
+- `SessionProfile.PinnedCertificate` is a `CertificatePin` (SHA-256 fingerprint as colon-separated upper-case hex,
+  subject, and the PEM chain leaf first) or null; `ConnectOptions(VerifyCertificate, Pin)` overrides either for one
+  attempt. The effective rule is in `B3270Session.ConnectAsync`: verify off means no pin; otherwise the one-shot pin
+  wins over the profile's; no pin means the engine's default trust. `DestructiveBackspace` defaults to true (every
+  x3270-family default keymap erases; the old belief that x3270 defaults to cursor-left came from the `BackSpace()`
+  action's name), and the profile JSON writes every field, so a saved false survives. `LizTerm.Core.Security` holds
+  `ICertificateFetcher` and `SslStreamCertificateFetcher` (one handshake that captures and accepts the chain,
+  keeping only the leaf plus the host-sent extras from the chain policy's ExtraStore, never a root the chain
+  engine supplied from the system store, 10 s bound, `IOException` "No TLS answer ..." on timeout) and
+  `CertificateReader` (fingerprint, PEM, and whether the chain is pinnable: .NET validates it with its own
+  self-signed members as the only trust roots, which is what
+  OpenSSL will do with the pin file). They are BCL-only, so they live in Core and the integration lane can use them.
 - Threading contract: a backend raises all events on one dedicated thread, in order, and knows nothing
   about UI threads. The App layer marshals.
 - `ConnectAsync(ConnectOptions?, CancellationToken)`: a cancelled token ends the attempt with
@@ -214,6 +230,16 @@ the backend tests.
   success is still a success). Every action goes through `RequireProcess`: after the engine dies it throws
   `BackendUnavailableException` carrying the last fault, and `InvalidOperationException` ("The session has not
   been started.") is reserved for a session that was never started.
+- Every connect sends one `Set(verifyHostCert,…,caFile,…,acceptHostname,…)` with all three explicit, so an attempt
+  never inherits the previous one's trust settings (verified: empty values clear them in the same engine). A pinned
+  attempt writes the PEM to `Path.GetTempPath()/lizterm-pin-<guid>.pem` (owner-only on Unix) just before that Set
+  and deletes it in a `finally` once the Connect run has answered, because x3270 loads `caFile` in `sio_init` for
+  each connection. `acceptHostname` is `any` only for a pin that is one self-signed certificate; a pin that also
+  carries CA certificates makes each of them an OpenSSL trust anchor, so the engine's normal name check stays on to
+  keep a certificate that CA issued for another host from verifying (`CertificateReader.CountCertificates` decides).
+  `LastPinFile` is the test seam. `WaitForDisconnectedAsync` awaits a completion source the connection state owns:
+  completed while the connection is down, replaced by a fresh one in `SetConnectionState` when it comes up, so
+  overlapping waiters share it and a waiter that gives up cannot orphan another.
 - `WireLog` is the bug-report mechanism and the fixture recorder: one file, every line, both directions,
   timestamped. `WireLog.TryFromEnvironment(out error)` returns null when the variable is unset or the file
   cannot be opened; the session raises the open error once as a `HostMessage`. The log is a swappable field
@@ -230,17 +256,34 @@ the backend tests.
 - `SessionViewModel` takes an `Action<Action> dispatch` argument to marshal backend events onto the UI
   thread; the app passes `Dispatcher.UIThread.Post`, tests pass `a => a()`. Rejected actions
   (`EmulatorActionException`) are deliberately swallowed because b3270 already explains them through the
-  keyboard lock; only unexpected and backend-unavailable errors set `ErrorMessage`.
+  keyboard lock; only unexpected and backend-unavailable errors set `ErrorMessage`. `SessionWindow` refocuses the
+  screen after the error bar's Dismiss.
 - `TerminalScreen` prepares each row as runs of identical style — rectangle, brushes, and shaped `FormattedText`
   — and keeps that list for as long as the snapshot instance and the `CellGeometry` are unchanged, so a blink
   phase flip (a full `InvalidateVisual` twice a second, for as long as anything blinks) redraws the prepared runs
   instead of re-segmenting and re-shaping every cell. A new snapshot or a new geometry rebuilds it; `RunPlanBuilds`
   is the test seam for that. It is a custom `Control` that draws those runs scaled to fit
   via `CellGeometry.Fit` (pure math, unit tested). It raises `KeyRequested`, `TextEntered`, and
-  `CellClicked`; `SessionWindow` wires those to the view model. Key events go through `DefaultKeymap`
-  first; anything unmapped falls through to Avalonia's text input so dead keys and IMEs work. Backspace maps
-  to b3270's non-destructive `BackSpace` unless the profile's `DestructiveBackspace` is on, in which case the
-  keymap emits `TerminalKey.Erase`; the control's `DestructiveBackspace` property carries that choice.
+  `CellClicked`; `SessionWindow` wires those to the view model. Key events go through the platform copy, paste,
+  and select-all hotkeys first, then `Keymap.TryMap`, then `Keymap.TryText` (Ctrl+[ types `¬`, Ctrl+6 `¢`), then
+  fall through to Avalonia's text input so dead keys and IMEs work. `Keymap` (`Keyboard/`) is an immutable table
+  of `KeyChord(Key, Modifiers, Tap)` to `TerminalKey`, built by
+  `DefaultKeymap.Create(destructiveBackspace)` (two cached instances) from Vista TN3270's defaults, cross-checked
+  against wc3270 in the 3b spec's section 6.2: Escape is Attn, Shift+Escape SysReq, Pause and Ctrl+Escape Clear,
+  Page Up/Down PF7/PF8, Alt+1 and Ctrl+Home/PageUp and Alt+2/3 the PA keys, Ctrl+F1..12 and Shift+F1..12 PF13..24,
+  Shift+Enter Newline, Ctrl+R Reset. Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's
+  `PlatformHotkeyConfiguration` constructor puts Ctrl+Insert into Copy whatever the command modifier (the Meta-based
+  macOS table included), and the screen checks the copy/paste/select-all gestures before the keymap, so Ctrl+Insert
+  copies on every platform and PA1 is reached through Alt+1 or the Keys menu. A Left Ctrl tap is Reset and a Right
+  Ctrl tap is Enter: `ModifierTapDetector` sees a Ctrl key down and the same key up with nothing between (`OnKeyUp`
+  looks up `KeyChord.TapOf`); another key, a pointer press, a wheel turn, focus loss, and the window deactivating
+  all reset it. `Keymap.With` is the seam for user remapping later; nothing else about remapping exists. The
+  control's `DestructiveBackspace` property (default true, bound to the profile) picks which table.
+  The screen's key, copy, paste, and select-all events call the view model's public methods (`SendKeyAsync`,
+  `CopyAsync`, `PasteAsync`, `SelectAll`) directly, as `TextEntered` and `CellClicked` always did; each method
+  carries its own guard, and a keystroke is never dropped for arriving while the previous one's round trip is
+  still open. The `[RelayCommand]`s on the same methods serve the menus, which keep CommunityToolkit's default of
+  disabling an async command while it runs.
 - Mouse selection is a `ScreenRegion` (Core; inclusive, zero-based, always normalized). `SelectionGesture`
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the
@@ -250,7 +293,8 @@ the backend tests.
   non-space cells. `SessionViewModel` owns Copy (trimmed rows joined by `\n`), Paste (CRLF normalized, one
   `PasteTextAsync`), and Select All, and nulls `Selection` on every path that sends input to the host. Clipboard
   access goes through `ITextClipboard` (`Clipboard/`), injected like the dispatch delegate; the app passes
-  `AvaloniaTextClipboard(window)`, so `App.OpenSession` creates the window before the view model.
+  `AvaloniaTextClipboard(window)`, so `App.OpenSession` creates the window before the view model. `TerminalScreen`
+  writes its own `Selection` with `SetCurrentValue` so a binding survives, and `OnPointerCaptureLost` ends a drag.
 - File transfer: `SessionWindow`'s "File Transfer..." item (enabled while connected) opens `FileTransferWindow`
   modally with a `FileTransferViewModel` from `SessionViewModel.CreateTransfer(IFilePicker)`, which pre-fills it
   from `LastTransferRequest` (the last request started from that window; nothing goes to the profile). The view
@@ -261,7 +305,9 @@ the backend tests.
   `FileTransferViewModel.TryClose`: the first close of a running transfer cancels it and keeps the window so
   the outcome shows, and a second close while the engine has still not answered lets the window go, because
   b3270 only aborts a running transfer on the host's next turn and a stalled host must not pin the dialog, the
-  session window, and Quit behind it. OS file dialogs go through `IFilePicker` (`Files/`), injected like the
+  session window, and Quit behind it. Escape closes the dialog in every phase through the window's `OnKeyDown`, so
+  it goes through `Closing` and `TryClose` like the Close button; the Running panel has no Close button, which is
+  why it is not an `IsCancel` button. OS file dialogs go through `IFilePicker` (`Files/`), injected like the
   clipboard; `LocalFileNames` suggests the save name (member or last qualifier, VM `FN.FT`). `TransferLabels`
   labels the combo boxes. Avalonia propagates an owned dialog's `Closing` cancel to its owner, so the first
   close of the session window (or quit) while a transfer runs is refused the same way; a forced shutdown's
@@ -288,10 +334,18 @@ the backend tests.
   pending one; the timeout line states only what was observed — an open socket with no 3270 session — and offers
   TLS as a possibility, because b3270 reports nothing that tells a TLS listener apart from a host that accepted
   the socket and stopped talking, and confident TLS advice on a host that does not speak it makes things worse),
-  offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard;
-  `saveProfile` is null for ad hoc profiles so the checkbox is hidden; the prompt and the save run after the
-  connect's catch clauses, never inside one, so their own failures reach the error banner instead of faulting the
-  command), and owns the Help menu's wire log toggle and `Engine` for `AboutWindow`. When `IsWireLogging` cannot
+  offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard, asked with a
+  `CertificatePromptRequest`: reason lines, what the host presented (read by the injected `ICertificateFetcher` for
+  TLS profiles only, under a fresh `ConnectTimeout` source), the previous pin, `CanPin`, and `CannotPinReason`;
+  `CanPin` needs a saved TLS profile, a pinnable certificate, and a fingerprint that differs from the pin in force,
+  which is what stops a rejected pin from being offered again; "Trust this certificate for this profile" pins: the
+  profile is saved with the pin and verification on, `_pinOverride` carries it for the window's life because the
+  session's profile is fixed, and Connect Anyway without it is one attempt with verification off; a changed
+  certificate reopens the same window titled "Certificate changed" with both fingerprints; the editor shows a pinned
+  profile's fingerprint with a Forget button, the only way back to default trust; the prompt and the save run after
+  the connect's catch clauses, never inside one, so their own failures reach the error banner instead of faulting
+  the command), and owns the Help menu's wire log toggle and `Engine` for `AboutWindow`. Wire log names gain `-2`,
+  `-3` when two starts land in the same second (`SessionViewModel.UniquePath`). When `IsWireLogging` cannot
   start a log it marshals its own correction back to false through `dispatch` rather than assigning inline: a
   value corrected from inside its own change notification is invisible to the menu item's two-way binding, which
   is still writing target to source, so the item would keep a check mark for a log that never started and swallow
@@ -330,4 +384,12 @@ the backend tests.
   `StatusFormatter` and its tests together.
 - New fakes: `FakeCertificatePrompt` (`Decision`, `OnAsk`, `Calls`), `FakeFolderOpener`, and
   `FakeEmulatorSession`'s `ConnectCompletion`, `ConnectToken`, `connect:noverify`, `wirelog:start:<path>` /
-  `wirelog:stop`, `WireLogException`, `Engine`.
+  `wirelog:stop`, `WireLogException`, `Engine`. `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
+  `fetch:<host>:<port>`), `FakeCertificatePrompt.LastRequest`, and `FakeEmulatorSession` recording
+  `connect:pin:<sha256>`. The App and backend test projects each have one `Wait.UntilAsync(condition, what, timeout?)` helper (`Wait.cs`) replacing the private copies the tests used to carry.
+  `EnvironmentCollection` is a non-parallel xunit collection in each of the App and backend test projects; the App
+  one holds `SessionFactoryTests`, which sets `LIZTERM_B3270_PATH`, and the backend one holds `WireLogTests`, which
+  sets `LIZTERM_WIRE_LOG`.
+  `TestCertificates` in the Core tests makes self-signed and CA-signed certificates and re-imports through PKCS#12
+  so macOS accepts the key for a loopback SslStream server; the live tests carry a 10 minute xunit timeout;
+  `gateway-pinned-login.jsonl` replays a verified pinned connect.

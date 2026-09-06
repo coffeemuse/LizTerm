@@ -201,7 +201,10 @@ Key events pass through one default keymap table to a `TerminalKey`, else fall t
 | Page Up / Page Down | PA1 / PA2 |
 | Ctrl+C, Ctrl+V (Cmd on macOS) | Copy / Paste |
 
-The table is cross-checked against wc3270 and Vista TN3270 defaults during planning. Not user-editable in v1.
+Superseded on 2026-09-05: the cross-check against wc3270 and Vista TN3270 is the table in
+`2026-09-05-lizterm-m2-hardening-design.md` section 6.2, which is what ships (Escape is Attn, Page Up/Down are
+PF7/PF8, Backspace erases by default, and the PA, Clear, SysReq, Newline, and modifier-tap rows are new). Not
+user-editable in v1.
 
 ### 6.6 Mouse, selection, clipboard
 

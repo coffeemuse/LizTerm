@@ -20,9 +20,10 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<ScreenSnapshot?> SnapshotProperty =
         AvaloniaProperty.Register<TerminalScreen, ScreenSnapshot?>(nameof(Snapshot));
 
-    /// <summary>Mirrors the profile's DestructiveBackspace choice; see <see cref="DefaultKeymap.TryMap"/>.</summary>
+    /// <summary>Mirrors the profile's DestructiveBackspace choice; the window binds it. True (erase) by default,
+    /// like a new profile (spec 3.2).</summary>
     public static readonly StyledProperty<bool> DestructiveBackspaceProperty =
-        AvaloniaProperty.Register<TerminalScreen, bool>(nameof(DestructiveBackspace));
+        AvaloniaProperty.Register<TerminalScreen, bool>(nameof(DestructiveBackspace), defaultValue: true);
 
     /// <summary>The mouse selection, or null. Two-way by default so the window can bind it to the view model,
     /// which clears it whenever input is sent to the host.</summary>
@@ -33,6 +34,9 @@ public sealed class TerminalScreen : Control
 
     private readonly Typeface _typeface = new(TerminalFont);
     private readonly SelectionGesture _gesture = new();
+    private readonly ModifierTapDetector _taps = new();
+    private WindowBase? _window;
+    private Keymap Keymap => DefaultKeymap.Create(DestructiveBackspace);
     private double _advancePerEm;
     private double _lineHeightPerEm;
 
@@ -69,6 +73,8 @@ public sealed class TerminalScreen : Control
     {
         base.OnAttachedToVisualTree(e);
         _attached = true;
+        _window = TopLevel.GetTopLevel(this) as WindowBase;
+        if (_window is not null) _window.Deactivated += OnWindowDeactivated;
         UpdateBlinkTimer(Snapshot);
     }
 
@@ -76,6 +82,8 @@ public sealed class TerminalScreen : Control
     {
         base.OnDetachedFromVisualTree(e);
         _attached = false;
+        if (_window is not null) _window.Deactivated -= OnWindowDeactivated;
+        _window = null;
         UpdateBlinkTimer(null);
     }
 
@@ -124,21 +132,61 @@ public sealed class TerminalScreen : Control
     public event EventHandler? PasteRequested;
     public event EventHandler? SelectAllRequested;
 
+    /// <summary>Spec 6.2 ordering: the platform's copy, paste, and select-all hotkeys first (they are not in the
+    /// table), then the key table, then the text table, then Avalonia's text input for everything else so dead
+    /// keys and IMEs keep working.</summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        _taps.KeyDown(e.Key);
         if (TryHandleClipboardKey(e))
         {
             e.Handled = true;
             return;
         }
-        if (DefaultKeymap.TryMap(e.Key, e.KeyModifiers, DestructiveBackspace, out var key))
+        var chord = new KeyChord(e.Key, e.KeyModifiers);
+        if (Keymap.TryMap(chord, out var key))
         {
             KeyRequested?.Invoke(this, key);
             e.Handled = true;
             return;
         }
+        if (Keymap.TryText(chord, out var text))
+        {
+            TextEntered?.Invoke(this, text);
+            e.Handled = true;
+            return;
+        }
         base.OnKeyDown(e);
     }
+
+    /// <summary>A Ctrl key released alone is a tap chord (Right Ctrl is Enter, Left Ctrl is Reset by default).</summary>
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (_taps.KeyUp(e.Key) is { } tapped && Keymap.TryMap(KeyChord.TapOf(tapped), out var key))
+        {
+            KeyRequested?.Invoke(this, key);
+            e.Handled = true;
+            return;
+        }
+        base.OnKeyUp(e);
+    }
+
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        _taps.Reset();
+        base.OnLostFocus(e);
+    }
+
+    /// <summary>A wheel turn between a Ctrl press and its release makes the release the end of a chord, not a tap
+    /// (a Ctrl+wheel zoom habit must not submit the screen), and so does the window losing activation while Ctrl is
+    /// down, which moves no keyboard focus.</summary>
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        _taps.Reset();
+        base.OnPointerWheelChanged(e);
+    }
+
+    private void OnWindowDeactivated(object? sender, EventArgs e) => _taps.Reset();
 
     private bool TryHandleClipboardKey(KeyEventArgs e)
     {
@@ -168,6 +216,8 @@ public sealed class TerminalScreen : Control
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
+        // A Ctrl+click is a click, not a Ctrl tap.
+        _taps.Reset();
         base.OnPointerPressed(e);
         Focus();
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
@@ -190,7 +240,7 @@ public sealed class TerminalScreen : Control
             _gesture.DoubleClick(cell.Row, cell.Column, snapshot);
         else
             _gesture.Press(cell.Row, cell.Column);
-        Selection = _gesture.Region;
+        SetCurrentValue(SelectionProperty, _gesture.Region);
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
@@ -202,15 +252,19 @@ public sealed class TerminalScreen : Control
         var position = e.GetPosition(this);
         if (LastGeometry.NearestCell(position.X, position.Y, snapshot.Rows, snapshot.Columns) is not { } cell) return;
         _gesture.Move(cell.Row, cell.Column);
-        Selection = _gesture.Region;
+        SetCurrentValue(SelectionProperty, _gesture.Region);
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
         if (e.InitialPressMouseButton != MouseButton.Left) return;
+        // Read before uncapturing: releasing capture on a control that owns it raises PointerCaptureLost
+        // synchronously, and that handler ends the gesture too, so uncapturing first would make every plain
+        // click look like the no-op release of an already-ended gesture.
+        var result = _gesture.Release();
         if (ReferenceEquals(e.Pointer.Captured, this)) e.Pointer.Capture(null);
-        if (_gesture.Release() != ReleaseResult.Click) return;
+        if (result != ReleaseResult.Click) return;
         var snapshot = Snapshot;
         if (snapshot is null) return;
         var position = e.GetPosition(this);
@@ -219,6 +273,14 @@ public sealed class TerminalScreen : Control
             CellClicked?.Invoke(this, cell);
             e.Handled = true;
         }
+    }
+
+    /// <summary>A capture lost mid-drag (a modal opened, the window deactivated) ends the gesture where it was:
+    /// the next move must not extend it and the next release must not click.</summary>
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _gesture.Release();
     }
 
     /// <summary>A screen of a different size makes the old coordinates meaningless; same size keeps them.</summary>
@@ -230,7 +292,7 @@ public sealed class TerminalScreen : Control
         UpdateBlinkTimer(newValue);
         if (Selection is null) return;
         if (oldValue is null || newValue is null || oldValue.Rows != newValue.Rows || oldValue.Columns != newValue.Columns)
-            Selection = null;
+            SetCurrentValue(SelectionProperty, null);
     }
 
     protected override Size ArrangeOverride(Size finalSize)

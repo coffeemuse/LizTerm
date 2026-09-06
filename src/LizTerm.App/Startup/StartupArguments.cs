@@ -4,7 +4,8 @@ using LizTerm.Core.Session;
 namespace LizTerm.App.Startup;
 
 /// <summary>Command line: no argument opens the picker; a saved profile name connects to it; x3270's ad hoc host
-/// syntax <c>[L:][Y:][lu@]host[:port]</c> (IPv6 hosts bracketed) connects without a profile. <c>L:</c> is TLS,
+/// syntax <c>[L:][Y:][lu@]host[:port]</c> (IPv6 hosts bracketed; an unbracketed IPv6 address is a usage error)
+/// connects without a profile. <c>L:</c> is TLS,
 /// <c>Y:</c> turns certificate verification off, and the LU part is passed to the engine verbatim, comma lists
 /// included. A syntax error sets <see cref="Error"/> to <see cref="Usage"/> and resolves to the picker.
 /// <para>The two readings overlap — <c>CONS01@mvs</c> and <c>a:b</c> are legal profile names as well as legal ad
@@ -95,8 +96,17 @@ public sealed record StartupArguments(
             }
         }
 
+        // More than one colon outside brackets can only be an unbracketed IPv6 address, which x3270 does not take
+        // either: a usage error, never a hostname, and the usage line shows the bracketed form (spec 8). Before this,
+        // a forcing prefix such as L: passed the text to the engine whole.
+        if (arg.Count(c => c == ':') > 1)
+        {
+            malformed = true;
+            return (null, null);
+        }
+
         var lastColon = arg.LastIndexOf(':');
-        if (lastColon > 0 && arg.IndexOf(':') == lastColon)
+        if (lastColon > 0)
         {
             if (TryParsePort(arg[(lastColon + 1)..], out var port)) return (arg[..lastColon], port);
             malformed = true;

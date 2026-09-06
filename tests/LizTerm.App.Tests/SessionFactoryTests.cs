@@ -3,6 +3,7 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.App.Tests;
 
+[Collection(EnvironmentCollection.Name)]
 public class SessionFactoryTests
 {
     /// <summary>With the override pointed at a file that does not exist and no bundled engine in this test's output,

@@ -80,7 +80,7 @@ public class B3270SessionLifecycleTests
         await session.StartProcessAsync(CancellationToken.None);
         var ex = await Assert.ThrowsAsync<EmulatorActionException>(() => session.RunAsync(new B3270Action("Enter")));
         Assert.Equal("Keyboard locked", ex.Message);
-        var raw = await session.RunRawAsync([new B3270Action("Enter")]);
+        var raw = await session.RunRawAsync([new B3270Action("Enter")], cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(raw.Success);
     }
 
@@ -283,7 +283,7 @@ public class B3270SessionLifecycleTests
         var release = new ManualResetEventSlim();
         session.Faulted += (_, _) => { parked.Set(); release.Wait(TimeSpan.FromSeconds(5)); };
         fake.Exit(1);
-        Assert.True(parked.Wait(TimeSpan.FromSeconds(5)), "the reader thread never reached Faulted");
+        Assert.True(parked.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken), "the reader thread never reached Faulted");
 
         fake.BeforeWrite = () =>
         {

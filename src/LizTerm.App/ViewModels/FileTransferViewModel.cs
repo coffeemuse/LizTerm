@@ -358,6 +358,8 @@ public partial class FileTransferViewModel : ObservableObject
     private void OnProgress(long bytes)
     {
         if (!IsRunning) return;
+        // A text send adds a carriage return before every line feed on its way to the host, so the count the engine
+        // reports can pass TotalBytes (the local file's length). The bar clamps at its maximum; the count stays true.
         BytesTransferred = bytes;
         if (!IsCancelling) StatusText = bytes.ToString("N0", CultureInfo.InvariantCulture) + " bytes";
     }

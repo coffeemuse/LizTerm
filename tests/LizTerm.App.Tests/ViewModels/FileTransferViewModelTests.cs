@@ -275,7 +275,7 @@ public class FileTransferViewModelTests
             vm.HostFile = "A.B";
             session.TransferCompletion = Pending();
             var run = vm.StartCommand.ExecuteAsync(null);
-            await WaitUntilAsync(() => vm.TotalBytes is not null, "the file length");
+            await Wait.UntilAsync(() => vm.TotalBytes is not null, "the file length");
             Assert.Equal(11, vm.TotalBytes);
             Assert.False(vm.IsProgressIndeterminate);
             Assert.Equal(11, vm.ProgressMaximum);
@@ -308,7 +308,7 @@ public class FileTransferViewModelTests
             };
 
             var run = vm.StartCommand.ExecuteAsync(null);
-            await WaitUntilAsync(() => vm.TotalBytes is not null, "the file length");
+            await Wait.UntilAsync(() => vm.TotalBytes is not null, "the file length");
 
             Assert.Equal(1, callsWhenLengthArrived);
             session.TransferCompletion.SetResult();
@@ -317,16 +317,6 @@ public class FileTransferViewModelTests
         finally
         {
             File.Delete(path);
-        }
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition, string what)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
-            await Task.Delay(5, TestContext.Current.CancellationToken);
         }
     }
 
@@ -592,5 +582,29 @@ public class FileTransferViewModelTests
             Assert.True(vm.IsDone);
         }
         finally { File.Delete(existing); }
+    }
+
+    /// <summary>The window binds the derived flags; each must be announced when its inputs change, not only computed.</summary>
+    [Fact]
+    public void Derived_flags_raise_property_changed()
+    {
+        var (vm, _, _) = Create();
+        var changed = new List<string>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName!);
+
+        vm.HostType = TransferHostType.Vm;
+        Assert.Superset(new HashSet<string> { nameof(vm.IsTso), nameof(vm.RecordFormats), nameof(vm.CanSetRecordFormat), nameof(vm.CanSetLrecl), nameof(vm.CanSetBlksize), nameof(vm.CanSetSpace), nameof(vm.CanSetAverageBlock) }, changed.ToHashSet());
+        changed.Clear();
+        vm.RecordFormat = RecordFormat.Fixed;
+        Assert.Superset(new HashSet<string> { nameof(vm.HasRecordFormat), nameof(vm.CanSetLrecl), nameof(vm.CanSetBlksize) }, changed.ToHashSet());
+        changed.Clear();
+        vm.AllocationUnits = AllocationUnits.AvBlock;
+        Assert.Superset(new HashSet<string> { nameof(vm.HasAllocation), nameof(vm.IsAvBlock), nameof(vm.CanSetSpace), nameof(vm.CanSetAverageBlock) }, changed.ToHashSet());
+        changed.Clear();
+        vm.IsReceive = true;
+        Assert.Superset(new HashSet<string> { nameof(vm.IsReceive), nameof(vm.ShowAdvanced) }, changed.ToHashSet());
+        changed.Clear();
+        vm.IsBinary = true;
+        Assert.Contains(nameof(vm.IsBinary), changed);
     }
 }

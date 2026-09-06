@@ -137,6 +137,21 @@ public class SessionWindowTests
         Assert.Empty(window.OwnedWindows);
     }
 
+    /// <summary>Regression: after Dismiss the button kept focus, so the next keystrokes never reached the host.</summary>
+    [AvaloniaFact]
+    public void Dismiss_returns_focus_to_the_screen()
+    {
+        var (window, screen, vm, _, _) = Show();
+        vm.ErrorMessage = "boom";
+        var dismiss = window.FindControl<Button>("DismissButton")!;
+        dismiss.Focus();
+        Assert.False(screen.IsFocused);
+
+        dismiss.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.True(screen.IsFocused);
+    }
+
     [AvaloniaFact]
     public void Help_menu_has_the_wire_log_toggle_bound_to_the_view_model()
     {
@@ -193,5 +208,37 @@ public class SessionWindowTests
         {
             if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
         }
+    }
+
+    /// <summary>Regression: routing keys through CanExecute dropped any key that arrived while the previous key's
+    /// round trip was still open, because the toolkit's async command reports CanExecute false while running.</summary>
+    [AvaloniaFact]
+    public async Task A_key_pressed_while_the_previous_one_is_in_flight_still_reaches_the_host()
+    {
+        var (window, _, _, session, _) = Show();
+        session.SendKeyCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        window.KeyPressQwerty(PhysicalKey.F1, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.F2, RawInputModifiers.None);
+
+        Assert.Equal(["key:PF1", "key:PF2"], session.Calls);
+        session.SendKeyCompletion.SetResult();
+        await Task.Yield();
+    }
+
+    /// <summary>OnFileTransferClick's catch: a dialog that cannot be shown is reported in the banner, not thrown
+    /// from an async void handler. A window that was never shown is an owner ShowDialog refuses.</summary>
+    [AvaloniaFact]
+    public async Task A_file_transfer_dialog_that_cannot_open_is_reported_in_the_banner()
+    {
+        var session = new FakeEmulatorSession();
+        var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard());
+        var window = new SessionWindow { DataContext = vm };
+        session.RaiseConnection(ConnectionState.Connected3270);
+
+        window.FindControl<MenuItem>("FileTransferMenuItem")!.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+        await Wait.UntilAsync(() => vm.ErrorMessage is not null, "the error banner");
+        Assert.StartsWith("Could not open the File Transfer dialog:", vm.ErrorMessage);
     }
 }

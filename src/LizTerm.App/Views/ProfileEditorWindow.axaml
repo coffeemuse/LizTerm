@@ -17,6 +17,10 @@
       <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4">
         <CheckBox Content="Use TLS" IsChecked="{Binding UseTls}" />
         <CheckBox Content="Verify host certificate" IsChecked="{Binding VerifyCertificate}" IsEnabled="{Binding UseTls}" />
+        <StackPanel x:Name="PinPanel" Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasPinnedCertificate}">
+          <TextBlock x:Name="PinText" Text="{Binding PinnedCertificateText}" VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" MaxWidth="260" />
+          <Button x:Name="ForgetButton" Content="Forget" Command="{Binding ForgetPinCommand}" />
+        </StackPanel>
       </StackPanel>
       <TextBlock Grid.Row="4" Text="Model" VerticalAlignment="Center" />
       <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="12">
@@ -28,7 +32,7 @@
       <TextBlock Grid.Row="6" Text="LU name" VerticalAlignment="Center" />
       <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding LuName}" Width="140" HorizontalAlignment="Left" PlaceholderText="optional" />
       <TextBlock Grid.Row="7" Text="Keyboard" VerticalAlignment="Center" />
-      <CheckBox Grid.Row="7" Grid.Column="1" Content="Backspace erases the previous character" IsChecked="{Binding DestructiveBackspace}" />
+      <CheckBox x:Name="BackspaceBox" Grid.Row="7" Grid.Column="1" Content="Backspace erases the previous character (off: Backspace only moves the cursor left)" IsChecked="{Binding DestructiveBackspace}" />
     </Grid>
     <TextBlock Text="{Binding ValidationMessage}" Foreground="#FF8080" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

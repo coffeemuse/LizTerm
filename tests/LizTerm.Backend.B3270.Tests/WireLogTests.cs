@@ -1,5 +1,6 @@
 namespace LizTerm.Backend.B3270.Tests;
 
+[Collection(EnvironmentCollection.Name)]
 public class WireLogTests
 {
     [Fact]
