@@ -93,10 +93,13 @@ public class B3270SessionStateTests
     {
         var (session, fake) = await StartAsync();
         KeyboardStatus? status = null;
-        session.StatusChanged += (_, s) => status = s;
+        // The reader thread publishes the property before it raises the event, so waiting on the property and
+        // then asserting on the event's capture races that gap. Wait on the event's own value instead: by the
+        // time it is visible, the property is too.
+        session.StatusChanged += (_, s) => Volatile.Write(ref status, s);
         fake.Emit(line);
-        await Wait.UntilAsync(() => session.KeyboardStatus.Lock == expected, "lock " + expected);
-        Assert.NotNull(status);
+        await Wait.UntilAsync(() => Volatile.Read(ref status)?.Lock == expected, "lock " + expected);
+        Assert.Equal(expected, session.KeyboardStatus.Lock);
     }
 
     [Fact]
