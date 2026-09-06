@@ -17,13 +17,14 @@ public partial class CertificateWindow : Window
     public CertificateWindow(CertificatePromptRequest request)
     {
         InitializeComponent();
-        var changed = request.Previous is not null;
+        var changed = request.Previous is not null && request.Presented is not null
+            && !string.Equals(request.Presented.Sha256, request.Previous.Sha256, StringComparison.OrdinalIgnoreCase);
         Title = changed ? "Certificate changed" : "Certificate not verified";
         HostText.Text = changed
             ? $"{request.Host} presented a certificate that is not the one trusted for this profile."
             : $"{request.Host} presented a certificate that could not be verified:";
-        TrustedText.IsVisible = changed;
-        TrustedText.Text = changed ? $"Trusted: SHA-256 {request.Previous!.Sha256}" : "";
+        TrustedText.IsVisible = request.Previous is not null;
+        TrustedText.Text = request.Previous is null ? "" : $"Trusted: SHA-256 {request.Previous.Sha256}";
         PresentedText.IsVisible = request.Presented is not null;
         SubjectText.IsVisible = request.Presented is not null;
         if (request.Presented is { } presented)

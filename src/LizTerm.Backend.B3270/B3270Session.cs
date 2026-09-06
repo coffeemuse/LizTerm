@@ -692,7 +692,13 @@ public sealed class B3270Session : IEmulatorSession
         var disconnected = Interlocked.CompareExchange(ref _disconnected, fresh, null) ?? fresh;
         try
         {
-            if (ConnectionState == ConnectionState.Disconnected) return;
+            if (ConnectionState == ConnectionState.Disconnected)
+            {
+                // The state is already there; a caller that joined this source must not wait for a report that
+                // may have been consumed before the source was installed.
+                disconnected.TrySetResult();
+                return;
+            }
             try
             {
                 await disconnected.Task.WaitAsync(DisconnectTimeout);

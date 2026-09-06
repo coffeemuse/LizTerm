@@ -519,3 +519,13 @@ Items 30 to 34 record the final-review fix wave of 2026-09-06:
     host) now falls back to the one-time "Connect Anyway" rather than being offered as pinnable — the chain built
     from ExtraStore members alone is missing its root, so `CertificateReader.CheckPinnable` reports it unpinnable,
     same as any other chain missing its root.
+31. "Certificate changed" (`CertificateWindow`, spec 5.4) now fires only when the presented fingerprint differs
+    from the pin in force, not merely because a previous pin exists. A rejected identical pin — the same
+    fingerprint loop-guard case, or an expired pinned self-signed certificate — used to show "presented a
+    certificate that is not the one trusted for this profile" with identical Trusted and Presented fingerprints;
+    it now shows the plain "Certificate not verified" title and wording, while `TrustedText` stays visible (the pin
+    in force is worth showing either way).
+32. `B3270Session.WaitForDisconnectedAsync`'s early return (state already `Disconnected` when the source is
+    installed) now completes the shared `disconnected` source before returning, so a caller that joined that same
+    source — installed it via the `Interlocked.CompareExchange` race, then found the state already settled — is
+    not left waiting for a report that may already have been consumed by the caller that returned early.
