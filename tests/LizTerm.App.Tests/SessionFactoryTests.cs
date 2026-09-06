@@ -1,4 +1,6 @@
 using LizTerm.App.Status;
+using LizTerm.Backend.B3270;
+using LizTerm.Core.Security;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.Tests;
@@ -59,5 +61,17 @@ public class SessionFactoryTests
         await using var viaDefault = SessionFactory.Create(profile);
         await using var viaSeam = SessionFactory.Create(profile, overridePath, baseDirectory);
         Assert.Equal(viaSeam.Engine, viaDefault.Engine);
+    }
+
+    /// <summary>The backend defaults to no anchors on purpose, so the app is the thing that has to supply the real
+    /// store. Without this the whole plan is inert in the shipping product while every test still passes.</summary>
+    [Fact]
+    public async Task The_session_it_builds_verifies_against_the_system_trust_anchors()
+    {
+        var profile = new SessionProfile(Name: "trust", Host: "h", UseTls: true);
+
+        await using var session = (B3270Session)SessionFactory.Create(profile, overridePath: "/nonexistent/b3270", Path.GetTempPath());
+
+        Assert.Same(SystemTrustAnchors.Default, session.TrustAnchors);
     }
 }

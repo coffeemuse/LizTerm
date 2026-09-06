@@ -1,5 +1,6 @@
 using LizTerm.Backend.B3270;
 using LizTerm.Backend.B3270.Process;
+using LizTerm.Core.Security;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App;
@@ -51,6 +52,11 @@ public static class SessionFactory
             processFactory = () => throw ex;
         }
         var wireLog = WireLog.TryFromEnvironment(out var wireLogError);
-        return new B3270Session(profile, processFactory, wireLog, wireLogError, location);
+        // The backend assumes no trust anchors; the app is where the machine's own store enters, the same way it
+        // supplies ICertificateFetcher rather than the backend reaching for one.
+        return new B3270Session(profile, processFactory, wireLog, wireLogError, location)
+        {
+            TrustAnchors = SystemTrustAnchors.Default,
+        };
     }
 }
