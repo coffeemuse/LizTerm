@@ -67,6 +67,24 @@ public class CertificateWindowTests
         Assert.False(Visible(window, "CannotPinText"));
     }
 
+    /// <summary>A pin the engine rejected is not a change: same fingerprint on both lines, the plain title, and the
+    /// reason line instead of the checkbox.</summary>
+    [AvaloniaFact]
+    public void A_rejected_pin_with_the_same_fingerprint_is_not_called_a_change()
+    {
+        var previous = new CertificatePin(Presented.Sha256, Presented.Subject, "pem");
+        const string reason = "The engine rejected the pinned certificate; connecting anyway applies to this attempt only.";
+        var window = new CertificateWindow(Request(Presented, previous: previous, cannotPinReason: reason));
+        window.Show();
+        Assert.Equal("Certificate not verified", window.Title);
+        Assert.Equal("mvs.local presented a certificate that could not be verified:", Text(window, "HostText"));
+        Assert.True(Visible(window, "TrustedText"));
+        Assert.Equal($"Trusted: SHA-256 {Presented.Sha256}", Text(window, "TrustedText"));
+        Assert.Equal($"Presented: SHA-256 {Presented.Sha256}", Text(window, "PresentedText"));
+        Assert.False(window.FindControl<CheckBox>("RememberBox")!.IsVisible);
+        Assert.Equal(reason, Text(window, "CannotPinText"));
+    }
+
     [AvaloniaFact]
     public void A_certificate_that_cannot_be_pinned_says_so_instead_of_the_checkbox()
     {
