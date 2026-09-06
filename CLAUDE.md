@@ -146,9 +146,11 @@ the backend tests.
   wins over the profile's; no pin means the engine's default trust. `DestructiveBackspace` defaults to true (every
   x3270-family default keymap erases; the old belief that x3270 defaults to cursor-left came from the `BackSpace()`
   action's name), and the profile JSON writes every field, so a saved false survives. `LizTerm.Core.Security` holds
-  `ICertificateFetcher` and `SslStreamCertificateFetcher` (one handshake that captures and accepts the chain, 10 s
-  bound, `IOException` "No TLS answer ..." on timeout) and `CertificateReader` (fingerprint, PEM, and whether the
-  chain is pinnable: .NET validates it with its own self-signed members as the only trust roots, which is what
+  `ICertificateFetcher` and `SslStreamCertificateFetcher` (one handshake that captures and accepts the chain,
+  keeping only the leaf plus the host-sent extras from the chain policy's ExtraStore, never a root the chain
+  engine supplied from the system store, 10 s bound, `IOException` "No TLS answer ..." on timeout) and
+  `CertificateReader` (fingerprint, PEM, and whether the chain is pinnable: .NET validates it with its own
+  self-signed members as the only trust roots, which is what
   OpenSSL will do with the pin file). They are BCL-only, so they live in Core and the integration lane can use them.
 - Threading contract: a backend raises all events on one dedicated thread, in order, and knows nothing
   about UI threads. The App layer marshals.

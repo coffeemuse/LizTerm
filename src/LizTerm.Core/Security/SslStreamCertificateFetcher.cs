@@ -24,14 +24,7 @@ public sealed class SslStreamCertificateFetcher : ICertificateFetcher
             await using var tls = new SslStream(client.GetStream(), leaveInnerStreamOpen: false, (_, certificate, chain, _) =>
             {
                 if (certificate is null) return false;
-                // Copies through the DER bytes: the objects SslStream hands out are disposed with the stream, and
-                // the byte-array X509Certificate2 constructors are obsolete (SYSLIB0057).
-                presented.Add(X509CertificateLoader.LoadCertificate(certificate.Export(X509ContentType.Cert)));
-                if (chain is not null)
-                {
-                    foreach (var element in chain.ChainElements.Cast<X509ChainElement>().Skip(1))
-                        presented.Add(X509CertificateLoader.LoadCertificate(element.Certificate.Export(X509ContentType.Cert)));
-                }
+                presented.AddRange(SelectPresented(certificate, chain));
                 return true;
             });
             await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
@@ -40,11 +33,36 @@ public sealed class SslStreamCertificateFetcher : ICertificateFetcher
                 CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
             }, bounded.Token);
             if (presented.Count == 0) throw new IOException("The host presented no certificate.");
-            return CertificateReader.Read(presented);
+            try
+            {
+                return CertificateReader.Read(presented);
+            }
+            finally
+            {
+                foreach (var c in presented) c.Dispose();
+            }
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
         {
             throw new IOException($"No TLS answer from {host}:{port} within {Timeout.TotalSeconds:0} s.");
         }
+    }
+
+    /// <summary>The certificates the host actually sent: the leaf, plus the chain elements that came from the
+    /// handshake, which SslStream places in the chain policy's ExtraStore before building. A root the chain engine
+    /// pulled from the system store was never on the wire and must not be pinned: with acceptHostname any, pinning
+    /// a public CA's root would trust every certificate that CA issued, for any name (final review, spec 11).
+    /// Copies go through the DER bytes; the callback's objects die with the stream.</summary>
+    internal static List<X509Certificate2> SelectPresented(X509Certificate certificate, X509Chain? chain)
+    {
+        var presented = new List<X509Certificate2> { X509CertificateLoader.LoadCertificate(certificate.Export(X509ContentType.Cert)) };
+        if (chain is null) return presented;
+        var sent = new HashSet<string>(chain.ChainPolicy.ExtraStore.Cast<X509Certificate2>().Select(c => c.Thumbprint), StringComparer.OrdinalIgnoreCase);
+        foreach (var element in chain.ChainElements.Cast<X509ChainElement>().Skip(1))
+        {
+            if (sent.Contains(element.Certificate.Thumbprint))
+                presented.Add(X509CertificateLoader.LoadCertificate(element.Certificate.Export(X509ContentType.Cert)));
+        }
+        return presented;
     }
 }
