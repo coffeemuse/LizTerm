@@ -43,7 +43,8 @@ Two GitHub Actions workflows under `.github/workflows`:
 
 To run the platform jobs by hand: Actions, Platforms, "Run workflow", or `gh workflow run platforms.yml`. A failed
 run uploads its `.trx` files as `test-results-<os>`. The macOS run's `b3270-osx-arm64` artifact is a CI-built engine
-you can download and drop into `native/out/osx-arm64/`.
+you can download and drop into `native/out/osx-arm64/`; downloaded artifacts lose the executable bit, so run
+`chmod +x native/out/osx-arm64/b3270` and rebuild.
 
 ## Recording protocol fixtures
 

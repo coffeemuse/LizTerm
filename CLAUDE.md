@@ -30,12 +30,16 @@ package management: `PackageReference` entries in csproj files carry no `Version
 `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "` is the zero-warning check to run before
 calling anything done; an incremental build hides warnings from projects it does not recompile.
 
-CI is two workflows under `.github/workflows`: `ci.yml` (job `test`, `ubuntu-latest`, every push and PR: Release build
-with `-warnaserror`, then the suite with a 5 minute blame hang timeout) and `platforms.yml` (pushes to `main`, dispatch,
-and PRs touching the workflow or `native/**`: `engine-macos` on `macos-15` runs `build-macos.sh`, uploads
+CI is two workflows under `.github/workflows`: `ci.yml` (job `test`, `ubuntu-latest`, every push, PR, and dispatch:
+Release build with `-warnaserror`, then the suite with a 5 minute blame hang timeout) and `platforms.yml` (pushes to
+`main`, dispatch, and PRs touching the workflow or `native/**`, the integration test project, or the two csproj files
+with the b3270 copy rule: `engine-macos` on `macos-15` runs `build-macos.sh`, uploads
 `b3270-osx-arm64`, and runs the suite with `LIZTERM_REQUIRE_ENGINE=1`; `test-windows` runs the suite). Failed runs
 upload `test-results-<os>` with the `.trx` files. `global.json` pins the SDK to the 10.0.2xx band; supported builds
-stay on the current LTS.
+stay on the current LTS. Branch protection on `main` requires `test` only; the platform jobs are path-filtered on PRs
+and would never report on most of them, so a rule requiring them would leave those PRs waiting forever. `global.json`
+rolls forward only within the 10.0.2xx band: when an SDK update replaces that band, bump `version`, never widen
+`rollForward` (the runner and the Mac must share one analyzer set for `-warnaserror` to mean the same thing).
 
 ### The b3270 binary
 
@@ -409,4 +413,4 @@ the backend tests.
   checks `Engine.Source` is `Bundled` and the version is at least `MinimumVersion`, and quits; it resolves with
   `B3270Locator.Find(null, AppContext.BaseDirectory)` so `LIZTERM_B3270_PATH` can never satisfy it. Without a bundled
   engine it skips, unless `LIZTERM_REQUIRE_ENGINE` is set, when it fails; `EngineRequirement.Decide` is that gate, unit
-  tested on its own. On a Mac that has run `build-macos.sh` the test runs locally and catches a stale binary in the output.
+  tested on its own. On a Mac that has run `build-macos.sh` the test runs locally and runs against the copied binary.
