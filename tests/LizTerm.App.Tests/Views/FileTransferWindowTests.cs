@@ -1,6 +1,8 @@
 using System.Globalization;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -134,6 +136,37 @@ public class FileTransferWindowTests
         session.TransferCompletion.SetResult();
         await run;
         Assert.True(vm.IsDone);
+    }
+
+    [AvaloniaFact]
+    public async Task Escape_closes_the_form_and_cancels_a_running_transfer_first()
+    {
+        var (form, _, _) = Show();
+        var formClosed = false;
+        form.Closed += (_, _) => formClosed = true;
+        form.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        Assert.True(formClosed);
+
+        var (window, vm, session) = Show();
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+        vm.LocalPath = "/nonexistent/a.txt";
+        vm.HostFile = "A.B";
+        session.TransferCompletion = Pending();
+        var run = vm.StartCommand.ExecuteAsync(null);
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        Assert.False(closed);
+        Assert.True(vm.IsCancelling);
+        Assert.True(session.TransferToken.IsCancellationRequested);
+
+        session.TransferResult = new FileTransferResult(false, "Transfer canceled by user");
+        session.TransferCompletion.SetResult();
+        await run;
+        Assert.True(vm.IsDone);
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        Assert.True(closed);
     }
 
     [Theory]

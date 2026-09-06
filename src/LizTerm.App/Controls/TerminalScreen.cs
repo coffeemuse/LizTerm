@@ -222,7 +222,7 @@ public sealed class TerminalScreen : Control
             _gesture.DoubleClick(cell.Row, cell.Column, snapshot);
         else
             _gesture.Press(cell.Row, cell.Column);
-        Selection = _gesture.Region;
+        SetCurrentValue(SelectionProperty, _gesture.Region);
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
@@ -234,15 +234,19 @@ public sealed class TerminalScreen : Control
         var position = e.GetPosition(this);
         if (LastGeometry.NearestCell(position.X, position.Y, snapshot.Rows, snapshot.Columns) is not { } cell) return;
         _gesture.Move(cell.Row, cell.Column);
-        Selection = _gesture.Region;
+        SetCurrentValue(SelectionProperty, _gesture.Region);
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
         if (e.InitialPressMouseButton != MouseButton.Left) return;
+        // Read before uncapturing: releasing capture on a control that owns it raises PointerCaptureLost
+        // synchronously, and that handler ends the gesture too, so uncapturing first would make every plain
+        // click look like the no-op release of an already-ended gesture.
+        var result = _gesture.Release();
         if (ReferenceEquals(e.Pointer.Captured, this)) e.Pointer.Capture(null);
-        if (_gesture.Release() != ReleaseResult.Click) return;
+        if (result != ReleaseResult.Click) return;
         var snapshot = Snapshot;
         if (snapshot is null) return;
         var position = e.GetPosition(this);
@@ -251,6 +255,14 @@ public sealed class TerminalScreen : Control
             CellClicked?.Invoke(this, cell);
             e.Handled = true;
         }
+    }
+
+    /// <summary>A capture lost mid-drag (a modal opened, the window deactivated) ends the gesture where it was:
+    /// the next move must not extend it and the next release must not click.</summary>
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _gesture.Release();
     }
 
     /// <summary>A screen of a different size makes the old coordinates meaningless; same size keeps them.</summary>
@@ -262,7 +274,7 @@ public sealed class TerminalScreen : Control
         UpdateBlinkTimer(newValue);
         if (Selection is null) return;
         if (oldValue is null || newValue is null || oldValue.Rows != newValue.Rows || oldValue.Columns != newValue.Columns)
-            Selection = null;
+            SetCurrentValue(SelectionProperty, null);
     }
 
     protected override Size ArrangeOverride(Size finalSize)
