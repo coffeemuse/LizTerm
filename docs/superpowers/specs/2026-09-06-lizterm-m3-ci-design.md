@@ -145,7 +145,11 @@ needed: the test reads the variable, it does not set it.
 
 - `global.json`: `{"sdk": {"version": "10.0.200", "rollForward": "latestPatch"}}`. The runner and Robert's
   Mac (10.0.201 today) resolve to the same feature band; a future 11.0 preview on either side cannot change the
-  build.
+  build. Toolchain policy (Robert, 2026-09-06): officially supported builds stay on the current LTS (.NET 10)
+  and move to the next LTS when it ships; a non-LTS release such as .NET 11 may be used to *test* against, but
+  never for a supported build unless there is a compelling reason, for example a security fix applied only
+  there. `global.json` is where that policy is enforced, so a test lane on a newer SDK would use its own
+  override rather than a change to the file.
 - `README.md`: a CI badge for `ci.yml` at the top, and a "Continuous integration" section: what each workflow
   proves, when each runs, how to dispatch `platforms.yml` by hand, and that the macOS run's artifact is a
   CI-built engine.
