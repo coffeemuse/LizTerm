@@ -551,12 +551,62 @@ public sealed class B3270Session : IEmulatorSession
     {
         await StartProcessAsync(cancellationToken);
         var verify = options?.VerifyCertificate ?? Profile.VerifyCertificate;
-        // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
-        // open before the Connect has even gone out.
-        await RunAsync([new B3270Action("Set", "verifyHostCert", verify ? "true" : "false")], throwOnFailure: true,
-            cancellationToken: cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
+        // Spec 3.1: verification off means no pin; otherwise the one-shot pin wins over the profile's.
+        var pin = verify ? options?.Pin ?? Profile.PinnedCertificate : null;
+        // The engine loads caFile when it builds the TLS context for this connection, inside the Connect run, so the
+        // file has to outlive that run and nothing more (spec 4.1). It holds a public certificate, so a leftover
+        // after a crash is harmless.
+        var pinFile = pin is null ? null : WritePinFile(pin.Pem);
+        LastPinFile = pinFile;
+        try
+        {
+            // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
+            // open before the Connect has even gone out. All three values are sent every time so an attempt never
+            // inherits the previous one's trust settings (spec 2).
+            await RunAsync([TlsSettings(verify, pinFile)], throwOnFailure: true, cancellationToken: cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await ConnectCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            if (pinFile is not null) TryDeletePinFile(pinFile);
+        }
+    }
 
+    /// <summary>The Set action carrying one attempt's trust settings (spec 4.1). With a pin the name check adds
+    /// nothing, so acceptHostname is "any".</summary>
+    internal static B3270Action TlsSettings(bool verify, string? pinFile) =>
+        new("Set", "verifyHostCert", verify ? "true" : "false", "caFile", pinFile ?? "", "acceptHostname", pinFile is null ? "" : "any");
+
+    /// <summary>The path of the last pin file written, deleted or not. Test seam.</summary>
+    internal string? LastPinFile { get; private set; }
+
+    internal static string WritePinFile(string pem)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lizterm-pin-{Guid.NewGuid():N}.pem");
+        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
+        // Owner-only on Unix; the Windows temp directory is already per user.
+        if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        using var stream = new FileStream(path, options);
+        using var writer = new StreamWriter(stream);
+        writer.Write(pem);
+        return path;
+    }
+
+    private static void TryDeletePinFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception)
+        {
+            // A leftover temp file holds a public certificate; there is nothing better to do about it here.
+        }
+    }
+
+    private async Task ConnectCoreAsync(CancellationToken cancellationToken)
+    {
         // b3270 answers a Disconnect while a Connect is pending (verified against 4.5ga6): the Disconnect run
         // succeeds at once and the Connect run then fails with "Connection failed", which is the cancel's own
         // consequence rather than an error to report. Its own token lets that wait be given up on if the engine
