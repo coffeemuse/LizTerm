@@ -2,14 +2,21 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:LizTerm.App.Controls"
         x:Class="LizTerm.App.Views.CertificateWindow"
-        Title="Certificate not verified" Width="520" SizeToContent="Height" CanResize="False"
+        Title="Certificate not verified" Width="560" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="12">
     <TextBlock x:Name="HostText" TextWrapping="Wrap" />
+    <StackPanel Spacing="4">
+      <TextBlock x:Name="TrustedText" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" TextWrapping="Wrap" />
+      <TextBlock x:Name="PresentedText" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" TextWrapping="Wrap" />
+      <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#A0A0A0" FontSize="12" />
+      <TextBlock x:Name="FetchErrorText" TextWrapping="Wrap" Foreground="#FFC080" />
+    </StackPanel>
     <Border Background="#101010" Padding="10">
       <TextBlock x:Name="ReasonText" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#F0F0F0" TextWrapping="Wrap" />
     </Border>
-    <CheckBox x:Name="RememberBox" Content="Always allow for this profile (stops checking its certificate)" />
+    <CheckBox x:Name="RememberBox" Content="Trust this certificate for this profile" />
+    <TextBlock x:Name="CannotPinText" TextWrapping="Wrap" Foreground="#FFC080" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button x:Name="ConnectAnywayButton" Content="Connect Anyway" Click="OnConnectAnywayClick" />
       <Button x:Name="CancelButton" Content="Cancel" IsDefault="True" IsCancel="True" Click="OnCancelClick" />
