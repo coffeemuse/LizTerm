@@ -72,7 +72,7 @@
     <Border DockPanel.Dock="Bottom" Background="#5A2020" Padding="10,6"
             IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
       <DockPanel>
-        <Button DockPanel.Dock="Right" Content="Dismiss" Command="{Binding DismissErrorCommand}" />
+        <Button x:Name="DismissButton" DockPanel.Dock="Right" Content="Dismiss" Command="{Binding DismissErrorCommand}" Click="OnDismissClick" />
         <TextBlock Text="{Binding ErrorMessage}" Foreground="White" TextWrapping="Wrap" VerticalAlignment="Center" />
       </DockPanel>
     </Border>

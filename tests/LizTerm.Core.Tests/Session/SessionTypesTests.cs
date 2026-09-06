@@ -37,4 +37,12 @@ public class SessionTypesTests
     [Fact]
     public void Initial_keyboard_status_is_not_connected() =>
         Assert.Equal(KeyboardLock.NotConnected, KeyboardStatus.Initial.Lock);
+
+    [Fact]
+    public void Backspace_erases_by_default_and_a_new_profile_has_no_pin()
+    {
+        var profile = new SessionProfile();
+        Assert.True(profile.DestructiveBackspace);
+        Assert.Null(profile.PinnedCertificate);
+    }
 }

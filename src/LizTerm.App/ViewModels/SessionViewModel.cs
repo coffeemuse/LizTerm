@@ -6,6 +6,7 @@ using LizTerm.App.Files;
 using LizTerm.App.Status;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Screen;
+using LizTerm.Core.Security;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.ViewModels;
@@ -18,7 +19,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly ICertificatePrompt? _certificatePrompt;
     private readonly Action<SessionProfile>? _saveProfile;
     private readonly IFolderOpener? _folderOpener;
-    private bool? _verifyOverride;
+    private readonly ICertificateFetcher? _certificateFetcher;
+    /// <summary>The pin chosen in this window. The session's profile is fixed at construction, so a pin made after
+    /// the window opened travels as a one-shot option on every later connect from here (spec 5.3).</summary>
+    private CertificatePin? _pinOverride;
     private readonly EventHandler<ScreenSnapshot> _onScreenUpdated;
     private readonly EventHandler<KeyboardStatus> _onStatusChanged;
     private readonly EventHandler<ConnectionState> _onConnectionChanged;
@@ -61,11 +65,12 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// <param name="dispatch">Marshals a callback onto the UI thread. Tests pass <c>a => a()</c>.</param>
     /// <param name="clipboard">Text clipboard; the app passes <see cref="AvaloniaTextClipboard"/>, tests a fake.</param>
     /// <param name="certificatePrompt">Asked on a certificate verification failure; null declines.</param>
-    /// <param name="saveProfile">Persists the profile when the user chooses "Always allow"; null for ad hoc profiles.</param>
+    /// <param name="saveProfile">Persists the profile when the user pins its certificate; null for ad hoc profiles.</param>
     /// <param name="folderOpener">Opens the wire log directory for Help &gt; Show Wire Logs; null for tests that don't cover it.</param>
+    /// <param name="certificateFetcher">Reads what a TLS host presented so the prompt can show and pin it; null shows the prompt without a fingerprint.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
         ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
-        IFolderOpener? folderOpener = null)
+        IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null)
     {
         _session = session;
         _dispatch = dispatch;
@@ -73,6 +78,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _certificatePrompt = certificatePrompt;
         _saveProfile = saveProfile;
         _folderOpener = folderOpener;
+        _certificateFetcher = certificateFetcher;
 
         _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
         _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
@@ -120,6 +126,21 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         return $"wire-{safe}-{now:yyyyMMdd-HHmmss}.log";
     }
 
+    /// <summary>The path for a new file of that name, or the first of name-2, name-3, ... that does not exist yet.
+    /// Two logs started in the same second must not share a file (spec 8).</summary>
+    internal static string UniquePath(string directory, string fileName)
+    {
+        var path = Path.Combine(directory, fileName);
+        if (!File.Exists(path)) return path;
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+        for (var n = 2; ; n++)
+        {
+            var candidate = Path.Combine(directory, $"{stem}-{n}{extension}");
+            if (!File.Exists(candidate)) return candidate;
+        }
+    }
+
     partial void OnIsWireLoggingChanged(bool value)
     {
         var active = _session.WireLogPath is not null;
@@ -128,7 +149,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             try
             {
                 Directory.CreateDirectory(WireLogDirectory);
-                _session.StartWireLog(Path.Combine(WireLogDirectory, WireLogFileName(Profile.Name, DateTime.Now)));
+                _session.StartWireLog(UniquePath(WireLogDirectory, WireLogFileName(Profile.Name, DateTime.Now)));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
                 or ArgumentException or NotSupportedException)
@@ -211,24 +232,28 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     }
 
     [RelayCommand]
-    private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions(_verifyOverride));
+    private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions(Pin: _pinOverride));
 
-    private async Task ConnectWithAsync(ConnectOptions options)
+    /// <returns>True when this attempt itself connected; false after any failure, including one the certificate
+    /// prompt then turned into a further attempt.</returns>
+    private async Task<bool> ConnectWithAsync(ConnectOptions options)
     {
         ErrorMessage = null;
         _socketOpened = false;
         _connectCancelledByUser = false;
         ConnectionFailedException? certificateFailure = null;
+        var connected = false;
         using (var cts = new CancellationTokenSource(ConnectTimeout))
         {
             _connectCts = cts;
             try
             {
                 await _session.ConnectAsync(options, cts.Token);
+                connected = true;
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
-                if (_disposed) return;
+                if (_disposed) return false;
                 if (!_connectCancelledByUser)
                     ErrorMessage = StatusFormatter.ConnectTimeout(Profile, ConnectTimeout, _socketOpened);
             }
@@ -256,22 +281,56 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             }
         }
         if (certificateFailure is not null && !_disposed) await OfferConnectAnywayAsync(certificateFailure);
+        return connected;
     }
 
-    /// <summary>Spec 5.3: ask once; on yes reconnect with verification off for this attempt, and with Remember also
-    /// save the profile and keep the override for the window's life. The reconnect cannot fail on verification,
-    /// so this never loops. Both the prompt (a modal window) and the save (a file write) can fail, and this runs
-    /// after the connect's catch clauses rather than inside one, so those failures reach the error banner instead
-    /// of faulting the command.</summary>
+    /// <summary>Spec 5.3. Reads what the host presented (TLS profiles only), asks once, and then either connects
+    /// without verification for this attempt only or pins the certificate: the retry verifies against the pin, and
+    /// only once the engine has accepted it is the profile saved with the pin and verification on, after which every
+    /// later connect from this window passes the same pin. A pin the engine rejects on that retry is not offered
+    /// again (the request says so), so this never loops, and it is not kept either, so the next prompt can offer
+    /// Remember afresh. The prompt (a modal window), the fetch (a
+    /// socket), and the save (a file write) can all fail, and this runs after the connect's catch clauses rather
+    /// than inside one, so those failures reach the error banner instead of faulting the command.</summary>
     private async Task OfferConnectAnywayAsync(ConnectionFailedException failure)
     {
         var reason = failure.Lines.Where(line => line != "Connection failed:").ToList();
+        var previous = _pinOverride ?? Profile.PinnedCertificate;
+
+        PresentedCertificate? presented = null;
+        string? fetchError = null;
+        if (Profile.UseTls && _certificateFetcher is not null)
+        {
+            // The fetcher only speaks TLS-on-connect, which is what a TLS profile is; a plain profile the host upgraded
+            // through STARTTLS gets the one-time allow without a fingerprint (spec 5.1). The connect's own token source
+            // is gone by now, so the fetch gets a fresh one with the same bound.
+            using var fetchCts = new CancellationTokenSource(ConnectTimeout);
+            try
+            {
+                presented = await _certificateFetcher.FetchAsync(Profile.Host, Profile.Port, fetchCts.Token);
+            }
+            catch (Exception ex)
+            {
+                fetchError = ex.Message;
+            }
+            if (_disposed) return;
+        }
+
+        var savedTlsProfile = _saveProfile is not null && Profile.UseTls;
+        var canPin = savedTlsProfile && presented is { Pinnable: true } && !CertificateReader.SameFingerprint(presented.Sha256, previous?.Sha256);
+        string? cannotPinReason = null;
+        if (savedTlsProfile && !canPin && presented is not null)
+        {
+            cannotPinReason = presented.Pinnable
+                ? "The engine rejected the pinned certificate; connecting anyway applies to this attempt only."
+                : $"This certificate cannot be pinned: {presented.NotPinnableReason}. Connect Anyway applies to this attempt only.";
+        }
+        var request = new CertificatePromptRequest(Profile.Host, reason, presented, fetchError, previous, canPin, cannotPinReason);
+
         CertificateDecision decision;
         try
         {
-            decision = _certificatePrompt is null
-                ? CertificateDecision.Declined
-                : await _certificatePrompt.AskAsync(Profile.Host, reason, _saveProfile is not null);
+            decision = _certificatePrompt is null ? CertificateDecision.Declined : await _certificatePrompt.AskAsync(request);
         }
         catch (Exception ex)
         {
@@ -287,26 +346,40 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        string? saveError = null;
-        if (decision.Remember)
+        ConnectOptions retry;
+        CertificatePin? pin = null;
+        if (decision.Remember && canPin)
         {
-            _verifyOverride = false;
-            try
-            {
-                _saveProfile?.Invoke(Profile with { VerifyCertificate = false });
-            }
-            catch (Exception ex)
-            {
-                // The choice still holds for this window; only writing it back failed, so the connect goes ahead.
-                saveError = "Could not save the profile: " + ex.Message;
-            }
+            // Held for the retry, so a rejection is reported as the engine rejecting this pin; nothing is written
+            // until the engine has accepted it, because the reader's verdict and OpenSSL's can differ (a weak key, a
+            // SHA-1 signature, an unsuitable purpose), and a saved pin the engine refuses would dead-end every later
+            // connect from the profile.
+            pin = new CertificatePin(presented!.Sha256, presented.Subject, presented.Pem);
+            _pinOverride = pin;
+            retry = new ConnectOptions(Pin: pin);
+        }
+        else
+        {
+            retry = new ConnectOptions(VerifyCertificate: false);
         }
 
-        await ConnectWithAsync(new ConnectOptions(VerifyCertificate: false));
+        var connected = await ConnectWithAsync(retry);
 
-        // ConnectWithAsync clears ErrorMessage on entry, so a save failure is reported after the retry.
-        if (saveError is not null && !_disposed)
-            ErrorMessage = ErrorMessage is null ? saveError : $"{ErrorMessage} {saveError}";
+        if (pin is null || _disposed) return;
+        if (!connected)
+        {
+            if (ReferenceEquals(_pinOverride, pin)) _pinOverride = null;
+            return;
+        }
+        try
+        {
+            _saveProfile!(Profile with { PinnedCertificate = pin, VerifyCertificate = true });
+        }
+        catch (Exception ex)
+        {
+            // The choice still holds for this window; only writing it back failed.
+            ErrorMessage = "Could not save the profile: " + ex.Message;
+        }
     }
 
     /// <summary>While a connect is pending this cancels it (the backend sends the Disconnect); otherwise it disconnects.</summary>
@@ -322,8 +395,11 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         return Guard(_session.DisconnectAsync());
     }
 
+    /// <summary>Keys overlap by nature (auto-repeat, fast typing) and the backend serializes its writes, so the
+    /// screen's keystrokes call this method directly, as they do <see cref="TypeTextAsync"/>; the command exists for
+    /// the Keys menu, whose items may disable for the length of a round trip.</summary>
     [RelayCommand]
-    private Task SendKeyAsync(TerminalKey key)
+    public Task SendKeyAsync(TerminalKey key)
     {
         Selection = null;
         return Guard(_session.SendKeyAsync(key));
@@ -348,7 +424,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     /// <summary>Copies the selection as trimmed lines. Copying is not host input, so the selection stays.</summary>
     [RelayCommand(CanExecute = nameof(CanCopy))]
-    private async Task CopyAsync()
+    public async Task CopyAsync()
     {
         if (Selection is not { } region || Screen is not { } screen) return;
         try
@@ -363,9 +439,9 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     /// <summary>One margin-aware paste of the clipboard text. b3270 moves to the next row at the paste margin on '\n'.</summary>
     [RelayCommand(CanExecute = nameof(IsConnected))]
-    private async Task PasteAsync()
+    public async Task PasteAsync()
     {
-        // Hotkeys execute commands without consulting CanExecute, so the guard lives here too.
+        // The screen's paste hotkey calls this method directly, so the guard lives here as well as in CanExecute.
         if (!IsConnected) return;
         string? text;
         try
@@ -385,7 +461,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private bool CanSelectAll => Screen is not null;
 
     [RelayCommand(CanExecute = nameof(CanSelectAll))]
-    private void SelectAll()
+    public void SelectAll()
     {
         if (Screen is { } screen) Selection = ScreenRegion.Full(screen.Rows, screen.Columns);
     }

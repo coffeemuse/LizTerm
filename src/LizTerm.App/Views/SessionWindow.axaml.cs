@@ -11,12 +11,14 @@ public partial class SessionWindow : Window
     public SessionWindow()
     {
         InitializeComponent();
-        Screen.KeyRequested += (_, key) => _ = ViewModel?.SendKeyCommand.ExecuteAsync(key);
+        // The screen's events call the view model's methods, not its commands: each method carries its own guard,
+        // and a keystroke must never be dropped for arriving while the previous one's round trip is still open.
+        Screen.KeyRequested += (_, key) => _ = ViewModel?.SendKeyAsync(key);
         Screen.TextEntered += (_, text) => _ = ViewModel?.TypeTextAsync(text);
         Screen.CellClicked += (_, cell) => _ = ViewModel?.MoveCursorAsync(cell.Row, cell.Column);
-        Screen.CopyRequested += (_, _) => _ = ViewModel?.CopyCommand.ExecuteAsync(null);
-        Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteCommand.ExecuteAsync(null);
-        Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAllCommand.Execute(null);
+        Screen.CopyRequested += (_, _) => _ = ViewModel?.CopyAsync();
+        Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteAsync();
+        Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAll();
         Opened += (_, _) =>
         {
             ShowPlatformGestures();
@@ -37,6 +39,10 @@ public partial class SessionWindow : Window
     private SessionViewModel? ViewModel => DataContext as SessionViewModel;
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+    /// <summary>The command clears the message; this puts the keyboard back on the screen, where the next keystroke
+    /// belongs (spec 7).</summary>
+    private void OnDismissClick(object? sender, RoutedEventArgs e) => Screen.Focus();
 
     private void OnNewSessionClick(object? sender, RoutedEventArgs e) => (Avalonia.Application.Current as App)?.ShowPicker();
 

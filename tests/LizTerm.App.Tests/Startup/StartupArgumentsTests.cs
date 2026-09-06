@@ -75,6 +75,9 @@ public class StartupArgumentsTests
     [InlineData("L:L:mvs.local")]
     [InlineData("@mvs.local")]
     [InlineData("L:@mvs.local:23")]
+    [InlineData("fe80::1")]
+    [InlineData("L:fe80::1")]
+    [InlineData("::1:23")]
     public void Bad_syntax_is_an_error_with_usage(string arg)
     {
         var parsed = StartupArguments.Parse([arg]);
@@ -163,5 +166,12 @@ public class StartupArgumentsTests
     {
         var saved = new SessionProfile { Name = "mvs.local:abc", Host = "10.0.0.1", Port = 3270 };
         Assert.Same(saved, StartupArguments.Parse(["mvs.local:abc"]).Resolve([saved]));
+    }
+
+    [Fact]
+    public void A_saved_profile_can_be_named_like_an_unbracketed_ipv6_address()
+    {
+        var profiles = new[] { new SessionProfile { Name = "fe80::1", Host = "mvs.local" } };
+        Assert.Same(profiles[0], StartupArguments.Parse(["fe80::1"]).Resolve(profiles));
     }
 }

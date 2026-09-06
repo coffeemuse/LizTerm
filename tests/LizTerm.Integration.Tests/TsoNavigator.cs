@@ -1,11 +1,14 @@
+using System.Diagnostics;
 using LizTerm.Core.Session;
 
 namespace LizTerm.Integration.Tests;
 
 /// <summary>Drives an MVS 3.8j TSO session: logon to READY, a command that returns to READY, and logoff. Screens
-/// are recognized by text only, never by coordinates, so the small differences between TK4-, TK5, and MVS/CE
-/// logon screens do not matter. READY means the last non-blank line of the screen is exactly READY, which is
-/// where IND$FILE must be started from.</summary>
+/// are recognized by text only, never by coordinates. The rules, which are all a host must satisfy: the Hercules
+/// banner is a screen that says "hit ENTER" (any case) and has no "===>"; the logon screen is the first screen
+/// with "===>"; the password prompt says "PASSWORD"; READY means the last non-blank line is exactly READY, which
+/// is where IND$FILE must be started from; a "***" pause is answered with Enter and any other "===>" screen (a
+/// menu) with PF3. A host whose screens carry none of these strings needs a rule added here, not coordinates.</summary>
 internal sealed class TsoNavigator(IEmulatorSession session, ScreenWaiter screens)
 {
     private static readonly TimeSpan Step = TimeSpan.FromSeconds(30);
@@ -58,6 +61,9 @@ internal sealed class TsoNavigator(IEmulatorSession session, ScreenWaiter screen
             await screens.WaitForQuietAsync(Quiet, Step);
             var text = screens.LatestText;
             if (IsAtReady(text)) return;
+            // The screen may have moved on during the quiet wait; act only on one of the gate screens, otherwise
+            // wait for the next one rather than sending PF3 into whatever is there now.
+            if (!(text.Contains("***") || text.Contains("===>"))) continue;
             await screens.WaitForUnlockedKeyboardAsync(Step);
             await session.SendKeyAsync(text.Contains("***") ? TerminalKey.Enter : TerminalKey.PF3);
             await screens.WaitForAsync(t => t != text, Step, "the screen to change");
@@ -72,17 +78,20 @@ internal sealed class TsoNavigator(IEmulatorSession session, ScreenWaiter screen
         await ReachReadyAsync();
     }
 
-    /// <summary>LOGOFF, then wait for the host to drop the line or show the logon screen again.</summary>
+    /// <summary>LOGOFF, then wait for the host to drop the line or show the logon screen again. A host that does
+    /// neither within a step is reported as a diagnostic rather than silently returning, because the next run is
+    /// then refused with USERID IN USE.</summary>
     public async Task LogoffAsync()
     {
         await TypeAndEnterAsync("LOGOFF");
-        var deadline = DateTime.UtcNow + Step;
-        while (DateTime.UtcNow < deadline)
+        var clock = Stopwatch.StartNew();
+        while (clock.Elapsed < Step)
         {
             if (!session.ConnectionState.IsConnected()) return;
             if (screens.LatestText.Contains("LOGON", StringComparison.OrdinalIgnoreCase) && !IsAtReady(screens.LatestText)) return;
             await Task.Delay(200);
         }
+        TestContext.Current.SendDiagnosticMessage($"LOGOFF: the host neither dropped the line nor showed the logon screen within {Step.TotalSeconds:0} s. Last screen:\n{screens.LatestText}");
     }
 
     private async Task TypeAndEnterAsync(string text)

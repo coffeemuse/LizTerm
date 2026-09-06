@@ -8,7 +8,10 @@ public class ConnectTypesTests
     public void ConnectOptions_defaults_to_the_profile()
     {
         Assert.Null(new ConnectOptions().VerifyCertificate);
+        Assert.Null(new ConnectOptions().Pin);
         Assert.False(new ConnectOptions(VerifyCertificate: false).VerifyCertificate);
+        var pin = new CertificatePin("AA", "CN=x", "pem");
+        Assert.Same(pin, new ConnectOptions(Pin: pin).Pin);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -105,6 +106,43 @@ public class TerminalScreenSelectionTests
         Assert.False(clicked);
     }
 
+    /// <summary>The control writes its own Selection with SetCurrentValue, so a binding installed by a window
+    /// keeps delivering values after a drag (spec 7).</summary>
+    [AvaloniaFact]
+    public void The_controls_own_selection_writes_do_not_break_a_binding()
+    {
+        var (window, screen) = Show();
+        var source = new TerminalScreen { Snapshot = ScreenSnapshot.Empty(24, 80) };
+        screen.Bind(TerminalScreen.SelectionProperty, source.GetObservable(TerminalScreen.SelectionProperty));
+
+        window.MouseDown(Center(screen, 5, 10), MouseButton.Left);
+        window.MouseMove(Center(screen, 2, 3));
+        window.MouseUp(Center(screen, 2, 3), MouseButton.Left);
+        Assert.Equal(ScreenRegion.FromCorners(2, 3, 5, 10), screen.Selection);
+
+        source.Selection = ScreenRegion.FromCorners(0, 0, 1, 1);
+        Assert.Equal(ScreenRegion.FromCorners(0, 0, 1, 1), screen.Selection);
+    }
+
+    [AvaloniaFact]
+    public void Losing_pointer_capture_ends_the_drag()
+    {
+        var (window, screen) = Show();
+        window.MouseDown(Center(screen, 2, 3), MouseButton.Left);
+        window.MouseMove(Center(screen, 4, 6));
+        var before = screen.Selection;
+        Assert.NotNull(before);
+
+        screen.RaiseEvent(new PointerCaptureLostEventArgs(screen, new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true)));
+        window.MouseMove(Center(screen, 10, 20));
+        Assert.Equal(before, screen.Selection);
+
+        var clicked = false;
+        screen.CellClicked += (_, _) => clicked = true;
+        window.MouseUp(Center(screen, 10, 20), MouseButton.Left);
+        Assert.False(clicked);
+    }
+
     [AvaloniaFact]
     public void Clipboard_hotkeys_raise_requests_and_bypass_the_keymap()
     {
@@ -122,5 +160,18 @@ public class TerminalScreenSelectionTests
         window.KeyPressQwerty(PhysicalKey.F3, RawInputModifiers.None);
 
         Assert.Equal(["copy", "paste", "select-all", "key:PF3"], events);
+    }
+
+    /// <summary>A third click is a plain press: it drops the word selection rather than growing it.</summary>
+    [AvaloniaFact]
+    public void A_triple_click_does_not_extend_the_word_selection()
+    {
+        var buffer = new ScreenBuffer(24, 80);
+        buffer.SetText(3, 10, "SYS1.PROCLIB", null, null, null);
+        var (_, screen) = Show(buffer.Snapshot());
+        screen.PressAt((3, 14), 2);
+        Assert.Equal(ScreenRegion.FromCorners(3, 10, 3, 21), screen.Selection);
+        screen.PressAt((3, 14), 3);
+        Assert.Null(screen.Selection);
     }
 }

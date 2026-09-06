@@ -1,26 +1,52 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using LizTerm.App.Dialogs;
+using LizTerm.Core.Security;
 
 namespace LizTerm.App.Views;
 
-/// <summary>Spec 5.3. Cancel is the default and Escape maps to it; closing with the title bar also declines.
-/// The result travels both as <see cref="Decision"/> and as the ShowDialog result.</summary>
+/// <summary>Spec 5.4. Cancel is the default and Escape maps to it; closing with the title bar also declines. The
+/// result travels both as <see cref="Decision"/> and as the ShowDialog result.</summary>
 public partial class CertificateWindow : Window
 {
-    public CertificateWindow() : this("", [], false) { }
+    /// <summary>Design-time only: a first-time failure with a pinnable certificate.</summary>
+    public CertificateWindow() : this(new CertificatePromptRequest("mvs.example",
+        ["TLS: Host certificate verification failed:", "self-signed certificate (18)"],
+        new PresentedCertificate("8C:13:6A:01", "CN=mvs.example", "", true, null), null, null, true, null)) { }
 
-    public CertificateWindow(string host, IReadOnlyList<string> reason, bool canRemember)
+    public CertificateWindow(CertificatePromptRequest request)
     {
         InitializeComponent();
-        HostText.Text = $"{host} presented a certificate that could not be verified:";
-        ReasonText.Text = string.Join("\n", reason);
-        RememberBox.IsVisible = canRemember;
+        var changed = request.Previous is not null && request.Presented is not null
+            && !CertificateReader.SameFingerprint(request.Presented.Sha256, request.Previous.Sha256);
+        Title = changed ? "Certificate changed" : "Certificate not verified";
+        HostText.Text = changed
+            ? $"{request.Host} presented a certificate that is not the one trusted for this profile."
+            : $"{request.Host} presented a certificate that could not be verified:";
+        TrustedText.IsVisible = request.Previous is not null;
+        TrustedText.Text = request.Previous is null ? "" : $"Trusted: SHA-256 {request.Previous.Sha256}";
+        PresentedText.IsVisible = request.Presented is not null;
+        SubjectText.IsVisible = request.Presented is not null;
+        if (request.Presented is { } presented)
+        {
+            PresentedText.Text = $"Presented: SHA-256 {presented.Sha256}";
+            SubjectText.Text = $"Subject: {presented.Subject}";
+            // A pin holds every certificate the host sent, and the engine trusts each of them, so a chain pins the
+            // CA as much as the leaf: say so.
+            if (CertificateReader.CountCertificates(presented.Pem) > 1)
+                RememberBox.Content = "Trust this certificate and its issuing CA for this profile";
+        }
+        FetchErrorText.IsVisible = request.Presented is null && request.FetchError is not null;
+        FetchErrorText.Text = request.FetchError is null ? "" : $"The certificate could not be read: {request.FetchError}";
+        ReasonText.Text = string.Join("\n", request.Reason);
+        RememberBox.IsVisible = request.CanPin;
+        CannotPinText.IsVisible = request.CannotPinReason is not null;
+        CannotPinText.Text = request.CannotPinReason ?? "";
     }
 
     public CertificateDecision? Decision { get; private set; }
 
-    internal void ConnectAnyway() => Finish(new CertificateDecision(true, RememberBox.IsChecked == true));
+    internal void ConnectAnyway() => Finish(new CertificateDecision(true, RememberBox.IsVisible && RememberBox.IsChecked == true));
 
     private void OnConnectAnywayClick(object? sender, RoutedEventArgs e) => ConnectAnyway();
 
