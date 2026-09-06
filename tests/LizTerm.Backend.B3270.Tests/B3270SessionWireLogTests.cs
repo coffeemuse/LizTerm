@@ -25,7 +25,7 @@ public class B3270SessionWireLogTests : IDisposable
         Assert.Equal(LogPath(), session.WireLogPath);
         await session.SendKeyAsync(TerminalKey.Enter);
         fake.Emit("""{"oia":{"field":"insert","value":"true"}}""");
-        await WaitUntilAsync(() => session.KeyboardStatus.InsertMode, "insert");
+        await Wait.UntilAsync(() => session.KeyboardStatus.InsertMode, "insert");
         session.StopWireLog();
         Assert.Null(session.WireLogPath);
 
@@ -76,7 +76,7 @@ public class B3270SessionWireLogTests : IDisposable
         Assert.Equal(LogPath(), session.WireLogPath);
         await session.StartProcessAsync(CancellationToken.None);
         fake.Exit(1);
-        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.Disconnected, "fault");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Disconnected, "fault");
         Assert.Equal(LogPath(), session.WireLogPath);
         await session.DisposeAsync();
         Assert.Null(session.WireLogPath);
@@ -94,21 +94,11 @@ public class B3270SessionWireLogTests : IDisposable
 
         await session.StartProcessAsync(CancellationToken.None);
         first.Exit(1);
-        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.Disconnected, "first exit");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Disconnected, "first exit");
         await Task.Delay(50, TestContext.Current.CancellationToken);
         await session.StartProcessAsync(CancellationToken.None);
 
         Assert.Single(messages, m => m == "Wire log disabled: boom");
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition, string what)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(2);
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
-            await Task.Delay(5, TestContext.Current.CancellationToken);
-        }
     }
 
     /// <summary>Reads the log while the session still holds it open, so a test can see what had been written at

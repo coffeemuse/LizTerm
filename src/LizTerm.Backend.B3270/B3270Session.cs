@@ -24,7 +24,7 @@ public sealed class B3270Session : IEmulatorSession
     private TaskCompletionSource<HelloIndication>? _hello;
     private int _tagCounter;
     private volatile bool _shuttingDown;
-    private volatile TaskCompletionSource? _disconnected;
+    private TaskCompletionSource? _disconnected;
     private TransferContext? _transfer;
     /// <summary>Why there is no process after there was one: set when the engine dies, cleared by the next start,
     /// so an action sent to a dead engine reports the fault rather than a session that was never started.</summary>
@@ -541,7 +541,7 @@ public sealed class B3270Session : IEmulatorSession
         }
         finally
         {
-            if (state == ConnectionState.Disconnected) _disconnected?.TrySetResult();
+            if (state == ConnectionState.Disconnected) Volatile.Read(ref _disconnected)?.TrySetResult();
         }
     }
 
@@ -683,11 +683,13 @@ public sealed class B3270Session : IEmulatorSession
     }
 
     /// <summary>Waits until b3270 reports the connection closed, or until <see cref="DisconnectTimeout"/> passes.
-    /// The source is installed before the state is checked so a report that lands in between is not missed.</summary>
+    /// The source is installed before the state is checked so a report that lands in between is not missed.
+    /// Overlapping callers share one source: the first installs it, a concurrent caller awaits the same one, and
+    /// the finally clears the slot only if it still holds that instance (spec 8).</summary>
     private async Task WaitForDisconnectedAsync()
     {
-        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _disconnected = disconnected;
+        var fresh = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disconnected = Interlocked.CompareExchange(ref _disconnected, fresh, null) ?? fresh;
         try
         {
             if (ConnectionState == ConnectionState.Disconnected) return;
@@ -703,7 +705,7 @@ public sealed class B3270Session : IEmulatorSession
         }
         finally
         {
-            _disconnected = null;
+            Interlocked.CompareExchange(ref _disconnected, null, disconnected);
         }
     }
 
