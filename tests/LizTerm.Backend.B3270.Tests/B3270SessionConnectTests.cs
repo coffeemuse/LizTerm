@@ -169,7 +169,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Pinned, () => fake);
         using var cts = new CancellationTokenSource();
         var connect = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
         Assert.True(File.Exists(session.LastPinFile));
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connect);
@@ -223,7 +223,7 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(1));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt);
@@ -269,9 +269,9 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(1));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
         cts.Cancel();
-        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""), TimeSpan.FromSeconds(1));
+        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""));
         await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.False(attempt.IsCompleted, "the attempt must wait for the Disconnect to be answered");
 
@@ -366,7 +366,7 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
@@ -382,7 +382,7 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("verifyHostCert"), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("verifyHostCert"));
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
@@ -400,7 +400,7 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
 
         // Hold the cancel's Disconnect inside its write, then kill the engine so the pending Connect run faults.
         var reached = new ManualResetEventSlim();
@@ -436,7 +436,7 @@ public class B3270SessionConnectTests
 
         var first = session.DisconnectAsync();
         var second = session.DisconnectAsync();
-        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""));
         await Task.Delay(50, TestContext.Current.CancellationToken);
         Assert.False(first.IsCompleted);
         Assert.False(second.IsCompleted);

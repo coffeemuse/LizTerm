@@ -216,7 +216,7 @@ public class B3270SessionStateTests
         fake.RunResponder = line => [RunResult(line)];
 
         var disconnect = session.DisconnectAsync();
-        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""));
         await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.False(disconnect.IsCompleted, "DisconnectAsync completed before the state changed");
 

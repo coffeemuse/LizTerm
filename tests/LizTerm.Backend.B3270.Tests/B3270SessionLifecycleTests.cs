@@ -53,8 +53,8 @@ public class B3270SessionLifecycleTests
 
         var first = session.RunAsync(new B3270Action("Enter"));
         var second = session.RunAsync(new B3270Action("PF", "3"));
-        var firstLine = await fake.WaitForInputAsync(l => l.Contains("\"Enter\""), TimeSpan.FromSeconds(1));
-        var secondLine = await fake.WaitForInputAsync(l => l.Contains("\"PF\""), TimeSpan.FromSeconds(1));
+        var firstLine = await fake.WaitForInputAsync(l => l.Contains("\"Enter\""));
+        var secondLine = await fake.WaitForInputAsync(l => l.Contains("\"PF\""));
         var firstTag = System.Text.RegularExpressions.Regex.Match(firstLine, "\"r-tag\":\"([^\"]+)\"").Groups[1].Value;
         var secondTag = System.Text.RegularExpressions.Regex.Match(secondLine, "\"r-tag\":\"([^\"]+)\"").Groups[1].Value;
         Assert.NotEqual(firstTag, secondTag);
@@ -94,7 +94,7 @@ public class B3270SessionLifecycleTests
         var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
         session.Faulted += (_, f) => { fault = f; faulted.TrySetResult(f); };
         var pending = session.RunAsync(new B3270Action("Enter"));
-        await fake.WaitForInputAsync(l => l.Contains("Enter"), TimeSpan.FromSeconds(1));
+        await fake.WaitForInputAsync(l => l.Contains("Enter"));
 
         fake.Exit(137);
 

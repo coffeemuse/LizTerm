@@ -24,7 +24,7 @@ public class FakeB3270ProcessTests
         var fake = new FakeB3270Process { AutoInitialize = false };
         fake.Start([]);
         fake.StandardInput.Write("""{"run":{"r-tag":"5","actions":[{"action":"Enter"}]}}""" + "\n");
-        var line = await fake.WaitForInputAsync(l => l.Contains("Enter"), TimeSpan.FromSeconds(1));
+        var line = await fake.WaitForInputAsync(l => l.Contains("Enter"));
         Assert.Contains("\"r-tag\":\"5\"", line);
         Assert.Equal("""{"run-result":{"r-tag":"5","success":true,"time":0}}""", fake.StandardOutput.ReadLine());
     }
