@@ -301,7 +301,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromSeconds(2) };
         await session.StartProcessAsync(CancellationToken.None);
         fake.Emit("""{"connection":{"state":"tcp-pending","host":"h","cause":"ui"}}""");
-        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "tcp-pending");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "tcp-pending");
 
         var attempt = session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         await Task.Delay(100, TestContext.Current.CancellationToken);
@@ -322,7 +322,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(100) };
         await session.StartProcessAsync(CancellationToken.None);
         fake.Emit("""{"connection":{"state":"tcp-pending","host":"h","cause":"ui"}}""");
-        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "tcp-pending");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "tcp-pending");
 
         await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal(ConnectionState.TcpPending, session.ConnectionState);
@@ -382,7 +382,7 @@ public class B3270SessionConnectTests
         try
         {
             await cts.CancelAsync();
-            Assert.True(reached.Wait(TimeSpan.FromSeconds(5)), "the cancel never sent a Disconnect");
+            Assert.True(reached.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken), "the cancel never sent a Disconnect");
             fake.Exit(1);
 
             var settled = await Task.WhenAny(attempt, Task.Delay(500, TestContext.Current.CancellationToken));
@@ -396,13 +396,25 @@ public class B3270SessionConnectTests
         await Assert.ThrowsAnyAsync<Exception>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition, string what)
+    /// <summary>Regression: the wait slot was a single field, so a second caller's install dropped the first
+    /// caller's completion source and the first waited out the whole DisconnectTimeout.</summary>
+    [Fact]
+    public async Task Two_overlapping_disconnect_waits_both_end_on_the_one_not_connected_report()
     {
-        var deadline = DateTime.UtcNow.AddSeconds(2);
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
-            await Task.Delay(5, TestContext.Current.CancellationToken);
-        }
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Verifying, () => fake);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+
+        var first = session.DisconnectAsync();
+        var second = session.DisconnectAsync();
+        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""), TimeSpan.FromSeconds(2));
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        Assert.False(first.IsCompleted);
+        Assert.False(second.IsCompleted);
+
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
     }
 }

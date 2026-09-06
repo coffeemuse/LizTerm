@@ -26,16 +26,6 @@ public class B3270SessionStateTests
         return $$$"""{"run-result":{"r-tag":"{{{tag}}}","success":true,"time":0}}""";
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition, string what)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(2);
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
-            await Task.Delay(5, TestContext.Current.CancellationToken);
-        }
-    }
-
     [Fact]
     public async Task Screen_mode_resizes_and_publishes()
     {
@@ -43,7 +33,7 @@ public class B3270SessionStateTests
         ScreenSnapshot? published = null;
         session.ScreenUpdated += (_, s) => published = s;
         fake.Emit("""{"screen-mode":{"model":4,"rows":43,"columns":80,"color":true,"oversize":false,"extended":true}}""");
-        await WaitUntilAsync(() => published?.Rows == 43, "resize");
+        await Wait.UntilAsync(() => published?.Rows == 43, "resize");
         Assert.NotNull(published);
         Assert.Equal(43, published!.Rows);
     }
@@ -53,7 +43,7 @@ public class B3270SessionStateTests
     {
         var (session, fake) = await StartAsync();
         fake.Emit("""{"screen":{"cursor":{"enabled":true,"row":2,"column":9},"rows":[{"row":1,"changes":[{"column":2,"fg":"red","count":1},{"column":3,"fg":"neutralBlack","bg":"red","text":"___"},{"column":6,"fg":"neutralBlack","bg":"red","count":2}]},{"row":2,"changes":[{"column":2,"text":"Field:"},{"column":8,"fg":"red","gr":"underline","count":3}]}]}}""");
-        await WaitUntilAsync(() => session.CurrentScreen.GetText(1, 1, 6) == "Field:", "screen text");
+        await Wait.UntilAsync(() => session.CurrentScreen.GetText(1, 1, 6) == "Field:", "screen text");
         var s = session.CurrentScreen;
         Assert.Equal(new CursorPosition(1, 8, true), s.Cursor);
         Assert.Equal(HostColor.Red, s[0, 1].Foreground);
@@ -73,9 +63,9 @@ public class B3270SessionStateTests
     {
         var (session, fake) = await StartAsync();
         fake.Emit("""{"screen":{"cursor":{"enabled":true,"row":1,"column":1}}}""");
-        await WaitUntilAsync(() => session.CurrentScreen.Cursor.Visible, "cursor on");
+        await Wait.UntilAsync(() => session.CurrentScreen.Cursor.Visible, "cursor on");
         fake.Emit("""{"screen":{"cursor":{"enabled":false}}}""");
-        await WaitUntilAsync(() => !session.CurrentScreen.Cursor.Visible, "cursor off");
+        await Wait.UntilAsync(() => !session.CurrentScreen.Cursor.Visible, "cursor off");
         Assert.Equal(new CursorPosition(0, 0, false), session.CurrentScreen.Cursor);
     }
 
@@ -84,9 +74,9 @@ public class B3270SessionStateTests
     {
         var (session, fake) = await StartAsync();
         fake.Emit("""{"screen":{"rows":[{"row":1,"changes":[{"column":1,"text":"abc"}]}]}}""");
-        await WaitUntilAsync(() => session.CurrentScreen.GetText(0, 0, 3) == "abc", "text");
+        await Wait.UntilAsync(() => session.CurrentScreen.GetText(0, 0, 3) == "abc", "text");
         fake.Emit("""{"erase":{"logical-rows":24,"logical-columns":80,"fg":"blue","bg":"neutralBlack"}}""");
-        await WaitUntilAsync(() => session.CurrentScreen.GetText(0, 0, 3) == "   ", "erase");
+        await Wait.UntilAsync(() => session.CurrentScreen.GetText(0, 0, 3) == "   ", "erase");
         Assert.Equal(HostColor.Blue, session.CurrentScreen[0, 0].Foreground);
     }
 
@@ -105,7 +95,7 @@ public class B3270SessionStateTests
         KeyboardStatus? status = null;
         session.StatusChanged += (_, s) => status = s;
         fake.Emit(line);
-        await WaitUntilAsync(() => session.KeyboardStatus.Lock == expected, "lock " + expected);
+        await Wait.UntilAsync(() => session.KeyboardStatus.Lock == expected, "lock " + expected);
         Assert.NotNull(status);
     }
 
@@ -116,11 +106,11 @@ public class B3270SessionStateTests
         fake.Emit("""{"oia":{"field":"insert","value":true}}""");
         fake.Emit("""{"oia":{"field":"typeahead","value":true}}""");
         fake.Emit("""{"oia":{"field":"lu","value":"IBM0TEQO"}}""");
-        await WaitUntilAsync(() => session.KeyboardStatus.LuName == "IBM0TEQO", "lu");
+        await Wait.UntilAsync(() => session.KeyboardStatus.LuName == "IBM0TEQO", "lu");
         Assert.True(session.KeyboardStatus.InsertMode);
         Assert.True(session.KeyboardStatus.Typeahead);
         fake.Emit("""{"oia":{"field":"lu"}}""");
-        await WaitUntilAsync(() => session.KeyboardStatus.LuName is null, "lu cleared");
+        await Wait.UntilAsync(() => session.KeyboardStatus.LuName is null, "lu cleared");
     }
 
     [Fact]
@@ -133,12 +123,12 @@ public class B3270SessionStateTests
         fake.Emit("""{"connection":{"state":"tls-pending","host":"h","cause":"ui"}}""");
         fake.Emit("""{"tls":{"secure":true,"verified":false,"session":"Version: TLSv1.3","host-cert":"CN = h"}}""");
         fake.Emit("""{"connection":{"state":"connected-tn3270e","host":"h","cause":"ui"}}""");
-        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.ConnectedTn3270E, "connected");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.ConnectedTn3270E, "connected");
         Assert.Equal([ConnectionState.TcpPending, ConnectionState.TlsPending, ConnectionState.ConnectedTn3270E], states);
         Assert.True(session.Tls!.Secure);
         Assert.False(session.Tls.Verified);
         fake.Emit("""{"connection":{"state":"not-connected"}}""");
-        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.Disconnected, "disconnected");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Disconnected, "disconnected");
         Assert.Null(session.Tls);
     }
 
@@ -149,7 +139,7 @@ public class B3270SessionStateTests
         string? message = null;
         session.HostMessage += (_, m) => message = m;
         fake.Emit("""{"popup":{"type":"connection-error","text":"Host unreachable","retrying":false}}""");
-        await WaitUntilAsync(() => message == "Host unreachable", "popup");
+        await Wait.UntilAsync(() => message == "Host unreachable", "popup");
     }
 
     [Fact]
@@ -187,7 +177,7 @@ public class B3270SessionStateTests
         await session.PasteTextAsync("line1\nline2");
         await session.MoveCursorAsync(4, 10);
         fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
-        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
         fake.RunResponder = line => line.Contains("\"Disconnect\"") ? [NotConnected, RunResult(line)] : [RunResult(line)];
         await session.DisconnectAsync();
         var lines = fake.InputLines;
@@ -218,7 +208,7 @@ public class B3270SessionStateTests
     {
         var (session, fake) = await StartAsync();
         fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
-        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
         // b3270 acknowledges the action at once; the connection indication arrives a little later.
         fake.RunResponder = line => [RunResult(line)];
 
@@ -238,7 +228,7 @@ public class B3270SessionStateTests
         var (session, fake) = await StartAsync();
         session.DisconnectTimeout = TimeSpan.FromMilliseconds(200);
         fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
-        await WaitUntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
         fake.RunResponder = line => [RunResult(line)];   // acknowledged, but never reports not-connected
 
         await session.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
