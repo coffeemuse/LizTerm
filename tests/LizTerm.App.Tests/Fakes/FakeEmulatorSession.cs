@@ -40,7 +40,8 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public async Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(Disposed, this);
-        Calls.Add(options?.VerifyCertificate == false ? "connect:noverify" : "connect");
+        Calls.Add(options?.Pin is { } pin ? "connect:pin:" + pin.Sha256
+            : options?.VerifyCertificate == false ? "connect:noverify" : "connect");
         ConnectToken = cancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         if (ConnectCompletion is { } completion)

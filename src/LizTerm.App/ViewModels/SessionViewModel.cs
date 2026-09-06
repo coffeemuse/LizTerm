@@ -6,6 +6,7 @@ using LizTerm.App.Files;
 using LizTerm.App.Status;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Screen;
+using LizTerm.Core.Security;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.ViewModels;
@@ -18,7 +19,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly ICertificatePrompt? _certificatePrompt;
     private readonly Action<SessionProfile>? _saveProfile;
     private readonly IFolderOpener? _folderOpener;
-    private bool? _verifyOverride;
+    private readonly ICertificateFetcher? _certificateFetcher;
+    /// <summary>The pin chosen in this window. The session's profile is fixed at construction, so a pin made after
+    /// the window opened travels as a one-shot option on every later connect from here (spec 5.3).</summary>
+    private CertificatePin? _pinOverride;
     private readonly EventHandler<ScreenSnapshot> _onScreenUpdated;
     private readonly EventHandler<KeyboardStatus> _onStatusChanged;
     private readonly EventHandler<ConnectionState> _onConnectionChanged;
@@ -61,11 +65,12 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// <param name="dispatch">Marshals a callback onto the UI thread. Tests pass <c>a => a()</c>.</param>
     /// <param name="clipboard">Text clipboard; the app passes <see cref="AvaloniaTextClipboard"/>, tests a fake.</param>
     /// <param name="certificatePrompt">Asked on a certificate verification failure; null declines.</param>
-    /// <param name="saveProfile">Persists the profile when the user chooses "Always allow"; null for ad hoc profiles.</param>
+    /// <param name="saveProfile">Persists the profile when the user pins its certificate; null for ad hoc profiles.</param>
     /// <param name="folderOpener">Opens the wire log directory for Help &gt; Show Wire Logs; null for tests that don't cover it.</param>
+    /// <param name="certificateFetcher">Reads what a TLS host presented so the prompt can show and pin it; null shows the prompt without a fingerprint.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
         ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
-        IFolderOpener? folderOpener = null)
+        IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null)
     {
         _session = session;
         _dispatch = dispatch;
@@ -73,6 +78,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _certificatePrompt = certificatePrompt;
         _saveProfile = saveProfile;
         _folderOpener = folderOpener;
+        _certificateFetcher = certificateFetcher;
 
         _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
         _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
@@ -211,7 +217,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     }
 
     [RelayCommand]
-    private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions(_verifyOverride));
+    private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions(Pin: _pinOverride));
 
     private async Task ConnectWithAsync(ConnectOptions options)
     {
@@ -258,20 +264,51 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         if (certificateFailure is not null && !_disposed) await OfferConnectAnywayAsync(certificateFailure);
     }
 
-    /// <summary>Spec 5.3: ask once; on yes reconnect with verification off for this attempt, and with Remember also
-    /// save the profile and keep the override for the window's life. The reconnect cannot fail on verification,
-    /// so this never loops. Both the prompt (a modal window) and the save (a file write) can fail, and this runs
-    /// after the connect's catch clauses rather than inside one, so those failures reach the error banner instead
-    /// of faulting the command.</summary>
+    /// <summary>Spec 5.3. Reads what the host presented (TLS profiles only), asks once, and then either connects
+    /// without verification for this attempt only or pins the certificate: the profile is saved with the pin and
+    /// verification on, and every later connect from this window passes the same pin. A pin the engine then rejects
+    /// is not offered again (the request says so), so this never loops. The prompt (a modal window), the fetch (a
+    /// socket), and the save (a file write) can all fail, and this runs after the connect's catch clauses rather
+    /// than inside one, so those failures reach the error banner instead of faulting the command.</summary>
     private async Task OfferConnectAnywayAsync(ConnectionFailedException failure)
     {
         var reason = failure.Lines.Where(line => line != "Connection failed:").ToList();
+        var previous = _pinOverride ?? Profile.PinnedCertificate;
+
+        PresentedCertificate? presented = null;
+        string? fetchError = null;
+        if (Profile.UseTls && _certificateFetcher is not null)
+        {
+            // The fetcher only speaks TLS-on-connect, which is what a TLS profile is; a plain profile the host upgraded
+            // through STARTTLS gets the one-time allow without a fingerprint (spec 5.1). The connect's own token source
+            // is gone by now, so the fetch gets a fresh one with the same bound.
+            using var fetchCts = new CancellationTokenSource(ConnectTimeout);
+            try
+            {
+                presented = await _certificateFetcher.FetchAsync(Profile.Host, Profile.Port, fetchCts.Token);
+            }
+            catch (Exception ex)
+            {
+                fetchError = ex.Message;
+            }
+            if (_disposed) return;
+        }
+
+        var savedTlsProfile = _saveProfile is not null && Profile.UseTls;
+        var canPin = savedTlsProfile && presented is { Pinnable: true } && presented.Sha256 != previous?.Sha256;
+        string? cannotPinReason = null;
+        if (savedTlsProfile && !canPin && presented is not null)
+        {
+            cannotPinReason = presented.Pinnable
+                ? "The engine rejected the pinned certificate; connecting anyway applies to this attempt only."
+                : $"This certificate cannot be pinned: {presented.NotPinnableReason}. Connect Anyway applies to this attempt only.";
+        }
+        var request = new CertificatePromptRequest(Profile.Host, reason, presented, fetchError, previous, canPin, cannotPinReason);
+
         CertificateDecision decision;
         try
         {
-            decision = _certificatePrompt is null
-                ? CertificateDecision.Declined
-                : await _certificatePrompt.AskAsync(Profile.Host, reason, _saveProfile is not null);
+            decision = _certificatePrompt is null ? CertificateDecision.Declined : await _certificatePrompt.AskAsync(request);
         }
         catch (Exception ex)
         {
@@ -288,21 +325,28 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
 
         string? saveError = null;
-        if (decision.Remember)
+        ConnectOptions retry;
+        if (decision.Remember && canPin)
         {
-            _verifyOverride = false;
+            var pin = new CertificatePin(presented!.Sha256, presented.Subject, presented.Pem);
+            _pinOverride = pin;
             try
             {
-                _saveProfile?.Invoke(Profile with { VerifyCertificate = false });
+                _saveProfile!(Profile with { PinnedCertificate = pin, VerifyCertificate = true });
             }
             catch (Exception ex)
             {
                 // The choice still holds for this window; only writing it back failed, so the connect goes ahead.
                 saveError = "Could not save the profile: " + ex.Message;
             }
+            retry = new ConnectOptions(Pin: pin);
+        }
+        else
+        {
+            retry = new ConnectOptions(VerifyCertificate: false);
         }
 
-        await ConnectWithAsync(new ConnectOptions(VerifyCertificate: false));
+        await ConnectWithAsync(retry);
 
         // ConnectWithAsync clears ErrorMessage on entry, so a save failure is reported after the retry.
         if (saveError is not null && !_disposed)
