@@ -44,4 +44,20 @@ public class SessionFactoryTests
             emptyDirectory.Delete(recursive: true);
         }
     }
+
+    /// <summary>The two tests above drive the seam, so nothing else would notice the public overload drifting off
+    /// the default the app actually ships with — passing Environment.CurrentDirectory, or reading the wrong
+    /// variable. Both public entry points resolve through DefaultLocation; this pins that they agree.</summary>
+    [Fact]
+    public async Task The_public_Create_resolves_through_the_same_default_as_CheckBackend()
+    {
+        var (overridePath, baseDirectory) = SessionFactory.DefaultLocation;
+        Assert.Equal(Environment.GetEnvironmentVariable(SessionFactory.OverrideOrigin), overridePath);
+        Assert.Equal(AppContext.BaseDirectory, baseDirectory);
+
+        var profile = new SessionProfile { Name = "t", Host = "h" };
+        await using var viaDefault = SessionFactory.Create(profile);
+        await using var viaSeam = SessionFactory.Create(profile, overridePath, baseDirectory);
+        Assert.Equal(viaSeam.Engine, viaDefault.Engine);
+    }
 }

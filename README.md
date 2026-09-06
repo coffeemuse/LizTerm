@@ -9,7 +9,8 @@ Design: `docs/superpowers/specs/2026-09-03-lizterm-v1-design.md`.
 
 ## Developer setup (macOS)
 
-1. .NET 10 SDK, Xcode command line tools, Homebrew `openssl@3`.
+1. .NET 10 SDK, 10.0.4xx band (`global.json` pins it, and rolls forward only within that band), Xcode command
+   line tools, Homebrew `openssl@3`.
 2. Build the emulator engine once: `native/build/build-macos.sh` (produces `native/out/osx-<arch>/b3270`,
    statically linked against OpenSSL; the app project copies it into its output).
 3. `dotnet test LizTerm.slnx`
@@ -24,7 +25,8 @@ Environment variables:
 - `LIZTERM_TEST_HOST`: `host[:port]` for the opt-in integration tests. Add `LIZTERM_TEST_TLS=1` for a TLS host
   and `LIZTERM_TEST_VERIFY_CERT=0` to accept a self-signed certificate.
 - `LIZTERM_REQUIRE_ENGINE`: any non-blank value makes the engine smoke test fail instead of skip when no bundled
-  b3270 is in the test output. CI sets it on the macOS job; leave it unset locally.
+  b3270 is in the test output. CI sets it on the macOS job; leave it unset locally. A b3270 that *is* in the test
+  output but is not executable fails the test either way, so a forgotten `chmod +x` cannot pass as a skip.
 
 `native/build/build-playback.sh` builds x3270's `playback` tool, for replaying a captured host
 trace against a live b3270 during local development.
@@ -33,17 +35,19 @@ trace against a live b3270 during local development.
 
 Two GitHub Actions workflows under `.github/workflows`:
 
-- `ci.yml` runs on every push, pull request, and manual dispatch: one Linux job, `test`, that builds the solution in
-  Release with warnings as errors and runs the full suite. No engine is needed; the integration lane skips itself.
-- `platforms.yml` runs on pushes to `main`, on manual dispatch, and on pull requests that touch the workflow or
-  `native/`: `engine-macos` builds b3270 with `native/build/build-macos.sh` (whose `verify-macos.sh` fails the job on
-  any non-system dynamic dependency), uploads it as the `b3270-osx-arm64` artifact, then runs the suite with
-  `LIZTERM_REQUIRE_ENGINE=1` so the engine smoke test must start the freshly built binary; `test-windows` runs the
-  suite on Windows.
+- `ci.yml` runs on pushes to `main`, on every pull request, and on manual dispatch: one Linux job, `test`, that
+  builds the solution in Release with warnings as errors and runs the full suite. No engine is needed; the live
+  host tests and the engine smoke test skip themselves.
+- `platforms.yml` runs on pushes to `main`, on manual dispatch, and on pull requests touching the workflow,
+  `native/`, `src/`, `tests/`, `global.json`, or the `Directory.*.props` files: `engine-macos` builds b3270 with
+  `native/build/build-macos.sh` (whose `verify-macos.sh` fails the job on any non-system dynamic dependency), runs
+  the suite with `LIZTERM_REQUIRE_ENGINE=1` so the engine smoke test must start the freshly built binary, and only
+  then uploads it as the `b3270-osx-arm64` artifact; `test-windows` runs the suite on Windows.
 
-To run the platform jobs by hand: Actions, Platforms, "Run workflow", or `gh workflow run platforms.yml`. A failed
-run uploads its `.trx` files as `test-results-<os>`. The macOS run's `b3270-osx-arm64` artifact is a CI-built engine
-you can download and drop into `native/out/osx-arm64/`; downloaded artifacts lose the executable bit, so run
+To run the platform jobs by hand: Actions, Platforms, "Run workflow", or `gh workflow run platforms.yml`. A run that
+fails or is cancelled uploads `test-results-<os>` with its `.trx` files and any hang dump. The macOS run's
+`b3270-osx-arm64` artifact is a CI-built engine that has been started by the smoke test before being published; you
+can download it and drop it into `native/out/osx-arm64/`, but downloaded artifacts lose the executable bit, so run
 `chmod +x native/out/osx-arm64/b3270` and rebuild.
 
 ## Recording protocol fixtures

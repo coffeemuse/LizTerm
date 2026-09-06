@@ -147,8 +147,8 @@ needed: the test reads the variable, it does not set it.
 
 ## 6. Repository changes
 
-- `global.json`: `{"sdk": {"version": "10.0.200", "rollForward": "latestPatch"}}`. The runner and Robert's
-  Mac (10.0.201 today) resolve to the same feature band; a future 11.0 preview on either side cannot change the
+- `global.json`: `{"sdk": {"version": "10.0.400", "rollForward": "latestPatch"}}`. The runner and Robert's
+  Mac resolve to the same feature band; a future 11.0 preview on either side cannot change the
   build. Toolchain policy (Robert, 2026-09-06): officially supported builds stay on the current LTS (.NET 10)
   and move to the next LTS when it ships; a non-LTS release such as .NET 11 may be used to *test* against, but
   never for a supported build unless there is a compelling reason, for example a security fix applied only
@@ -188,8 +188,12 @@ tests in CI.
 - Every job carries `timeout-minutes`: 20 for `test` and `test-windows`, 30 for `engine-macos`. The hang timeout
   bounds only the test step; a hung SourceForge download or brew step would otherwise run to GitHub's six-hour
   default, at ten times the cost on a macOS runner.
-- Each TRX upload also collects `TestResults/**/Sequence_*.xml`, the file a blame-hang kill writes naming the
-  hung test, alongside the TRX rather than instead of it.
+- Each TRX upload also collects the hang evidence. Corrected after review: a blame-hang kill writes a process
+  dump (`*_hangdump.dmp`) and *no* sequence file at all — the collector logs "All tests finished running, Sequence
+  file will not be generated" — and the crash-mode file is `<guid>_Sequence.xml`, so the original `Sequence_*.xml`
+  glob matched nothing in either mode. The uploads take `*.trx`, `*.dmp` and `*Sequence*.xml`, and are conditioned
+  on `failure() || cancelled()`, because `timeout-minutes` and `cancel-in-progress` both cancel rather than fail
+  and `failure()` alone would skip the upload on exactly those runs.
 - The `engine-macos` cache key is the content hash of `fetch-source.sh`, not the version string written into
   the spec above; section 4.1 already reflects this.
 - The `platforms.yml` path filter is wider than section 4 first proposed: the integration test project and the
@@ -201,6 +205,30 @@ tests in CI.
   waits on the event's capture rather than a fixed delay; `Wait` defaults to 5 s; the unreadable-profile test
   opens the file with an exclusive handle so Windows honours the denial; and the `caFile` assertion escapes the
   pin path the way the wire does.
-- Recorded decision: `ci.yml` keeps bare `push` plus `pull_request` rather than `pull_request` only, even
-  though `test` then reports twice for most PRs (once per trigger). Dropping `push` would leave direct pushes
-  to non-default branches unchecked, which the two-report cost does not outweigh.
+- Recorded decision, **reversed after review**: `ci.yml` first kept bare `push` plus `pull_request`, on the view
+  that the two-report cost was worth checking direct pushes to non-default branches. That priced only the duplicate
+  minutes. The two runs also test *different trees* — the push run the branch tip, the pull_request run the merge
+  with `main` — and both land a check run named `test` on the same head SHA, which a required check cannot tell
+  apart. A PR on a branch behind `main` could therefore go green on a tree that does not build when merged.
+  `ci.yml` now uses `push: branches: [main]`; an unmerged branch is checked by its PR.
+
+- Also corrected after review: the `pull_request` path filter on `platforms.yml` was too narrow. Both jobs run the
+  whole solution, so their coverage depends on every source and test file, not the native build alone — and the
+  Windows-only fixes this plan itself made (the unreadable-profile test in `LizTerm.Core.Tests`, the `caFile`
+  escaping in `LizTerm.Backend.B3270.Tests`) lived outside the original list. The filter now covers `src/**`,
+  `tests/**`, `global.json` and the `Directory.*.props` files.
+
+- Also corrected after review: `Upload b3270` now runs *after* the test step, so an engine that links cleanly but
+  cannot be spawned is never published; `engine-macos` caches the built engine as well as the source tarball
+  (keyed on every `native/build/*.sh`, so any change to the build forces a real build and a fresh gate run); and a
+  failure dumps `native/build-tmp/*/{configure,make}.log`, which `build-macos.sh` otherwise redirects out of the
+  job log, leaving nothing but an exit code.
+
+- Also corrected after review: `EngineRequirement.Decide` takes a `present` flag as well as `found`.
+  `B3270Locator.Find` throws the same exception type for "no binary anywhere" and "a binary is there without its
+  executable bit", and collapsing them meant a downloaded artifact missing its `chmod +x` — the state §6's own
+  README text warns about — produced a green *skip* from the one test whose job is proving that binary runs. A
+  present-but-unresolved engine now always fails. The smoke test's other two assertions were dropped as
+  unfalsifiable (`Engine.Source` echoes a constructor argument; the version floor is already enforced inside
+  `StartProcessAsync`) and replaced with one that actually proves the csproj copy rule: the resolved path is under
+  `runtimes/<rid>/native`.

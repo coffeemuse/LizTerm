@@ -220,7 +220,10 @@ public class B3270SessionLifecycleTests
             var fake = new FakeB3270Process { AutoInitialize = calls != 1 };
             if (calls == 2) fake2 = fake;
             return fake;
-        }) { StartupTimeout = TimeSpan.FromMilliseconds(1000) };
+            // Kept short on purpose: the first start can only end by expiring this, so every millisecond here is
+            // a deterministic sleep. The retry needs no headroom from it — AutoInitialize queues hello inside
+            // Start(), before StartProcessAsync begins waiting, so 200 ms only has to cover a dequeue.
+        }) { StartupTimeout = TimeSpan.FromMilliseconds(200) };
         var faults = new List<BackendFault>();
         var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
         session.Faulted += (_, f) => { faults.Add(f); faulted.TrySetResult(f); };
