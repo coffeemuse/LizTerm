@@ -6,6 +6,9 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- Compiled into this assembly too rather than duplicated: the certificate shapes these tests need are the
+         ones the Core tests already build. -->
+    <Compile Include="../LizTerm.Core.Tests/Security/TestCertificates.cs" Link="Security/TestCertificates.cs" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
