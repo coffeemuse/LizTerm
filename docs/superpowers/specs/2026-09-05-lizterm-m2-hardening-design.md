@@ -434,3 +434,76 @@ Rulings made in planning and execution, recorded here rather than edited into th
     an unchanged project carries warnings. Every verification from Task 2 onward instead used
     `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "`, which forces a full rebuild so no
     project's warnings are hidden by up-to-date caching.
+
+Items 20 to 29 record the live UI pass of 2026-09-06 (Task 16): the app driven by hand against the real TLS
+gateway through the Avalonia DevTools MCP, with `HOME` pointed at a scratch directory so no real profile was
+touched, and `LIZTERM_B3270_PATH` set to the Homebrew b3270 4.5.6 because the worktree has no `native/out`.
+
+20. First-time pin. Connecting the seeded `gateway` profile (`verifyCertificate: true`, no pin) opened a second
+    window titled "Certificate not verified" beside the session window, reading "129.212.188.194 presented a
+    certificate that could not be verified:" with `TrustedText` hidden (`IsVisible` false, empty), `PresentedText`
+    "Presented: SHA-256 8C:13:6A:01:6D:75:F8:F1:8F:82:27:90:11:14:83:75:FD:41:B1:B0:49:7B:87:3B:FF:A9:1E:49:2A:35:
+    B5:59", `SubjectText` "Subject: CN=localhost, O=tn3270proxy quick-start", and `ReasonText` carrying b3270's own
+    words, "TLS: Host certificate verification failed: self-signed certificate (18)". `RememberBox` was visible,
+    enabled, and unchecked, with the content "Trust this certificate for this profile". Checking it and clicking
+    Connect Anyway closed the dialog, left the session window as the only root, and put the gateway's TN3270 LOGIN
+    screen on the terminal with the cursor at 23/017. The status bar then read "Connected to 129.212.188.194
+    (TN3270)", " TLS, certificate verified" (the padlock and the verified wording of `StatusFormatter.Tls`),
+    and "✓ Ready"; the error bar stayed hidden. So the accept-and-remember path ends in a *verified* connection,
+    not merely an unverified one that was allowed through.
+21. The profile file gained the pin. After that connect, `grep -c '"sha256"'` on the scratch profile printed 1, and
+    the file held `pinnedCertificate` with `sha256` equal to the fingerprint the dialog had shown, `subject`
+    "CN=localhost, O=tn3270proxy quick-start", and the PEM; `verifyCertificate` was still `true`, as intended — the
+    pin is what makes verification succeed, it does not turn verification off.
+22. "Certificate changed". With the pin replaced by a decoy (`sha256` "00:11:22:33", subject "CN=decoy", a
+    freshly generated self-signed PEM), the same launch produced a dialog titled "Certificate changed" reading
+    "129.212.188.194 presented a certificate that is not the one trusted for this profile." Both fingerprints were
+    on screen at once: `TrustedText` visible with "Trusted: SHA-256 00:11:22:33" and `PresentedText` with the
+    gateway's real one; `RememberBox` visible and unchecked. Clicking Cancel closed the dialog and left the session
+    window showing "✕ Not connected" with the error bar visible and reading "Connection failed: TLS: Host
+    certificate verification failed: self-signed certificate (18)".
+23. The editor's pinned line. Launched with no argument, the picker listed the one profile; selecting it enabled
+    Edit... (`IsEffectivelyEnabled` true) and the editor opened as a second root titled "Edit gateway", with
+    `PinPanel` visible (bound to `HasPinnedCertificate`), `PinText` reading "Pinned certificate: SHA-256
+    00:11:22:33", and the `ForgetButton` beside it. Clicking Forget flipped `PinPanel`'s `IsVisible` to false in
+    place. The dialog was then closed with Cancel, and the profile on disk still held the decoy pin — Forget stages
+    the change in the editor and only Save commits it.
+24. A pinned connect prompts for nothing. With the real pin restored, launching the profile opened the session
+    window alone: no certificate window was ever a root, and the status bar again read " TLS, certificate
+    verified" with "✓ Ready". This is the everyday case section 5 is for — the prompt appears once, and never
+    again while the host keeps its certificate.
+25. Keys, read off the wire log started from Help > Wire Log (the status bar showed "● wire log" and the file
+    appeared under `<config>/logs/`). Escape sent `{"action":"Attn"}`; Page Up sent `{"action":"PF","args":["7"]}`;
+    and a Right Ctrl press and release alone sent `{"action":"Enter"}` — the modifier tap of section 6.3, observed
+    live. The tap's cancel rule was seen too: Left Ctrl down, Escape down, Left Ctrl up produced no `Reset` on the
+    wire, because the Escape press cleared the candidate.
+26. Ctrl+Escape (Clear) could not be sent live. The DevTools `input` tool takes one Avalonia `Key` per event and
+    carries no modifier state — "Ctrl+Escape" is rejected as an unknown key, and a preceding Left Ctrl `KeyDown`
+    does not make the following Escape event carry `KeyModifiers.Control`, so the attempt arrived as a plain
+    Escape and produced a second `Attn` rather than a `Clear`. The chord is covered headless by the keymap tests.
+    `Clear` was reached instead through the Keys menu, which put `{"action":"Clear"}` on the wire — the menu path,
+    not the chord. Final counts over the log were 2 `Attn`, 1 `Clear`, 1 `Enter`, 1 `PF`, and 1 `Disconnect`.
+27. Escape closes the transfer dialog. File > File Transfer... was enabled while connected and opened
+    `FileTransferWindow` as a second root; a single Escape `KeyDown` inside it closed the window, leaving the
+    session window as the only root — the Form-phase case of section 7's rule, which `FileTransferWindow.OnKeyDown`
+    routes through `Closing` and so through `TryClose`.
+28. The splash was NOT captured, and this remains the one behavior of this milestone never seen rendered. It is
+    unobservable through the DevTools MCP on this machine for a timing reason, not a defect: the splash lives at
+    most 2.5 s (`SplashTiming.Default`, and with no input it always runs the full maximum), while the round trip
+    between two MCP tool calls in this session measured consistently longer than that — `attach-to-app` reliably
+    landed while the splash was still a root (a `screenshot` of node 1008 in the same batch answered "the node may
+    have been removed from the tree", which is the splash closing between the two calls), but no second call ever
+    landed in time. Holding the dispatcher busy so the splash could not close (a profile directory of 150,000 and
+    then 500,000 files, which stretched startup from 1 s to 5.4 s and beyond) does not help: with the UI thread
+    blocked the diagnostics handshake itself fails ("Discovery connect failed for process ID"), so the window that
+    is long enough to photograph is exactly the window in which nothing can be photographed. `attach-to-file`
+    (the XAML previewer) timed out on every attempt, and macOS `screencapture` answered "could not create image
+    from display", both because the Mac's display was asleep for the whole session — the same condition that made
+    roughly every second app launch fail with Avalonia's RenderTimer error -6661. What the splash *is* stays as
+    `SplashWindow.axaml` states it and as `SplashWindowTests` asserts headless: a 480x300 undecorated, centred,
+    topmost black window showing "LizTerm" at 72 pt and "TN3270 terminal" at 20 pt, both in the IBM 3270 font in
+    green (#50FF50), over a grey "Version <n>" line at 16 pt. A screenshot of it belongs in the next live pass run
+    on a machine with an awake display.
+29. Everything else in this pass was observed on the real gateway; nothing was skipped for lack of a host. The
+    IND$FILE round trip was not exercised here because the gateway lane carries no credentials — Task 14 ran it
+    against MVS/CE — and the same run's four gateway integration tests passed with the IND$FILE test skipping.
