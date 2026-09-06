@@ -142,4 +142,12 @@ public class B3270SessionWireLogTests : IDisposable
         Assert.Null(session.WireLogPath);
         Assert.Contains("\"Quit\"", File.ReadAllText(LogPath()));
     }
+
+    [Fact]
+    public async Task Stop_when_no_log_is_active_is_a_no_op()
+    {
+        await using var session = new B3270Session(new SessionProfile { Name = "t", Host = "h" }, () => new FakeB3270Process());
+        session.StopWireLog();
+        Assert.Null(session.WireLogPath);
+    }
 }
