@@ -46,7 +46,10 @@ public class CertificateReaderTests
         using var expired = TestCertificates.SelfSigned(notBefore: DateTimeOffset.UtcNow.AddDays(-30), notAfter: DateTimeOffset.UtcNow.AddDays(-1));
         var presented = CertificateReader.Read([expired]);
         Assert.False(presented.Pinnable);
-        Assert.Contains("valid", presented.NotPinnableReason, StringComparison.OrdinalIgnoreCase);
+        Assert.False(string.IsNullOrWhiteSpace(presented.NotPinnableReason));
+        // The wording is the platform's: "An expired certificate was detected." on macOS, "...not within its
+        // validity period..." on Windows and OpenSSL. Either names the cause.
+        Assert.Matches("(?i)expired|valid", presented.NotPinnableReason);
     }
 
     [Fact]
