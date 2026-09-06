@@ -180,4 +180,11 @@ public class FileTransferWindowTests
     [InlineData(RecordFormat.Undefined, "Undefined")]
     public void Combo_box_labels(object value, string expected) =>
         Assert.Equal(expected, TransferLabels.Converter.Convert(value, typeof(string), null, CultureInfo.InvariantCulture));
+
+    [AvaloniaFact]
+    public void Labels_pass_null_through_and_never_convert_back()
+    {
+        Assert.Null(TransferLabels.Converter.Convert(null, typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Throws<NotSupportedException>(() => TransferLabels.Converter.ConvertBack("TSO", typeof(TransferHostType), null, CultureInfo.InvariantCulture));
+    }
 }

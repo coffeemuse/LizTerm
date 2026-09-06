@@ -146,4 +146,49 @@ public class TransferMapperTests
         Assert.Equal("Transfer", TransferMapper.CancelAction.Name);
         Assert.Equal(["Cancel"], TransferMapper.CancelAction.Args);
     }
+
+    [Fact]
+    public void Binary_tso_send_keeps_allocation_and_drops_cr_and_remap()
+    {
+        var args = Args(Send() with
+        {
+            Mode = TransferMode.Binary, RecordFormat = RecordFormat.Fixed, Lrecl = 80, Blksize = 3120,
+            AllocationUnits = AllocationUnits.Tracks, PrimarySpace = 5, SecondarySpace = 1,
+        });
+        Assert.Contains("mode=binary", args);
+        Assert.DoesNotContain(args, a => a.StartsWith("cr=") || a.StartsWith("remap="));
+        Assert.Contains("recfm=fixed", args);
+        Assert.Contains("lrecl=80", args);
+        Assert.Contains("blksize=3120", args);
+        Assert.Contains("allocation=tracks", args);
+        Assert.Contains("primaryspace=5", args);
+        Assert.Contains("secondaryspace=1", args);
+    }
+
+    [Theory]
+    [InlineData(TransferHostType.Tso, "host=tso")]
+    [InlineData(TransferHostType.Vm, "host=vm")]
+    [InlineData(TransferHostType.Cics, "host=cics")]
+    public void Every_host_type_has_a_keyword(TransferHostType host, string expected) => Assert.Contains(expected, Args(Send(host)));
+
+    [Theory]
+    [InlineData(RecordFormat.Fixed, "recfm=fixed")]
+    [InlineData(RecordFormat.Variable, "recfm=variable")]
+    [InlineData(RecordFormat.Undefined, "recfm=undefined")]
+    public void Every_record_format_has_a_keyword_on_tso(RecordFormat format, string expected) =>
+        Assert.Contains(expected, Args(Send() with { RecordFormat = format }));
+
+    [Theory]
+    [InlineData(AllocationUnits.Tracks, "allocation=tracks")]
+    [InlineData(AllocationUnits.Cylinders, "allocation=cylinders")]
+    [InlineData(AllocationUnits.AvBlock, "allocation=avblock")]
+    public void Every_allocation_unit_has_a_keyword_on_tso(AllocationUnits units, string expected) =>
+        Assert.Contains(expected, Args(Send() with { AllocationUnits = units, PrimarySpace = 1, AverageBlock = units == AllocationUnits.AvBlock ? 4096 : null }));
+
+    [Fact]
+    public void Default_record_format_and_units_emit_nothing()
+    {
+        var args = Args(Send());
+        Assert.DoesNotContain(args, a => a.StartsWith("recfm=") || a.StartsWith("allocation="));
+    }
 }

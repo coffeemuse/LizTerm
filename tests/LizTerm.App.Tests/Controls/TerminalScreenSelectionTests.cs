@@ -161,4 +161,17 @@ public class TerminalScreenSelectionTests
 
         Assert.Equal(["copy", "paste", "select-all", "key:PF3"], events);
     }
+
+    /// <summary>A third click is a plain press: it drops the word selection rather than growing it.</summary>
+    [AvaloniaFact]
+    public void A_triple_click_does_not_extend_the_word_selection()
+    {
+        var buffer = new ScreenBuffer(24, 80);
+        buffer.SetText(3, 10, "SYS1.PROCLIB", null, null, null);
+        var (_, screen) = Show(buffer.Snapshot());
+        screen.PressAt((3, 14), 2);
+        Assert.Equal(ScreenRegion.FromCorners(3, 10, 3, 21), screen.Selection);
+        screen.PressAt((3, 14), 3);
+        Assert.Null(screen.Selection);
+    }
 }

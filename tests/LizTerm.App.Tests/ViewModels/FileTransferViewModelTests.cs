@@ -583,4 +583,28 @@ public class FileTransferViewModelTests
         }
         finally { File.Delete(existing); }
     }
+
+    /// <summary>The window binds the derived flags; each must be announced when its inputs change, not only computed.</summary>
+    [Fact]
+    public void Derived_flags_raise_property_changed()
+    {
+        var (vm, _, _) = Create();
+        var changed = new List<string>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName!);
+
+        vm.HostType = TransferHostType.Vm;
+        Assert.Superset(new HashSet<string> { nameof(vm.IsTso), nameof(vm.RecordFormats), nameof(vm.CanSetRecordFormat), nameof(vm.CanSetLrecl), nameof(vm.CanSetBlksize), nameof(vm.CanSetSpace), nameof(vm.CanSetAverageBlock) }, changed.ToHashSet());
+        changed.Clear();
+        vm.RecordFormat = RecordFormat.Fixed;
+        Assert.Superset(new HashSet<string> { nameof(vm.HasRecordFormat), nameof(vm.CanSetLrecl), nameof(vm.CanSetBlksize) }, changed.ToHashSet());
+        changed.Clear();
+        vm.AllocationUnits = AllocationUnits.AvBlock;
+        Assert.Superset(new HashSet<string> { nameof(vm.HasAllocation), nameof(vm.IsAvBlock), nameof(vm.CanSetSpace), nameof(vm.CanSetAverageBlock) }, changed.ToHashSet());
+        changed.Clear();
+        vm.IsReceive = true;
+        Assert.Superset(new HashSet<string> { nameof(vm.IsReceive), nameof(vm.ShowAdvanced) }, changed.ToHashSet());
+        changed.Clear();
+        vm.IsBinary = true;
+        Assert.Contains(nameof(vm.IsBinary), changed);
+    }
 }

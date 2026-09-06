@@ -225,4 +225,20 @@ public class SessionWindowTests
         session.SendKeyCompletion.SetResult();
         await Task.Yield();
     }
+
+    /// <summary>OnFileTransferClick's catch: a dialog that cannot be shown is reported in the banner, not thrown
+    /// from an async void handler. A window that was never shown is an owner ShowDialog refuses.</summary>
+    [AvaloniaFact]
+    public async Task A_file_transfer_dialog_that_cannot_open_is_reported_in_the_banner()
+    {
+        var session = new FakeEmulatorSession();
+        var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard());
+        var window = new SessionWindow { DataContext = vm };
+        session.RaiseConnection(ConnectionState.Connected3270);
+
+        window.FindControl<MenuItem>("FileTransferMenuItem")!.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+        await Wait.UntilAsync(() => vm.ErrorMessage is not null, "the error banner");
+        Assert.StartsWith("Could not open the File Transfer dialog:", vm.ErrorMessage);
+    }
 }
