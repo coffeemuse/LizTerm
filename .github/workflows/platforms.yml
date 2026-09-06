@@ -1,0 +1,85 @@
+name: Platforms
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - .github/workflows/platforms.yml
+      - native/**
+  workflow_dispatch:
+
+concurrency:
+  group: platforms-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  engine-macos:
+    runs-on: macos-15
+    env:
+      LIZTERM_REQUIRE_ENGINE: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache the pinned x3270 source tarball
+        uses: actions/cache@v6
+        with:
+          path: native/cache
+          key: x3270-src-${{ hashFiles('native/build/fetch-source.sh') }}
+
+      - name: Ensure OpenSSL 3 is installed
+        run: brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+
+      - name: Build b3270 (verify-macos.sh is the gate)
+        run: native/build/build-macos.sh
+
+      - name: Upload b3270
+        uses: actions/upload-artifact@v7
+        with:
+          name: b3270-osx-arm64
+          path: native/out/osx-arm64/b3270
+          if-no-files-found: error
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build (warnings are errors)
+        run: dotnet build LizTerm.slnx --configuration Release -warnaserror
+
+      - name: Test (the engine smoke test must run, not skip)
+        run: dotnet test LizTerm.slnx --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-macos
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build (warnings are errors)
+        run: dotnet build LizTerm.slnx --configuration Release -warnaserror
+
+      - name: Test
+        run: dotnet test LizTerm.slnx --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-windows
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
