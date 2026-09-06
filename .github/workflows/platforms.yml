@@ -7,6 +7,9 @@ on:
     paths:
       - .github/workflows/platforms.yml
       - native/**
+      - tests/LizTerm.Integration.Tests/**
+      - src/LizTerm.App/LizTerm.App.csproj
+      - tests/LizTerm.Integration.Tests/LizTerm.Integration.Tests.csproj
   workflow_dispatch:
 
 concurrency:
@@ -19,6 +22,7 @@ permissions:
 jobs:
   engine-macos:
     runs-on: macos-15
+    timeout-minutes: 30
     env:
       LIZTERM_REQUIRE_ENGINE: "1"
     steps:
@@ -58,11 +62,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results-macos
-          path: TestResults/**/*.trx
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/Sequence_*.xml
           if-no-files-found: ignore
 
   test-windows:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -81,5 +88,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results-windows
-          path: TestResults/**/*.trx
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/Sequence_*.xml
           if-no-files-found: ignore
