@@ -15,6 +15,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -33,5 +34,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results-linux
-          path: TestResults/**/*.trx
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/Sequence_*.xml
           if-no-files-found: ignore

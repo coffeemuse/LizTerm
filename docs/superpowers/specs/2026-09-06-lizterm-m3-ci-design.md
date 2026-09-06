@@ -91,9 +91,12 @@ The check a branch-protection rule would require is this job's name, `test`.
 ## 4. `platforms.yml`
 
 Triggers: `push` to `main`; `workflow_dispatch`; and `pull_request` filtered with `paths` to
-`.github/workflows/platforms.yml` and `native/**`. The path filter is what lets this PR (and any later change
-to the engine build) exercise the platform jobs before merge, and it is the permanent rule that a change to the
-native build gets checked before it lands.
+`.github/workflows/platforms.yml`, `native/**`, `tests/LizTerm.Integration.Tests/**`,
+`src/LizTerm.App/LizTerm.App.csproj`, and `tests/LizTerm.Integration.Tests/LizTerm.Integration.Tests.csproj`. The
+path filter is what lets this PR (and any later change to the engine build) exercise the platform jobs before
+merge, and it is the permanent rule that a change to the native build gets checked before it lands. The smoke
+test and the two csproj files carry the b3270 copy rule, so a PR changing either must be proven on macOS before
+merge too.
 
 Concurrency: group `platforms-${{ github.ref }}`, `cancel-in-progress: true`.
 
@@ -102,8 +105,9 @@ Two independent jobs.
 ### 4.1 `engine-macos` on `macos-15`
 
 1. `actions/checkout`.
-2. `actions/cache` on `native/cache` with key `x3270-src-4.5ga6` (the version string as `fetch-source.sh` pins
-   it; bumping the version in the script changes the key). A miss just downloads as the script does today.
+2. `actions/cache` on `native/cache` with key `x3270-src-${{ hashFiles('native/build/fetch-source.sh') }}` (the
+   script's own content hash; bumping the pinned version in the script invalidates the cache on its own, with no
+   second edit to the workflow). A miss just downloads as the script does today.
 3. `native/build/build-macos.sh`. Its own `verify-macos.sh` step is the gate: a non-system dynamic dependency
    fails the job. The script leaves the binary at `native/out/osx-arm64/b3270`.
 4. `actions/upload-artifact` of `native/out/osx-arm64/b3270` as `b3270-osx-arm64`. Nothing in this plan consumes
@@ -178,3 +182,25 @@ Linux and Windows engines (3b, 3c); macOS x64; `dotnet publish`, bundles, versio
 the integration lane and its container (3e); code signing and notarization; Dependabot or other dependency
 automation; caching NuGet packages (restore is fast enough and a cache adds a failure mode); running the live
 tests in CI.
+
+## 9. Deviations from this spec (as-built)
+
+- Every job carries `timeout-minutes`: 20 for `test` and `test-windows`, 30 for `engine-macos`. The hang timeout
+  bounds only the test step; a hung SourceForge download or brew step would otherwise run to GitHub's six-hour
+  default, at ten times the cost on a macOS runner.
+- Each TRX upload also collects `TestResults/**/Sequence_*.xml`, the file a blame-hang kill writes naming the
+  hung test, alongside the TRX rather than instead of it.
+- The `engine-macos` cache key is the content hash of `fetch-source.sh`, not the version string written into
+  the spec above; section 4.1 already reflects this.
+- The `platforms.yml` path filter is wider than section 4 first proposed: the integration test project and the
+  two csproj files carrying the b3270 copy rule are included, for the reason given there.
+- `permissions: contents: read` is set at the top of both workflow files.
+- The first runs found fixes this plan folds in rather than deferring: the App csproj's copy item flows into
+  the App test output too, so `SessionFactoryTests` use an internal `SessionFactory.Create(profile,
+  overridePath, baseDirectory)` seam to keep a stray bundled engine out of its assertions; the OIA-lock test
+  waits on the event's capture rather than a fixed delay; `Wait` defaults to 5 s; the unreadable-profile test
+  opens the file with an exclusive handle so Windows honours the denial; and the `caFile` assertion escapes the
+  pin path the way the wire does.
+- Recorded decision: `ci.yml` keeps bare `push` plus `pull_request` rather than `pull_request` only, even
+  though `test` then reports twice for most PRs (once per trigger). Dropping `push` would leave direct pushes
+  to non-default branches unchecked, which the two-report cost does not outweigh.
