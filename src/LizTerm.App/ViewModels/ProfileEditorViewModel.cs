@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.ViewModels;
@@ -17,6 +18,15 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private bool _destructiveBackspace = true;
     [ObservableProperty] private string? _validationMessage;
 
+    /// <summary>The pin the profile carries, shown read-only. Forget clears it and Save then writes the profile
+    /// without it, which is the only way back from a pin to the engine's default trust (spec 5.5).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPinnedCertificate), nameof(PinnedCertificateText))]
+    private CertificatePin? _pinnedCertificate;
+
+    public bool HasPinnedCertificate => PinnedCertificate is not null;
+    public string? PinnedCertificateText => PinnedCertificate is { } pin ? $"Pinned certificate: SHA-256 {pin.Sha256}" : null;
+
     public int[] Models { get; } = [2, 3, 4, 5];
     public bool IsNew { get; }
 
@@ -34,6 +44,7 @@ public partial class ProfileEditorViewModel : ObservableObject
         _codePage = existing.CodePage;
         _luName = existing.LuName ?? "";
         _destructiveBackspace = existing.DestructiveBackspace;
+        _pinnedCertificate = existing.PinnedCertificate;
     }
 
     partial void OnUseTlsChanged(bool value)
@@ -41,6 +52,9 @@ public partial class ProfileEditorViewModel : ObservableObject
         if (value && PortText == "23") PortText = "992";
         else if (!value && PortText == "992") PortText = "23";
     }
+
+    [RelayCommand]
+    private void ForgetPin() => PinnedCertificate = null;
 
     public SessionProfile? TryBuild()
     {
@@ -56,6 +70,7 @@ public partial class ProfileEditorViewModel : ObservableObject
             Port = port,
             UseTls = UseTls,
             VerifyCertificate = VerifyCertificate,
+            PinnedCertificate = PinnedCertificate,
             Model = Model,
             Extended = Extended,
             CodePage = CodePage.Trim(),

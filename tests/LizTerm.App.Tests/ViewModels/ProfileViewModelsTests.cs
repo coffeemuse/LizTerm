@@ -54,7 +54,7 @@ public class ProfileViewModelsTests : IDisposable
     [Fact]
     public void Editor_round_trips_an_existing_profile()
     {
-        var original = new SessionProfile { Name = "TK5", Host = "mvs", Port = 3270, UseTls = true, VerifyCertificate = false, Model = 5, Extended = false, CodePage = "bracket", LuName = "LU1", DestructiveBackspace = true };
+        var original = new SessionProfile { Name = "TK5", Host = "mvs", Port = 3270, UseTls = true, VerifyCertificate = false, Model = 5, Extended = false, CodePage = "bracket", LuName = "LU1", DestructiveBackspace = true, PinnedCertificate = new CertificatePin("8C:13", "CN=mvs", "pem") };
         var vm = new ProfileEditorViewModel(original);
         Assert.Equal(original, vm.TryBuild());
     }
@@ -100,5 +100,33 @@ public class ProfileViewModelsTests : IDisposable
         var vm = new ProfilePickerViewModel(_store, _ => { }, _ => Task.FromResult<SessionProfile?>(null), () => { });
         await vm.NewCommand.ExecuteAsync(null);
         Assert.Empty(vm.Profiles);
+    }
+
+    [Fact]
+    public void Editor_shows_the_pin_and_forget_drops_it()
+    {
+        var pin = new CertificatePin("8C:13:6A:01", "CN=gw", "pem");
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "gw", Host = "gw", UseTls = true, PinnedCertificate = pin });
+        Assert.True(vm.HasPinnedCertificate);
+        Assert.Equal("Pinned certificate: SHA-256 8C:13:6A:01", vm.PinnedCertificateText);
+        Assert.Same(pin, vm.TryBuild()!.PinnedCertificate);
+
+        var changes = new List<string?>();
+        vm.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        vm.ForgetPinCommand.Execute(null);
+        Assert.False(vm.HasPinnedCertificate);
+        Assert.Null(vm.PinnedCertificateText);
+        Assert.Null(vm.TryBuild()!.PinnedCertificate);
+        Assert.Contains(nameof(vm.HasPinnedCertificate), changes);
+        Assert.Contains(nameof(vm.PinnedCertificateText), changes);
+    }
+
+    [Fact]
+    public void A_new_profile_has_no_pin()
+    {
+        var vm = new ProfileEditorViewModel(null);
+        Assert.False(vm.HasPinnedCertificate);
+        Assert.Null(vm.PinnedCertificateText);
+        Assert.Null(vm.TryBuild()?.PinnedCertificate);
     }
 }
