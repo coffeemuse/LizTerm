@@ -14,7 +14,7 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private bool _extended = true;
     [ObservableProperty] private string _codePage = "cp037";
     [ObservableProperty] private string _luName = "";
-    [ObservableProperty] private bool _destructiveBackspace;
+    [ObservableProperty] private bool _destructiveBackspace = true;
     [ObservableProperty] private string? _validationMessage;
 
     public int[] Models { get; } = [2, 3, 4, 5];

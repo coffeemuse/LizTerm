@@ -24,7 +24,7 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(2, vm.Model);
         Assert.True(vm.Extended);
         Assert.Equal("cp037", vm.CodePage);
-        Assert.False(vm.DestructiveBackspace);
+        Assert.True(vm.DestructiveBackspace);
         vm.UseTls = true;
         Assert.Equal("992", vm.PortText);
         vm.UseTls = false;
