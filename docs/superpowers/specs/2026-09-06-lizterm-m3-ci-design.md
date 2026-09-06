@@ -13,14 +13,15 @@ LizTerm. Milestone 3 was split on 2026-09-06 into five plans, each with its own 
 - **3a (this spec):** GitHub Actions for what exists. Build and test on every push and pull request; build the
   macOS engine with the existing script and gate, prove LizTerm can spawn it, upload it, and run the suite on
   Windows, on pushes to main.
-- **3b:** Linux x64 and arm64 engine builds (static OpenSSL, `ldd` gate, oldest supported glibc, CA file for a
-  static OpenSSL's trust directory).
-- **3c:** Windows engine builds (upstream MinGW cross build from Linux, Schannel, `b3270.exe`; Windows arm64
+- **3b:** Default trust for a bundled engine: the OS root store exported to the engine's caFile, because a
+  statically linked b3270 carries a trust directory that exists only on the build machine.
+- **3c:** Linux x64 and arm64 engine builds (static OpenSSL, `ldd` gate, oldest supported glibc).
+- **3d:** Windows engine builds (upstream MinGW cross build from Linux, Schannel, `b3270.exe`; Windows arm64
   ships the x64 binary).
-- **3d:** Publish and release (self-contained `dotnet publish` for six runtime identifiers, macOS app bundle,
+- **3e:** Publish and release (self-contained `dotnet publish` for six runtime identifiers, macOS app bundle,
   tarball and zip layouts, version stamping, tag-triggered release job). Code signing and notarization are a
   separate later task, gated on paying for the Apple Developer Program and a Windows certificate.
-- **3e:** Scheduled integration lane. Rule set on 2026-09-06: full CI must not rely on anything on Robert's LAN;
+- **3f:** Scheduled integration lane. Rule set on 2026-09-06: full CI must not rely on anything on Robert's LAN;
   the lane spins up a dockerized TK4-/TK5 or MVS/CE inside the Action (MVS/CE lacks IND$FILE out of the box:
   `RX MVP INSTALL IND$FILE` as `IBMUSER` installs it).
 
