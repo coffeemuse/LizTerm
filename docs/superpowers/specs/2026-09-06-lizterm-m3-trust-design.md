@@ -175,5 +175,5 @@ Rulings made in planning and execution, recorded here rather than edited into th
    `NullReferenceException` every time: `ConnectAsync`'s cancellation path waits for the Disconnected state before
    returning, and that state clears `Tls`. The test now captures `Tls` into a local before cancelling.
 3. The milestone renumbering this plan performs (Linux becomes 3c, Windows 3d, publish and release 3e, the
-   integration lane 3f) is applied only to the plan 3a spec's section 1, not to the other places in that document
-   that still name the old letters.
+   integration lane 3f) is applied throughout the plan 3a spec, not just its section 1 — every other place in
+   that document naming a milestone letter is corrected to match.
