@@ -126,6 +126,21 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         return $"wire-{safe}-{now:yyyyMMdd-HHmmss}.log";
     }
 
+    /// <summary>The path for a new file of that name, or the first of name-2, name-3, ... that does not exist yet.
+    /// Two logs started in the same second must not share a file (spec 8).</summary>
+    internal static string UniquePath(string directory, string fileName)
+    {
+        var path = Path.Combine(directory, fileName);
+        if (!File.Exists(path)) return path;
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+        for (var n = 2; ; n++)
+        {
+            var candidate = Path.Combine(directory, $"{stem}-{n}{extension}");
+            if (!File.Exists(candidate)) return candidate;
+        }
+    }
+
     partial void OnIsWireLoggingChanged(bool value)
     {
         var active = _session.WireLogPath is not null;
@@ -134,7 +149,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             try
             {
                 Directory.CreateDirectory(WireLogDirectory);
-                _session.StartWireLog(Path.Combine(WireLogDirectory, WireLogFileName(Profile.Name, DateTime.Now)));
+                _session.StartWireLog(UniquePath(WireLogDirectory, WireLogFileName(Profile.Name, DateTime.Now)));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
                 or ArgumentException or NotSupportedException)

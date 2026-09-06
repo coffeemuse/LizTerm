@@ -20,7 +20,7 @@ public sealed record StartupArguments(
     string? LuName = null,
     string? Error = null)
 {
-    public const string Usage = "Usage: LizTerm [profile | [L:][Y:][lu@]host[:port] | [L:][Y:][lu@][ipv6][:port]]";
+    public const string Usage = "Usage: LizTerm [profile | [L:][Y:][lu@]host[:port] | [L:][Y:][lu@][ipv6][:port]]; an unbracketed IPv6 address is a usage error";
 
     /// <summary>A malformed argument still carries its text, so it can name a saved profile even when it is not a
     /// legal host: "a:b" is a usage error as a host and a perfectly good profile name.</summary>
@@ -95,8 +95,17 @@ public sealed record StartupArguments(
             }
         }
 
+        // More than one colon outside brackets can only be an unbracketed IPv6 address, which x3270 does not take
+        // either: a usage error, never a hostname, and the usage line shows the bracketed form (spec 8). Before this,
+        // a forcing prefix such as L: passed the text to the engine whole.
+        if (arg.Count(c => c == ':') > 1)
+        {
+            malformed = true;
+            return (null, null);
+        }
+
         var lastColon = arg.LastIndexOf(':');
-        if (lastColon > 0 && arg.IndexOf(':') == lastColon)
+        if (lastColon > 0)
         {
             if (TryParsePort(arg[(lastColon + 1)..], out var port)) return (arg[..lastColon], port);
             malformed = true;

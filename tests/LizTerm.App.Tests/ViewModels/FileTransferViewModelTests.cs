@@ -275,7 +275,7 @@ public class FileTransferViewModelTests
             vm.HostFile = "A.B";
             session.TransferCompletion = Pending();
             var run = vm.StartCommand.ExecuteAsync(null);
-            await WaitUntilAsync(() => vm.TotalBytes is not null, "the file length");
+            await Wait.UntilAsync(() => vm.TotalBytes is not null, "the file length");
             Assert.Equal(11, vm.TotalBytes);
             Assert.False(vm.IsProgressIndeterminate);
             Assert.Equal(11, vm.ProgressMaximum);
@@ -308,7 +308,7 @@ public class FileTransferViewModelTests
             };
 
             var run = vm.StartCommand.ExecuteAsync(null);
-            await WaitUntilAsync(() => vm.TotalBytes is not null, "the file length");
+            await Wait.UntilAsync(() => vm.TotalBytes is not null, "the file length");
 
             Assert.Equal(1, callsWhenLengthArrived);
             session.TransferCompletion.SetResult();
@@ -317,16 +317,6 @@ public class FileTransferViewModelTests
         finally
         {
             File.Delete(path);
-        }
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition, string what)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
-            await Task.Delay(5, TestContext.Current.CancellationToken);
         }
     }
 

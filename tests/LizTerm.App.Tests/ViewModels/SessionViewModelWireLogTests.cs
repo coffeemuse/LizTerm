@@ -92,4 +92,32 @@ public class SessionViewModelWireLogTests : IDisposable
         await vm.ShowWireLogsCommand.ExecuteAsync(null);
         Assert.Equal($"Could not open the logs folder. Wire logs are in {_dir}.", vm.ErrorMessage);
     }
+
+    [Fact]
+    public void A_second_log_in_the_same_second_gets_a_numbered_name()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "lizterm-wirelog-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            Assert.Equal(Path.Combine(dir, "wire-a-1.log"), SessionViewModel.UniquePath(dir, "wire-a-1.log"));
+            File.WriteAllText(Path.Combine(dir, "wire-a-1.log"), "");
+            Assert.Equal(Path.Combine(dir, "wire-a-1-2.log"), SessionViewModel.UniquePath(dir, "wire-a-1.log"));
+            File.WriteAllText(Path.Combine(dir, "wire-a-1-2.log"), "");
+            Assert.Equal(Path.Combine(dir, "wire-a-1-3.log"), SessionViewModel.UniquePath(dir, "wire-a-1.log"));
+
+            // Through the toggle: whichever second the start lands in, a file with that name already exists.
+            var session = new FakeEmulatorSession();
+            var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard()) { WireLogDirectory = dir };
+            var now = DateTime.Now;
+            File.WriteAllText(Path.Combine(dir, SessionViewModel.WireLogFileName(session.Profile.Name, now)), "");
+            File.WriteAllText(Path.Combine(dir, SessionViewModel.WireLogFileName(session.Profile.Name, now.AddSeconds(1))), "");
+            vm.IsWireLogging = true;
+            Assert.EndsWith("-2.log", session.WireLogPath);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
 }
