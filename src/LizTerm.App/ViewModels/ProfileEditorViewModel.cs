@@ -19,13 +19,18 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private string? _validationMessage;
 
     /// <summary>The pin the profile carries, shown read-only. Forget clears it and Save then writes the profile
-    /// without it, which is the only way back from a pin to the engine's default trust (spec 5.5).</summary>
+    /// without it, which is the only way back from a pin to the engine's default trust (spec 5.5). A pin belongs to
+    /// the host and port it was taken from: editing either drops it, and restoring them brings it back until Save.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPinnedCertificate), nameof(PinnedCertificateText))]
     private CertificatePin? _pinnedCertificate;
+    private CertificatePin? _pinnedFor;
+    private readonly string _pinnedHost = "";
+    private readonly string _pinnedPortText = "";
 
     public bool HasPinnedCertificate => PinnedCertificate is not null;
-    public string? PinnedCertificateText => PinnedCertificate is { } pin ? $"Pinned certificate: SHA-256 {pin.Sha256}" : null;
+    public string? PinnedCertificateText =>
+        PinnedCertificate is { } pin ? $"Pinned certificate: SHA-256 {pin.Sha256} ({pin.Subject})" : null;
 
     public int[] Models { get; } = [2, 3, 4, 5];
     public bool IsNew { get; }
@@ -45,6 +50,9 @@ public partial class ProfileEditorViewModel : ObservableObject
         _luName = existing.LuName ?? "";
         _destructiveBackspace = existing.DestructiveBackspace;
         _pinnedCertificate = existing.PinnedCertificate;
+        _pinnedFor = existing.PinnedCertificate;
+        _pinnedHost = existing.Host;
+        _pinnedPortText = existing.Port.ToString();
     }
 
     partial void OnUseTlsChanged(bool value)
@@ -53,8 +61,19 @@ public partial class ProfileEditorViewModel : ObservableObject
         else if (!value && PortText == "992") PortText = "23";
     }
 
+    partial void OnHostChanged(string value) => RefreshPin();
+
+    partial void OnPortTextChanged(string value) => RefreshPin();
+
+    private void RefreshPin() =>
+        PinnedCertificate = Host.Trim() == _pinnedHost && PortText.Trim() == _pinnedPortText ? _pinnedFor : null;
+
     [RelayCommand]
-    private void ForgetPin() => PinnedCertificate = null;
+    private void ForgetPin()
+    {
+        _pinnedFor = null;
+        PinnedCertificate = null;
+    }
 
     public SessionProfile? TryBuild()
     {

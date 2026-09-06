@@ -21,6 +21,17 @@ public class CertificateWindowTests
     private static string Text(Window window, string name) => window.FindControl<TextBlock>(name)!.Text ?? "";
     private static bool Visible(Window window, string name) => window.FindControl<Control>(name)!.IsVisible;
 
+    /// <summary>A pin holds every certificate the host sent and the engine trusts each of them, so a chain pins the
+    /// CA as much as the leaf, and the checkbox says so.</summary>
+    [AvaloniaFact]
+    public void A_chain_says_the_issuing_ca_is_trusted_too()
+    {
+        var chain = Presented with { Pem = "-----BEGIN CERTIFICATE-----\nbGVhZg==\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\ncm9vdA==\n-----END CERTIFICATE-----\n" };
+        var window = new CertificateWindow(Request(chain, canPin: true));
+        window.Show();
+        Assert.Equal("Trust this certificate and its issuing CA for this profile", window.FindControl<CheckBox>("RememberBox")!.Content);
+    }
+
     [AvaloniaFact]
     public void A_first_time_failure_shows_the_presented_certificate_and_offers_to_trust_it()
     {

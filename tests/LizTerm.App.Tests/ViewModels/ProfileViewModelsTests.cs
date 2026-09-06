@@ -108,7 +108,7 @@ public class ProfileViewModelsTests : IDisposable
         var pin = new CertificatePin("8C:13:6A:01", "CN=gw", "pem");
         var vm = new ProfileEditorViewModel(new SessionProfile { Name = "gw", Host = "gw", UseTls = true, PinnedCertificate = pin });
         Assert.True(vm.HasPinnedCertificate);
-        Assert.Equal("Pinned certificate: SHA-256 8C:13:6A:01", vm.PinnedCertificateText);
+        Assert.Equal("Pinned certificate: SHA-256 8C:13:6A:01 (CN=gw)", vm.PinnedCertificateText);
         Assert.Same(pin, vm.TryBuild()!.PinnedCertificate);
 
         var changes = new List<string?>();
@@ -119,6 +119,32 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Null(vm.TryBuild()!.PinnedCertificate);
         Assert.Contains(nameof(vm.HasPinnedCertificate), changes);
         Assert.Contains(nameof(vm.PinnedCertificateText), changes);
+    }
+
+    /// <summary>A pin was taken from one host and port; a profile pointed somewhere else must not carry it, and the
+    /// engine's name check being off for a single-certificate pin makes that matter. Restoring the original endpoint
+    /// before Save keeps the pin; Forget is final.</summary>
+    [Fact]
+    public void Editing_the_host_or_port_drops_the_pin_and_restoring_them_brings_it_back()
+    {
+        var pin = new CertificatePin("8C:13:6A:01", "CN=gw", "pem");
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "gw", Host = "gw", Port = 4270, UseTls = true, PinnedCertificate = pin });
+
+        vm.Host = "other";
+        Assert.False(vm.HasPinnedCertificate);
+        Assert.Null(vm.TryBuild()!.PinnedCertificate);
+        vm.Host = "gw";
+        Assert.Same(pin, vm.TryBuild()!.PinnedCertificate);
+
+        vm.PortText = "4271";
+        Assert.Null(vm.TryBuild()!.PinnedCertificate);
+        vm.PortText = "4270";
+        Assert.Same(pin, vm.PinnedCertificate);
+
+        vm.ForgetPinCommand.Execute(null);
+        vm.Host = "x";
+        vm.Host = "gw";
+        Assert.Null(vm.PinnedCertificate);
     }
 
     [Fact]

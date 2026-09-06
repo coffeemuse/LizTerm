@@ -160,6 +160,11 @@ public class FileTransferWindowTests
         Assert.True(vm.IsCancelling);
         Assert.True(session.TransferToken.IsCancellationRequested);
 
+        // A held Escape auto-repeats; the repeats must not become the second close that lets the window go.
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        Assert.False(closed);
+
         session.TransferResult = new FileTransferResult(false, "Transfer canceled by user");
         session.TransferCompletion.SetResult();
         await run;

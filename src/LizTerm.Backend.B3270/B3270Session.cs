@@ -3,6 +3,7 @@ using System.Text;
 using LizTerm.Backend.B3270.Process;
 using LizTerm.Backend.B3270.Protocol;
 using LizTerm.Core.Screen;
+using LizTerm.Core.Security;
 using LizTerm.Core.Session;
 
 namespace LizTerm.Backend.B3270;
@@ -24,7 +25,10 @@ public sealed class B3270Session : IEmulatorSession
     private TaskCompletionSource<HelloIndication>? _hello;
     private int _tagCounter;
     private volatile bool _shuttingDown;
-    private TaskCompletionSource? _disconnected;
+    /// <summary>Completed while the connection is down and replaced by a fresh source when it comes up: owned by
+    /// the connection state rather than by whoever waits, so a report cannot be consumed early, orphaned by a
+    /// waiter that gave up, or missed by one that joined late (spec 8).</summary>
+    private TaskCompletionSource _disconnected = CompletedSource();
     private TransferContext? _transfer;
     /// <summary>Why there is no process after there was one: set when the engine dies, cleared by the next start,
     /// so an action sent to a dead engine reports the fault rather than a session that was never started.</summary>
@@ -534,6 +538,10 @@ public sealed class B3270Session : IEmulatorSession
     private void SetConnectionState(ConnectionState state)
     {
         if (ConnectionState == state) return;
+        // The new source is in place before the state leaves Disconnected, so a waiter never sees a connection that
+        // is up beside a source that is already complete.
+        if (ConnectionState == ConnectionState.Disconnected)
+            Volatile.Write(ref _disconnected, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
         ConnectionState = state;
         try
         {
@@ -541,8 +549,15 @@ public sealed class B3270Session : IEmulatorSession
         }
         finally
         {
-            if (state == ConnectionState.Disconnected) Volatile.Read(ref _disconnected)?.TrySetResult();
+            if (state == ConnectionState.Disconnected) Volatile.Read(ref _disconnected).TrySetResult();
         }
+    }
+
+    private static TaskCompletionSource CompletedSource()
+    {
+        var source = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        source.SetResult();
+        return source;
     }
 
     // ---- IEmulatorSession actions ----
@@ -558,12 +573,17 @@ public sealed class B3270Session : IEmulatorSession
         // after a crash is harmless.
         var pinFile = pin is null ? null : WritePinFile(pin.Pem);
         LastPinFile = pinFile;
+        // A pin that is one self-signed certificate names the host by itself, so the name check adds nothing. A pin
+        // that also carries CA certificates makes each of them a trust anchor (OpenSSL trusts every member of caFile),
+        // and only the engine's normal name check then keeps a certificate that CA issued for another host from
+        // verifying here.
+        var anyName = pin is not null && CertificateReader.CountCertificates(pin.Pem) == 1;
         try
         {
             // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
             // open before the Connect has even gone out. All three values are sent every time so an attempt never
             // inherits the previous one's trust settings (spec 2).
-            await RunAsync([TlsSettings(verify, pinFile)], throwOnFailure: true, cancellationToken: cancellationToken);
+            await RunAsync([TlsSettings(verify, pinFile, anyName)], throwOnFailure: true, cancellationToken: cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             await ConnectCoreAsync(cancellationToken);
         }
@@ -573,10 +593,11 @@ public sealed class B3270Session : IEmulatorSession
         }
     }
 
-    /// <summary>The Set action carrying one attempt's trust settings (spec 4.1). With a pin the name check adds
-    /// nothing, so acceptHostname is "any".</summary>
-    internal static B3270Action TlsSettings(bool verify, string? pinFile) =>
-        new("Set", "verifyHostCert", verify ? "true" : "false", "caFile", pinFile ?? "", "acceptHostname", pinFile is null ? "" : "any");
+    /// <summary>The Set action carrying one attempt's trust settings (spec 4.1). <paramref name="acceptAnyName"/>
+    /// turns the engine's host-name check off, which is right only for a pin that is a single self-signed
+    /// certificate; an empty acceptHostname is the engine's normal check against the connect host.</summary>
+    internal static B3270Action TlsSettings(bool verify, string? pinFile, bool acceptAnyName) =>
+        new("Set", "verifyHostCert", verify ? "true" : "false", "caFile", pinFile ?? "", "acceptHostname", pinFile is not null && acceptAnyName ? "any" : "");
 
     /// <summary>The path of the last pin file written, deleted or not. Test seam.</summary>
     internal string? LastPinFile { get; private set; }
@@ -683,35 +704,19 @@ public sealed class B3270Session : IEmulatorSession
     }
 
     /// <summary>Waits until b3270 reports the connection closed, or until <see cref="DisconnectTimeout"/> passes.
-    /// The source is installed before the state is checked so a report that lands in between is not missed.
-    /// Overlapping callers share one source: the first installs it, a concurrent caller awaits the same one, and
-    /// the finally clears the slot only if it still holds that instance (spec 8).</summary>
+    /// The source belongs to the connection state, so a wait that starts while the state is already Disconnected
+    /// returns at once, and overlapping callers await the same source whatever order they arrive in or give up in
+    /// (spec 8).</summary>
     private async Task WaitForDisconnectedAsync()
     {
-        var fresh = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var disconnected = Interlocked.CompareExchange(ref _disconnected, fresh, null) ?? fresh;
         try
         {
-            if (ConnectionState == ConnectionState.Disconnected)
-            {
-                // The state is already there; a caller that joined this source must not wait for a report that
-                // may have been consumed before the source was installed.
-                disconnected.TrySetResult();
-                return;
-            }
-            try
-            {
-                await disconnected.Task.WaitAsync(DisconnectTimeout);
-            }
-            catch (TimeoutException)
-            {
-                // b3270 accepted the action but never reported the state; the ConnectionChanged event still
-                // fires if it does later. Hanging the caller would be worse.
-            }
+            await Volatile.Read(ref _disconnected).Task.WaitAsync(DisconnectTimeout);
         }
-        finally
+        catch (TimeoutException)
         {
-            Interlocked.CompareExchange(ref _disconnected, null, disconnected);
+            // b3270 accepted the action but never reported the state; the ConnectionChanged event still
+            // fires if it does later. Hanging the caller would be worse.
         }
     }
 

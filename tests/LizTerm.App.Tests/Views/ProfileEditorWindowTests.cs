@@ -17,7 +17,7 @@ public class ProfileEditorWindowTests
         pinned.Show();
         var panel = pinned.FindControl<StackPanel>("PinPanel")!;
         Assert.True(panel.IsVisible);
-        Assert.Equal("Pinned certificate: SHA-256 8C:13", pinned.FindControl<TextBlock>("PinText")!.Text);
+        Assert.Equal("Pinned certificate: SHA-256 8C:13 (CN=gw)", pinned.FindControl<TextBlock>("PinText")!.Text);
         pinned.FindControl<Button>("ForgetButton")!.Command!.Execute(null);
         Assert.False(panel.IsVisible);
 

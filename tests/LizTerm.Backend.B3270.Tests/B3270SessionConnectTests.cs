@@ -22,10 +22,27 @@ public class B3270SessionConnectTests
     [Fact]
     public void Tls_settings_are_explicit_for_all_three_cases()
     {
-        Assert.Equal(["verifyHostCert", "true", "caFile", "/tmp/x.pem", "acceptHostname", "any"], B3270Session.TlsSettings(true, "/tmp/x.pem").Args);
-        Assert.Equal(["verifyHostCert", "true", "caFile", "", "acceptHostname", ""], B3270Session.TlsSettings(true, null).Args);
-        Assert.Equal(["verifyHostCert", "false", "caFile", "", "acceptHostname", ""], B3270Session.TlsSettings(false, null).Args);
-        Assert.Equal("Set", B3270Session.TlsSettings(true, null).Name);
+        Assert.Equal(["verifyHostCert", "true", "caFile", "/tmp/x.pem", "acceptHostname", "any"], B3270Session.TlsSettings(true, "/tmp/x.pem", acceptAnyName: true).Args);
+        Assert.Equal(["verifyHostCert", "true", "caFile", "/tmp/x.pem", "acceptHostname", ""], B3270Session.TlsSettings(true, "/tmp/x.pem", acceptAnyName: false).Args);
+        Assert.Equal(["verifyHostCert", "true", "caFile", "", "acceptHostname", ""], B3270Session.TlsSettings(true, null, acceptAnyName: true).Args);
+        Assert.Equal(["verifyHostCert", "false", "caFile", "", "acceptHostname", ""], B3270Session.TlsSettings(false, null, acceptAnyName: false).Args);
+        Assert.Equal("Set", B3270Session.TlsSettings(true, null, acceptAnyName: false).Name);
+    }
+
+    /// <summary>OpenSSL trusts every certificate in caFile, so a pin that carries the host's CA trusts everything
+    /// that CA issued; the engine's own name check is what keeps that to this host, and only a pin that is one
+    /// self-signed certificate may switch it off.</summary>
+    [Fact]
+    public async Task A_pin_with_a_ca_in_it_keeps_the_engine_name_check()
+    {
+        var fake = new FakeB3270Process();
+        var chain = new CertificatePin("8C:13:6A:01", "CN=mvs.lan",
+            "-----BEGIN CERTIFICATE-----\nbGVhZg==\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\ncm9vdA==\n-----END CERTIFICATE-----\n");
+        await using var session = new B3270Session(Verifying with { PinnedCertificate = chain }, () => fake);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var set = LastSetLine(fake);
+        Assert.Contains($"\"caFile\",\"{session.LastPinFile}\"", set);
+        Assert.Contains("\"acceptHostname\",\"\"", set);
     }
 
     [Fact]
@@ -418,5 +435,27 @@ public class B3270SessionConnectTests
 
         fake.Emit("""{"connection":{"state":"not-connected"}}""");
         await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The completion source belongs to the connection state, not to the first waiter: one that gives up
+    /// after its timeout must not take the source with it, or a later report would find nothing to complete and a
+    /// waiter that joined late would sit out its own full timeout beside an already closed connection.</summary>
+    [Fact]
+    public async Task A_report_after_one_waiter_timed_out_still_ends_a_later_waiter_at_once()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(600) };
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+
+        var first = session.DisconnectAsync();
+        await Task.Delay(450, TestContext.Current.CancellationToken);
+        var second = session.DisconnectAsync();
+        await first.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.False(second.IsCompleted);
+
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await second.WaitAsync(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
     }
 }

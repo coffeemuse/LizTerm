@@ -16,25 +16,38 @@ public sealed class ProfileStore(string directory)
         var profiles = new List<SessionProfile>();
         foreach (var file in System.IO.Directory.EnumerateFiles(Directory, "*.json"))
         {
-            try
-            {
-                var profile = JsonSerializer.Deserialize(File.ReadAllText(file), ProfileJsonContext.Default.SessionProfile);
-                if (profile is not null && profile.Name.Length > 0) profiles.Add(profile);
-            }
-            catch (JsonException)
-            {
-                // Skip unreadable files; the user can delete them by hand.
-            }
-            catch (IOException)
-            {
-                // Skip files that cannot be read due to I/O errors.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // Skip files that cannot be read due to permission issues.
-            }
+            if (Read(file) is { } profile) profiles.Add(profile);
         }
         return profiles.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>The saved profile of that name, or null when it has no readable file.</summary>
+    public SessionProfile? Load(string name) => Read(Path.Combine(Directory, FileNameFor(name)));
+
+    /// <summary>Applies <paramref name="change"/> to the profile as it is on disk now, or to <paramref name="fallback"/>
+    /// when its file is gone, and saves the result. A caller holding an older copy of the profile (a session window,
+    /// whose profile is fixed at construction) writes one choice back this way without discarding edits saved since.</summary>
+    public void Update(SessionProfile fallback, Func<SessionProfile, SessionProfile> change) =>
+        Save(change(Load(fallback.Name) ?? fallback));
+
+    /// <summary>One file, or null when it cannot be read; the user can delete such a file by hand. A pin without
+    /// its PEM or fingerprint (a hand-edited or redacted file) is dropped rather than handed to the engine, which
+    /// would refuse an empty trust file with an error naming a temp file that no longer exists.</summary>
+    private static SessionProfile? Read(string file)
+    {
+        SessionProfile? profile;
+        try
+        {
+            profile = JsonSerializer.Deserialize(File.ReadAllText(file), ProfileJsonContext.Default.SessionProfile);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+        if (profile is null || profile.Name.Length == 0) return null;
+        if (profile.PinnedCertificate is { } pin && (string.IsNullOrWhiteSpace(pin.Pem) || string.IsNullOrWhiteSpace(pin.Sha256)))
+            profile = profile with { PinnedCertificate = null };
+        return profile;
     }
 
     public void Save(SessionProfile profile)

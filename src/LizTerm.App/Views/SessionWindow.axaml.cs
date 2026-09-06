@@ -11,12 +11,14 @@ public partial class SessionWindow : Window
     public SessionWindow()
     {
         InitializeComponent();
-        Screen.KeyRequested += (_, key) => { if (ViewModel is { } vm) _ = CommandRouting.TryExecuteAsync(vm.SendKeyCommand, key); };
+        // The screen's events call the view model's methods, not its commands: each method carries its own guard,
+        // and a keystroke must never be dropped for arriving while the previous one's round trip is still open.
+        Screen.KeyRequested += (_, key) => _ = ViewModel?.SendKeyAsync(key);
         Screen.TextEntered += (_, text) => _ = ViewModel?.TypeTextAsync(text);
         Screen.CellClicked += (_, cell) => _ = ViewModel?.MoveCursorAsync(cell.Row, cell.Column);
-        Screen.CopyRequested += (_, _) => { if (ViewModel is { } vm) _ = CommandRouting.TryExecuteAsync(vm.CopyCommand); };
-        Screen.PasteRequested += (_, _) => { if (ViewModel is { } vm) _ = CommandRouting.TryExecuteAsync(vm.PasteCommand); };
-        Screen.SelectAllRequested += (_, _) => { if (ViewModel is { } vm) CommandRouting.TryExecute(vm.SelectAllCommand); };
+        Screen.CopyRequested += (_, _) => _ = ViewModel?.CopyAsync();
+        Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteAsync();
+        Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAll();
         Opened += (_, _) =>
         {
             ShowPlatformGestures();

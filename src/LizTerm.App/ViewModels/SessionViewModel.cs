@@ -234,22 +234,26 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand]
     private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions(Pin: _pinOverride));
 
-    private async Task ConnectWithAsync(ConnectOptions options)
+    /// <returns>True when this attempt itself connected; false after any failure, including one the certificate
+    /// prompt then turned into a further attempt.</returns>
+    private async Task<bool> ConnectWithAsync(ConnectOptions options)
     {
         ErrorMessage = null;
         _socketOpened = false;
         _connectCancelledByUser = false;
         ConnectionFailedException? certificateFailure = null;
+        var connected = false;
         using (var cts = new CancellationTokenSource(ConnectTimeout))
         {
             _connectCts = cts;
             try
             {
                 await _session.ConnectAsync(options, cts.Token);
+                connected = true;
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
-                if (_disposed) return;
+                if (_disposed) return false;
                 if (!_connectCancelledByUser)
                     ErrorMessage = StatusFormatter.ConnectTimeout(Profile, ConnectTimeout, _socketOpened);
             }
@@ -277,12 +281,15 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             }
         }
         if (certificateFailure is not null && !_disposed) await OfferConnectAnywayAsync(certificateFailure);
+        return connected;
     }
 
     /// <summary>Spec 5.3. Reads what the host presented (TLS profiles only), asks once, and then either connects
-    /// without verification for this attempt only or pins the certificate: the profile is saved with the pin and
-    /// verification on, and every later connect from this window passes the same pin. A pin the engine then rejects
-    /// is not offered again (the request says so), so this never loops. The prompt (a modal window), the fetch (a
+    /// without verification for this attempt only or pins the certificate: the retry verifies against the pin, and
+    /// only once the engine has accepted it is the profile saved with the pin and verification on, after which every
+    /// later connect from this window passes the same pin. A pin the engine rejects on that retry is not offered
+    /// again (the request says so), so this never loops, and it is not kept either, so the next prompt can offer
+    /// Remember afresh. The prompt (a modal window), the fetch (a
     /// socket), and the save (a file write) can all fail, and this runs after the connect's catch clauses rather
     /// than inside one, so those failures reach the error banner instead of faulting the command.</summary>
     private async Task OfferConnectAnywayAsync(ConnectionFailedException failure)
@@ -310,7 +317,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
 
         var savedTlsProfile = _saveProfile is not null && Profile.UseTls;
-        var canPin = savedTlsProfile && presented is { Pinnable: true } && presented.Sha256 != previous?.Sha256;
+        var canPin = savedTlsProfile && presented is { Pinnable: true } && !CertificateReader.SameFingerprint(presented.Sha256, previous?.Sha256);
         string? cannotPinReason = null;
         if (savedTlsProfile && !canPin && presented is not null)
         {
@@ -339,21 +346,16 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        string? saveError = null;
         ConnectOptions retry;
+        CertificatePin? pin = null;
         if (decision.Remember && canPin)
         {
-            var pin = new CertificatePin(presented!.Sha256, presented.Subject, presented.Pem);
+            // Held for the retry, so a rejection is reported as the engine rejecting this pin; nothing is written
+            // until the engine has accepted it, because the reader's verdict and OpenSSL's can differ (a weak key, a
+            // SHA-1 signature, an unsuitable purpose), and a saved pin the engine refuses would dead-end every later
+            // connect from the profile.
+            pin = new CertificatePin(presented!.Sha256, presented.Subject, presented.Pem);
             _pinOverride = pin;
-            try
-            {
-                _saveProfile!(Profile with { PinnedCertificate = pin, VerifyCertificate = true });
-            }
-            catch (Exception ex)
-            {
-                // The choice still holds for this window; only writing it back failed, so the connect goes ahead.
-                saveError = "Could not save the profile: " + ex.Message;
-            }
             retry = new ConnectOptions(Pin: pin);
         }
         else
@@ -361,11 +363,23 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             retry = new ConnectOptions(VerifyCertificate: false);
         }
 
-        await ConnectWithAsync(retry);
+        var connected = await ConnectWithAsync(retry);
 
-        // ConnectWithAsync clears ErrorMessage on entry, so a save failure is reported after the retry.
-        if (saveError is not null && !_disposed)
-            ErrorMessage = ErrorMessage is null ? saveError : $"{ErrorMessage} {saveError}";
+        if (pin is null || _disposed) return;
+        if (!connected)
+        {
+            if (ReferenceEquals(_pinOverride, pin)) _pinOverride = null;
+            return;
+        }
+        try
+        {
+            _saveProfile!(Profile with { PinnedCertificate = pin, VerifyCertificate = true });
+        }
+        catch (Exception ex)
+        {
+            // The choice still holds for this window; only writing it back failed.
+            ErrorMessage = "Could not save the profile: " + ex.Message;
+        }
     }
 
     /// <summary>While a connect is pending this cancels it (the backend sends the Disconnect); otherwise it disconnects.</summary>
@@ -381,12 +395,11 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         return Guard(_session.DisconnectAsync());
     }
 
-    /// <summary>Keys overlap by nature (auto-repeat, fast typing) and the backend serializes its writes, so a
-    /// key sent while the previous one's round trip is still open must run, not be dropped: the toolkit's async
-    /// commands report CanExecute false while an execution is in flight unless told otherwise, and the window
-    /// reaches this command through CommandRouting, which honours CanExecute.</summary>
-    [RelayCommand(AllowConcurrentExecutions = true)]
-    private Task SendKeyAsync(TerminalKey key)
+    /// <summary>Keys overlap by nature (auto-repeat, fast typing) and the backend serializes its writes, so the
+    /// screen's keystrokes call this method directly, as they do <see cref="TypeTextAsync"/>; the command exists for
+    /// the Keys menu, whose items may disable for the length of a round trip.</summary>
+    [RelayCommand]
+    public Task SendKeyAsync(TerminalKey key)
     {
         Selection = null;
         return Guard(_session.SendKeyAsync(key));
@@ -410,8 +423,8 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private bool CanCopy => Selection is not null && Screen is not null;
 
     /// <summary>Copies the selection as trimmed lines. Copying is not host input, so the selection stays.</summary>
-    [RelayCommand(CanExecute = nameof(CanCopy), AllowConcurrentExecutions = true)]
-    private async Task CopyAsync()
+    [RelayCommand(CanExecute = nameof(CanCopy))]
+    public async Task CopyAsync()
     {
         if (Selection is not { } region || Screen is not { } screen) return;
         try
@@ -425,10 +438,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     }
 
     /// <summary>One margin-aware paste of the clipboard text. b3270 moves to the next row at the paste margin on '\n'.</summary>
-    [RelayCommand(CanExecute = nameof(IsConnected), AllowConcurrentExecutions = true)]
-    private async Task PasteAsync()
+    [RelayCommand(CanExecute = nameof(IsConnected))]
+    public async Task PasteAsync()
     {
-        // Hotkeys execute commands without consulting CanExecute, so the guard lives here too.
+        // The screen's paste hotkey calls this method directly, so the guard lives here as well as in CanExecute.
         if (!IsConnected) return;
         string? text;
         try
@@ -448,7 +461,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private bool CanSelectAll => Screen is not null;
 
     [RelayCommand(CanExecute = nameof(CanSelectAll))]
-    private void SelectAll()
+    public void SelectAll()
     {
         if (Screen is { } screen) Selection = ScreenRegion.Full(screen.Rows, screen.Columns);
     }
