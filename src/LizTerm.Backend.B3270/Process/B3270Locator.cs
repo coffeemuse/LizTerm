@@ -22,12 +22,23 @@ public static class B3270Locator
     public static B3270Location Find() =>
         Find(Environment.GetEnvironmentVariable(EnvironmentOverride), AppContext.BaseDirectory);
 
-    public static B3270Location Find(string? overridePath, string baseDirectory)
+    /// <summary>Where <see cref="Find"/> looks, in order. Public so a caller can tell "no binary anywhere" apart
+    /// from "a binary is there and unusable", which <see cref="Find"/> reports with the same exception type.</summary>
+    public static IReadOnlyList<B3270Location> Candidates(string? overridePath, string baseDirectory)
     {
         var candidates = new List<B3270Location>();
         if (!string.IsNullOrWhiteSpace(overridePath)) candidates.Add(new B3270Location(overridePath, EngineSource.Override));
         candidates.Add(new B3270Location(Path.Combine(baseDirectory, "runtimes", RuntimeInformation.RuntimeIdentifier, "native", FileName), EngineSource.Bundled));
         candidates.Add(new B3270Location(Path.Combine(baseDirectory, FileName), EngineSource.Bundled));
+        return candidates;
+    }
+
+    /// <summary>The bundled path the csproj copy rule fills: <c>runtimes/&lt;rid&gt;/native/</c> under the base directory.</summary>
+    public static string BundledDirectory => Path.Combine("runtimes", RuntimeInformation.RuntimeIdentifier, "native");
+
+    public static B3270Location Find(string? overridePath, string baseDirectory)
+    {
+        var candidates = Candidates(overridePath, baseDirectory);
 
         foreach (var candidate in candidates)
         {

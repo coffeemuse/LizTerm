@@ -31,11 +31,11 @@ public class B3270SessionStateTests
     {
         var (session, fake) = await StartAsync();
         ScreenSnapshot? published = null;
-        session.ScreenUpdated += (_, s) => published = s;
+        // The reader thread writes this; Volatile pairs the release with the test thread's acquire read below.
+        session.ScreenUpdated += (_, s) => Volatile.Write(ref published, s);
         fake.Emit("""{"screen-mode":{"model":4,"rows":43,"columns":80,"color":true,"oversize":false,"extended":true}}""");
-        await Wait.UntilAsync(() => published?.Rows == 43, "resize");
-        Assert.NotNull(published);
-        Assert.Equal(43, published!.Rows);
+        await Wait.UntilAsync(() => Volatile.Read(ref published)?.Rows == 43, "resize");
+        Assert.Equal(43, Volatile.Read(ref published)!.Rows);
     }
 
     [Fact]
@@ -120,14 +120,20 @@ public class B3270SessionStateTests
     public async Task Connection_and_tls_map_and_reset()
     {
         var (session, fake) = await StartAsync();
+        // SetConnectionState assigns the property before it raises the event, so waiting on the property and then
+        // reading the list races the last Add. Wait on the list itself, and guard it: the reader thread appends
+        // while this thread reads, which a bare List<T> does not survive.
         var states = new List<ConnectionState>();
-        session.ConnectionChanged += (_, s) => states.Add(s);
+        var statesLock = new object();
+        List<ConnectionState> States() { lock (statesLock) return [.. states]; }
+        session.ConnectionChanged += (_, s) => { lock (statesLock) states.Add(s); };
         fake.Emit("""{"connection":{"state":"tcp-pending","host":"h","cause":"ui"}}""");
         fake.Emit("""{"connection":{"state":"tls-pending","host":"h","cause":"ui"}}""");
         fake.Emit("""{"tls":{"secure":true,"verified":false,"session":"Version: TLSv1.3","host-cert":"CN = h"}}""");
         fake.Emit("""{"connection":{"state":"connected-tn3270e","host":"h","cause":"ui"}}""");
-        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.ConnectedTn3270E, "connected");
-        Assert.Equal([ConnectionState.TcpPending, ConnectionState.TlsPending, ConnectionState.ConnectedTn3270E], states);
+        await Wait.UntilAsync(() => States().Count == 3, "three connection states");
+        Assert.Equal([ConnectionState.TcpPending, ConnectionState.TlsPending, ConnectionState.ConnectedTn3270E], States());
+        Assert.Equal(ConnectionState.ConnectedTn3270E, session.ConnectionState);
         Assert.True(session.Tls!.Secure);
         Assert.False(session.Tls.Verified);
         fake.Emit("""{"connection":{"state":"not-connected"}}""");
@@ -140,9 +146,10 @@ public class B3270SessionStateTests
     {
         var (session, fake) = await StartAsync();
         string? message = null;
-        session.HostMessage += (_, m) => message = m;
+        // The reader thread writes this; Volatile pairs the release with the test thread's acquire read below.
+        session.HostMessage += (_, m) => Volatile.Write(ref message, m);
         fake.Emit("""{"popup":{"type":"connection-error","text":"Host unreachable","retrying":false}}""");
-        await Wait.UntilAsync(() => message == "Host unreachable", "popup");
+        await Wait.UntilAsync(() => Volatile.Read(ref message) == "Host unreachable", "popup");
     }
 
     [Fact]

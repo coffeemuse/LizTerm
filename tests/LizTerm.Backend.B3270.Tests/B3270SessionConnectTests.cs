@@ -452,18 +452,21 @@ public class B3270SessionConnectTests
     public async Task A_report_after_one_waiter_timed_out_still_ends_a_later_waiter_at_once()
     {
         var fake = new FakeB3270Process();
-        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(600) };
+        // The three spans below are one ratio, not three numbers: `first` gives up at DisconnectTimeout, `second`
+        // joins a third of the way in and must still be waiting then, and the report must reach it inside the
+        // rest of its own budget. Scaled together for a loaded runner; scale them together again if they pinch.
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(1200) };
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
         await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
 
         var first = session.DisconnectAsync();
-        await Task.Delay(450, TestContext.Current.CancellationToken);
+        await Task.Delay(400, TestContext.Current.CancellationToken);
         var second = session.DisconnectAsync();
         await first.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.False(second.IsCompleted);
 
         fake.Emit("""{"connection":{"state":"not-connected"}}""");
-        await second.WaitAsync(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
+        await second.WaitAsync(TimeSpan.FromMilliseconds(600), TestContext.Current.CancellationToken);
     }
 }

@@ -1,7 +1,10 @@
 name: CI
 
 on:
+  # Only main on push: a bare push trigger puts a second check run named `test` on a PR's head SHA — one over
+  # the branch tip, one over the merge with main — and a required check cannot tell the two apart.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -29,12 +32,16 @@ jobs:
       - name: Test
         run: dotnet test LizTerm.slnx --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
 
+      # cancelled() as well as failure(): timeout-minutes and cancel-in-progress both cancel rather than fail,
+      # and a wedge past the job timeout is exactly the run whose evidence is worth keeping. The hang dump is
+      # *.dmp; a blame kill writes no Sequence_*.xml, and the crash-mode file is <guid>_Sequence.xml.
       - name: Upload test results
-        if: failure()
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: test-results-linux
           path: |
             TestResults/**/*.trx
-            TestResults/**/Sequence_*.xml
+            TestResults/**/*.dmp
+            TestResults/**/*Sequence*.xml
           if-no-files-found: ignore
