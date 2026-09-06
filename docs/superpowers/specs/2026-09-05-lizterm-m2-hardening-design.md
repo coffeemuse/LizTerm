@@ -354,3 +354,83 @@ plain profile, any other editor change, removal of the five stale worktrees, and
 keys. Noted for Milestone 3 packaging rather than here: a statically linked b3270 has whatever OpenSSL
 directory was compiled in, so on a machine without that directory default trust may reject every certificate;
 the bundle will need a CA file and a `caFile` default.
+
+## 11. Deviations from this spec (as-built)
+
+Rulings made in planning and execution, recorded here rather than edited into the sections above:
+
+1. `ICertificateFetcher`, `PresentedCertificate`, `CertificateReader`, and `SslStreamCertificateFetcher` live in
+   `src/LizTerm.Core/Security/` (section 5.1 said the App). They are BCL-only, so the dependency rule allows it,
+   and the integration project, which references only the backend, needs the fetcher for the live pinning test.
+2. `_verifyOverride` (section 5.3) was removed; nothing sets it once Remember means pin.
+3. The certificate fetch runs under a fresh `CancellationTokenSource(ConnectTimeout)`, not the connect's token
+   (section 5.3 step 1), because that source is disposed before the prompt runs.
+4. Escape in the File Transfer dialog is handled in the window's `OnKeyDown` (section 7 said `IsCancel` on the
+   Close button): the Running panel has no Close button. Both routes go through `Closing` and `TryClose`.
+5. `TerminalScreen.DestructiveBackspace` (the styled property) also defaults to true (section 3.2 named only the
+   profile), so an unbound control behaves like a new profile.
+6. The plan 3a review's "coverage gaps in tasks 1, 3, 4, 5, 6, 9, 10, 11, 12, 16" (section 8) resolved, on reading
+   each task against the tests, to two additions: `StopWireLog` when no log is active, and a prompt answered after
+   the window was disposed. "Cancel disables after the first click" and "`DisposeAsync` stops the log only after
+   Quit" already had tests.
+7. `CertificateReader` puts only the chain's self-signed members in the custom trust store and the rest in the
+   extra store when deciding `Pinnable` (section 5.1 said "the presented certificates as the only trust roots"),
+   because a non-root certificate in the trust store would validate any leaf trivially.
+8. The live pinning test forces `VerifyCertificate: true` in its options (section 9): the lane's profile has
+   verification off, and section 3.1 makes a pin inert when verification is off.
+9. Section 3.1 (and the profile shape it assumed) took for granted that a record's `init`-only properties would
+   still read their declared defaults when a saved file was missing a field. `SessionProfile`'s properties became
+   plain `{ get; set; }` instead: a scratch probe showed the System.Text.Json source generator behind
+   `ProfileJsonContext` ignores property initializers on init-only members, so a file missing a field read the CLR
+   default rather than the declared one — a latent bug for every field, not only `DestructiveBackspace`. The first
+   implementation's hand-written `SessionProfileConverter`, which worked around this one field at a time, was
+   dropped once the accessor fix covered all of them.
+10. Section 9's fetcher tests implicitly assumed one wording for an expired certificate's chain status (the
+    Windows/OpenSSL text, "...not within its validity period..."). `CertificateReaderTests`'s expired-certificate
+    assertion instead accepts either platform's wording (`Assert.Matches("(?i)expired|valid", ...)`), because
+    macOS's `X509Chain` reports "An expired certificate was detected." with no "valid" substring; the `Pinnable:
+    false` verdict is the same on both, only the English text differs.
+11. `CertificateReader.IsSelfSigned` (section 5.1, ruling 7 above) compares only the subject and issuer names, not
+    the signature. Accepted as it stands: `Pinnable` exists to predict what the engine does with the pin file, and
+    OpenSSL (b3270's TLS library) also never verifies a trust anchor's own signature by default, so a certificate
+    whose subject equals its issuer is trusted by both once the user pins it, which is what a pin means.
+12. The loopback fetcher test (section 9) discards the server-side read's result, `_ = await tls.ReadAsync(...)`,
+    to satisfy the CA2022 analyzer ("avoid inexact read"); the plan did not specify this.
+13. Section 8's `EnvironmentCollection` reads as one collection for the whole test matrix; each test project in
+    fact has its own. The backend project's `EnvironmentCollection` governs only `WireLogTests`, which sets
+    `LIZTERM_WIRE_LOG`, not `LIZTERM_B3270_PATH` — its doc comment still names `LIZTERM_B3270_PATH`, which nothing
+    in that project sets; the actual mutator, `SessionFactoryTests`, lives in the App test project under its own
+    `EnvironmentCollection`. Left as a naming mismatch rather than fixed, since fixing it was not the task at hand.
+    The same task fixed three pre-existing xUnit1051 warnings (`Task.Delay` without
+    `TestContext.Current.CancellationToken`) that only a full rebuild surfaces, in files it already touched.
+14. `TerminalScreen.OnLostFocus` overrides `OnLostFocus(FocusChangedEventArgs e)`, Avalonia 12.1.2's actual
+    signature, where the plan (section 7) named the parameter as `RoutedEventArgs`.
+15. Section 6.2's table lists Ctrl+Insert as a home for PA1 on every platform. Ctrl+Insert is also an alternate
+    Copy gesture in Avalonia's generic `HotkeyConfiguration` (Windows, Linux, and the headless test platform), and
+    `TerminalScreen.OnKeyDown` checks the platform copy/paste/select-all hotkeys before the keymap table (section
+    6.2's own ordering rule) — so on those platforms Ctrl+Insert copies, and PA1 is reached through Alt+1 (its
+    other home) or the Keys menu; only on macOS (Cmd-based hotkeys) does Ctrl+Insert reach PA1 as Vista has it.
+    The screen test's Ctrl-chord row uses Ctrl+Home (PA2) instead, which is unaffected. This footnotes section
+    6.2's table rather than rewriting it.
+16. Section 7's "hotkeys respect `CanExecute`" rule, applied uniformly, broke `SendKeyAsync`, `CopyAsync`, and
+    `PasteAsync`: CommunityToolkit's `AsyncRelayCommand.CanExecute` reports false while a previous execution is in
+    flight, so routing a key through `CommandRouting.TryExecuteAsync` would drop any keystroke landing during the
+    previous key's round trip (auto-repeat, fast typing) — invisible to the existing tests because
+    `FakeEmulatorSession.SendKeyAsync` completed synchronously. Those three commands were given
+    `AllowConcurrentExecutions = true` instead: their bodies were already safe to run concurrently (the backend
+    serializes writes under its own lock; clipboard calls are independent), which restores the pre-change
+    semantics while their explicit `CanExecute` predicates (`CanCopy`, `IsConnected`) still apply. A
+    `SendKeyCompletion` seam was added to `FakeEmulatorSession` and a regression test holds one key's round trip
+    open to prove a second one still lands.
+17. Section 7's "selection property hygiene" bullet did not order ending the drag against releasing pointer
+    capture. `TerminalScreen.OnPointerReleased` calls `_gesture.Release()` before `e.Pointer.Capture(null)`,
+    because `Capture(null)` raises `OnPointerCaptureLost` synchronously and that override itself calls
+    `_gesture.Release()`; releasing the gesture first keeps the reset idempotent instead of depending on an
+    ordering the plan did not pin down.
+18. Section 4.2 said the pinned-connect fixture mirrors `gateway-login-tls.jsonl`'s shape but did not repeat that
+    fixture's host redaction. `gateway-pinned-login.jsonl`'s host fields were replaced with `gateway.test`, as in
+    the sibling fixtures, rather than left as the live gateway's address.
+19. The plan's zero-warning check, `dotnet build | grep -c " warning "`, reads 0 on an incremental build even when
+    an unchanged project carries warnings. Every verification from Task 2 onward instead used
+    `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "`, which forces a full rebuild so no
+    project's warnings are hidden by up-to-date caching.
