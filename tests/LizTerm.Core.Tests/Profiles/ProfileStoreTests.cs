@@ -154,10 +154,21 @@ public class ProfileStoreTests : IDisposable
 
         using (File.Open(unreadablePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
-            // LoadAll should return only the readable profile
-            var profiles = store.LoadAll();
-            var readableProfile = Assert.Single(profiles);
-            Assert.Equal("readable", readableProfile.Name);
+            // On non-Windows, also strip the file's permissions so the UnauthorizedAccessException arm of
+            // ProfileStore.Read is exercised here too, alongside the exclusive-handle IOException arm.
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(unreadablePath, UnixFileMode.None);
+            try
+            {
+                // LoadAll should return only the readable profile
+                var profiles = store.LoadAll();
+                var readableProfile = Assert.Single(profiles);
+                Assert.Equal("readable", readableProfile.Name);
+            }
+            finally
+            {
+                if (!OperatingSystem.IsWindows())
+                    File.SetUnixFileMode(unreadablePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
         }
     }
 }
