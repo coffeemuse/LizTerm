@@ -1,6 +1,9 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using LizTerm.Backend.B3270;
 using LizTerm.Backend.B3270.Process;
 using LizTerm.Core.Screen;
+using LizTerm.Core.Security;
 using LizTerm.Core.Session;
 
 namespace LizTerm.Integration.Tests;
@@ -11,7 +14,9 @@ namespace LizTerm.Integration.Tests;
 /// LIZTERM_B3270_PATH.</summary>
 public class LiveHostTests
 {
-    [Fact]
+    private const int LiveTimeout = 600_000;
+
+    [Fact(Timeout = LiveTimeout)]
     public async Task Connects_and_receives_a_screen()
     {
         var target = Environment.GetEnvironmentVariable("LIZTERM_TEST_HOST");
@@ -36,7 +41,7 @@ public class LiveHostTests
 
     /// <summary>Needs a TLS host whose certificate cannot be verified (LIZTERM_TEST_TLS=1, LIZTERM_TEST_VERIFY_CERT=0);
     /// connects with verification forced on and expects the flagged failure.</summary>
-    [Fact]
+    [Fact(Timeout = LiveTimeout)]
     public async Task Verify_on_connect_to_a_self_signed_host_is_flagged()
     {
         var target = Environment.GetEnvironmentVariable("LIZTERM_TEST_HOST");
@@ -50,8 +55,44 @@ public class LiveHostTests
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
     }
 
+    /// <summary>Spec 9: a pin made from what the gateway presents verifies (the tls indication reports verified),
+    /// and a decoy pin fails with the certificate flag on the same session. The profile from the environment has
+    /// verification off, so both attempts force it on; a pin is ignored when verification is off (spec 3.1). Needs
+    /// the TLS gateway (LIZTERM_TEST_TLS=1, LIZTERM_TEST_VERIFY_CERT=0). Run alone with LIZTERM_WIRE_LOG set to
+    /// record the gateway-pinned-login fixture.</summary>
+    [Fact(Timeout = LiveTimeout)]
+    public async Task A_pinned_certificate_verifies_and_a_decoy_pin_fails()
+    {
+        var target = Environment.GetEnvironmentVariable("LIZTERM_TEST_HOST");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(target), "LIZTERM_TEST_HOST is not set");
+        var profile = ProfileFor(target!);
+        Assert.SkipUnless(profile is { UseTls: true, VerifyCertificate: false }, "needs LIZTERM_TEST_TLS=1 and LIZTERM_TEST_VERIFY_CERT=0");
+        var ct = TestContext.Current.CancellationToken;
+
+        var presented = await new SslStreamCertificateFetcher().FetchAsync(profile.Host, profile.Port, ct);
+        Assert.True(presented.Pinnable, presented.NotPinnableReason);
+        var pin = new CertificatePin(presented.Sha256, presented.Subject, presented.Pem);
+
+        await using var session = new B3270Session(profile, () => new B3270ChildProcess(B3270Locator.Find().Path), WireLog.TryFromEnvironment(out _));
+        await session.ConnectAsync(new ConnectOptions(VerifyCertificate: true, Pin: pin), ct);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (session.Tls?.Verified != true && DateTime.UtcNow < deadline) await Task.Delay(50, ct);
+        Assert.True(session.Tls?.Secure, "session is not secure");
+        Assert.True(session.Tls?.Verified, "the pinned connect was not verified");
+        await session.DisconnectAsync();
+
+        using var decoyKey = RSA.Create(2048);
+        using var decoy = new CertificateRequest("CN=localhost", decoyKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+            .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        var decoyPin = new CertificatePin(CertificateReader.Fingerprint(decoy), decoy.Subject, decoy.ExportCertificatePem() + "\n");
+        var ex = await Assert.ThrowsAsync<ConnectionFailedException>(() =>
+            session.ConnectAsync(new ConnectOptions(VerifyCertificate: true, Pin: decoyPin), ct));
+        Assert.True(ex.CertificateVerificationFailed, string.Join(" | ", ex.Lines));
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
     /// <summary>A plain connect to a TLS listener never completes; the token must end it and leave the session usable.</summary>
-    [Fact]
+    [Fact(Timeout = LiveTimeout)]
     public async Task Plain_connect_to_a_tls_port_is_cancelled_by_the_token_and_the_session_recovers()
     {
         var target = Environment.GetEnvironmentVariable("LIZTERM_TEST_HOST");
@@ -95,7 +136,7 @@ public class LiveHostTests
     /// with trailing blanks trimmed per line (IND$FILE pads records to the record length). Needs the three
     /// LIZTERM_TEST_* variables; the credentials are typed through TypeTextAsync, so a wire log of this run
     /// contains the password on its outbound side and must never be committed.</summary>
-    [Fact]
+    [Fact(Timeout = LiveTimeout)]
     public async Task Indfile_round_trip_matches()
     {
         var target = Environment.GetEnvironmentVariable("LIZTERM_TEST_HOST");

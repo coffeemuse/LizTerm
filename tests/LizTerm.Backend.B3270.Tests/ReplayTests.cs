@@ -103,6 +103,37 @@ public class ReplayTests
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
     }
 
+    /// <summary>Recorded from the live pinning test: a connect with verifyHostCert on and caFile pointing at the
+    /// gateway's own certificate. The only difference from gateway-login-tls.jsonl that matters is verified:true.</summary>
+    [Fact]
+    public async Task Gateway_pinned_login_replays_to_a_verified_tls_connection()
+    {
+        var fake = new FakeB3270Process { AutoInitialize = false, RunResponder = _ => [] };
+        foreach (var line in File.ReadLines(Fixture("gateway-pinned-login.jsonl"))) fake.Emit(line);
+        fake.Exit(0);
+
+        var profile = new SessionProfile { Name = "replay", Host = "gateway.test", Port = 4270, UseTls = true };
+        var session = new B3270Session(profile, () => fake);
+        var states = new List<ConnectionState>();
+        TlsInfo? tlsWhileConnected = null;
+        session.ConnectionChanged += (_, s) =>
+        {
+            states.Add(s);
+            if (s == ConnectionState.Connected3270) tlsWhileConnected = session.Tls;
+        };
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, _) => ended.TrySetResult();
+
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.Contains(ConnectionState.Connected3270, states);
+        Assert.Equal(ConnectionState.Disconnected, states[^1]);
+        Assert.NotNull(tlsWhileConnected);
+        Assert.True(tlsWhileConnected!.Secure);
+        Assert.True(tlsWhileConnected.Verified);
+    }
+
     /// <summary>The fixture was recorded with run tags "set" and "connect"; the responder replays the engine's
     /// answers against the tags this session actually sends, so ConnectAsync sees the real failure text.</summary>
     [Fact]
