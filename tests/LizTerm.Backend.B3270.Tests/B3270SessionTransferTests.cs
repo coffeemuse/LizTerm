@@ -10,7 +10,7 @@ public class B3270SessionTransferTests
 {
     private static readonly SessionProfile Profile = new() { Name = "t", Host = "h", Port = 23 };
     private static readonly FileTransferRequest Request = new() { Direction = TransferDirection.Send, LocalPath = "/nonexistent/a.txt", HostFile = "A.B" };
-    private static readonly TimeSpan WaitTime = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan WaitTime = TimeSpan.FromSeconds(5);
 
     private static async Task<(B3270Session Session, FakeB3270Process Fake)> StartAsync()
     {

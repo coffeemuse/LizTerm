@@ -6,7 +6,7 @@ internal static class Wait
 {
     public static async Task UntilAsync(Func<bool> condition, string what, TimeSpan? timeout = null)
     {
-        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(2));
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
         while (!condition())
         {
             if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);

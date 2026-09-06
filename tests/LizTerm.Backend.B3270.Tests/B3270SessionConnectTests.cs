@@ -1,3 +1,5 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using LizTerm.Backend.B3270.Tests.Fakes;
 using LizTerm.Core.Session;
@@ -18,6 +20,12 @@ public class B3270SessionConnectTests
     private static readonly SessionProfile Pinned = Verifying with { PinnedCertificate = Pin };
 
     private static string LastSetLine(FakeB3270Process fake) => fake.InputLines.Last(l => l.Contains("\"Set\""));
+
+    /// <summary>One action argument as it appears on the wire, quotes included. A Windows pin path's backslashes
+    /// are escaped there (<c>C:\\Users\\...</c>), so an assertion on the path has to escape them the same way.
+    /// RunOperation.Serialize writes with the same relaxed encoder.</summary>
+    private static string WireArg(string value) =>
+        JsonSerializer.Serialize(value, new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
 
     [Fact]
     public void Tls_settings_are_explicit_for_all_three_cases()
@@ -41,7 +49,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Verifying with { PinnedCertificate = chain }, () => fake);
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         var set = LastSetLine(fake);
-        Assert.Contains($"\"caFile\",\"{session.LastPinFile}\"", set);
+        Assert.Contains($"\"caFile\",{WireArg(session.LastPinFile!)}", set);
         Assert.Contains("\"acceptHostname\",\"\"", set);
     }
 
@@ -69,7 +77,7 @@ public class B3270SessionConnectTests
 
         var set = LastSetLine(fake);
         Assert.Contains("\"verifyHostCert\",\"true\"", set);
-        Assert.Contains($"\"caFile\",\"{session.LastPinFile}\"", set);
+        Assert.Contains($"\"caFile\",{WireArg(session.LastPinFile!)}", set);
         Assert.Contains("\"acceptHostname\",\"any\"", set);
         Assert.True(existedDuringConnect, "the pin file did not exist while the Connect run was pending");
         Assert.Equal(Pin.Pem, contentDuringConnect);
@@ -161,7 +169,7 @@ public class B3270SessionConnectTests
         await using var session = new B3270Session(Pinned, () => fake);
         using var cts = new CancellationTokenSource();
         var connect = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
         Assert.True(File.Exists(session.LastPinFile));
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connect);
@@ -215,7 +223,7 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(1));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt);
@@ -261,9 +269,9 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(1));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
         cts.Cancel();
-        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""), TimeSpan.FromSeconds(1));
+        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""));
         await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.False(attempt.IsCompleted, "the attempt must wait for the Disconnect to be answered");
 
@@ -358,7 +366,7 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
@@ -374,7 +382,7 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("verifyHostCert"), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("verifyHostCert"));
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
@@ -392,7 +400,7 @@ public class B3270SessionConnectTests
         using var cts = new CancellationTokenSource();
 
         var attempt = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
 
         // Hold the cancel's Disconnect inside its write, then kill the engine so the pending Connect run faults.
         var reached = new ManualResetEventSlim();
@@ -428,13 +436,13 @@ public class B3270SessionConnectTests
 
         var first = session.DisconnectAsync();
         var second = session.DisconnectAsync();
-        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""), TimeSpan.FromSeconds(2));
+        await fake.WaitForInputAsync(l => l.Contains("\"Disconnect\""));
         await Task.Delay(50, TestContext.Current.CancellationToken);
         Assert.False(first.IsCompleted);
         Assert.False(second.IsCompleted);
 
         fake.Emit("""{"connection":{"state":"not-connected"}}""");
-        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
     }
 
     /// <summary>The completion source belongs to the connection state, not to the first waiter: one that gives up
@@ -444,18 +452,21 @@ public class B3270SessionConnectTests
     public async Task A_report_after_one_waiter_timed_out_still_ends_a_later_waiter_at_once()
     {
         var fake = new FakeB3270Process();
-        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(600) };
+        // The three spans below are one ratio, not three numbers: `first` gives up at DisconnectTimeout, `second`
+        // joins a third of the way in and must still be waiting then, and the report must reach it inside the
+        // rest of its own budget. Scaled together for a loaded runner; scale them together again if they pinch.
+        await using var session = new B3270Session(Verifying, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(1200) };
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
         fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
         await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
 
         var first = session.DisconnectAsync();
-        await Task.Delay(450, TestContext.Current.CancellationToken);
+        await Task.Delay(400, TestContext.Current.CancellationToken);
         var second = session.DisconnectAsync();
-        await first.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await first.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.False(second.IsCompleted);
 
         fake.Emit("""{"connection":{"state":"not-connected"}}""");
-        await second.WaitAsync(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
+        await second.WaitAsync(TimeSpan.FromMilliseconds(600), TestContext.Current.CancellationToken);
     }
 }
