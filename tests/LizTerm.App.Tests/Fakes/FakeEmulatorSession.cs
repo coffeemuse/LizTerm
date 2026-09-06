@@ -30,6 +30,9 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     /// <summary>When set, TransferAsync waits for it before answering, so a test can push progress through
     /// TransferProgress and cancel through TransferToken while the dialog is in its Running phase.</summary>
     public TaskCompletionSource? TransferCompletion { get; set; }
+    /// <summary>When set, SendKeyAsync waits for it before completing, so a test can hold one key's round trip open
+    /// while a second key arrives.</summary>
+    public TaskCompletionSource? SendKeyCompletion { get; set; }
 
     public event EventHandler<ScreenSnapshot>? ScreenUpdated;
     public event EventHandler<KeyboardStatus>? StatusChanged;
@@ -67,7 +70,14 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     }
 
     public Task DisconnectAsync() => Record("disconnect");
-    public Task SendKeyAsync(TerminalKey key) => Record("key:" + key);
+
+    public async Task SendKeyAsync(TerminalKey key)
+    {
+        Calls.Add("key:" + key);
+        if (SendKeyCompletion is { } completion) await completion.Task;
+        if (ActionException is not null) throw ActionException;
+    }
+
     public Task TypeTextAsync(string text) => Record("type:" + text);
     public Task PasteTextAsync(string text) => Record("paste:" + text);
     public Task MoveCursorAsync(int row, int column) => Record($"move:{row},{column}");

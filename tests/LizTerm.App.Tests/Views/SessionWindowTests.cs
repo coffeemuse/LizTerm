@@ -209,4 +209,20 @@ public class SessionWindowTests
             if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
         }
     }
+
+    /// <summary>Regression: routing keys through CanExecute dropped any key that arrived while the previous key's
+    /// round trip was still open, because the toolkit's async command reports CanExecute false while running.</summary>
+    [AvaloniaFact]
+    public async Task A_key_pressed_while_the_previous_one_is_in_flight_still_reaches_the_host()
+    {
+        var (window, _, _, session, _) = Show();
+        session.SendKeyCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        window.KeyPressQwerty(PhysicalKey.F1, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.F2, RawInputModifiers.None);
+
+        Assert.Equal(["key:PF1", "key:PF2"], session.Calls);
+        session.SendKeyCompletion.SetResult();
+        await Task.Yield();
+    }
 }
