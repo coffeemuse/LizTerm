@@ -529,3 +529,11 @@ Items 30 to 34 record the final-review fix wave of 2026-09-06:
     installed) now completes the shared `disconnected` source before returning, so a caller that joined that same
     source — installed it via the `Interlocked.CompareExchange` race, then found the state already settled — is
     not left waiting for a report that may already have been consumed by the caller that returned early.
+33. Recorded, not changed: the regression test for spec 8's overlapping-callers rule,
+    `Two_overlapping_disconnect_waits_both_end_on_the_one_not_connected_report`
+    (`B3270SessionConnectTests`), drives two concurrent `DisconnectAsync` calls sharing one `not-connected` report,
+    rather than a cancelled connect racing a second waiter as an earlier draft of this plan considered.
+34. An unbracketed IPv6 argument carrying a forcing prefix (`L:`, `Y:`, or an `lu@` part) used to reach the engine:
+    `StartupArguments.Parse`'s host-shape check passed it through, and `HostStringBuilder` bracketed it before
+    handing it to b3270. That argument is now a usage error like every other unbracketed IPv6 address, a
+    deliberate behavior change; `StartupArguments.Usage` and the class doc comment name it.

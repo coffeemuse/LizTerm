@@ -111,6 +111,7 @@ public class B3270SessionConnectTests
         await using (var session = new B3270Session(Pinned, () => failing))
         {
             await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+            Assert.NotNull(session.LastPinFile);
             Assert.False(File.Exists(session.LastPinFile));
         }
 
@@ -123,6 +124,7 @@ public class B3270SessionConnectTests
         await using (var session = new B3270Session(Pinned, () => dying))
         {
             await Assert.ThrowsAsync<BackendUnavailableException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+            Assert.NotNull(session.LastPinFile);
             Assert.False(File.Exists(session.LastPinFile));
         }
     }

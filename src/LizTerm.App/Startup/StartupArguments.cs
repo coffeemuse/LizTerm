@@ -4,7 +4,8 @@ using LizTerm.Core.Session;
 namespace LizTerm.App.Startup;
 
 /// <summary>Command line: no argument opens the picker; a saved profile name connects to it; x3270's ad hoc host
-/// syntax <c>[L:][Y:][lu@]host[:port]</c> (IPv6 hosts bracketed) connects without a profile. <c>L:</c> is TLS,
+/// syntax <c>[L:][Y:][lu@]host[:port]</c> (IPv6 hosts bracketed; an unbracketed IPv6 address is a usage error)
+/// connects without a profile. <c>L:</c> is TLS,
 /// <c>Y:</c> turns certificate verification off, and the LU part is passed to the engine verbatim, comma lists
 /// included. A syntax error sets <see cref="Error"/> to <see cref="Usage"/> and resolves to the picker.
 /// <para>The two readings overlap — <c>CONS01@mvs</c> and <c>a:b</c> are legal profile names as well as legal ad
@@ -20,7 +21,7 @@ public sealed record StartupArguments(
     string? LuName = null,
     string? Error = null)
 {
-    public const string Usage = "Usage: LizTerm [profile | [L:][Y:][lu@]host[:port] | [L:][Y:][lu@][ipv6][:port]]; an unbracketed IPv6 address is a usage error";
+    public const string Usage = "Usage: LizTerm [profile | [L:][Y:][lu@]host[:port] | [L:][Y:][lu@][ipv6][:port]]";
 
     /// <summary>A malformed argument still carries its text, so it can name a saved profile even when it is not a
     /// legal host: "a:b" is a usage error as a host and a perfectly good profile name.</summary>
