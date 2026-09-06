@@ -30,10 +30,18 @@ package management: `PackageReference` entries in csproj files carry no `Version
 `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "` is the zero-warning check to run before
 calling anything done; an incremental build hides warnings from projects it does not recompile.
 
+CI is two workflows under `.github/workflows`: `ci.yml` (job `test`, `ubuntu-latest`, every push and PR: Release build
+with `-warnaserror`, then the suite with a 5 minute blame hang timeout) and `platforms.yml` (pushes to `main`, dispatch,
+and PRs touching the workflow or `native/**`: `engine-macos` on `macos-15` runs `build-macos.sh`, uploads
+`b3270-osx-arm64`, and runs the suite with `LIZTERM_REQUIRE_ENGINE=1`; `test-windows` runs the suite). Failed runs
+upload `test-results-<os>` with the `.trx` files. `global.json` pins the SDK to the 10.0.2xx band; supported builds
+stay on the current LTS.
+
 ### The b3270 binary
 
 The app and the integration test project copy `native/out/<host-rid>/b3270*` into their output as
-`runtimes/<rid>/native/b3270`, but only if that directory exists **at build time**. Build it once with
+`runtimes/<rid>/native/b3270`, but only if that directory exists **at build time**. The App test project inherits that
+copy through its project reference to the App, so a built engine lands in its output too. Build it once with
 `native/build/build-macos.sh` (needs Xcode CLT and Homebrew `openssl@3`; downloads and checksums x3270
 4.5ga6, links OpenSSL statically, and `verify-macos.sh` fails the build if `otool -L` shows anything
 outside `/usr/lib` or `/System/Library`), then rebuild the .NET projects. Without it, connecting throws
@@ -44,7 +52,7 @@ Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
 be started from Help > Wire Log in a session window; files go to `<config>/logs/wire-<profile>-<timestamp>.log`,
 and Show Wire Logs opens that folder. `LIZTERM_TEST_HOST`
-(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, which otherwise reports five skipped tests; add
+(`host[:port]`, enables `tests/LizTerm.Integration.Tests`, whose five live tests otherwise skip; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
 `LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
 which logs on to TSO, sends and receives `LIZTERM.ITEST` under the user's prefix, and deletes it; without them that
@@ -52,6 +60,8 @@ test skips. The credentials are typed through the session, so a wire log of that
 outbound side and is never committed. On Robert's Mac the three live-lane variables are kept in
 `~/.config/lizterm-test.env` (outside the repo); `source` it in the shell that runs `dotnet test` rather than
 exporting values on a command line.
+`LIZTERM_REQUIRE_ENGINE` (any non-blank value) makes the engine smoke test in the same project fail rather than skip when
+the test output has no bundled b3270; CI sets it on the macOS job only.
 
 ### Avalonia Developer Tools MCP
 
@@ -387,9 +397,16 @@ the backend tests.
   `wirelog:stop`, `WireLogException`, `Engine`. `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
   `fetch:<host>:<port>`), `FakeCertificatePrompt.LastRequest`, and `FakeEmulatorSession` recording
   `connect:pin:<sha256>`. The App and backend test projects each have one `Wait.UntilAsync(condition, what, timeout?)` helper (`Wait.cs`) replacing the private copies the tests used to carry.
-  `EnvironmentCollection` is a non-parallel xunit collection in each of the App and backend test projects; the App
-  one holds `SessionFactoryTests`, which sets `LIZTERM_B3270_PATH`, and the backend one holds `WireLogTests`, which
-  sets `LIZTERM_WIRE_LOG`.
+  Its default timeout is 5 s (raised from 2 s for CI headroom).
+  `EnvironmentCollection` is a non-parallel xunit collection in the backend test project only, holding `WireLogTests`,
+  which sets `LIZTERM_WIRE_LOG`. `SessionFactoryTests` no longer touches the environment: it calls the internal
+  `SessionFactory.Create(profile, overridePath, baseDirectory)` seam with a bogus override and an empty temp directory,
+  because a bundled engine in the App test output would otherwise satisfy the locator.
   `TestCertificates` in the Core tests makes self-signed and CA-signed certificates and re-imports through PKCS#12
   so macOS accepts the key for a loopback SslStream server; the live tests carry a 10 minute xunit timeout;
   `gateway-pinned-login.jsonl` replays a verified pinned connect.
+- `EngineSmokeTests` (integration project) starts the **bundled** engine from the test output through `B3270Session`,
+  checks `Engine.Source` is `Bundled` and the version is at least `MinimumVersion`, and quits; it resolves with
+  `B3270Locator.Find(null, AppContext.BaseDirectory)` so `LIZTERM_B3270_PATH` can never satisfy it. Without a bundled
+  engine it skips, unless `LIZTERM_REQUIRE_ENGINE` is set, when it fails; `EngineRequirement.Decide` is that gate, unit
+  tested on its own. On a Mac that has run `build-macos.sh` the test runs locally and catches a stale binary in the output.
