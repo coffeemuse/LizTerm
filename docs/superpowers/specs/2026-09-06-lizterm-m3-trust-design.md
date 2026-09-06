@@ -95,8 +95,12 @@ roots the test machine happens to hold.
 
 ### 4.2 `B3270Session`
 
-A new init property, `TrustAnchors { get; init; } = SystemTrustAnchors.Default`, following `StartupTimeout`'s
-pattern; the backend tests set it to a fake. `ConnectAsync` gains one branch: when verification is on and there
+A new init property, `TrustAnchors { get; init; } = NoTrustAnchors.Instance`, following `StartupTimeout`'s
+pattern. The default yields nothing and `SessionFactory` — the one place the App names the backend — injects
+`SystemTrustAnchors.Default`. Defaulting to the real store instead would make every backend test that connects
+with a verifying profile read whatever roots the test machine happens to hold, which is both non-deterministic
+and a behaviour no test asked for; it also matches how `ICertificateFetcher` is already wired, where the App
+supplies the real implementation and the backend assumes nothing. `ConnectAsync` gains one branch: when verification is on and there
 is no pin, ask the source for a PEM and, if it is non-null, write it with the existing `WritePinFile` mechanism as
 `lizterm-roots-<guid>.pem`, owner-only on Unix. That method is renamed `WriteCaFile` as part of this plan,
 since it now serves two callers and its name should say what it writes rather than who asked. The file is deleted in the same `finally` that already deletes
