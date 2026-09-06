@@ -110,8 +110,10 @@ public class SessionViewModelWireLogTests : IDisposable
             var session = new FakeEmulatorSession();
             var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard()) { WireLogDirectory = dir };
             var now = DateTime.Now;
-            File.WriteAllText(Path.Combine(dir, SessionViewModel.WireLogFileName(session.Profile.Name, now)), "");
-            File.WriteAllText(Path.Combine(dir, SessionViewModel.WireLogFileName(session.Profile.Name, now.AddSeconds(1))), "");
+            // A stall between the capture above and the toggle below must not make this test flaky: seed every
+            // second the real DateTime.Now inside the toggle could plausibly land on, not just the one after.
+            for (var s = -2; s <= 3; s++)
+                File.WriteAllText(Path.Combine(dir, SessionViewModel.WireLogFileName(session.Profile.Name, now.AddSeconds(s))), "");
             vm.IsWireLogging = true;
             Assert.EndsWith("-2.log", session.WireLogPath);
         }

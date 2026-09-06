@@ -200,6 +200,8 @@ public sealed class TerminalScreen : Control
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
+        // A Ctrl+click is a click, not a Ctrl tap.
+        _taps.Reset();
         base.OnPointerPressed(e);
         Focus();
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
