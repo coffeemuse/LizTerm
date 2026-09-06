@@ -1,5 +1,7 @@
 # LizTerm
 
+[![CI](https://github.com/coffeemuse/LizTerm/actions/workflows/ci.yml/badge.svg)](https://github.com/coffeemuse/LizTerm/actions/workflows/ci.yml)
+
 A cross-platform TN3270 client for retro mainframe hobbyists: macOS, Linux, and Windows, one UI, no install
 dependencies. Built with .NET 10 and Avalonia on top of the b3270 engine from the x3270 suite.
 
@@ -21,9 +23,27 @@ Environment variables:
 - `LIZTERM_WIRE_LOG`: append every protocol line in both directions to this file (attach to bug reports).
 - `LIZTERM_TEST_HOST`: `host[:port]` for the opt-in integration tests. Add `LIZTERM_TEST_TLS=1` for a TLS host
   and `LIZTERM_TEST_VERIFY_CERT=0` to accept a self-signed certificate.
+- `LIZTERM_REQUIRE_ENGINE`: any non-blank value makes the engine smoke test fail instead of skip when no bundled
+  b3270 is in the test output. CI sets it on the macOS job; leave it unset locally.
 
 `native/build/build-playback.sh` builds x3270's `playback` tool, for replaying a captured host
 trace against a live b3270 during local development.
+
+## Continuous integration
+
+Two GitHub Actions workflows under `.github/workflows`:
+
+- `ci.yml` runs on every push, pull request, and manual dispatch: one Linux job, `test`, that builds the solution in
+  Release with warnings as errors and runs the full suite. No engine is needed; the integration lane skips itself.
+- `platforms.yml` runs on pushes to `main`, on manual dispatch, and on pull requests that touch the workflow or
+  `native/`: `engine-macos` builds b3270 with `native/build/build-macos.sh` (whose `verify-macos.sh` fails the job on
+  any non-system dynamic dependency), uploads it as the `b3270-osx-arm64` artifact, then runs the suite with
+  `LIZTERM_REQUIRE_ENGINE=1` so the engine smoke test must start the freshly built binary; `test-windows` runs the
+  suite on Windows.
+
+To run the platform jobs by hand: Actions, Platforms, "Run workflow", or `gh workflow run platforms.yml`. A failed
+run uploads its `.trx` files as `test-results-<os>`. The macOS run's `b3270-osx-arm64` artifact is a CI-built engine
+you can download and drop into `native/out/osx-arm64/`.
 
 ## Recording protocol fixtures
 
