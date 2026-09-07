@@ -272,12 +272,15 @@ the backend tests.
   never inherits the previous one's trust settings (verified: empty values clear them in the same engine). What
   fills `caFile` is one rule: a pin in force means the pin file (its PEM verbatim, so a pin that lost its `pem` in a
   hand-edited profile writes an empty file and fails the connect rather than quietly widening to the anchors);
-  otherwise, only for a `UseTls` profile that verifies, the trust anchors `TrustAnchors` yields, written to
-  `lizterm-roots-<guid>.pem`; and everything else — verification off, a plain telnet connect, a source with no
-  anchors — means empty, because an empty *file* makes b3270 fail the connect with "CA database load … failed"
-  rather than falling back. The `UseTls` half of that gate matters because `VerifyCertificate` defaults to *true*
-  while `UseTls` defaults to false, so gating on verification alone made every plain connect read the OS store and
-  write a quarter of a megabyte. `WriteCaFile(pem, kind)` writes both kinds, owner-only on Unix, because x3270 loads
+  otherwise, whenever the attempt verifies, the trust anchors `TrustAnchors` yields, written to
+  `lizterm-roots-<guid>.pem`; and everything else — verification off, or a source with no anchors — means empty,
+  because an empty *file* makes b3270 fail the connect with "CA database load … failed" rather than falling back.
+  Do **not** gate the anchors on `Profile.UseTls`, however tempting the saved work looks: b3270 implements the
+  TELNET START-TLS option, so a plain profile can be upgraded to TLS by the host mid-session, and that upgrade
+  would then verify against the engine's own compiled-in directory — the nonexistent Homebrew path this milestone
+  exists to stop relying on. (Two reviews have now proposed that gate; the cost it was chasing is already gone,
+  because the anchors are read once per process and the file is written once per session.)
+  `WriteCaFile(pem, kind)` writes both kinds, owner-only on Unix, because x3270 loads
   `caFile` in `sio_init` for each connection. Their lifetimes differ: a pin file is deleted in the `finally` once
   the Connect run has answered, while the roots file is the same public bytes every time and is written once by
   `RootsFile` and kept for the session, so a reconnect reuses it; `DisposeAsync` deletes it. `acceptHostname` is `any` only

@@ -515,11 +515,12 @@ public class B3270SessionConnectTests
         Assert.False(File.Exists(rootsFile), "the roots file outlived the session");
     }
 
-    /// <summary>VerifyCertificate defaults to true on a profile whose UseTls defaults to false, so gating the
-    /// store read on verification alone made every plain telnet connect read the OS store and write a roots file
-    /// for a TLS context the engine never builds.</summary>
+    /// <summary>A plain profile still gets the anchors, and this test is why: b3270 implements the TELNET START-TLS
+    /// option, so a connection that began without `L:` can be upgraded to TLS by the host mid-session. Gating the
+    /// CA file on Profile.UseTls left that upgrade verifying against the engine's own compiled-in directory — the
+    /// nonexistent Homebrew path this milestone exists to stop relying on.</summary>
     [Fact]
-    public async Task A_plain_connect_asks_the_trust_source_for_nothing()
+    public async Task A_plain_connect_still_gets_the_anchors_because_the_host_may_start_tls()
     {
         var fake = new FakeB3270Process();
         var trust = new FakeTrustAnchorSource();
@@ -527,9 +528,8 @@ public class B3270SessionConnectTests
 
         await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Contains("\"verifyHostCert\",\"true\",\"caFile\",\"\",\"acceptHostname\",\"\"", LastSetLine(fake));
-        Assert.Null(session.LastCaFile);
-        Assert.Equal(0, trust.Calls);
+        Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", LastSetLine(fake));
+        Assert.Equal(FakeTrustAnchorSource.TwoRoots, File.ReadAllText(session.LastCaFile!));
     }
 
     /// <summary>A pin is a deliberate answer to "trust exactly this"; adding the machine's roots beside it would
