@@ -3,7 +3,8 @@
 # Docker on the host and nothing else.
 #
 # With no arguments it runs the build. With arguments it runs those inside the same image instead, which is how
-# the gate's negative fixtures are checked without a second wrapper.
+# CI exercises the gate — against the built binary and against a fixture per arm, in one invocation — without a
+# second wrapper.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 . "$(dirname "$0")/linux-image.sh"

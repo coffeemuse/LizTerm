@@ -112,12 +112,12 @@ jobs:
     # First cold-cache run (2026-09-07, PR #10): linux-x64 17m47s total, linux-arm64 4m35s. Both are under the
     # 20-minute threshold for lowering this, so 40 replaces the brief's 45 -- comfortably above double the
     # slower leg, with headroom rather than a bare double.
-    # The x64 leg was slow almost entirely in the two negative-fixture steps (~4m40s each): each one calls
-    # build-linux-docker.sh again, which reinstalls PACKAGES with dnf inside a fresh container every time
-    # (nothing from the first build's dnf run is cached), and that install was far slower on the x64 runner
-    # than on the arm64 one in this run. That is runner/network variance in package installation, not evidence
-    # that x64 needs more time to build the engine itself, but the extra headroom in 40 leaves room for it to
-    # recur.
+    # The x64 leg was slow almost entirely in package installation: every invocation of build-linux-docker.sh
+    # reinstalls PACKAGES with dnf inside a fresh container (nothing from the first one's dnf run is cached),
+    # and that install was far slower on the x64 runner than on the arm64 one in that run -- the two
+    # negative-fixture steps it then had cost 279s and 281s against a 432s build. Folding them into the single
+    # gate step below removed one of the three invocations. That was runner/network variance rather than
+    # evidence that x64 needs longer to build the engine, so 40 keeps room for it to recur.
     timeout-minutes: 40
     env:
       LIZTERM_REQUIRE_ENGINE: "1"
@@ -158,27 +158,61 @@ jobs:
             echo "::endgroup::"
           done
 
-      # These three run whether or not the engine came from the cache. On a cache hit the build step never
-      # executes, so they are the only thing standing between a stale cached binary and an artifact upload.
+      # Both of these run whether or not the engine came from the cache. On a cache hit the build step never
+      # executes, so they are the only thing standing between a stale cached binary and an artifact upload --
+      # which is why the step below runs the gate against the built binary and not only against the fixtures.
+      # They are separate steps because they are separate claims: this one runs on the host and starts the
+      # engine in a bare floor container, the next runs inside the build container and inspects it.
       - name: The engine starts on a bare floor system
         run: native/build/verify-linux-start.sh native/out/${{ matrix.rid }}/b3270
 
-      # A guard that cannot fail is not a guard (plan 3b, deviation 5). One fixture per arm of the gate.
-      - name: The gate rejects a binary that links more than glibc
-        run: |
-          if native/build/build-linux-docker.sh native/build/verify-linux.sh /usr/bin/bash; then
-            echo "verify-linux.sh accepted /usr/bin/bash; its dependency allowlist is not working" >&2
-            exit 1
-          fi
-
-      - name: The gate rejects a binary built on a newer glibc
+      # A guard that cannot fail is not a guard (plan 3b, deviation 5) -- and neither is a check on the guard
+      # that passes for any non-zero exit. build-linux-docker.sh exits non-zero for a Docker Hub rate limit, a
+      # failed dnf install (which is its own `exit 1`) or a network hiccup, so asserting only "it exited
+      # non-zero" reported every one of those as "the gate rejected the fixture". Each arm is therefore
+      # asserted on the message that arm prints. One container invocation, three runs of the gate: one accept,
+      # two rejects, instead of three invocations each paying the wrapper's dnf install again.
+      - name: The gate accepts the engine and rejects both fixtures
         run: |
           mkdir -p native/build-tmp
-          docker run --rm -v "$PWD/native/build-tmp:/out" debian:12-slim cp /bin/true /out/newglibc-fixture
-          if native/build/build-linux-docker.sh native/build/verify-linux.sh native/build-tmp/newglibc-fixture; then
-            echo "verify-linux.sh accepted a glibc 2.36 binary; its symbol floor check is not working" >&2
-            exit 1
-          fi
+          # debian 12 is glibc 2.36, so its /bin/true imports __libc_start_main@GLIBC_2.34 -- above our 2.28
+          # floor -- while linking nothing but the glibc runtime: it passes the allowlist arm and must fail the
+          # floor arm. Pinned by digest for the same reason the build image is, and to the multi-architecture
+          # *index* digest so both legs resolve. It is deliberately not in linux-image.sh: that file is hashed
+          # into the engine cache key, and a fixture image has nothing to do with how the engine is built.
+          docker run --rm -v "$PWD/native/build-tmp:/out" \
+            debian:12-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 \
+            cp /bin/true /out/newglibc-fixture
+          # Single quotes on purpose: every $ below is for the container shell, not this one. Only the
+          # matrix expression is substituted here, by Actions, before either shell sees the text.
+          # shellcheck disable=SC2016
+          native/build/build-linux-docker.sh bash -c '
+          set -euo pipefail
+
+          echo "--- the gate must accept the engine it is gating"
+          native/build/verify-linux.sh native/out/${{ matrix.rid }}/b3270
+
+          # Capture the output and match it; do not pipe it. grep -q exits on its first match and SIGPIPEs the
+          # writer, which under this pipefail becomes 141 -- the trap that already cost this script family a
+          # head -3 (see verify-linux.sh).
+          reject() {
+            echo "--- the gate must reject $2 by its $1"
+            if output=$(native/build/verify-linux.sh "$2" 2>&1); then
+              printf "%s\n" "$output"
+              echo "FAILED: verify-linux.sh accepted $2; its $1 is not working" >&2
+              exit 1
+            fi
+            printf "%s\n" "$output"
+            case "$output" in
+              *"$3"*) echo "OK: rejected by the $1" ;;
+              *) echo "FAILED: verify-linux.sh rejected $2, but not by its $1 (nothing matched: $3)" >&2
+                 exit 1 ;;
+            esac
+          }
+
+          reject "dependency allowlist" /usr/bin/bash "dynamic dependencies outside the glibc runtime"
+          reject "glibc symbol floor" native/build-tmp/newglibc-fixture "above the 2.28 floor"
+          '
 
       - uses: actions/setup-dotnet@v6
         with:
