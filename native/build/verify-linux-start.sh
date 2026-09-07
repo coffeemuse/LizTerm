@@ -8,6 +8,7 @@ BIN=${1:?usage: verify-linux-start.sh <binary>}
 DIR=$(cd "$(dirname "$BIN")" && pwd)
 FILE=$(basename "$BIN")
 . "$(dirname "$0")/linux-image.sh"
-# sed, not head: see verify-linux.sh — head plus pipefail turns a passing check into exit 141.
-docker run --rm -v "$DIR:/engine:ro" "$LIZTERM_LINUX_IMAGE" "/engine/$FILE" --version | sed -n '1,3p'
+# 2>&1 because b3270 writes its banner to stderr; without it sed filters an empty stream. sed, not head: see
+# verify-linux.sh — head plus pipefail turns a passing check into exit 141.
+docker run --rm -v "$DIR:/engine:ro" "$LIZTERM_LINUX_IMAGE" "/engine/$FILE" --version 2>&1 | sed -n '1,3p'
 echo "OK: $BIN starts on $LIZTERM_LINUX_IMAGE with no build tools present"
