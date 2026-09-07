@@ -57,7 +57,8 @@ pass, each fixture must be rejected *by the message its own arm prints* — and 
 from the cache, alongside the start check: on a cache hit the build step never executes, so those two steps are the
 only thing between a stale cached binary and an artifact upload. Asserting the message rather than a non-zero exit
 is the point: the wrapper also exits non-zero for a Docker Hub rate limit or a failed `dnf install`, so the earlier
-`if wrapper …; then fail; fi` shape passed for those too.
+`if wrapper …; then fail; fi` shape passed for those too. Measured after the fold, cold on both legs: x64 678s
+total and arm64 238s, the gate step 219s and 31s against 560s and 58s for the two steps it replaced.
 
 `ci.yml` deliberately does *not* carry a bare `push:` trigger: with `pull_request:` beside it, a PR head SHA gets two
 check runs named `test` — one over the branch tip, one over the merge with `main` — and a required check cannot tell

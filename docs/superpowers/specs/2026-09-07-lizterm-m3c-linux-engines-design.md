@@ -349,7 +349,10 @@ Rulings made in planning and execution, recorded here rather than edited into th
    the x64 runner than the corresponding arm64 steps in that run. Section 5's pre-run reasoning was backwards —
    it expected the two-vCPU arm64 runner to be the one needing headroom, and arm64 was the fast leg by a wide
    margin. Those two steps were later folded into one (deviation 11), which removes one of the three container
-   invocations and so one `dnf install` per leg.
+   invocations and so one `dnf install` per leg. Cold-cache again after that fold, on the same PR: x64 678s and
+   arm64 238s, the single gate step 219s and 31s against 560s and 58s for the pair it replaced — the x64 leg
+   lost a third of its total. `timeout-minutes` stays at 40 rather than following the numbers down, because the
+   variance that produced 1067s was `dnf`, which is still on the critical path twice.
 9. **The check names are runner-qualified.** GitHub renders every `matrix.include` property in a job's check name,
    not only the one that varies meaningfully, so section 7's `engine-linux (linux-x64)` and
    `engine-linux (linux-arm64)` are really `engine-linux (ubuntu-24.04, linux-x64)` and
@@ -383,7 +386,9 @@ Rulings made in planning and execution, recorded here rather than edited into th
     on the host rather than in the build container, and it is a different claim. `debian:12-slim` is now pinned by
     digest like the build image, to the multi-architecture *index* digest so both legs resolve — the pin lives in
     the workflow rather than in `linux-image.sh` on purpose, because that file is hashed into the engine cache key
-    and a fixture image has nothing to do with how the engine is built.
+    and a fixture image has nothing to do with how the engine is built. Both legs ran it cold and green: the
+    engine accepted, `/usr/bin/bash` rejected by the allowlist, the `/bin/true` rejected by the floor, in 219s on
+    x64 and 31s on arm64 (deviation 8).
 12. **Each static prefix is stamped with the SHA-256 of the fetch script that filled it.** `build-linux.sh` guarded
     the OpenSSL and expat builds on the archive alone (`[ ! -f "$STAGE/lib/libssl.a" ]`), so bumping a version in a
     fetcher and rebuilding locally without clearing `native/build-tmp` silently linked the old library — and
