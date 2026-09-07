@@ -44,6 +44,9 @@ fi
 
 echo "OK: $BIN links only the glibc runtime and needs no more than glibc $HIGHEST (floor $FLOOR)"
 ldd "$BIN"
+# 2>&1 because b3270 writes its whole banner to stderr: without it sed filters an empty stream and a dozen
+# unfiltered lines reach the log anyway.
 # sed, not head: head closes the pipe after three lines, GNU coreutils SIGPIPEs the writer for it, and under
-# pipefail that 141 becomes this script's exit status — a passing binary reported as a failed gate.
-"$BIN" --version | sed -n '1,3p'
+# pipefail that 141 becomes this script's exit status — a passing binary reported as a failed gate. That trap
+# is why the redirection cannot simply be bolted onto a head.
+"$BIN" --version 2>&1 | sed -n '1,3p'
