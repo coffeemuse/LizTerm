@@ -305,7 +305,9 @@ fi
 
 # 2. ldd alone is not a portability claim: a binary built on Ubuntu 24.04 links only these too, and still
 # cannot start on RHEL 9. The highest glibc symbol version it imports is what actually decides.
-HIGHEST=$(readelf --dyn-syms --wide "$BIN" | grep -o 'GLIBC_[0-9][0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1)
+# The || true is load-bearing: grep exits 1 when it matches nothing, and under pipefail that would abort
+# the script here instead of reaching the empty check below, which is the branch with the useful message.
+HIGHEST=$(readelf --dyn-syms --wide "$BIN" | grep -o 'GLIBC_[0-9][0-9.]*' | sed 's/GLIBC_//' | sort -V | tail -1 || true)
 if [ -z "$HIGHEST" ]; then
   echo "ERROR: $BIN imports no versioned glibc symbols. Is it dynamically linked against glibc at all?" >&2
   exit 1
@@ -318,7 +320,9 @@ fi
 
 echo "OK: $BIN links only the glibc runtime and needs no more than glibc $HIGHEST (floor $FLOOR)"
 ldd "$BIN"
-"$BIN" --version | head -3
+# sed, not head: head closes the pipe after three lines, GNU coreutils SIGPIPEs the writer for it, and under
+# pipefail that 141 becomes this script's exit status — a passing binary reported as a failed gate.
+"$BIN" --version | sed -n '1,3p'
 ```
 
 - [ ] **Step 2: Prove the allowlist arm rejects a binary that links more**
@@ -417,8 +421,9 @@ cd "$SRC"
   --disable-pr3287 --disable-x3270if --disable-mitm --disable-playback \
   --with-openssl="$STAGE" LIBS="-ldl -pthread" > "$BUILD/configure.log" 2>&1
 make -j"$JOBS" > "$BUILD/make.log" 2>&1
-# GNU find, so -perm -u+x rather than the macOS script's BSD -perm +111.
-BIN=$(find obj -type f -name b3270 -perm -u+x | head -1)
+# GNU find, so -perm -u+x rather than the macOS script's BSD -perm +111. sed rather than head for the same
+# SIGPIPE-under-pipefail reason as verify-linux.sh.
+BIN=$(find obj -type f -name b3270 -perm -u+x | sort | sed -n 1p)
 OUT="$ROOT/native/out/$RID"
 mkdir -p "$OUT"
 cp "$BIN" "$OUT/b3270"
@@ -461,7 +466,8 @@ BIN=${1:?usage: verify-linux-start.sh <binary>}
 DIR=$(cd "$(dirname "$BIN")" && pwd)
 FILE=$(basename "$BIN")
 . "$(dirname "$0")/linux-image.sh"
-docker run --rm -v "$DIR:/engine:ro" "$LIZTERM_LINUX_IMAGE" "/engine/$FILE" --version | head -3
+# sed, not head: see verify-linux.sh — head plus pipefail turns a passing check into exit 141.
+docker run --rm -v "$DIR:/engine:ro" "$LIZTERM_LINUX_IMAGE" "/engine/$FILE" --version | sed -n '1,3p'
 echo "OK: $BIN starts on $LIZTERM_LINUX_IMAGE with no build tools present"
 ```
 
