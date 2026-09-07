@@ -472,6 +472,30 @@ Rulings made in planning and execution, recorded here rather than edited into th
     configure line and the comment explaining it differ now, which is what those comments were always about.
     The two csproj copy-rule comments, which still said the engine appears "when native/build/build-macos.sh has
     run", name the Linux script too.
+22. **`timeout-minutes` is 15, measured rather than reasoned.** Deviations 8 and 18 both left it at 40 on
+    purpose: the x64 variance that produced 1067s came from `dnf`, and the rule adopted after section 5 got the
+    slow leg backwards was not to tighten the number on expectation. Deviation 18 took `dnf` off the critical
+    path and said explicitly to leave 40 until a cold run had been measured without it. That run is
+    34159848465 (PR #10, 2026-09-07, all four jobs green, every cache missed and all seven source tarballs
+    downloaded -- the worst case, not a partially warm one):
+
+        x64    arm64   after
+        1067s   275s   as first shipped -- three container invocations per leg, each re-running dnf install
+         678s   238s   deviation 11: the two fixture steps folded into one (gate 219s and 31s, from 560s/58s)
+         271s   210s   deviations 18 and 20: dnf as an image layer, x64 scoped to the integration project
+
+    The build step is now 201s and 137s -- about 36s of that the one-time image build -- and the gate step is
+    4s on both legs, from 219s and 31s. The two legs have converged, which is what a build cost looks like
+    where the old spread was a network cost, so the headroom 40 existed to hold no longer has anything to
+    hold. 15 is roughly 3.3x the slowest leg yet observed, and unlike 40 it does not let a genuinely wedged
+    build burn most of an hour first. Warm runs have never exceeded 2m31s.
+    That run also closed out the plan's remaining unverified claims in one go: the derived image builds
+    (`lizterm-linux-build:628fdac…`, the same tag the local derivation produces) and `dnf install` appears
+    twice per run rather than four times; `verify-macos.sh`'s new TLS arm gated a freshly built engine
+    (`TLS provider: OpenSSL 3.6.3`) rather than being skipped on a cache hit; all three gate arms fired on
+    both legs; the x64 leg ran 21 tests where arm64 ran 609; and both engine jobs show 16 passed / 5 skipped
+    against `test-windows`'s 13 / 8, so `EngineSmokeTests` ran rather than skipping under
+    `LIZTERM_REQUIRE_ENGINE=1`.
 
 The claim section 7 said this plan's first CI run would either prove or refute held: **no .NET source change was
 needed.** `$(NETCoreSdkRuntimeIdentifier)` in the App and integration test csproj files and

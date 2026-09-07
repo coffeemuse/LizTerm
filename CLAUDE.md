@@ -58,20 +58,25 @@ on exactly the run that needs them. Each engine cache key hashes only the script
 `*macos*.sh` plus `fetch-source.sh`, against `*linux*.sh` plus `fetch-*.sh` — with `shared-*.sh` in both, so a
 Linux-only edit no longer forces a cold macOS rebuild that cannot change its binary, and new shared machinery cannot
 be added to one key and forgotten in the other. Its
-`timeout-minutes` is 40, set from the first cold-cache run: x64 17m47s, arm64 4m35s (2m31s and 2m2s warm) — of the
-x64 leg's 1067s, the two negative-fixture steps it then had took 279s and 281s, roughly half the leg between them,
-against 28s and 30s on arm64, and the main build step took 432s, not far behind: at that point every invocation of
-`build-linux-docker.sh`, main build included, paid the wrapper's `dnf install` again in a fresh container — since
-fixed, by installing the packages into a derived image once. Those
+`timeout-minutes` is 15, set from three cold-cache runs, each after a change that took work off the critical path:
+x64 1067s / arm64 275s as first shipped, 678s / 238s once the two negative-fixture steps became one, and 271s / 210s
+once `dnf install` became a derived-image layer and the x64 leg stopped re-running `ci.yml`'s suite — that last one
+with every cache missed and all seven source tarballs downloaded, so it is the worst case rather than a partially
+warm one (warm runs have never exceeded 2m31s). In that first run the two fixture steps took 279s and 281s on x64 against a 432s build,
+roughly half the leg between them, against 28s and 30s on arm64: at that point every invocation of
+`build-linux-docker.sh`, main build included, paid the wrapper's `dnf install` again in a fresh container. In the
+latest the build step is 201s and 137s — some 36s of that the one-time image build — and the gate step is 4s on
+both, down from 219s and 31s. The legs have converged, which is what a build cost rather than a network cost looks
+like, and 15 is about 3.3x the slowest leg yet seen. Those
 fixtures are now one step that makes a single invocation run `verify-linux.sh` three times — the built binary must
 pass, each fixture must be rejected *by the message its own arm prints* — and it runs whether or not the engine came
 from the cache, alongside the start check: on a cache hit the build step never executes, so those two steps are the
 only thing between a stale cached binary and an artifact upload. Asserting the message rather than a non-zero exit
 is the point: the wrapper also exits non-zero for a Docker Hub rate limit or a failed `dnf install`, so the earlier
 `if wrapper …; then fail; fi` shape passed for those too. Measured after the fold, cold on both legs: x64 678s
-total and arm64 238s, the gate step 219s and 31s against 560s and 58s for the two steps it replaced. `dnf` has
-since come off the critical path entirely (the derived image above), so 40 is now headroom over headroom; leave it
-there until a cold run has been measured without it rather than tightening it on reasoning alone.
+total and arm64 238s, the gate step 219s and 31s against 560s and 58s for the two steps it replaced — the numbers
+`timeout-minutes` was cut from 40 to 15 on, once the run after them measured `dnf` off the critical path rather
+than being tightened on reasoning alone.
 
 `ci.yml` deliberately does *not* carry a bare `push:` trigger: with `pull_request:` beside it, a PR head SHA gets two
 check runs named `test` — one over the branch tip, one over the merge with `main` — and a required check cannot tell

@@ -115,19 +115,24 @@ jobs:
           - { runner: ubuntu-24.04, rid: linux-x64 }
           - { runner: ubuntu-24.04-arm, rid: linux-arm64 }
     runs-on: ${{ matrix.runner }}
-    # First cold-cache run (2026-09-07, PR #10): linux-x64 17m47s total, linux-arm64 4m35s. Both are under the
-    # 20-minute threshold for lowering this, so 40 replaces the brief's 45 -- comfortably above double the
-    # slower leg, with headroom rather than a bare double.
-    # The x64 leg was slow almost entirely in package installation: every invocation of build-linux-docker.sh
-    # reinstalls PACKAGES with dnf inside a fresh container (nothing from the first one's dnf run is cached),
-    # and that install was far slower on the x64 runner than on the arm64 one in that run -- the two
-    # negative-fixture steps it then had cost 279s and 281s against a 432s build. Folding them into the single
-    # gate step below removed one of the three invocations. That was runner/network variance rather than
-    # evidence that x64 needs longer to build the engine, so 40 keeps room for it to recur.
-    # Cold-cache again after that fold (same PR): x64 678s total, arm64 238s -- the gate step 219s and 31s,
-    # against 560s and 58s for the two steps it replaced. 40 is now generous, and deliberately so: the x64
-    # variance that produced 1067s came from dnf, which is still on the critical path twice.
-    timeout-minutes: 40
+    # 15, from three cold-cache runs on PR #10 (2026-09-07), each after a change that took work off the
+    # critical path. Every number below is a cold run -- in the last one every cache missed and all seven source
+    # tarballs were downloaded, so it is the worst case, not a partial. Warm runs have never exceeded 2m31s.
+    #
+    #   x64    arm64   what had changed
+    #   1067s   275s   as first shipped: three container invocations per leg, each re-running dnf install.
+    #                  Of the x64 leg, the two negative-fixture steps took 279s and 281s against a 432s build.
+    #    678s   238s   the two fixture steps folded into one gate step (219s and 31s, from 560s and 58s),
+    #                  removing one of the three invocations -- and so one dnf install -- per leg.
+    #    271s   210s   dnf install moved into a derived image built once per job, and the x64 leg scoped to
+    #                  tests/LizTerm.Integration.Tests. Build step 201s and 137s (~36s of it the image),
+    #                  gate step 4s on both, down from 219s and 31s.
+    #
+    # The x64 variance that produced 1067s was dnf on the critical path twice; it is now one cached layer, and
+    # the two legs have converged, which is what a build cost rather than a network cost looks like. 15 is
+    # ~3.3x the slowest leg observed -- room for the runners to have a bad day, without the old 40 that could
+    # let a genuinely wedged build burn most of an hour before anyone hears about it.
+    timeout-minutes: 15
     env:
       LIZTERM_REQUIRE_ENGINE: "1"
     steps:
