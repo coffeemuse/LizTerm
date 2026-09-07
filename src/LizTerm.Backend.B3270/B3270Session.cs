@@ -603,9 +603,9 @@ public sealed class B3270Session : IEmulatorSession
     }
 
     /// <summary>The trust decision for one connect attempt, and the file that carries it: spec 3, a pin is the whole
-    /// trust store; without one, a verifying TLS connect gets the machine's own anchors, because a statically linked
-    /// engine has none it can use (spec 1); anything else — verification off, or a plain connect that never builds a
-    /// TLS context — gets no CA file at all. Evaluated off the caller's context (see <see cref="ConnectAsync"/>)
+    /// trust store; without one, a verifying connect gets the machine's own anchors, because a statically linked
+    /// engine has none it can use (spec 1); verification off gets no CA file at all. Evaluated off the caller's
+    /// context (see <see cref="ConnectAsync"/>)
     /// since it is the only part of a connect that does real work: reading the trust source and writing its PEM to
     /// disk. <c>Ephemeral</c> is whether the caller deletes the file after the Connect run: a pin file, not the
     /// shared roots file.</summary>
@@ -626,10 +626,12 @@ public sealed class B3270Session : IEmulatorSession
             // so the file has to outlive that run and nothing more.
             return (WriteCaFile(pinPem, "pin"), CertificateReader.CountCertificates(pinPem) == 1, Ephemeral: true);
         }
-        // Only for a connection that will actually build a TLS context: a plain telnet connect never loads
-        // caFile, and VerifyCertificate defaults to true on a profile whose UseTls defaults to false, so gating
-        // on verify alone made every plain connect pay for the store read and the ~238 KB write.
-        var anchors = verify && Profile.UseTls ? TrustAnchors.ExportPem() : null;
+        // NOT gated on Profile.UseTls, however tempting: b3270 implements the TELNET START-TLS option, so a plain
+        // profile can still upgrade to TLS mid-session, and an attempt that reached that point with an empty
+        // caFile would verify against the engine's own compiled-in directory — the nonexistent Homebrew path this
+        // milestone exists to stop relying on. The cost that made the gate look attractive is gone anyway: the
+        // anchors are read once per process and RootsFile writes the file once per session.
+        var anchors = verify ? TrustAnchors.ExportPem() : null;
         // A source with nothing to offer, or only whitespace, leaves caFile empty: an empty *file* fails the
         // connect outright, so "nothing usable" has to collapse to null before it reaches the file.
         return (string.IsNullOrWhiteSpace(anchors) ? null : RootsFile(anchors), false, Ephemeral: false);
