@@ -39,26 +39,39 @@ never published; `engine-linux` does the same on a two-leg matrix, `ubuntu-24.04
 rather than `ubuntu-latest` so the legs differ only in architecture — uploading `b3270-linux-x64` and
 `b3270-linux-arm64`, with `fail-fast: false`, because one
 architecture failing is information about that architecture and cancelling the other leg throws it away; `test-windows`
-runs the suite). All three jobs run the whole solution, which is why the path filter covers
-all of `src/` and `tests/` rather than the native build alone. Runs that fail *or are cancelled* upload
+runs the suite). `engine-macos`, `test-windows` and `engine-linux`'s arm64 leg run the whole solution, which is why the
+path filter covers all of `src/` and `tests/` rather than the native build alone. `engine-linux`'s **x64** leg is the
+exception: `ci.yml`'s `test` already runs that same solution, in the same configuration, on the same OS and
+architecture, so this leg runs only `tests/LizTerm.Integration.Tests` — the engine smoke test is the one claim it adds.
+That is an expression on the `dotnet test` line, not a third `matrix.include` property, because GitHub renders every
+one of those in the check name and a new one would rewrite the two names below. Runs that fail *or are cancelled* upload
 `test-results-<os>`: `.trx`, plus `*.dmp` (a blame-hang kill writes a hang dump, not a sequence file) and any
 `*Sequence*.xml`. `timeout-minutes` and `cancel-in-progress` both *cancel*, so those uploads are
 `if: ${{ failure() || cancelled() }}` — plain `failure()` would drop the evidence on exactly those runs. `engine-macos`
-caches the built engine (`native/out/osx-arm64`, keyed on every `native/build/*.sh`) as well as the source tarball, and
-dumps `native/build-tmp/*/{configure,make}.log` on failure, because `build-macos.sh` redirects them out of the job log.
-`engine-linux` caches the same two things per leg (`native/out/<rid>` on that same key; one shared `native/cache` entry
-for both legs, since source tarballs are architecture-independent) and dumps `{openssl,expat,configure,make}.log`. Its
+caches the built engine (`native/out/osx-arm64`) as well as the source tarball, and dumps
+`native/build-tmp/*/{configure,make}.log`, because `build-macos.sh` redirects them out of the job log.
+`engine-linux` caches the same two things per leg (`native/out/<rid>`; one shared `native/cache` entry
+for both legs, since source tarballs are architecture-independent) and dumps `{openssl,expat,configure,make}.log`.
+Both log dumps are `failure() || cancelled()` for the reason the test-results uploads are: a build wedged past
+`timeout-minutes` is *cancelled*, and those logs never leave `native/build-tmp`, so plain `failure()` would lose them
+on exactly the run that needs them. Each engine cache key hashes only the scripts that feed **that** platform —
+`*macos*.sh` plus `fetch-source.sh`, against `*linux*.sh` plus `fetch-*.sh` — with `shared-*.sh` in both, so a
+Linux-only edit no longer forces a cold macOS rebuild that cannot change its binary, and new shared machinery cannot
+be added to one key and forgotten in the other. Its
 `timeout-minutes` is 40, set from the first cold-cache run: x64 17m47s, arm64 4m35s (2m31s and 2m2s warm) — of the
 x64 leg's 1067s, the two negative-fixture steps it then had took 279s and 281s, roughly half the leg between them,
-against 28s and 30s on arm64, and the main build step took 432s, not far behind: every invocation of
-`build-linux-docker.sh`, main build included, pays the wrapper's `dnf install` again in a fresh container. Those
+against 28s and 30s on arm64, and the main build step took 432s, not far behind: at that point every invocation of
+`build-linux-docker.sh`, main build included, paid the wrapper's `dnf install` again in a fresh container — since
+fixed, by installing the packages into a derived image once. Those
 fixtures are now one step that makes a single invocation run `verify-linux.sh` three times — the built binary must
 pass, each fixture must be rejected *by the message its own arm prints* — and it runs whether or not the engine came
 from the cache, alongside the start check: on a cache hit the build step never executes, so those two steps are the
 only thing between a stale cached binary and an artifact upload. Asserting the message rather than a non-zero exit
 is the point: the wrapper also exits non-zero for a Docker Hub rate limit or a failed `dnf install`, so the earlier
 `if wrapper …; then fail; fi` shape passed for those too. Measured after the fold, cold on both legs: x64 678s
-total and arm64 238s, the gate step 219s and 31s against 560s and 58s for the two steps it replaced.
+total and arm64 238s, the gate step 219s and 31s against 560s and 58s for the two steps it replaced. `dnf` has
+since come off the critical path entirely (the derived image above), so 40 is now headroom over headroom; leave it
+there until a cold run has been measured without it rather than tightening it on reasoning alone.
 
 `ci.yml` deliberately does *not* carry a bare `push:` trigger: with `pull_request:` beside it, a PR head SHA gets two
 check runs named `test` — one over the branch tip, one over the merge with `main` — and a required check cannot tell
@@ -82,7 +95,8 @@ The app and the integration test project copy `native/out/<host-rid>/b3270*` int
 copy through its project reference to the App, so a built engine lands in its output too. Build it once with
 `native/build/build-macos.sh` (needs Xcode CLT and Homebrew `openssl@3`; downloads and checksums x3270
 4.5ga6, links OpenSSL statically, and `verify-macos.sh` fails the build if `otool -L` shows anything
-outside `/usr/lib` or `/System/Library`), then rebuild the .NET projects. Without it, connecting throws
+outside `/usr/lib` or `/System/Library`, or if the banner reports no OpenSSL TLS provider), then rebuild the
+.NET projects. Without it, connecting throws
 `BackendUnavailableException`; set `LIZTERM_B3270_PATH` to any b3270 4.2+ (a Homebrew x3270 install
 works) as a development override. `native/cache`, `native/build-tmp`, and `native/out` are gitignored.
 
@@ -93,7 +107,10 @@ that image's glibc 2.28 is the oldest LizTerm supports and is also .NET 10's own
 .NET supports the engine never becomes the thing that decides where the app can run, and a floating tag could
 raise the base layer silently. The digest pins that base layer, not the toolchain: `dnf install` still pulls gcc,
 binutils and python3 from live AlmaLinux 8 repositories and glibc can move within the 2.28 stream, so what
-actually holds the floor is RHEL 8's frozen glibc ABI plus the gate's symbol check, which is the backstop. Use
+actually holds the floor is RHEL 8's frozen glibc ABI plus the gate's symbol check, which is the backstop. Those
+packages go into an image *derived* from the pinned base, tagged with the base digest and the package list and
+built once, rather than being `dnf install`ed inside a fresh container on every invocation; bumping either input
+builds a new image instead of reusing the old one. Use
 the multi-architecture *index* digest when bumping it (a platform manifest digest breaks exactly one leg of the
 matrix). `build-linux.sh` records the RID the container resolved in `native/build-tmp/rid` and the wrapper reads
 that back rather than deriving one from the host's `uname -m`: the two disagree whenever Docker's platform is not
@@ -102,6 +119,10 @@ host still reads arm64 — and a host-derived path would hand the start check a 
 OpenSSL 3.5.8 and expat 2.8.4 are built from pinned tarballs (`fetch-openssl.sh`, `fetch-expat.sh`) and
 linked statically rather than taken from the image, for the same reason in both cases: a statically linked
 library never receives the distribution's security updates, so its version has to be ours to bump deliberately.
+Each `fetch-*.sh` is a pin — a version, a checksum, a URL — and delegates downloading, verifying and extracting to
+`shared-fetch-tarball.sh`; `shared-sha256.sh` is the one place that knows the container has `sha256sum` and macOS
+has `shasum`, and `shared-verify-tls.sh` is the banner check both gates make. Anything named `shared-*.sh` is in
+both engine cache keys by construction.
 Each static prefix under `native/build-tmp` carries a `.pin` stamp holding the SHA-256 of its fetch script *and*
 of `build-linux.sh`, and `build-linux.sh` reuses a prefix only when both the archive and a matching stamp are
 there — otherwise bumping a pin and rebuilding without clearing `build-tmp` would link the old library and skip
@@ -116,8 +137,11 @@ packages no static expat, so linking the image's would have put `libexpat.so.1` 
 which is exactly the class of dependency the gate exists to catch. The gate is four checks, not one:
 `verify-linux.sh` (inside the container) rejects a dynamic dependency outside the glibc runtime, any imported
 glibc symbol above 2.28 — `ldd` alone passes a binary built on Ubuntu 24.04 that cannot start on RHEL 9 — and a
-banner that does not report an OpenSSL TLS provider; then `verify-linux-start.sh` (on the host, because a script
-already inside a container cannot start another) runs the result in a bare container from the same image. The TLS
+banner that does not report an OpenSSL TLS provider — that last one through `shared-verify-tls.sh`, which
+`verify-macos.sh` now calls too, because the failure is x3270's rather than either platform's, and which reports an
+engine that could not run at all as its own fault rather than as a missing provider; then `verify-linux-start.sh`
+(on the host, because a script already inside a container cannot start another) runs the result in a bare container
+from the same image. The TLS
 check earns its place: x3270's configure probes OpenSSL by *linking*, and static libcrypto needs the
 `LIBS="-ldl -pthread"` on `build-linux.sh`'s configure line to link at all. Drop it and configure quietly
 disables TLS, and the resulting `TLS provider: None` binary is smaller and links *fewer* libraries, so it passes

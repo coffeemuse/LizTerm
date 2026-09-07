@@ -39,14 +39,17 @@ jobs:
           path: native/cache
           key: x3270-src-${{ hashFiles('native/build/fetch-source.sh') }}
 
-      # The compile, not just the download. Keyed on every build script, so any change to how the engine is
-      # built (including the pinned version in fetch-source.sh) forces a real build and a fresh gate run.
+      # The compile, not just the download. Keyed on the scripts that actually feed THIS platform's engine:
+      # its own build and verify scripts, the fetcher it uses, and everything shared. Hashing all of
+      # native/build/*.sh instead would make a Linux-only edit rebuild the macOS engine (and the reverse),
+      # neither of which can change the other platform's binary. New shared machinery is picked up by the
+      # shared-* glob, so it cannot be added to one key and forgotten in the other.
       - name: Cache the built engine
         id: engine
         uses: actions/cache@v6
         with:
           path: native/out/osx-arm64
-          key: b3270-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/build/*.sh') }}
+          key: b3270-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/build/*macos*.sh', 'native/build/fetch-source.sh', 'native/build/shared-*.sh') }}
 
       - name: Ensure OpenSSL 3 is installed
         if: steps.engine.outputs.cache-hit != 'true'
@@ -58,8 +61,11 @@ jobs:
 
       # build-macos.sh redirects configure and make into native/build-tmp/, which is gitignored and never
       # uploaded, so without this a build failure leaves nothing in the job log but the exit code.
+      # cancelled() as well as failure(), for the reason the test-results upload below gives: timeout-minutes
+      # and cancel-in-progress both cancel rather than fail, and a build wedged past the job timeout is exactly
+      # the run whose logs are worth having.
       - name: Show the build logs
-        if: ${{ failure() }}
+        if: ${{ failure() || cancelled() }}
         run: |
           for log in native/build-tmp/*/configure.log native/build-tmp/*/make.log; do
             [ -f "$log" ] || continue
@@ -135,14 +141,15 @@ jobs:
           path: native/cache
           key: sources-${{ hashFiles('native/build/fetch-*.sh') }}
 
-      # Keyed on every build script, linux-image.sh included, so changing the base image or either pin forces a
-      # real build and a fresh gate run.
+      # Keyed on the Linux build and verify scripts (linux-image.sh included, so changing the base image forces
+      # a real build), the fetchers, and the shared machinery -- but not on the macOS scripts, which cannot
+      # change this binary. See the macOS job's cache step for the rule.
       - name: Cache the built engine
         id: engine
         uses: actions/cache@v6
         with:
           path: native/out/${{ matrix.rid }}
-          key: b3270-${{ matrix.rid }}-${{ hashFiles('native/build/*.sh') }}
+          key: b3270-${{ matrix.rid }}-${{ hashFiles('native/build/*linux*.sh', 'native/build/fetch-*.sh', 'native/build/shared-*.sh') }}
 
       - name: Build b3270 (verify-linux.sh is the gate)
         if: steps.engine.outputs.cache-hit != 'true'
@@ -151,8 +158,11 @@ jobs:
       # build-linux.sh redirects configure, make and the OpenSSL and expat builds into native/build-tmp/, which
       # is gitignored and never uploaded, so without this a build failure leaves nothing in the job log but the
       # exit code.
+      # cancelled() as well as failure(), for the reason the test-results upload below gives: timeout-minutes
+      # and cancel-in-progress both cancel rather than fail, and a build wedged past the job timeout is exactly
+      # the run whose logs are worth having.
       - name: Show the build logs
-        if: ${{ failure() }}
+        if: ${{ failure() || cancelled() }}
         run: |
           for log in native/build-tmp/*/openssl.log native/build-tmp/*/expat.log native/build-tmp/*/configure.log native/build-tmp/*/make.log; do
             [ -f "$log" ] || continue
@@ -224,8 +234,14 @@ jobs:
       - name: Build (warnings are errors)
         run: dotnet build LizTerm.slnx --configuration Release -warnaserror
 
+      # linux-x64 is already covered end to end by ci.yml's `test` job -- same OS, same architecture, same two
+      # commands -- so this leg runs only the project that needs the bundled engine. linux-arm64 is a platform
+      # nothing else builds or tests, so it keeps the whole solution, which is what the path filter's coverage
+      # of all of src/ and tests/ is for.
+      # An expression rather than a third matrix.include property: GitHub renders every one of those in the
+      # check name, and adding one would rewrite the two names a branch-protection rule has to spell out.
       - name: Test (the engine smoke test must run, not skip)
-        run: dotnet test LizTerm.slnx --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
+        run: dotnet test ${{ matrix.rid == 'linux-x64' && 'tests/LizTerm.Integration.Tests' || 'LizTerm.slnx' }} --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
 
       # After the smoke test, so a binary that links cleanly but cannot be spawned is never published.
       - name: Upload b3270

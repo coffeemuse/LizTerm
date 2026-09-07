@@ -44,28 +44,12 @@ if [ "$(printf '%s\n%s\n' "$FLOOR" "$HIGHEST" | sort -V | tail -1)" != "$FLOOR" 
 fi
 
 # 3. The engine must actually have TLS. Nothing above notices its absence, and checks 1 and 2 get *happier*
-# without it: x3270's configure probes OpenSSL by linking a test program, and when that probe fails it prints
-# one warning, builds a b3270 reporting "TLS provider: None", and that binary links fewer libraries and passes
-# both checks with room to spare. Measured, not theoretical — dropping `LIBS="-ldl -pthread"` from
-# build-linux.sh's configure line does exactly this, and the gate passed the result. LizTerm without TLS cannot
-# reach a TLS host at all, and plan 3b's whole trust story would have nothing to verify with, so a binary that
-# links beautifully and cannot do TLS is a worse outcome than one that fails to link.
-# 2>&1 because b3270 writes its whole banner to stderr; captured rather than piped for the SIGPIPE reason
-# below, and reused for the summary so the binary runs once.
-VERSION=$("$BIN" --version 2>&1 || true)
-case "$VERSION" in
-  *"TLS provider: OpenSSL"*) ;;
-  *)
-    echo "ERROR: $BIN reports no OpenSSL TLS provider:" >&2
-    printf '%s\n' "$VERSION" | sed -n '1,3p' >&2
-    echo "x3270's configure disables TLS when its -lcrypto link probe fails; static libcrypto needs the" >&2
-    echo "LIBS on build-linux.sh's configure line. See native/build/build-linux.sh step 3." >&2
-    exit 1 ;;
-esac
+# without it, so a link-only gate prefers the broken binary. shared-verify-tls.sh is that check and carries the
+# full reasoning; it is shared with verify-macos.sh because the failure it catches is x3270's, not Linux's. It
+# also separates "the engine did not run at all" from "the engine has no TLS", which this arm used to report as
+# the same thing. Its three banner lines are held until after the verdict below, so the OK line comes first.
+BANNER=$("$(dirname "$0")/shared-verify-tls.sh" "$BIN")
 
 echo "OK: $BIN links only the glibc runtime, needs no more than glibc $HIGHEST (floor $FLOOR), and has TLS"
 ldd "$BIN"
-# sed, not head: head closes the pipe after three lines, GNU coreutils SIGPIPEs the writer for it, and under
-# pipefail that 141 becomes this script's exit status — a passing binary reported as a failed gate. That trap
-# is why the banner could not simply have gained a 2>&1 while keeping the head.
-printf '%s\n' "$VERSION" | sed -n '1,3p'
+printf '%s\n' "$BANNER"

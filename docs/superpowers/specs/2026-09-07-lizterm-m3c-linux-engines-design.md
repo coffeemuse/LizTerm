@@ -424,6 +424,54 @@ Rulings made in planning and execution, recorded here rather than edited into th
     that needs no discipline from whoever edits those flags next, at the cost of a comment-only edit also
     rebuilding both prefixes. That cost is the safe direction, and CI never pays it — its engine cache key
     already hashes every `native/build/*.sh`, so any edit here rebuilds there regardless.
+16. **The TLS check is shared with the macOS gate, and no longer misreports an engine that cannot run.**
+    Deviation 7 left `verify-macos.sh` without the check "in principle" and deferred it; the gap shipped in the
+    meantime, on the platform whose artifact CI actually publishes. `build-macos.sh` runs the same configure
+    against staged static archives with no `LIBS=` at all, so the same probe failure yields the same
+    `TLS provider: None` binary, and the otool check likes it *better* than the real engine for the same reason
+    the Linux checks did. The check is now `shared-verify-tls.sh`, called by both gates: the failure is x3270's,
+    not either platform's, so one copy is the right number. It also separates the two faults the Linux check 3
+    used to conflate — `VERSION=$("$BIN" --version 2>&1 || true)` swallowed the exit status, so a binary that
+    could not execute at all (wrong architecture, truncated copy, missing loader) was reported as "reports no
+    OpenSSL TLS provider" with advice to edit a configure line that was not the problem. The status is now kept
+    and an exec failure says so. This also settles deviation 13's deferred pair: `verify-macos.sh`'s inert
+    `| head -3` is gone, since the shared script captures rather than pipes.
+17. **`build-macos.sh` got deviation 10's substitution too.** It still ended `find obj … | head -1`, the exact
+    SIGPIPE-under-pipefail trap that deviation replaced everywhere it shipped — `head` closes the pipe, `find`
+    takes SIGPIPE, `pipefail` promotes 141, and a good build aborts with no message — and it lacked the `sort`
+    that makes the pick deterministic when the tree holds more than one match. Both applied.
+18. **The toolchain is a layer, not a step.** `dnf install` ran inside a fresh container on every invocation of
+    `build-linux-docker.sh`, cached nowhere: deviation 8 named it as the x64 variance that produced 1067s and
+    the reason `timeout-minutes` stays at 40, and deviation 11 could only remove one of the three invocations.
+    The packages now go into an image derived from the pinned base, tagged with the base digest and the package
+    list so bumping either builds a new one, and built once per machine (once per job on a CI runner). Deviation
+    8's closing note — "`dnf`, which is still on the critical path twice" — is superseded. `timeout-minutes`
+    stays at 40 until a cold run has been measured without `dnf` on that path, rather than being tightened on
+    reasoning alone, which is the mistake section 5 made in the other direction.
+19. **The engine cache keys are per-platform.** Both jobs keyed on `hashFiles('native/build/*.sh')`, so the six
+    scripts this plan added to that directory made every Linux-only edit invalidate the macOS engine cache and
+    every macOS-only edit invalidate both Linux ones — cold rebuilds that cannot change the binary being
+    rebuilt. Each key now hashes its own platform's scripts (`*macos*.sh` or `*linux*.sh`), the fetchers it
+    uses, and `shared-*.sh`. The glob for the shared machinery is deliberate: a new shared helper lands in both
+    keys without anyone remembering to add it, which is the failure the narrower keys would otherwise invite.
+20. **The x64 leg no longer re-runs `ci.yml`'s job.** `engine-linux`'s two legs ran the same
+    `dotnet build … -warnaserror` and whole-solution `dotnet test` as `ci.yml`'s `test`, and on x64 that is the
+    same OS, the same architecture and the same tree — a second full build and suite per PR for one extra claim,
+    the engine smoke test. That leg now runs `tests/LizTerm.Integration.Tests` alone. arm64 keeps the whole
+    solution: nothing else builds or tests that platform, which is what the path filter's coverage of all of
+    `src/` and `tests/` is for. It is an expression on the `dotnet test` line rather than a third
+    `matrix.include` property, because of deviation 9 — a new property would rewrite both check names.
+21. **The duplicated machinery under `native/build` is shared.** Three copies of the
+    `command -v sha256sum … else shasum -a 256` helper had already needed one synchronised edit in this plan,
+    and a fourth appeared with the `.pin` stamp; they are now `shared-sha256.sh`. `fetch-openssl.sh` and
+    `fetch-expat.sh` were near-verbatim copies of `fetch-source.sh` differing in four values, so the
+    download/verify/extract body is `shared-fetch-tarball.sh` and each fetcher is its pin plus one delegating
+    line — the pin is still visible in the file that owns it, which was the reason they were siblings. The cache
+    filename is still the URL's basename, so existing `native/cache` entries stay valid. `build-linux.sh`'s two
+    static-prefix blocks, copy-pasted down to the `.pin` write, are one `build_static` helper; only the
+    configure line and the comment explaining it differ now, which is what those comments were always about.
+    The two csproj copy-rule comments, which still said the engine appears "when native/build/build-macos.sh has
+    run", name the Linux script too.
 
 The claim section 7 said this plan's first CI run would either prove or refute held: **no .NET source change was
 needed.** `$(NETCoreSdkRuntimeIdentifier)` in the App and integration test csproj files and
