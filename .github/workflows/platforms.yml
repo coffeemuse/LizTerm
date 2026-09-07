@@ -110,13 +110,15 @@ jobs:
           - { runner: ubuntu-24.04-arm, rid: linux-arm64 }
     runs-on: ${{ matrix.runner }}
     # First cold-cache run (2026-09-07, PR #10): linux-x64 17m47s total, linux-arm64 4m35s. Both are under the
-    # 20-minute threshold for lowering this, so 36 (roughly double the slower leg) replaces the brief's 45.
+    # 20-minute threshold for lowering this, so 40 replaces the brief's 45 -- comfortably above double the
+    # slower leg, with headroom rather than a bare double.
     # The x64 leg was slow almost entirely in the two negative-fixture steps (~4m40s each): each one calls
     # build-linux-docker.sh again, which reinstalls PACKAGES with dnf inside a fresh container every time
     # (nothing from the first build's dnf run is cached), and that install was far slower on the x64 runner
     # than on the arm64 one in this run. That is runner/network variance in package installation, not evidence
-    # that x64 needs more time to build the engine itself, but 36 still leaves headroom for it to recur.
-    timeout-minutes: 36
+    # that x64 needs more time to build the engine itself, but the extra headroom in 40 leaves room for it to
+    # recur.
+    timeout-minutes: 40
     env:
       LIZTERM_REQUIRE_ENGINE: "1"
     steps:
