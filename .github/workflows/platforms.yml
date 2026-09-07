@@ -98,6 +98,111 @@ jobs:
             TestResults/**/*Sequence*.xml
           if-no-files-found: ignore
 
+  engine-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ubuntu-24.04 rather than ubuntu-latest: the two legs must differ only in architecture, and
+          # ubuntu-latest rolling to 26.04 while the arm label stays at 24.04 would quietly make them
+          # incomparable. arm64 standard runners reached private repositories in January 2026.
+          - { runner: ubuntu-24.04, rid: linux-x64 }
+          - { runner: ubuntu-24.04-arm, rid: linux-arm64 }
+    runs-on: ${{ matrix.runner }}
+    # 45, not the macOS job's 30: the arm64 runner has two vCPUs on a private repository and this job builds
+    # OpenSSL and x3270 from source on a cold cache.
+    timeout-minutes: 45
+    env:
+      LIZTERM_REQUIRE_ENGINE: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      # Source tarballs are architecture-independent, so both legs share one entry. Two legs missing at once
+      # means both download and one loses the save race with a warning, which is harmless.
+      - name: Cache the pinned source tarballs
+        uses: actions/cache@v6
+        with:
+          path: native/cache
+          key: sources-${{ hashFiles('native/build/fetch-*.sh') }}
+
+      # Keyed on every build script, linux-image.sh included, so changing the base image or either pin forces a
+      # real build and a fresh gate run.
+      - name: Cache the built engine
+        id: engine
+        uses: actions/cache@v6
+        with:
+          path: native/out/${{ matrix.rid }}
+          key: b3270-${{ matrix.rid }}-${{ hashFiles('native/build/*.sh') }}
+
+      - name: Build b3270 (verify-linux.sh is the gate)
+        if: steps.engine.outputs.cache-hit != 'true'
+        run: native/build/build-linux-docker.sh
+
+      # build-linux.sh redirects configure, make and the OpenSSL and expat builds into native/build-tmp/, which
+      # is gitignored and never uploaded, so without this a build failure leaves nothing in the job log but the
+      # exit code.
+      - name: Show the build logs
+        if: ${{ failure() }}
+        run: |
+          for log in native/build-tmp/*/openssl.log native/build-tmp/*/expat.log native/build-tmp/*/configure.log native/build-tmp/*/make.log; do
+            [ -f "$log" ] || continue
+            echo "::group::$log"
+            tail -n 200 "$log"
+            echo "::endgroup::"
+          done
+
+      # These three run whether or not the engine came from the cache. On a cache hit the build step never
+      # executes, so they are the only thing standing between a stale cached binary and an artifact upload.
+      - name: The engine starts on a bare floor system
+        run: native/build/verify-linux-start.sh native/out/${{ matrix.rid }}/b3270
+
+      # A guard that cannot fail is not a guard (plan 3b, deviation 5). One fixture per arm of the gate.
+      - name: The gate rejects a binary that links more than glibc
+        run: |
+          if native/build/build-linux-docker.sh native/build/verify-linux.sh /usr/bin/bash; then
+            echo "verify-linux.sh accepted /usr/bin/bash; its dependency allowlist is not working" >&2
+            exit 1
+          fi
+
+      - name: The gate rejects a binary built on a newer glibc
+        run: |
+          mkdir -p native/build-tmp
+          docker run --rm -v "$PWD/native/build-tmp:/out" debian:12-slim cp /bin/true /out/newglibc-fixture
+          if native/build/build-linux-docker.sh native/build/verify-linux.sh native/build-tmp/newglibc-fixture; then
+            echo "verify-linux.sh accepted a glibc 2.36 binary; its symbol floor check is not working" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build (warnings are errors)
+        run: dotnet build LizTerm.slnx --configuration Release -warnaserror
+
+      - name: Test (the engine smoke test must run, not skip)
+        run: dotnet test LizTerm.slnx --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
+
+      # After the smoke test, so a binary that links cleanly but cannot be spawned is never published.
+      - name: Upload b3270
+        uses: actions/upload-artifact@v7
+        with:
+          name: b3270-${{ matrix.rid }}
+          path: native/out/${{ matrix.rid }}/b3270
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test results
+        if: ${{ failure() || cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.rid }}
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/*.dmp
+            TestResults/**/*Sequence*.xml
+          if-no-files-found: ignore
+
   test-windows:
     runs-on: windows-latest
     timeout-minutes: 20
