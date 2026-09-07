@@ -8,12 +8,14 @@ SHA256=06faf5ce883852258cc6a2a4da9fe5ce023e97d01e50625ff36f4a01ea703468
 URL="https://downloads.sourceforge.net/project/x3270/x3270/$VERSION/suite3270-$VERSION-src.tgz"
 CACHE="$ROOT/native/cache"
 TGZ="$CACHE/suite3270-$VERSION-src.tgz"
+# Runs inside the Linux build container as well as on macOS; take whichever checksum tool is present.
+checksum() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
 mkdir -p "$CACHE"
 if [ ! -f "$TGZ" ]; then
   echo "Downloading $URL" >&2
   curl -fsSL -o "$TGZ" "$URL"
 fi
-echo "$SHA256  $TGZ" | shasum -a 256 -c - >&2
+echo "$SHA256  $TGZ" | checksum -c - >&2
 rm -rf "$DEST"
 mkdir -p "$DEST"
 tar xzf "$TGZ" -C "$DEST"
