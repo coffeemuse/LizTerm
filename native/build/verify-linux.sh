@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Fails if the binary links anything outside the glibc runtime, or if it imports a glibc symbol newer than the
-# floor. Runs INSIDE the build container (it needs that container's ldd and readelf).
+# Fails if the binary links anything outside the glibc runtime, if it imports a glibc symbol newer than the
+# floor, or if it was built without TLS. Runs INSIDE the build container (it needs that container's ldd and
+# readelf).
 set -euo pipefail
 BIN=${1:?usage: verify-linux.sh <binary>}
 FLOOR=2.28
@@ -42,11 +43,29 @@ if [ "$(printf '%s\n%s\n' "$FLOOR" "$HIGHEST" | sort -V | tail -1)" != "$FLOOR" 
   exit 1
 fi
 
-echo "OK: $BIN links only the glibc runtime and needs no more than glibc $HIGHEST (floor $FLOOR)"
+# 3. The engine must actually have TLS. Nothing above notices its absence, and checks 1 and 2 get *happier*
+# without it: x3270's configure probes OpenSSL by linking a test program, and when that probe fails it prints
+# one warning, builds a b3270 reporting "TLS provider: None", and that binary links fewer libraries and passes
+# both checks with room to spare. Measured, not theoretical — dropping `LIBS="-ldl -pthread"` from
+# build-linux.sh's configure line does exactly this, and the gate passed the result. LizTerm without TLS cannot
+# reach a TLS host at all, and plan 3b's whole trust story would have nothing to verify with, so a binary that
+# links beautifully and cannot do TLS is a worse outcome than one that fails to link.
+# 2>&1 because b3270 writes its whole banner to stderr; captured rather than piped for the SIGPIPE reason
+# below, and reused for the summary so the binary runs once.
+VERSION=$("$BIN" --version 2>&1 || true)
+case "$VERSION" in
+  *"TLS provider: OpenSSL"*) ;;
+  *)
+    echo "ERROR: $BIN reports no OpenSSL TLS provider:" >&2
+    printf '%s\n' "$VERSION" | sed -n '1,3p' >&2
+    echo "x3270's configure disables TLS when its -lcrypto link probe fails; static libcrypto needs the" >&2
+    echo "LIBS on build-linux.sh's configure line. See native/build/build-linux.sh step 3." >&2
+    exit 1 ;;
+esac
+
+echo "OK: $BIN links only the glibc runtime, needs no more than glibc $HIGHEST (floor $FLOOR), and has TLS"
 ldd "$BIN"
-# 2>&1 because b3270 writes its whole banner to stderr: without it sed filters an empty stream and a dozen
-# unfiltered lines reach the log anyway.
 # sed, not head: head closes the pipe after three lines, GNU coreutils SIGPIPEs the writer for it, and under
 # pipefail that 141 becomes this script's exit status — a passing binary reported as a failed gate. That trap
-# is why the redirection cannot simply be bolted onto a head.
-"$BIN" --version 2>&1 | sed -n '1,3p'
+# is why the banner could not simply have gained a 2>&1 while keeping the head.
+printf '%s\n' "$VERSION" | sed -n '1,3p'
