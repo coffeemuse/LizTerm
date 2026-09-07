@@ -118,6 +118,9 @@ jobs:
     # negative-fixture steps it then had cost 279s and 281s against a 432s build. Folding them into the single
     # gate step below removed one of the three invocations. That was runner/network variance rather than
     # evidence that x64 needs longer to build the engine, so 40 keeps room for it to recur.
+    # Cold-cache again after that fold (same PR): x64 678s total, arm64 238s -- the gate step 219s and 31s,
+    # against 560s and 58s for the two steps it replaced. 40 is now generous, and deliberately so: the x64
+    # variance that produced 1067s came from dnf, which is still on the critical path twice.
     timeout-minutes: 40
     env:
       LIZTERM_REQUIRE_ENGINE: "1"
