@@ -8,6 +8,7 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 . "$(dirname "$0")/linux-image.sh"
+. "$(dirname "$0")/shared-sha256.sh"
 
 # binutils is for the readelf the gate needs; findutils and diffutils are configure's, perl-core is OpenSSL's.
 # python3 is x3270's: its configure refuses to run without one ("Can't find Python using 'python3'") because the
@@ -27,10 +28,25 @@ fi
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
 
-docker run --rm -v "$ROOT:/src" -w /src "$LIZTERM_LINUX_IMAGE" bash -c "
+# The toolchain is a layer, not a step. dnf install used to run inside a fresh container on every invocation
+# with nothing about it cached -- twice on the critical path of a CI run, once more for every local rebuild, and
+# the single biggest source of the x64 variance timeout-minutes still carries headroom for. It now goes into an
+# image derived from the pinned base, built once and reused. The tag carries the base digest and the package
+# list, so bumping either builds a new image instead of silently reusing the old one, and the pin stays the only
+# thing this build trusts.
+IMAGE_TAG="lizterm-linux-build:$(printf '%s\n%s\n' "$LIZTERM_LINUX_IMAGE" "$PACKAGES" | sha256_stdin | cut -c1-16)"
+if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+  echo "Building $IMAGE_TAG from $LIZTERM_LINUX_IMAGE" >&2
+  # A Dockerfile on stdin with "-" as the context: nothing from the repo is sent to the daemon.
+  docker build -t "$IMAGE_TAG" - <<DOCKERFILE
+FROM $LIZTERM_LINUX_IMAGE
+RUN dnf install -y $PACKAGES && dnf clean all
+DOCKERFILE
+fi
+
+docker run --rm -v "$ROOT:/src" -w /src "$IMAGE_TAG" bash -c "
 set -euo pipefail
 trap 'chown -R $HOST_UID:$HOST_GID native/out native/build-tmp native/cache 2>/dev/null || true' EXIT
-dnf install -y $PACKAGES > /tmp/dnf.log 2>&1 || { cat /tmp/dnf.log >&2; exit 1; }
 $COMMAND
 "
 

@@ -36,18 +36,20 @@ trace against a live b3270 during local development.
 ## Building the Linux engines
 
 `native/build/build-linux-docker.sh` produces `native/out/linux-x64/b3270` or `native/out/linux-arm64/b3270`,
-whichever matches the host, and needs only Docker. The build runs inside `almalinux:8`, pinned by digest in
+whichever the container resolves to (the host's architecture, unless Docker has been pointed elsewhere), and needs
+only Docker. The build runs inside `almalinux:8`, pinned by digest in
 `native/build/linux-image.sh`: that image's glibc 2.28 is the oldest release LizTerm supports and is also .NET 10's
 own floor, so on every glibc distribution .NET supports the engine is never the thing that decides where the app
 can run. The digest pins the base layer rather than the toolchain — the build still installs gcc and friends from
-live AlmaLinux 8 repositories — so the floor rests on RHEL 8's frozen glibc ABI and, as the backstop, on the gate's
-symbol check. OpenSSL and expat are built from pinned source and linked statically, so the binary asks the target
+live AlmaLinux 8 repositories, into an image derived from the pinned base and built once rather than on every run —
+so the floor rests on RHEL 8's frozen glibc ABI and, as the backstop, on the gate's symbol check. OpenSSL and expat are built from pinned source and linked statically, so the binary asks the target
 system for nothing but glibc.
 
 The gate is the last part of the build, not a separate step to remember: `verify-linux.sh` fails it if the binary
 has any dynamic dependency outside the glibc runtime, imports a glibc symbol newer than 2.28, or reports no
-OpenSSL TLS provider, and `verify-linux-start.sh` then runs the result in a bare container from the same image. Alpine and other musl
-distributions are a different runtime identifier and are not built here.
+OpenSSL TLS provider, and `verify-linux-start.sh` then runs the result in a bare container from the same image. The
+TLS check is `shared-verify-tls.sh`, which the macOS gate calls too. Alpine and other musl distributions are a
+different runtime identifier and are not built here.
 
 ## Continuous integration
 
@@ -58,13 +60,15 @@ Two GitHub Actions workflows under `.github/workflows`:
   host tests and the engine smoke test skip themselves.
 - `platforms.yml` runs on pushes to `main`, on manual dispatch, and on pull requests touching the workflow,
   `native/`, `src/`, `tests/`, `global.json`, or the `Directory.*.props` files: `engine-macos` builds b3270 with
-  `native/build/build-macos.sh` (whose `verify-macos.sh` fails the job on any non-system dynamic dependency), runs
-  the suite with `LIZTERM_REQUIRE_ENGINE=1` so the engine smoke test must start the freshly built binary, and only
-  then uploads it as the `b3270-osx-arm64` artifact; `engine-linux` does the same on two legs, `ubuntu-24.04` and
-  `ubuntu-24.04-arm`, uploading `b3270-linux-x64` and `b3270-linux-arm64`, and also runs the gate against the
-  binary it just built plus two binaries it must reject — each rejection checked against the message that arm of
-  the gate prints — so a gate that has stopped rejecting anything fails the job instead of passing everything;
-  `test-windows` runs the suite on Windows.
+  `native/build/build-macos.sh` (whose `verify-macos.sh` fails the job on any non-system dynamic dependency, or on a
+  binary built without TLS), runs the suite with `LIZTERM_REQUIRE_ENGINE=1` so the engine smoke test must start the
+  freshly built binary, and only then uploads it as the `b3270-osx-arm64` artifact; `engine-linux` does the same on
+  two legs, `ubuntu-24.04` and `ubuntu-24.04-arm`, uploading `b3270-linux-x64` and `b3270-linux-arm64`, and also runs
+  the gate against the binary it just built plus two binaries it must reject — each rejection checked against the
+  message that arm of the gate prints — so a gate that has stopped rejecting anything fails the job instead of
+  passing everything. The arm64 Linux leg runs the whole solution; the x64 one runs only
+  `tests/LizTerm.Integration.Tests`, since `ci.yml`'s `test` already covers that solution on the same OS and
+  architecture. `test-windows` runs the suite on Windows.
 
 To run the platform jobs by hand: Actions, Platforms, "Run workflow", or `gh workflow run platforms.yml`. A run that
 fails or is cancelled uploads `test-results-<os>` with its `.trx` files and any hang dump. The `b3270-osx-arm64`,

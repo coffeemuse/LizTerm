@@ -32,9 +32,7 @@ JOBS=$(nproc)
 # dropped no-shared and rebuilt" — the same silent-wrong-library failure by the other door. Hashing the file
 # needs no discipline from whoever edits those flags next; the cost is that editing these comments rebuilds
 # both prefixes too, which is the safe direction for a guard whose other outcome has no tell.
-sha256_stdin() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | awk '{print $1}'
-}
+. "$ROOT/native/build/shared-sha256.sh"
 # Contents, not names: the paths here are absolute, and hashing them would restamp every prefix whenever the
 # checkout moves. SELF rather than $0 because step 3 cd's into the source tree, and a relative $0 read after
 # that would be a stamp of nothing.
@@ -42,21 +40,29 @@ SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 stamp_of() { cat "$1" "$SELF" | sha256_stdin; }
 stale() { [ ! -f "$1" ] || [ "$(cat "$2/.pin" 2>/dev/null || true)" != "$3" ]; }
 
+# One shape for both static prefixes, so the .pin rule, the log redirection, the rm -rf ordering and the
+# sentinel choice cannot drift apart between them: only the configure line and the comment explaining it
+# differ, which is what those comments are actually about.
+# build_static <log-and-src-name> <fetcher> <prefix> <sentinel-archive> <make-install-target> <configure...>
+build_static() {
+  local name=$1 fetcher=$2 prefix=$3 sentinel=$4 install=$5
+  shift 5
+  local pin src
+  pin=$(stamp_of "$ROOT/native/build/$fetcher")
+  stale "$prefix/lib/$sentinel" "$prefix" "$pin" || return 0
+  src=$("$ROOT/native/build/$fetcher" "$BUILD/$name-src")
+  rm -rf "$prefix"
+  ( cd "$src" && "$@" && make -j"$JOBS" && make "$install" ) > "$BUILD/$name.log" 2>&1
+  printf '%s\n' "$pin" > "$prefix/.pin"
+}
+
 # 1. OpenSSL, static only. --libdir=lib is not cosmetic: OpenSSL installs to lib64 on x86_64 by default, and
 # pinning it makes the staged layout identical on both architectures and matches what x3270 expects. Because
 # no-shared leaves no .so in the prefix at all, the macOS script's "stage only the archives" trick is
 # unnecessary here — there is nothing else for the linker to find.
 STAGE="$BUILD/openssl-static"
-SSL_PIN=$(stamp_of "$ROOT/native/build/fetch-openssl.sh")
-if stale "$STAGE/lib/libssl.a" "$STAGE" "$SSL_PIN"; then
-  SSL_SRC=$("$ROOT/native/build/fetch-openssl.sh" "$BUILD/openssl-src")
-  rm -rf "$STAGE"
-  ( cd "$SSL_SRC" \
-    && ./config no-shared no-tests no-docs --prefix="$STAGE" --libdir=lib \
-    && make -j"$JOBS" \
-    && make install_sw ) > "$BUILD/openssl.log" 2>&1
-  printf '%s\n' "$SSL_PIN" > "$STAGE/.pin"
-fi
+build_static openssl fetch-openssl.sh "$STAGE" libssl.a install_sw \
+  ./config no-shared no-tests no-docs --prefix="$STAGE" --libdir=lib
 
 # 2. expat, static only, for the same reason and by the same method. b3270 requires it and offers no way to
 # build without it, and unlike macOS — where it lives in /usr/lib and verify-macos.sh allows it as part of that
@@ -66,17 +72,9 @@ fi
 # below can resolve to nothing else (the image ships /usr/lib64/libexpat.so.1, which -lexpat does not match, and
 # expat-devel is deliberately not in the container's PACKAGES).
 EXPAT="$BUILD/expat-static"
-EXPAT_PIN=$(stamp_of "$ROOT/native/build/fetch-expat.sh")
-if stale "$EXPAT/lib/libexpat.a" "$EXPAT" "$EXPAT_PIN"; then
-  EXPAT_SRC=$("$ROOT/native/build/fetch-expat.sh" "$BUILD/expat-src")
-  rm -rf "$EXPAT"
-  ( cd "$EXPAT_SRC" \
-    && ./configure --disable-shared --without-docbook --without-examples --without-tests \
-         --prefix="$EXPAT" --libdir="$EXPAT/lib" \
-    && make -j"$JOBS" \
-    && make install ) > "$BUILD/expat.log" 2>&1
-  printf '%s\n' "$EXPAT_PIN" > "$EXPAT/.pin"
-fi
+build_static expat fetch-expat.sh "$EXPAT" libexpat.a install \
+  ./configure --disable-shared --without-docbook --without-examples --without-tests \
+    --prefix="$EXPAT" --libdir="$EXPAT/lib"
 
 # 3. b3270 against both, with the macOS script's component flags. x3270's configure keeps the CPPFLAGS and
 # LDFLAGS it is given and appends OpenSSL's own -I/-L to them (lib/configure.in saves them as orig_CPPFLAGS and
