@@ -101,11 +101,16 @@ Each static prefix under `native/build-tmp` carries a `.pin` stamp holding its f
 pin and rebuilding without clearing `build-tmp` would link the old library and skip the new checksum too.
 expat is not a choice — b3270's configure hard-errors without it and offers no `--without-expat` — and AlmaLinux 8
 packages no static expat, so linking the image's would have put `libexpat.so.1` in the gate's rejection list,
-which is exactly the class of dependency the gate exists to catch. The gate is three checks, not one:
-`verify-linux.sh` (inside the container) rejects a dynamic dependency outside the glibc runtime and any imported
-glibc symbol above 2.28 — `ldd` alone passes a binary built on Ubuntu 24.04 that cannot start on RHEL 9 — and
-`verify-linux-start.sh` (on the host, because a script already inside a container cannot start another) runs the
-result in a bare container from the same image. CI proves the gate accepts *and* rejects in one container
+which is exactly the class of dependency the gate exists to catch. The gate is four checks, not one:
+`verify-linux.sh` (inside the container) rejects a dynamic dependency outside the glibc runtime, any imported
+glibc symbol above 2.28 — `ldd` alone passes a binary built on Ubuntu 24.04 that cannot start on RHEL 9 — and a
+banner that does not report an OpenSSL TLS provider; then `verify-linux-start.sh` (on the host, because a script
+already inside a container cannot start another) runs the result in a bare container from the same image. The TLS
+check earns its place: x3270's configure probes OpenSSL by *linking*, and static libcrypto needs the
+`LIBS="-ldl -pthread"` on `build-linux.sh`'s configure line to link at all. Drop it and configure quietly
+disables TLS, and the resulting `TLS provider: None` binary is smaller and links *fewer* libraries, so it passes
+the dependency and floor checks more comfortably than the real engine does. That is measured, not hypothetical —
+do not treat those `LIBS` as removable. CI proves the gate accepts *and* rejects in one container
 invocation: it runs `verify-linux.sh` against the built binary, then against one fixture per arm — `/usr/bin/bash`,
 which links `libtinfo`, for the allowlist, and a `/bin/true` copied out of a digest-pinned `debian:12-slim` for
 the floor, which needs no compiler and so is the same fixture on a developer's Mac — and asserts each rejection

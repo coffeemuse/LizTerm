@@ -45,8 +45,8 @@ symbol check. OpenSSL and expat are built from pinned source and linked statical
 system for nothing but glibc.
 
 The gate is the last part of the build, not a separate step to remember: `verify-linux.sh` fails it if the binary
-has any dynamic dependency outside the glibc runtime or imports a glibc symbol newer than 2.28, and
-`verify-linux-start.sh` then runs the result in a bare container from the same image. Alpine and other musl
+has any dynamic dependency outside the glibc runtime, imports a glibc symbol newer than 2.28, or reports no
+OpenSSL TLS provider, and `verify-linux-start.sh` then runs the result in a bare container from the same image. Alpine and other musl
 distributions are a different runtime identifier and are not built here.
 
 ## Continuous integration
