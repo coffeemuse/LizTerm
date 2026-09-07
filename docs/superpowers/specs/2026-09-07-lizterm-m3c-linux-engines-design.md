@@ -320,7 +320,7 @@ Rulings made in planning and execution, recorded here rather than edited into th
    configure line is a follow-up this plan did not take, not settled design, and the gate re-proves it on both
    legs when someone does.
 8. **`timeout-minutes` is 40, not section 5's 45.** From the first cold-cache run (PR #10, 2026-09-07): x64
-   17m47s, arm64 4m35s, and about 2m per leg once the caches are warm. 40 sits comfortably above double the
+   17m47s, arm64 4m35s; on the same PR with warm caches, 2m31s and 2m2s. 40 sits comfortably above double the
    slower leg with headroom, rather than being a bare double. Almost all of the x64 leg's time was the two
    negative-fixture steps, ~4m40s each against 26s and 29s on arm64: every invocation of `build-linux-docker.sh`
    re-runs `dnf install` in a fresh container, nothing about that install is cached, and it was several times

@@ -47,7 +47,7 @@ caches the built engine (`native/out/osx-arm64`, keyed on every `native/build/*.
 dumps `native/build-tmp/*/{configure,make}.log` on failure, because `build-macos.sh` redirects them out of the job log.
 `engine-linux` caches the same two things per leg (`native/out/<rid>` on that same key; one shared `native/cache` entry
 for both legs, since source tarballs are architecture-independent) and dumps `{openssl,expat,configure,make}.log`. Its
-`timeout-minutes` is 40, set from the first cold-cache run: x64 17m47s, arm64 4m35s, about 2m per leg warm — the x64
+`timeout-minutes` is 40, set from the first cold-cache run: x64 17m47s, arm64 4m35s (2m31s and 2m2s warm) — the x64
 leg is slow almost entirely in the two negative-fixture steps, each of which pays the wrapper's `dnf install` again in
 a fresh container. Those two steps and the start check run whether or not the engine came from the cache: on a cache
 hit the build step never executes, so they are the only thing between a stale cached binary and an artifact upload.
