@@ -14,18 +14,33 @@ BUILD="$ROOT/native/build-tmp/$RID"
 mkdir -p "$BUILD"
 JOBS=$(nproc)
 
+# Each static prefix is stamped with the SHA-256 of the fetch script that filled it, and the guards below
+# require the stamp as well as the archive. Bumping a pin rewrites its fetcher, so a prefix built from the
+# previous version no longer matches and is rebuilt. Without the stamp, a rebuild that reuses an existing
+# native/build-tmp sees the archive, skips the block — and because the fetch is inside the block, silently
+# links the old library and never verifies the new checksum either. CI never hits this (it caches
+# native/out, never native/build-tmp), but the CVE story for both pins is "a one-line edit in the fetcher",
+# and locally that has to be true. A stale OpenSSL at least shows up in `b3270 --version`; a stale expat has
+# no tell at all.
+stamp_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | awk '{print $1}'
+}
+stale() { [ ! -f "$1" ] || [ "$(cat "$2/.pin" 2>/dev/null || true)" != "$3" ]; }
+
 # 1. OpenSSL, static only. --libdir=lib is not cosmetic: OpenSSL installs to lib64 on x86_64 by default, and
 # pinning it makes the staged layout identical on both architectures and matches what x3270 expects. Because
 # no-shared leaves no .so in the prefix at all, the macOS script's "stage only the archives" trick is
 # unnecessary here — there is nothing else for the linker to find.
 STAGE="$BUILD/openssl-static"
-if [ ! -f "$STAGE/lib/libssl.a" ]; then
+SSL_PIN=$(stamp_of "$ROOT/native/build/fetch-openssl.sh")
+if stale "$STAGE/lib/libssl.a" "$STAGE" "$SSL_PIN"; then
   SSL_SRC=$("$ROOT/native/build/fetch-openssl.sh" "$BUILD/openssl-src")
   rm -rf "$STAGE"
   ( cd "$SSL_SRC" \
     && ./config no-shared no-tests no-docs --prefix="$STAGE" --libdir=lib \
     && make -j"$JOBS" \
     && make install_sw ) > "$BUILD/openssl.log" 2>&1
+  printf '%s\n' "$SSL_PIN" > "$STAGE/.pin"
 fi
 
 # 2. expat, static only, for the same reason and by the same method. b3270 requires it and offers no way to
@@ -36,7 +51,8 @@ fi
 # below can resolve to nothing else (the image ships /usr/lib64/libexpat.so.1, which -lexpat does not match, and
 # expat-devel is deliberately not in the container's PACKAGES).
 EXPAT="$BUILD/expat-static"
-if [ ! -f "$EXPAT/lib/libexpat.a" ]; then
+EXPAT_PIN=$(stamp_of "$ROOT/native/build/fetch-expat.sh")
+if stale "$EXPAT/lib/libexpat.a" "$EXPAT" "$EXPAT_PIN"; then
   EXPAT_SRC=$("$ROOT/native/build/fetch-expat.sh" "$BUILD/expat-src")
   rm -rf "$EXPAT"
   ( cd "$EXPAT_SRC" \
@@ -44,6 +60,7 @@ if [ ! -f "$EXPAT/lib/libexpat.a" ]; then
          --prefix="$EXPAT" --libdir="$EXPAT/lib" \
     && make -j"$JOBS" \
     && make install ) > "$BUILD/expat.log" 2>&1
+  printf '%s\n' "$EXPAT_PIN" > "$EXPAT/.pin"
 fi
 
 # 3. b3270 against both, with the macOS script's component flags. x3270's configure keeps the CPPFLAGS and
