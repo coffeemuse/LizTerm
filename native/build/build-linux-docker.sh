@@ -9,7 +9,9 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 . "$(dirname "$0")/linux-image.sh"
 
 # binutils is for the readelf the gate needs; findutils and diffutils are configure's, perl-core is OpenSSL's.
-PACKAGES="gcc make perl-core diffutils findutils tar binutils"
+# python3 is x3270's: its configure refuses to run without one ("Can't find Python using 'python3'") because the
+# build generates several C sources with Python scripts.
+PACKAGES="gcc make perl-core diffutils findutils tar binutils python3"
 
 if [ "$#" -eq 0 ]; then
   COMMAND="native/build/build-linux.sh"
@@ -30,3 +32,14 @@ trap 'chown -R $HOST_UID:$HOST_GID native/out native/build-tmp native/cache 2>/d
 dnf install -y $PACKAGES > /tmp/dnf.log 2>&1 || { cat /tmp/dnf.log >&2; exit 1; }
 $COMMAND
 "
+
+# The build path gets the whole gate. CI calls this script directly as well, because on a cache hit the
+# docker run above never happens and this is the only thing between a stale cached binary and an upload.
+if [ "$#" -eq 0 ]; then
+  case "$(uname -m)" in
+    x86_64)         RID=linux-x64 ;;
+    arm64|aarch64)  RID=linux-arm64 ;;
+    *) echo "unsupported arch $(uname -m)" >&2; exit 1 ;;
+  esac
+  "$(dirname "$0")/verify-linux-start.sh" "$ROOT/native/out/$RID/b3270"
+fi

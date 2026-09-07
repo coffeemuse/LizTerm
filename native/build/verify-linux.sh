@@ -14,7 +14,12 @@ FLOOR=2.28
 # found" line ahead of them, on stdout, not stderr. Without this filter that line's first field becomes the
 # binary's own path with a colon stuck on, which matches no allowed name and gets reported here as a phantom
 # dependency — masking the real, actionable problem that check 2 below exists to name.
-ALLOWED='^(linux-vdso|libc|libm|libdl|libpthread|librt|libresolv|libgcc_s|ld-linux.*)\.so'
+# libutil and libanl are on this list because b3270 genuinely needs them: x3270's configure resolves forkpty to
+# -lutil and getaddrinfo_a to -lanl. Both are glibc's own — `rpm -qf /usr/lib64/lib{util,anl}.so.1` on the floor
+# image answers glibc-2.28 for each — and they are separate shared objects only up to glibc 2.33; 2.34 folded
+# them into libc.so.6 along with libdl, libpthread and librt, which are already here for the same reason. So
+# allowing them does not widen the check beyond "the glibc runtime": a system with libc.so.6 has them.
+ALLOWED='^(linux-vdso|libc|libm|libdl|libpthread|librt|libresolv|libutil|libanl|libgcc_s|ld-linux.*)\.so'
 BAD=$(ldd "$BIN" | grep -E '^[[:space:]]' | awk '{print $1}' | sed 's|.*/||' | grep -v -E "$ALLOWED" || true)
 if [ -n "$BAD" ]; then
   echo "ERROR: $BIN has dynamic dependencies outside the glibc runtime:" >&2
