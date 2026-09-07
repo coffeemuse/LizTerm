@@ -55,6 +55,12 @@ public sealed class B3270Session : IEmulatorSession
 
     public TimeSpan StartupTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>Where the engine's trust anchors come from when no pin is in force. Defaults to none, which leaves
+    /// the engine on whatever trust it was built with; the App injects the real store in SessionFactory. Defaulting
+    /// to the machine's store would make every test that connects with a verifying profile depend on the roots that
+    /// machine happens to hold.</summary>
+    public ITrustAnchorSource TrustAnchors { get; init; } = NoTrustAnchors.Instance;
+
     public SessionProfile Profile { get; }
     public ScreenSnapshot CurrentScreen { get; private set; }
     public ConnectionState ConnectionState { get; private set; } = ConnectionState.Disconnected;
@@ -283,7 +289,9 @@ public sealed class B3270Session : IEmulatorSession
         {
             // Closed last, and on every path: a fault (see OnProcessEnded) may already have cleared _process, but
             // the log still needs closing — and the Quit, plus whatever b3270 says on its way out, are exactly
-            // the lines a report about a hang on close turns on.
+            // the lines a report about a hang on close turns on. The roots file goes the same way: it is kept
+            // across a session's connects, so this is where its life ends.
+            DeleteRootsFile();
             StopWireLog();
         }
     }
@@ -568,53 +576,130 @@ public sealed class B3270Session : IEmulatorSession
         var verify = options?.VerifyCertificate ?? Profile.VerifyCertificate;
         // Spec 3.1: verification off means no pin; otherwise the one-shot pin wins over the profile's.
         var pin = verify ? options?.Pin ?? Profile.PinnedCertificate : null;
-        // The engine loads caFile when it builds the TLS context for this connection, inside the Connect run, so the
-        // file has to outlive that run and nothing more (spec 4.1). It holds a public certificate, so a leftover
-        // after a crash is harmless.
-        var pinFile = pin is null ? null : WritePinFile(pin.Pem);
-        LastPinFile = pinFile;
-        // A pin that is one self-signed certificate names the host by itself, so the name check adds nothing. A pin
-        // that also carries CA certificates makes each of them a trust anchor (OpenSSL trusts every member of caFile),
-        // and only the engine's normal name check then keeps a certificate that CA issued for another host from
-        // verifying here.
-        var anyName = pin is not null && CertificateReader.CountCertificates(pin.Pem) == 1;
+        // Off the caller's context: App.OpenSession starts every connect from the Avalonia UI thread, and nothing
+        // in this codebase uses ConfigureAwait(false), so without this Task.Run the continuation after
+        // StartProcessAsync — and so TrustAnchors.ExportPem() (measured 210 ms reading the OS store) and the 238 KB
+        // synchronous write below — would run on that thread. DecideCaFile is the whole decide-and-write step, so
+        // the CA file is fully written (or the source's short-circuit fully resolved) before the thread pool hop
+        // back to the caller. The token goes with it: an attempt already cancelled skips work whose result is
+        // known to be discarded, the way every other await on this path does.
+        var (caFile, anyName, ephemeral) = await Task.Run(() => DecideCaFile(pin, verify), cancellationToken);
+        LastCaFile = caFile;
         try
         {
             // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
             // open before the Connect has even gone out. All three values are sent every time so an attempt never
             // inherits the previous one's trust settings (spec 2).
-            await RunAsync([TlsSettings(verify, pinFile, anyName)], throwOnFailure: true, cancellationToken: cancellationToken);
+            await RunAsync([TlsSettings(verify, caFile, anyName)], throwOnFailure: true, cancellationToken: cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             await ConnectCoreAsync(cancellationToken);
         }
         finally
         {
-            if (pinFile is not null) TryDeletePinFile(pinFile);
+            // Only a pin file: it is per attempt and the secrecy argument applies to it. The roots file holds
+            // public certificates that do not change between attempts, so it lives until DisposeAsync.
+            if (ephemeral && caFile is not null) TryDeleteCaFile(caFile);
         }
+    }
+
+    /// <summary>The trust decision for one connect attempt, and the file that carries it: spec 3, a pin is the whole
+    /// trust store; without one, a verifying TLS connect gets the machine's own anchors, because a statically linked
+    /// engine has none it can use (spec 1); anything else — verification off, or a plain connect that never builds a
+    /// TLS context — gets no CA file at all. Evaluated off the caller's context (see <see cref="ConnectAsync"/>)
+    /// since it is the only part of a connect that does real work: reading the trust source and writing its PEM to
+    /// disk. <c>Ephemeral</c> is whether the caller deletes the file after the Connect run: a pin file, not the
+    /// shared roots file.</summary>
+    private (string? CaFile, bool AnyName, bool Ephemeral) DecideCaFile(CertificatePin? pin, bool verify)
+    {
+        // A pin is the whole trust store, so it never reaches the trust-anchor source. Pem is declared
+        // non-nullable but arrives from a user-editable profile file, so a pin that lost it must still fail the
+        // connect loudly — b3270 answers the resulting empty caFile with "CA database load … failed" — rather
+        // than falling through to the wider trust of the anchors below.
+        if (pin is not null)
+        {
+            var pinPem = pin.Pem ?? "";
+            // A pin that is one self-signed certificate names the host by itself, so the name check adds nothing.
+            // A pin that also carries CA certificates makes each of them a trust anchor (OpenSSL trusts every
+            // member of caFile), and only the engine's normal name check then keeps a certificate that CA issued
+            // for another host from verifying here.
+            // The engine loads caFile when it builds the TLS context for this connection, inside the Connect run,
+            // so the file has to outlive that run and nothing more.
+            return (WriteCaFile(pinPem, "pin"), CertificateReader.CountCertificates(pinPem) == 1, Ephemeral: true);
+        }
+        // Only for a connection that will actually build a TLS context: a plain telnet connect never loads
+        // caFile, and VerifyCertificate defaults to true on a profile whose UseTls defaults to false, so gating
+        // on verify alone made every plain connect pay for the store read and the ~238 KB write.
+        var anchors = verify && Profile.UseTls ? TrustAnchors.ExportPem() : null;
+        // A source with nothing to offer, or only whitespace, leaves caFile empty: an empty *file* fails the
+        // connect outright, so "nothing usable" has to collapse to null before it reaches the file.
+        return (string.IsNullOrWhiteSpace(anchors) ? null : RootsFile(anchors), false, Ephemeral: false);
+    }
+
+    private readonly object _rootsLock = new();
+    private string? _rootsFile;
+    private string? _rootsPem;
+
+    /// <summary>The anchors are the same public bytes for every attempt this session makes, so the file is written
+    /// once and reused by every later connect — a reconnect or a retry rewriting and deleting a quarter of a
+    /// megabyte each time bought nothing. <see cref="DisposeAsync"/> removes it.</summary>
+    private string RootsFile(string pem)
+    {
+        lock (_rootsLock)
+        {
+            if (_rootsFile is not null && _rootsPem == pem && File.Exists(_rootsFile)) return _rootsFile;
+            _rootsFile = WriteCaFile(pem, "roots");
+            _rootsPem = pem;
+            return _rootsFile;
+        }
+    }
+
+    private void DeleteRootsFile()
+    {
+        string? path;
+        lock (_rootsLock)
+        {
+            path = _rootsFile;
+            _rootsFile = null;
+            _rootsPem = null;
+        }
+        if (path is not null) TryDeleteCaFile(path);
     }
 
     /// <summary>The Set action carrying one attempt's trust settings (spec 4.1). <paramref name="acceptAnyName"/>
     /// turns the engine's host-name check off, which is right only for a pin that is a single self-signed
-    /// certificate; an empty acceptHostname is the engine's normal check against the connect host.</summary>
-    internal static B3270Action TlsSettings(bool verify, string? pinFile, bool acceptAnyName) =>
-        new("Set", "verifyHostCert", verify ? "true" : "false", "caFile", pinFile ?? "", "acceptHostname", pinFile is not null && acceptAnyName ? "any" : "");
+    /// certificate; an empty acceptHostname is the engine's normal check against the connect host. An empty
+    /// caFile leaves the engine on its own default trust.</summary>
+    internal static B3270Action TlsSettings(bool verify, string? caFile, bool acceptAnyName) =>
+        new("Set", "verifyHostCert", verify ? "true" : "false", "caFile", caFile ?? "", "acceptHostname", caFile is not null && acceptAnyName ? "any" : "");
 
-    /// <summary>The path of the last pin file written, deleted or not. Test seam.</summary>
-    internal string? LastPinFile { get; private set; }
+    /// <summary>The path of the last CA file written — a pin or the trust anchors — deleted or not. Test seam.</summary>
+    internal string? LastCaFile { get; private set; }
 
-    internal static string WritePinFile(string pem)
+    /// <param name="kind">"pin" or "roots": the file name says which of the two callers wrote it, which is what a
+    /// leftover in the temp directory and a failing test both have to be read by.</param>
+    internal static string WriteCaFile(string pem, string kind)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"lizterm-pin-{Guid.NewGuid():N}.pem");
+        var path = Path.Combine(Path.GetTempPath(), $"lizterm-{kind}-{Guid.NewGuid():N}.pem");
         var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
         // Owner-only on Unix; the Windows temp directory is already per user.
         if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        using var stream = new FileStream(path, options);
-        using var writer = new StreamWriter(stream);
-        writer.Write(pem);
+        try
+        {
+            using var stream = new FileStream(path, options);
+            using var writer = new StreamWriter(stream);
+            writer.Write(pem);
+        }
+        catch
+        {
+            // A write that fails partway (disk full, etc.) never hands the path back to the caller, so the
+            // caller's finally can never delete it; clean up the partial file here instead of leaking it.
+            TryDeleteCaFile(path);
+            throw;
+        }
         return path;
     }
 
-    private static void TryDeletePinFile(string path)
+    private static void TryDeleteCaFile(string path)
     {
         try
         {

@@ -14,28 +14,12 @@ public class EngineSmokeTests
     [Fact(Timeout = 60_000)]
     public async Task Bundled_engine_starts_and_reports_its_version()
     {
-        B3270Location? location = null;
-        string? missing = null;
-        try
-        {
-            location = B3270Locator.Find(overridePath: null, AppContext.BaseDirectory);
-        }
-        catch (BackendUnavailableException e)
-        {
-            missing = e.Message;
-        }
-
-        // Find throws the same exception type for "nothing anywhere" and "there but not executable", so ask the
-        // locator where it looked: a candidate that exists on disk means the second, which must never skip.
-        var present = B3270Locator.Candidates(overridePath: null, AppContext.BaseDirectory).Any(c => File.Exists(c.Path));
-        var outcome = EngineRequirement.Decide(location is not null, present, Environment.GetEnvironmentVariable(EngineRequirement.Variable));
-        if (outcome == EngineRequirementOutcome.Fail) Assert.Fail(missing ?? "no bundled engine");
-        Assert.SkipWhen(outcome == EngineRequirementOutcome.Skip, missing ?? "no bundled engine");
+        var location = BundledEngine.Require();
 
         // The point of the macOS job: the csproj copy rule put the freshly built binary in runtimes/<rid>/native/.
         // Find's other bundled candidate is a b3270 sitting beside the test assembly, which would satisfy a check
         // on Engine.Source while the copy rule was broken.
-        Assert.Contains(B3270Locator.BundledDirectory, location!.Path);
+        Assert.Contains(B3270Locator.BundledDirectory, location.Path);
 
         var profile = new SessionProfile(Name: "engine-smoke", Host: "engine-smoke.invalid");
         await using var session = new B3270Session(profile, () => new B3270ChildProcess(location.Path), location: location);

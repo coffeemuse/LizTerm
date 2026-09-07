@@ -137,6 +137,10 @@ supposed to add a trimmed fixture.
 `LizTerm.App` depends on both, but names `LizTerm.Backend.B3270` in exactly one place:
 `src/LizTerm.App/SessionFactory.cs`. Everything else in App talks to `IEmulatorSession`. This is what
 lets the App tests run against `FakeEmulatorSession` and keeps a future managed engine possible.
+The App *tests* name it in exactly one place too, `SessionFactoryTests.The_session_it_builds_verifies_against_the_system_trust_anchors`,
+which casts the factory's result to `B3270Session` to read `TrustAnchors`: what the factory injects is the one
+thing about the backend the App owns, and asserting it needs the concrete type. Every other App test stays on
+`IEmulatorSession` and `FakeEmulatorSession`.
 
 Each src project has `InternalsVisibleTo` for its own test project (Backend also for Integration).
 `B3270Session.StartProcessAsync`, `RunAsync`, and `RunRawAsync` are internal and exercised directly by
@@ -171,15 +175,21 @@ the backend tests.
 - `SessionProfile.PinnedCertificate` is a `CertificatePin` (SHA-256 fingerprint as colon-separated upper-case hex,
   subject, and the PEM chain leaf first) or null; `ConnectOptions(VerifyCertificate, Pin)` overrides either for one
   attempt. The effective rule is in `B3270Session.ConnectAsync`: verify off means no pin; otherwise the one-shot pin
-  wins over the profile's; no pin means the engine's default trust. `DestructiveBackspace` defaults to true (every
+  wins over the profile's; no pin means whatever `TrustAnchors` yields, not the engine's own default trust — for
+  an App session that is the machine's root store, since `SessionFactory` injects `SystemTrustAnchors.Default`;
+  the engine's own trust survives only on a bare `B3270Session` left on `TrustAnchors`' own default,
+  `NoTrustAnchors`. `DestructiveBackspace` defaults to true (every
   x3270-family default keymap erases; the old belief that x3270 defaults to cursor-left came from the `BackSpace()`
   action's name), and the profile JSON writes every field, so a saved false survives. `LizTerm.Core.Security` holds
   `ICertificateFetcher` and `SslStreamCertificateFetcher` (one handshake that captures and accepts the chain,
   keeping only the leaf plus the host-sent extras from the chain policy's ExtraStore, never a root the chain
-  engine supplied from the system store, 10 s bound, `IOException` "No TLS answer ..." on timeout) and
+  engine supplied from the system store, 10 s bound, `IOException` "No TLS answer ..." on timeout),
   `CertificateReader` (fingerprint, PEM, and whether the chain is pinnable: .NET validates it with its own
   self-signed members as the only trust roots, which is what
-  OpenSSL will do with the pin file). They are BCL-only, so they live in Core and the integration lane can use them.
+  OpenSSL will do with the pin file), and `ITrustAnchorSource` with `SystemTrustAnchors` (the OS root store, both
+  `LocalMachine` and `CurrentUser`, read once per instance and exported as a PEM; a store that will not open
+  contributes nothing) and `NoTrustAnchors`, the default that leaves an engine on its own trust. They are BCL-only,
+  so they live in Core and the integration lane can use them.
 - Threading contract: a backend raises all events on one dedicated thread, in order, and knows nothing
   about UI threads. The App layer marshals.
 - `ConnectAsync(ConnectOptions?, CancellationToken)`: a cancelled token ends the attempt with
@@ -259,15 +269,26 @@ the backend tests.
   `BackendUnavailableException` carrying the last fault, and `InvalidOperationException` ("The session has not
   been started.") is reserved for a session that was never started.
 - Every connect sends one `Set(verifyHostCert,…,caFile,…,acceptHostname,…)` with all three explicit, so an attempt
-  never inherits the previous one's trust settings (verified: empty values clear them in the same engine). A pinned
-  attempt writes the PEM to `Path.GetTempPath()/lizterm-pin-<guid>.pem` (owner-only on Unix) just before that Set
-  and deletes it in a `finally` once the Connect run has answered, because x3270 loads `caFile` in `sio_init` for
-  each connection. `acceptHostname` is `any` only for a pin that is one self-signed certificate; a pin that also
-  carries CA certificates makes each of them an OpenSSL trust anchor, so the engine's normal name check stays on to
-  keep a certificate that CA issued for another host from verifying (`CertificateReader.CountCertificates` decides).
-  `LastPinFile` is the test seam. `WaitForDisconnectedAsync` awaits a completion source the connection state owns:
-  completed while the connection is down, replaced by a fresh one in `SetConnectionState` when it comes up, so
-  overlapping waiters share it and a waiter that gives up cannot orphan another.
+  never inherits the previous one's trust settings (verified: empty values clear them in the same engine). What
+  fills `caFile` is one rule: a pin in force means the pin file (its PEM verbatim, so a pin that lost its `pem` in a
+  hand-edited profile writes an empty file and fails the connect rather than quietly widening to the anchors);
+  otherwise, only for a `UseTls` profile that verifies, the trust anchors `TrustAnchors` yields, written to
+  `lizterm-roots-<guid>.pem`; and everything else — verification off, a plain telnet connect, a source with no
+  anchors — means empty, because an empty *file* makes b3270 fail the connect with "CA database load … failed"
+  rather than falling back. The `UseTls` half of that gate matters because `VerifyCertificate` defaults to *true*
+  while `UseTls` defaults to false, so gating on verification alone made every plain connect read the OS store and
+  write a quarter of a megabyte. `WriteCaFile(pem, kind)` writes both kinds, owner-only on Unix, because x3270 loads
+  `caFile` in `sio_init` for each connection. Their lifetimes differ: a pin file is deleted in the `finally` once
+  the Connect run has answered, while the roots file is the same public bytes every time and is written once by
+  `RootsFile` and kept for the session, so a reconnect reuses it; `DisposeAsync` deletes it. `acceptHostname` is `any` only
+  for a pin that is one self-signed certificate; a pin that also carries CA certificates makes each of them an
+  OpenSSL trust anchor, so the engine's normal name check stays on to keep a certificate that CA issued for another
+  host from verifying (`CertificateReader.CountCertificates` decides). `B3270Session.TrustAnchors` defaults to
+  `NoTrustAnchors.Instance`, so only `SessionFactory` — which injects `SystemTrustAnchors.Default` — makes a
+  session read the machine's store; a test that wants anchors supplies them. `LastCaFile` is the test seam (it was
+  `LastPinFile` until two callers shared it). `WaitForDisconnectedAsync` awaits a completion source the connection
+  state owns: completed while the connection is down, replaced by a fresh one in `SetConnectionState` when it
+  comes up, so overlapping waiters share it and a waiter that gives up cannot orphan another.
 - `WireLog` is the bug-report mechanism and the fixture recorder: one file, every line, both directions,
   timestamped. `WireLog.TryFromEnvironment(out error)` returns null when the variable is unset or the file
   cannot be opened; the session raises the open error once as a `HostMessage`. The log is a swappable field
@@ -393,6 +414,7 @@ the backend tests.
   throw, `FaultWaitForExit` to simulate a process that is already gone, and `BeforeWrite` to run a hook (a test
   can make the engine die part-way through a write) before each character reaches stdin. `ReplayTests` feeds a
   fixture through `Emit` and asserts on the resulting snapshot, cursor, and connection-state sequence.
+  `FakeTrustAnchorSource` (`Pem`, `Calls`) stands in for `ITrustAnchorSource` in connect tests.
 - App tests run on Avalonia's headless platform: `TestAppBuilder` is registered with
   `[assembly: AvaloniaTestApplication]`, control tests use `[AvaloniaFact]` and `KeyPressQwerty`,
   view-model tests use plain `[Fact]` with `FakeEmulatorSession`, which records calls as strings such as
@@ -414,15 +436,22 @@ the backend tests.
   `FakeEmulatorSession`'s `ConnectCompletion`, `ConnectToken`, `connect:noverify`, `wirelog:start:<path>` /
   `wirelog:stop`, `WireLogException`, `Engine`. `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
   `fetch:<host>:<port>`), `FakeCertificatePrompt.LastRequest`, and `FakeEmulatorSession` recording
-  `connect:pin:<sha256>`. The App and backend test projects each have one `Wait.UntilAsync(condition, what, timeout?)` helper (`Wait.cs`) replacing the private copies the tests used to carry.
-  Its default timeout is 5 s (raised from 2 s for CI headroom).
+  `connect:pin:<sha256>`. `Wait.UntilAsync(condition, what, timeout?)` lives once in `tests/Shared/Wait.cs`
+  (namespace `LizTerm.Tests.Shared`), compiled into all three test projects by a `<Compile Include=... Link=...>`
+  item and imported by a `<Using>` in each csproj, so its default timeout — 5 s, raised from 2 s for CI headroom —
+  cannot be changed in one project and missed in another.
   `EnvironmentCollection` is a non-parallel xunit collection in the backend test project only, holding `WireLogTests`,
   which sets `LIZTERM_WIRE_LOG`. `SessionFactoryTests` no longer touches the environment: it calls the internal
   `SessionFactory.Create(profile, overridePath, baseDirectory)` seam with a bogus override and an empty temp directory,
   because a bundled engine in the App test output would otherwise satisfy the locator.
   `TestCertificates` in the Core tests makes self-signed and CA-signed certificates and re-imports through PKCS#12
-  so macOS accepts the key for a loopback SslStream server; the live tests carry a 10 minute xunit timeout;
-  `gateway-pinned-login.jsonl` replays a verified pinned connect.
+  so macOS accepts the key for a loopback SslStream server; it stays `internal` and is compiled into the integration
+  project by a `<Compile Include=... Link=...>` item (a source-level share, not a project reference, which is why no
+  visibility change was needed). `CreateRoot` and `Serial` are the shared parts of `CaSigned`,
+  `CaSignedServable(subject)` — whose leaf can serve TLS — and `Ca(subject)`, which is the root alone for a test
+  that needs an anchor and no leaf. Two CAs meant to be unrelated must be given different subjects: OpenSSL looks an
+  issuer up by subject name, so a shared name tests the wrong-signature path instead. The live tests carry a
+  10 minute xunit timeout; `gateway-pinned-login.jsonl` replays a verified pinned connect.
 - `EngineSmokeTests` (integration project) starts the **bundled** engine from the test output through `B3270Session`
   and quits; it resolves with `B3270Locator.Find(null, AppContext.BaseDirectory)` so `LIZTERM_B3270_PATH` can never
   satisfy it. It asserts the resolved path is under `B3270Locator.BundledDirectory` (`runtimes/<rid>/native`), which is
@@ -431,6 +460,7 @@ the backend tests.
   would be unfalsifiable. Without a bundled engine it skips, unless `LIZTERM_REQUIRE_ENGINE` is set, when it fails.
   A binary that is *present* but did not resolve — the locator's not-executable arm, which is what a downloaded CI
   artifact looks like before `chmod +x` — always fails, whatever the variable says: that is a broken engine, not an
-  absent one. `EngineRequirement.Decide(found, present, variable)` is that gate, unit tested on its own, and
+  absent one. `BundledEngine.Require()` is the one place that whole decision is spelled out, called by every test
+  in the project that needs the engine. `EngineRequirement.Decide(found, present, variable)` is that gate, unit tested on its own, and
   `B3270Locator.Candidates` is how the test tells the two apart (`Find` throws the same type for both). On a Mac that
   has run `build-macos.sh` the test runs locally and runs against the copied binary.

@@ -8,19 +8,20 @@ Date: 2026-09-06. Parent spec: `2026-09-03-lizterm-v1-design.md` (section 8.5 sk
 
 Milestone 2 is merged in full and Milestone 3 (distribution) has no infrastructure yet: no `.github/workflows`,
 one native build script (macOS), and no automated proof that a b3270 built by the script can be spawned by
-LizTerm. Milestone 3 was split on 2026-09-06 into five plans, each with its own spec and PR:
+LizTerm. Milestone 3 was split on 2026-09-06 into six plans, each with its own spec and PR:
 
 - **3a (this spec):** GitHub Actions for what exists. Build and test on every push and pull request; build the
   macOS engine with the existing script and gate, prove LizTerm can spawn it, upload it, and run the suite on
   Windows, on pushes to main.
-- **3b:** Linux x64 and arm64 engine builds (static OpenSSL, `ldd` gate, oldest supported glibc, CA file for a
-  static OpenSSL's trust directory).
-- **3c:** Windows engine builds (upstream MinGW cross build from Linux, Schannel, `b3270.exe`; Windows arm64
+- **3b:** Default trust for a bundled engine: the OS root store exported to the engine's caFile, because a
+  statically linked b3270 carries a trust directory that exists only on the build machine.
+- **3c:** Linux x64 and arm64 engine builds (static OpenSSL, `ldd` gate, oldest supported glibc).
+- **3d:** Windows engine builds (upstream MinGW cross build from Linux, Schannel, `b3270.exe`; Windows arm64
   ships the x64 binary).
-- **3d:** Publish and release (self-contained `dotnet publish` for six runtime identifiers, macOS app bundle,
+- **3e:** Publish and release (self-contained `dotnet publish` for six runtime identifiers, macOS app bundle,
   tarball and zip layouts, version stamping, tag-triggered release job). Code signing and notarization are a
   separate later task, gated on paying for the Apple Developer Program and a Windows certificate.
-- **3e:** Scheduled integration lane. Rule set on 2026-09-06: full CI must not rely on anything on Robert's LAN;
+- **3f:** Scheduled integration lane. Rule set on 2026-09-06: full CI must not rely on anything on Robert's LAN;
   the lane spins up a dockerized TK4-/TK5 or MVS/CE inside the Action (MVS/CE lacks IND$FILE out of the box:
   `RX MVP INSTALL IND$FILE` as `IBMUSER` installs it).
 
@@ -62,7 +63,7 @@ Decisions taken in the brainstorm on 2026-09-06:
   so a workflow that only had push-to-main and dispatch triggers could not be exercised before its own PR merged.
 - GitHub-hosted `macos-15` runners are Apple Silicon and ship Homebrew `openssl@3`; `build-macos.sh` needs
   nothing else beyond the Xcode command line tools the image has. The existing script builds the host
-  architecture only, so this plan produces `osx-arm64`. macOS x64 belongs to a later plan (3b or 3d).
+  architecture only, so this plan produces `osx-arm64`. macOS x64 belongs to a later plan (3c or 3e).
 - The headless App tests have only ever run on macOS. A font or text-shaping difference on Linux or Windows is
   possible and is treated as a finding to fix, not a reason to drop the runner.
 
@@ -111,7 +112,7 @@ Two independent jobs.
 3. `native/build/build-macos.sh`. Its own `verify-macos.sh` step is the gate: a non-system dynamic dependency
    fails the job. The script leaves the binary at `native/out/osx-arm64/b3270`.
 4. `actions/upload-artifact` of `native/out/osx-arm64/b3270` as `b3270-osx-arm64`. Nothing in this plan consumes
-   it; it exists for plan 3d's publish job and for downloading a CI-built engine by hand.
+   it; it exists for plan 3e's publish job and for downloading a CI-built engine by hand.
 5. `actions/setup-dotnet`, then the same build and test steps as section 3, with `LIZTERM_REQUIRE_ENGINE=1` in
    the job environment. Because `native/out/osx-arm64` now exists, the csproj copy rules place the fresh binary
    in the integration test output and the smoke test (section 5) runs against it. If the copy rule ever stops
@@ -120,7 +121,7 @@ Two independent jobs.
 
 ### 4.2 `test-windows` on `windows-latest`
 
-The section 3 steps unchanged, with the artifact named `test-results-windows`. No engine: plan 3c adds it.
+The section 3 steps unchanged, with the artifact named `test-results-windows`. No engine: plan 3d adds it.
 
 ## 5. The engine smoke test
 
@@ -178,8 +179,8 @@ needed: the test reads the variable, it does not set it.
 
 ## 8. Out of scope
 
-Linux and Windows engines (3b, 3c); macOS x64; `dotnet publish`, bundles, version stamping, and releases (3d);
-the integration lane and its container (3e); code signing and notarization; Dependabot or other dependency
+Linux and Windows engines (3c, 3d); macOS x64; `dotnet publish`, bundles, version stamping, and releases (3e);
+the integration lane and its container (3f); code signing and notarization; Dependabot or other dependency
 automation; caching NuGet packages (restore is fast enough and a cache adds a failure mode); running the live
 tests in CI.
 

@@ -6,9 +6,17 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- Compiled into this assembly too rather than duplicated: the certificate shapes these tests need are the
+         ones the Core tests already build. -->
+    <Compile Include="../LizTerm.Core.Tests/Security/TestCertificates.cs" Link="Security/TestCertificates.cs" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="LizTerm.Tests.Shared" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The one copy of the polling helper, compiled into each test assembly (see tests/Shared/Wait.cs). -->
+    <Compile Include="../Shared/Wait.cs" Link="Wait.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/LizTerm.Backend.B3270/LizTerm.Backend.B3270.csproj" />
