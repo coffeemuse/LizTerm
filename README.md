@@ -20,17 +20,31 @@ Design: `docs/superpowers/specs/2026-09-03-lizterm-v1-design.md`.
 Environment variables:
 
 - `LIZTERM_B3270_PATH`: use this b3270 instead of the bundled one. The app and the integration
-  test project use the bundled b3270 when built after `native/build/build-macos.sh` has run;
-  otherwise set this.
+  test project use the bundled b3270 when built after `native/build/build-macos.sh` (or, on Linux,
+  `native/build/build-linux-docker.sh`) has run; otherwise set this.
 - `LIZTERM_WIRE_LOG`: append every protocol line in both directions to this file (attach to bug reports).
 - `LIZTERM_TEST_HOST`: `host[:port]` for the opt-in integration tests. Add `LIZTERM_TEST_TLS=1` for a TLS host
   and `LIZTERM_TEST_VERIFY_CERT=0` to accept a self-signed certificate.
 - `LIZTERM_REQUIRE_ENGINE`: any non-blank value makes the engine smoke test fail instead of skip when no bundled
-  b3270 is in the test output. CI sets it on the macOS job; leave it unset locally. A b3270 that *is* in the test
-  output but is not executable fails the test either way, so a forgotten `chmod +x` cannot pass as a skip.
+  b3270 is in the test output. CI sets it on the macOS and Linux engine jobs; leave it unset locally. A b3270 that
+  *is* in the test output but is not executable fails the test either way, so a forgotten `chmod +x` cannot pass
+  as a skip.
 
 `native/build/build-playback.sh` builds x3270's `playback` tool, for replaying a captured host
 trace against a live b3270 during local development.
+
+## Building the Linux engines
+
+`native/build/build-linux-docker.sh` produces `native/out/linux-x64/b3270` or `native/out/linux-arm64/b3270`,
+whichever matches the host, and needs only Docker. The build runs inside `almalinux:8`, pinned by digest in
+`native/build/linux-image.sh`: that image's glibc 2.28 is the oldest release LizTerm supports and is also .NET 10's
+own floor, so the engine is never the thing that decides where the app can run. OpenSSL and expat are built from
+pinned source and linked statically, so the binary asks the target system for nothing but glibc.
+
+The gate is the last part of the build, not a separate step to remember: `verify-linux.sh` fails it if the binary
+has any dynamic dependency outside the glibc runtime or imports a glibc symbol newer than 2.28, and
+`verify-linux-start.sh` then runs the result in a bare container from the same image. Alpine and other musl
+distributions are a different runtime identifier and are not built here.
 
 ## Continuous integration
 
@@ -43,13 +57,16 @@ Two GitHub Actions workflows under `.github/workflows`:
   `native/`, `src/`, `tests/`, `global.json`, or the `Directory.*.props` files: `engine-macos` builds b3270 with
   `native/build/build-macos.sh` (whose `verify-macos.sh` fails the job on any non-system dynamic dependency), runs
   the suite with `LIZTERM_REQUIRE_ENGINE=1` so the engine smoke test must start the freshly built binary, and only
-  then uploads it as the `b3270-osx-arm64` artifact; `test-windows` runs the suite on Windows.
+  then uploads it as the `b3270-osx-arm64` artifact; `engine-linux` does the same on two legs, `ubuntu-24.04` and
+  `ubuntu-24.04-arm`, uploading `b3270-linux-x64` and `b3270-linux-arm64`, and also feeds the gate two binaries it
+  must reject, so a gate that has stopped rejecting anything fails the job instead of passing everything;
+  `test-windows` runs the suite on Windows.
 
 To run the platform jobs by hand: Actions, Platforms, "Run workflow", or `gh workflow run platforms.yml`. A run that
-fails or is cancelled uploads `test-results-<os>` with its `.trx` files and any hang dump. The macOS run's
-`b3270-osx-arm64` artifact is a CI-built engine that has been started by the smoke test before being published; you
-can download it and drop it into `native/out/osx-arm64/`, but downloaded artifacts lose the executable bit, so run
-`chmod +x native/out/osx-arm64/b3270` and rebuild.
+fails or is cancelled uploads `test-results-<os>` with its `.trx` files and any hang dump. The `b3270-osx-arm64`,
+`b3270-linux-x64` and `b3270-linux-arm64` artifacts are CI-built engines that have been started by the smoke test
+before being published; you can download one and drop it into the matching `native/out/<rid>/`, but downloaded
+artifacts lose the executable bit, so run `chmod +x native/out/<rid>/b3270` and rebuild.
 
 ## Recording protocol fixtures
 
