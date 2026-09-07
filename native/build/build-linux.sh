@@ -66,6 +66,14 @@ fi
 # 3. b3270 against both, with the macOS script's component flags. x3270's configure keeps the CPPFLAGS and
 # LDFLAGS it is given and appends OpenSSL's own -I/-L to them (lib/configure.in saves them as orig_CPPFLAGS and
 # orig_LDFLAGS), so pointing them at the expat prefix here does not disturb --with-openssl.
+#
+# LIBS="-ldl -pthread" is REQUIRED, not a hedge. It was once believed to be one, on the evidence that removing
+# it still built and still passed the gate. It does — with "checking for CRYPTO_malloc in -lcrypto... no" and
+# "configure: WARNING: Disabling TLS -- missing OpenSSL libraries" buried in configure.log, and a b3270 that
+# reports "TLS provider: None". Static libcrypto needs -ldl and -pthread at link time, so without them the
+# AC_CHECK_LIB probe fails to link and configure concludes OpenSSL is unavailable. The resulting binary is
+# smaller and links *fewer* libraries, so checks 1 and 2 of the gate liked it better than the real thing.
+# That is why verify-linux.sh's check 3 exists. Verified on arm64, 2026-09-07.
 SRC=$("$ROOT/native/build/fetch-source.sh" "$BUILD/src")
 cd "$SRC"
 ./configure --enable-b3270 \
