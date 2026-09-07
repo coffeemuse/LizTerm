@@ -12,19 +12,34 @@ case "$ARCH" in
 esac
 BUILD="$ROOT/native/build-tmp/$RID"
 mkdir -p "$BUILD"
+# The RID the *container* resolved, for build-linux-docker.sh to read back rather than re-derive. It cannot
+# derive this itself: with DOCKER_DEFAULT_PLATFORM=linux/amd64 (or an amd64 default in Docker Desktop) an
+# arm64 Mac gets an x86_64 container, and a host-side `uname -m` would name a path this build never wrote.
+printf '%s\n' "$RID" > "$ROOT/native/build-tmp/rid"
 JOBS=$(nproc)
 
-# Each static prefix is stamped with the SHA-256 of the fetch script that filled it, and the guards below
-# require the stamp as well as the archive. Bumping a pin rewrites its fetcher, so a prefix built from the
-# previous version no longer matches and is rebuilt. Without the stamp, a rebuild that reuses an existing
-# native/build-tmp sees the archive, skips the block — and because the fetch is inside the block, silently
-# links the old library and never verifies the new checksum either. CI never hits this (it caches
-# native/out, never native/build-tmp), but the CVE story for both pins is "a one-line edit in the fetcher",
-# and locally that has to be true. A stale OpenSSL at least shows up in `b3270 --version`; a stale expat has
-# no tell at all.
-stamp_of() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | awk '{print $1}'
+# Each static prefix is stamped with the SHA-256 of the fetch script that filled it *and* of this script, and
+# the guards below require the stamp as well as the archive. Bumping a pin rewrites its fetcher and changing a
+# configure line rewrites this file, so either way a prefix built from the previous inputs stops matching and
+# is rebuilt. Without the stamp, a rebuild that reuses an existing native/build-tmp sees the archive, skips
+# the block — and because the fetch is inside the block, silently links the old library and never verifies
+# the new checksum either. CI never hits this (it caches native/out, never native/build-tmp), but the CVE
+# story for both pins is "a one-line edit in the fetcher", and locally that has to be true. A stale OpenSSL at
+# least shows up in `b3270 --version`; a stale expat has no tell at all.
+#
+# This script goes into the stamp whole rather than only its configure lines. The flags that shape a prefix
+# live here, not in the fetcher, so a stamp covering the fetcher alone answers the CVE bump and misses "I
+# dropped no-shared and rebuilt" — the same silent-wrong-library failure by the other door. Hashing the file
+# needs no discipline from whoever edits those flags next; the cost is that editing these comments rebuilds
+# both prefixes too, which is the safe direction for a guard whose other outcome has no tell.
+sha256_stdin() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | awk '{print $1}'
 }
+# Contents, not names: the paths here are absolute, and hashing them would restamp every prefix whenever the
+# checkout moves. SELF rather than $0 because step 3 cd's into the source tree, and a relative $0 read after
+# that would be a stamp of nothing.
+SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+stamp_of() { cat "$1" "$SELF" | sha256_stdin; }
 stale() { [ ! -f "$1" ] || [ "$(cat "$2/.pin" 2>/dev/null || true)" != "$3" ]; }
 
 # 1. OpenSSL, static only. --libdir=lib is not cosmetic: OpenSSL installs to lib64 on x86_64 by default, and

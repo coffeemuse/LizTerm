@@ -403,6 +403,27 @@ Rulings made in planning and execution, recorded here rather than edited into th
     it still ends `| head -3`, which is safe only *because* nothing reaches it — adding the redirection there
     without also replacing `head` would newly expose it to the SIGPIPE-under-pipefail failure of deviation 10.
     Fixing that pair together is worth doing and belongs with the `engine-macos` gate work, not here.
+14. **The wrapper no longer derives the RID from the host.** `build-linux-docker.sh` mapped its own `uname -m`
+    to a RID for the closing `verify-linux-start.sh` call, while `build-linux.sh` mapped the *container's*
+    `uname -m` for the path it actually wrote to. The two agree only while Docker's platform is the host's:
+    with `DOCKER_DEFAULT_PLATFORM=linux/amd64` (or an amd64 default in Docker Desktop) an arm64 Mac builds
+    `native/out/linux-x64` and the wrapper then looks under `linux-arm64`, so a good 15-minute build ends on
+    docker's bare "no such file or directory". `build-linux.sh` now writes the RID it resolved to
+    `native/build-tmp/rid` — where the wrapper's chown trap already covers it — and the wrapper reads that
+    back, so the container is the single source of truth and the host-side `case` is gone. CI is unaffected:
+    it passes `${{ matrix.rid }}` to its own verify steps and only reaches this branch on a cache miss.
+15. **The `.pin` stamp covers `build-linux.sh` as well as the fetcher.** Deviation 12 closed the CVE-bump door
+    and left the other one open: a prefix has two owners, and the configure flags that shape it live in
+    `build-linux.sh`, not in the fetcher. Editing `./config no-shared no-tests no-docs --libdir=lib` (or the
+    expat line) and rebuilding without clearing `native/build-tmp` still matched the old stamp, skipped the
+    block, and linked a prefix built with the previous flags — deviation 12's own
+    silent-wrong-library-with-no-tell, reached by the other door. `stamp_of` now hashes the fetcher's contents
+    concatenated with this script's; contents rather than names, because the paths are absolute and hashing
+    them would restamp every prefix when the checkout moves, and via an absolute `SELF` captured up front
+    because step 3 `cd`s into the source tree. The script goes in whole rather than only its configure lines:
+    that needs no discipline from whoever edits those flags next, at the cost of a comment-only edit also
+    rebuilding both prefixes. That cost is the safe direction, and CI never pays it — its engine cache key
+    already hashes every `native/build/*.sh`, so any edit here rebuilds there regardless.
 
 The claim section 7 said this plan's first CI run would either prove or refute held: **no .NET source change was
 needed.** `$(NETCoreSdkRuntimeIdentifier)` in the App and integration test csproj files and
