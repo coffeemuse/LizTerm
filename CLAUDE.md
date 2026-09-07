@@ -36,7 +36,8 @@ dispatch: Release build with `-warnaserror`, then the suite with a 5 minute blam
 `Directory.*.props` files: `engine-macos` on `macos-15` runs `build-macos.sh`, runs the suite with
 `LIZTERM_REQUIRE_ENGINE=1`, and only then uploads `b3270-osx-arm64`, so a binary that links but cannot be spawned is
 never published; `engine-linux` does the same on a two-leg matrix, `ubuntu-24.04` and `ubuntu-24.04-arm` — pinned
-rather than `ubuntu-latest` so the legs differ only in architecture — with `fail-fast: false`, because one
+rather than `ubuntu-latest` so the legs differ only in architecture — uploading `b3270-linux-x64` and
+`b3270-linux-arm64`, with `fail-fast: false`, because one
 architecture failing is information about that architecture and cancelling the other leg throws it away; `test-windows`
 runs the suite). All three jobs run the whole solution, which is why the path filter covers
 all of `src/` and `tests/` rather than the native build alone. Runs that fail *or are cancelled* upload
@@ -48,11 +49,15 @@ dumps `native/build-tmp/*/{configure,make}.log` on failure, because `build-macos
 `engine-linux` caches the same two things per leg (`native/out/<rid>` on that same key; one shared `native/cache` entry
 for both legs, since source tarballs are architecture-independent) and dumps `{openssl,expat,configure,make}.log`. Its
 `timeout-minutes` is 40, set from the first cold-cache run: x64 17m47s, arm64 4m35s (2m31s and 2m2s warm) — of the
-x64 leg's 1064s, the two negative-fixture steps took 279s and 281s, roughly half the leg between them, and the main
-build step took 432s, not far behind: every one of the three container invocations, main build included, pays the
-wrapper's `dnf install` again in a fresh container. Those two steps and the start check run whether or not the engine
-came from the cache: on a cache hit the build step never executes, so they are the only thing between a stale cached
-binary and an artifact upload.
+x64 leg's 1067s, the two negative-fixture steps it then had took 279s and 281s, roughly half the leg between them,
+against 28s and 30s on arm64, and the main build step took 432s, not far behind: every invocation of
+`build-linux-docker.sh`, main build included, pays the wrapper's `dnf install` again in a fresh container. Those
+fixtures are now one step that makes a single invocation run `verify-linux.sh` three times — the built binary must
+pass, each fixture must be rejected *by the message its own arm prints* — and it runs whether or not the engine came
+from the cache, alongside the start check: on a cache hit the build step never executes, so those two steps are the
+only thing between a stale cached binary and an artifact upload. Asserting the message rather than a non-zero exit
+is the point: the wrapper also exits non-zero for a Docker Hub rate limit or a failed `dnf install`, so the earlier
+`if wrapper …; then fail; fi` shape passed for those too.
 
 `ci.yml` deliberately does *not* carry a bare `push:` trigger: with `pull_request:` beside it, a PR head SHA gets two
 check runs named `test` — one over the branch tip, one over the merge with `main` — and a required check cannot tell
@@ -81,22 +86,31 @@ outside `/usr/lib` or `/System/Library`), then rebuild the .NET projects. Withou
 works) as a development override. `native/cache`, `native/build-tmp`, and `native/out` are gitignored.
 
 Linux engines come from `native/build/build-linux-docker.sh`, which needs only Docker: it builds `linux-x64` or
-`linux-arm64` (whichever the host is) inside `almalinux:8`, pinned by digest in `native/build/linux-image.sh`
-because the digest *is* the floor — that image's glibc 2.28 is the oldest LizTerm supports and is also .NET 10's
-own, so the engine never becomes the thing that decides where the app can run, and a floating tag could raise it
-silently. OpenSSL 3.5.8 and expat 2.8.4 are built from pinned tarballs (`fetch-openssl.sh`, `fetch-expat.sh`) and
+`linux-arm64` (whichever the host is) inside `almalinux:8`, pinned by digest in `native/build/linux-image.sh` —
+that image's glibc 2.28 is the oldest LizTerm supports and is also .NET 10's own, so on every glibc distribution
+.NET supports the engine never becomes the thing that decides where the app can run, and a floating tag could
+raise the base layer silently. The digest pins that base layer, not the toolchain: `dnf install` still pulls gcc,
+binutils and python3 from live AlmaLinux 8 repositories and glibc can move within the 2.28 stream, so what
+actually holds the floor is RHEL 8's frozen glibc ABI plus the gate's symbol check, which is the backstop. Use
+the multi-architecture *index* digest when bumping it (a platform manifest digest breaks exactly one leg of the
+matrix). OpenSSL 3.5.8 and expat 2.8.4 are built from pinned tarballs (`fetch-openssl.sh`, `fetch-expat.sh`) and
 linked statically rather than taken from the image, for the same reason in both cases: a statically linked
 library never receives the distribution's security updates, so its version has to be ours to bump deliberately.
+Each static prefix under `native/build-tmp` carries a `.pin` stamp holding its fetch script's SHA-256, and
+`build-linux.sh` reuses a prefix only when both the archive and a matching stamp are there — otherwise bumping a
+pin and rebuilding without clearing `build-tmp` would link the old library and skip the new checksum too.
 expat is not a choice — b3270's configure hard-errors without it and offers no `--without-expat` — and AlmaLinux 8
 packages no static expat, so linking the image's would have put `libexpat.so.1` in the gate's rejection list,
 which is exactly the class of dependency the gate exists to catch. The gate is three checks, not one:
 `verify-linux.sh` (inside the container) rejects a dynamic dependency outside the glibc runtime and any imported
 glibc symbol above 2.28 — `ldd` alone passes a binary built on Ubuntu 24.04 that cannot start on RHEL 9 — and
 `verify-linux-start.sh` (on the host, because a script already inside a container cannot start another) runs the
-result in a bare container from the same image. CI proves the gate rejects as well as accepts, one fixture per
-arm: `/usr/bin/bash`, which links `libtinfo`, for the allowlist, and a `/bin/true` copied out of `debian:12-slim`
-for the floor, which needs no compiler and so is the same fixture on a developer's Mac. Alpine and any other musl
-target is a different RID and out of scope.
+result in a bare container from the same image. CI proves the gate accepts *and* rejects in one container
+invocation: it runs `verify-linux.sh` against the built binary, then against one fixture per arm — `/usr/bin/bash`,
+which links `libtinfo`, for the allowlist, and a `/bin/true` copied out of a digest-pinned `debian:12-slim` for
+the floor, which needs no compiler and so is the same fixture on a developer's Mac — and asserts each rejection
+by the message that arm prints, not by a bare non-zero exit, which the wrapper also returns for a Docker Hub rate
+limit or a failed `dnf install`. Alpine and any other musl target is a different RID and out of scope.
 
 Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG` (append every protocol
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can

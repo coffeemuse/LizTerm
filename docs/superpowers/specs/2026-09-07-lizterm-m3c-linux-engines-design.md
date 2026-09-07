@@ -18,9 +18,11 @@ integration lane.
 
 Decisions taken in the brainstorm on 2026-09-07:
 
-- **The glibc floor is 2.28**, which is AlmaLinux 8 / RHEL 8. That is also .NET 10's own floor, so the engine
-  never becomes the thing that decides where LizTerm runs. A floor above it — Debian 12's 2.36 is the tempting
-  one, because the toolchain is current and the image is small — would ship a binary that cannot start on
+- **The glibc floor is 2.28**, which is AlmaLinux 8 / RHEL 8. That is also .NET 10's own floor, so on every
+  glibc distribution .NET supports the engine never becomes the thing that decides where LizTerm runs. (The one
+  exception is deliberate and named in section 2: .NET 10 supports Alpine, and a glibc engine will not run
+  there. musl is out of scope for this plan.) A floor above it — Debian 12's 2.36 is the tempting one, because
+  the toolchain is current and the image is small — would ship a binary that cannot start on
   Ubuntu 22.04 (2.35) or RHEL 9 (2.34), both supported for years yet, and a binary that cannot start is exactly
   the failure this plan's gate exists to prevent.
 - **OpenSSL comes from pinned 3.5.x LTS source, built inside the container**, not from the base image's
@@ -38,8 +40,9 @@ Decisions taken in the brainstorm on 2026-09-07:
 - GitHub made arm64 standard runners available in private repositories on 2026-01-29. They are free-tier
   eligible and carry two vCPUs on a private repository against four on a public one. The label is
   `ubuntu-24.04-arm`; there is no `ubuntu-latest-arm`.
-- .NET 10 supports Ubuntu 18.04 and later and RHEL 8 and later — glibc 2.27 and 2.28. Building the engine at
-  2.28 puts it at or below the floor of everything else LizTerm ships.
+- .NET 10's supported-OS list starts at Ubuntu 22.04 (glibc 2.35); the oldest glibc anywhere on it is RHEL 8's
+  2.28. Building the engine at 2.28 therefore puts it at exactly .NET's own floor, not one step below it — so
+  no glibc system .NET 10 supports is ruled out by the engine.
 - AlmaLinux 8 is glibc 2.28 on both `x86_64` and `aarch64`, publishes both images, and is supported until 2029.
 - OpenSSL 3.5 is the current LTS, released 2025-04-08 and supported until 2030-04-08. The next LTS is 4.2 in
   April 2027, which is when this pin next wants a look.
@@ -115,11 +118,12 @@ The wrapper, and the only script CI or a developer calls directly to build. It r
 nothing else:
 
 - Sources `native/build/linux-image.sh`, which holds the base image **pinned by digest**
-  (`almalinux:8@sha256:...`) and nothing else. The digest is where the glibc floor actually comes from, and two
-  scripts need it — this wrapper and `verify-linux-start.sh` — so it lives in one file they both read rather
-  than in both of them, where the two copies could drift and quietly stop testing the same floor. It is a `.sh`
-  under `native/build`, so `hashFiles('native/build/*.sh')` covers it: changing the image forces a rebuild and a
-  fresh gate run.
+  (`almalinux:8@sha256:...`) and nothing else. The digest pins the base layer the floor comes from. It does not
+  pin the toolchain, which `dnf install` still pulls live, so the floor ultimately rests on RHEL 8's frozen
+  glibc ABI with section 4's symbol check as the backstop. Two scripts need the digest — this wrapper and
+  `verify-linux-start.sh` — so it lives in one file they both read rather than in both of them, where the two
+  copies could drift and quietly stop testing the same floor. It is a `.sh` under `native/build`, so
+  `hashFiles('native/build/*.sh')` covers it: changing the image forces a rebuild and a fresh gate run.
 - `docker run --rm -v <repo>:/src -w /src <image>` a small inline preamble that `dnf install`s the toolchain
   (`gcc make perl-core diffutils tar binutils` — `binutils` for the `readelf` the gate needs; the plan's first
   task pins the final list) and then runs the requested command.
@@ -312,22 +316,25 @@ Rulings made in planning and execution, recorded here rather than edited into th
    but `fetch-source.sh` now runs inside the container too — it is `build-linux.sh` that fetches x3270 — where
    `shasum`, a Perl script, may be absent. All three fetchers therefore share a two-line helper that prefers
    `sha256sum` and falls back to `shasum -a 256`, so the same script works on macOS and in the container.
-7. **`LIBS="-ldl -pthread"` proved unnecessary and is scheduled for removal.** Section 3.2 left this as discovery
-   work. Removing it on arm64 built and gated cleanly — configure's own link line already supplies what static
-   libcrypto needs — and its only observable effect is one extra dependency, `libdl.so.2`, on a library that is
-   glibc's own and folded into `libc` at 2.34. It was kept as a hedge for the x86_64 leg, which nobody had built
-   at that point. That leg is now green, so the hedge has expired: dropping `LIBS` from `build-linux.sh`'s
-   configure line is a follow-up this plan did not take, not settled design, and the gate re-proves it on both
-   legs when someone does.
+7. **`LIBS="-ldl -pthread"` proved unnecessary and was removed.** Section 3.2 left this as discovery work.
+   Removing it on arm64 built and gated cleanly — configure's own link line already supplies what static
+   libcrypto needs — and its only observable effect was one extra dependency, `libdl.so.2`, on a library that is
+   glibc's own and folded into `libc` at 2.34. It was kept for a while as a hedge for the x86_64 leg, which
+   nobody had built at that point. Once that leg was green the hedge had expired, and `LIBS` came off
+   `build-linux.sh`'s configure line in the branch's final fix wave. Because that edit changes `build-linux.sh`
+   and so the engine cache key, CI rebuilt both legs cold without it and both gated clean, with `libdl.so.2`
+   gone from the dependency list on each — the removal is re-proved on both architectures, not just the one it
+   was first tried on.
 8. **`timeout-minutes` is 40, not section 5's 45.** From the first cold-cache run (PR #10, 2026-09-07): x64
    17m47s, arm64 4m35s; on the same PR with warm caches, 2m31s and 2m2s. 40 sits comfortably above double the
-   slower leg with headroom, rather than being a bare double. Of the x64 leg's 1064s, the two negative-fixture
-   steps took 279s and 281s, roughly half the leg between them, against 26s and 29s on arm64, and the main build
+   slower leg with headroom, rather than being a bare double. Of the x64 leg's 1067s, the two negative-fixture
+   steps took 279s and 281s, roughly half the leg between them, against 28s and 30s on arm64, and the main build
    step took 432s, not far behind: every invocation of `build-linux-docker.sh`, main build included, re-runs
    `dnf install` in a fresh container, nothing about that install is cached, and it was several times slower on
    the x64 runner than the corresponding arm64 steps in that run. Section 5's pre-run reasoning was backwards —
    it expected the two-vCPU arm64 runner to be the one needing headroom, and arm64 was the fast leg by a wide
-   margin.
+   margin. Those two steps were later folded into one (deviation 11), which removes one of the three container
+   invocations and so one `dnf install` per leg.
 9. **The check names are runner-qualified.** GitHub renders every `matrix.include` property in a job's check name,
    not only the one that varies meaningfully, so section 7's `engine-linux (linux-x64)` and
    `engine-linux (linux-arm64)` are really `engine-linux (ubuntu-24.04, linux-x64)` and
@@ -342,6 +349,40 @@ Rulings made in planning and execution, recorded here rather than edited into th
     `sed -n '1,3p'` reads to the end and does not. That substitution went in at all three sites in the shipped
     scripts that used `head`, including `build-linux.sh`'s `find ... | head -1`, which also gained a `sort` so
     the binary it picks is deterministic.
+11. **The two negative-fixture steps became one step that also runs the gate against the real binary.** As first
+    shipped, each fixture step asserted only that `build-linux-docker.sh` exited non-zero — and the wrapper exits
+    non-zero for a Docker Hub rate limit, a failed `dnf install` (its own `exit 1`) or a network hiccup, every one
+    of which then read as "the gate rejected the fixture". Exit codes cannot separate them: a `dnf` failure and a
+    real rejection are both 1. That is deviation 10's lesson — a guard that cannot fail is not a guard —
+    reappearing one level up, in the check on the guard. Worse, section 5 claimed those steps stood between a
+    stale cached binary and the upload, and on a cache hit `verify-linux.sh` never ran against
+    `native/out/<rid>/b3270` at all: only `verify-linux-start.sh` touched the real artifact, and starting on
+    `almalinux:8` is a strictly weaker claim than the allowlist — a binary linking `libexpat.so.1` or
+    `libtinfo.so.6` starts there fine. One step now makes a single container invocation run `verify-linux.sh`
+    three times: the built binary must pass, `/usr/bin/bash` must be rejected with `dynamic dependencies outside
+    the glibc runtime`, and the `debian:12-slim` `/bin/true` with `above the 2.28 floor`. Each arm is asserted on
+    its own message, so a wrapper failure fails the step instead of counting as a rejection, and the fixture
+    output is captured into a variable rather than piped into `grep -q`, which would stop at its first match and
+    SIGPIPE the writer into the 141 deviation 10 already recorded. It also removes one of the three container
+    invocations, and so one `dnf install`, from every run. `verify-linux-start.sh` stays a separate step: it runs
+    on the host rather than in the build container, and it is a different claim. `debian:12-slim` is now pinned by
+    digest like the build image, to the multi-architecture *index* digest so both legs resolve — the pin lives in
+    the workflow rather than in `linux-image.sh` on purpose, because that file is hashed into the engine cache key
+    and a fixture image has nothing to do with how the engine is built.
+12. **Each static prefix is stamped with the SHA-256 of the fetch script that filled it.** `build-linux.sh` guarded
+    the OpenSSL and expat builds on the archive alone (`[ ! -f "$STAGE/lib/libssl.a" ]`), so bumping a version in a
+    fetcher and rebuilding locally without clearing `native/build-tmp` silently linked the old library — and
+    because the fetch is *inside* the guard, the new checksum was never verified either. A stale OpenSSL at least
+    shows up in `b3270 --version`; a stale expat has no tell at all. CI never saw it (it caches `native/out`,
+    never `build-tmp`), but the CVE-bump story for both pins is "a one-line edit in the fetcher", and locally that
+    has to be true. Each prefix now gets a `.pin` file holding its fetcher's SHA-256 on a successful build, and the
+    guard requires the archive *and* a matching stamp, so a bumped pin rebuilds.
+13. **The `--version` filter at the end of both verify scripts was inert.** b3270 writes its whole banner to
+    stderr, so `"$BIN" --version | sed -n '1,3p'` filtered an empty stream while about a dozen unfiltered lines
+    went to the log anyway. Both now redirect `2>&1` into the `sed`. `verify-macos.sh` was deliberately left alone:
+    it still ends `| head -3`, which is safe only *because* nothing reaches it — adding the redirection there
+    without also replacing `head` would newly expose it to the SIGPIPE-under-pipefail failure of deviation 10.
+    Fixing that pair together is worth doing and belongs with the `engine-macos` gate work, not here.
 
 The claim section 7 said this plan's first CI run would either prove or refute held: **no .NET source change was
 needed.** `$(NETCoreSdkRuntimeIdentifier)` in the App and integration test csproj files and
