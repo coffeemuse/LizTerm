@@ -35,20 +35,32 @@ dispatch: Release build with `-warnaserror`, then the suite with a 5 minute blam
 (pushes to `main`, dispatch, and PRs touching the workflow, `native/**`, `src/**`, `tests/**`, `global.json`, or the
 `Directory.*.props` files: `engine-macos` on `macos-15` runs `build-macos.sh`, runs the suite with
 `LIZTERM_REQUIRE_ENGINE=1`, and only then uploads `b3270-osx-arm64`, so a binary that links but cannot be spawned is
-never published; `test-windows` runs the suite). Both jobs run the whole solution, which is why the path filter covers
+never published; `engine-linux` does the same on a two-leg matrix, `ubuntu-24.04` and `ubuntu-24.04-arm` — pinned
+rather than `ubuntu-latest` so the legs differ only in architecture — with `fail-fast: false`, because one
+architecture failing is information about that architecture and cancelling the other leg throws it away; `test-windows`
+runs the suite). All three jobs run the whole solution, which is why the path filter covers
 all of `src/` and `tests/` rather than the native build alone. Runs that fail *or are cancelled* upload
 `test-results-<os>`: `.trx`, plus `*.dmp` (a blame-hang kill writes a hang dump, not a sequence file) and any
 `*Sequence*.xml`. `timeout-minutes` and `cancel-in-progress` both *cancel*, so those uploads are
 `if: ${{ failure() || cancelled() }}` — plain `failure()` would drop the evidence on exactly those runs. `engine-macos`
 caches the built engine (`native/out/osx-arm64`, keyed on every `native/build/*.sh`) as well as the source tarball, and
 dumps `native/build-tmp/*/{configure,make}.log` on failure, because `build-macos.sh` redirects them out of the job log.
+`engine-linux` caches the same two things per leg (`native/out/<rid>` on that same key; one shared `native/cache` entry
+for both legs, since source tarballs are architecture-independent) and dumps `{openssl,expat,configure,make}.log`. Its
+`timeout-minutes` is 40, set from the first cold-cache run: x64 17m47s, arm64 4m35s, about 2m per leg warm — the x64
+leg is slow almost entirely in the two negative-fixture steps, each of which pays the wrapper's `dnf install` again in
+a fresh container. Those two steps and the start check run whether or not the engine came from the cache: on a cache
+hit the build step never executes, so they are the only thing between a stale cached binary and an artifact upload.
 
 `ci.yml` deliberately does *not* carry a bare `push:` trigger: with `pull_request:` beside it, a PR head SHA gets two
 check runs named `test` — one over the branch tip, one over the merge with `main` — and a required check cannot tell
 them apart, so a PR could go green for a tree that does not build when merged. Branch protection on `main` requires
 `test` only; the platform jobs are path-filtered on PRs and would never report on a docs-only PR, so a rule requiring
 them directly would leave those waiting forever (the fix, when it matters, is a `platforms-gate` job with
-`needs: [engine-macos, test-windows]` and `if: always()` that passes when they are skipped).
+`needs: [engine-macos, engine-linux, test-windows]` and `if: always()` that passes when they are skipped). A rule
+naming the Linux checks directly would have to spell them `engine-linux (ubuntu-24.04, linux-x64)` and
+`engine-linux (ubuntu-24.04-arm, linux-arm64)`: GitHub renders every `matrix.include` property in a check name, not
+just the one that varies meaningfully, and a rule requiring the short form matches nothing and waits forever.
 
 `global.json` pins the SDK to the 10.0.4xx band; supported builds stay on the current LTS. It rolls forward only
 within that band: when an SDK update replaces it, bump `version`, never widen `rollForward` (the runner and the Mac
@@ -65,6 +77,24 @@ copy through its project reference to the App, so a built engine lands in its ou
 outside `/usr/lib` or `/System/Library`), then rebuild the .NET projects. Without it, connecting throws
 `BackendUnavailableException`; set `LIZTERM_B3270_PATH` to any b3270 4.2+ (a Homebrew x3270 install
 works) as a development override. `native/cache`, `native/build-tmp`, and `native/out` are gitignored.
+
+Linux engines come from `native/build/build-linux-docker.sh`, which needs only Docker: it builds `linux-x64` or
+`linux-arm64` (whichever the host is) inside `almalinux:8`, pinned by digest in `native/build/linux-image.sh`
+because the digest *is* the floor — that image's glibc 2.28 is the oldest LizTerm supports and is also .NET 10's
+own, so the engine never becomes the thing that decides where the app can run, and a floating tag could raise it
+silently. OpenSSL 3.5.8 and expat 2.8.4 are built from pinned tarballs (`fetch-openssl.sh`, `fetch-expat.sh`) and
+linked statically rather than taken from the image, for the same reason in both cases: a statically linked
+library never receives the distribution's security updates, so its version has to be ours to bump deliberately.
+expat is not a choice — b3270's configure hard-errors without it and offers no `--without-expat` — and AlmaLinux 8
+packages no static expat, so linking the image's would have put `libexpat.so.1` in the gate's rejection list,
+which is exactly the class of dependency the gate exists to catch. The gate is three checks, not one:
+`verify-linux.sh` (inside the container) rejects a dynamic dependency outside the glibc runtime and any imported
+glibc symbol above 2.28 — `ldd` alone passes a binary built on Ubuntu 24.04 that cannot start on RHEL 9 — and
+`verify-linux-start.sh` (on the host, because a script already inside a container cannot start another) runs the
+result in a bare container from the same image. CI proves the gate rejects as well as accepts, one fixture per
+arm: `/usr/bin/bash`, which links `libtinfo`, for the allowlist, and a `/bin/true` copied out of `debian:12-slim`
+for the floor, which needs no compiler and so is the same fixture on a developer's Mac. Alpine and any other musl
+target is a different RID and out of scope.
 
 Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG` (append every protocol
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can

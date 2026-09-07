@@ -254,4 +254,96 @@ and is not this plan.
 
 ## 9. Deviations from this spec (as-built)
 
-Filled in during execution.
+Rulings made in planning and execution, recorded here rather than edited into the sections above:
+
+1. **expat is pinned and built static too, so `native/build` gained a seventh file rather than the six this spec
+   lists** (`linux-image.sh`, `fetch-openssl.sh`, `build-linux.sh`, `build-linux-docker.sh`, `verify-linux.sh`,
+   `verify-linux-start.sh`, and now `fetch-expat.sh`). Section 3.2 names only OpenSSL, but b3270 requires libexpat
+   and offers no way to build without it: `b3270/configure.in` searches for `XML_ParserCreate` and then
+   hard-errors on a missing `expat.h`, and there is no `--without-expat`. macOS never noticed because expat lives
+   in `/usr/lib`, which `verify-macos.sh` allows as part of that OS; Linux has no distribution-independent
+   libexpat. AlmaLinux 8 ships `expat` and `expat-devel` but no static package (`dnf provides '*/libexpat.a'`
+   finds nothing, `powertools` included), and the binary built against the shared one put `libexpat.so.1` in the
+   gate's rejection list — the exact class of dependency section 4 exists to catch. Admitting it would have
+   changed check 1's meaning from "the glibc runtime" to "the glibc runtime plus whatever we happened to link",
+   so instead `fetch-expat.sh` pins expat 2.8.4 beside `fetch-openssl.sh`, `build-linux.sh` builds it
+   `--disable-shared` into its own prefix, and `expat-devel` is deliberately kept out of the container's packages
+   so `-lexpat` cannot resolve to anything but our archive. libexpat publishes a GPG signature but no checksum
+   file, so the pin was cross-checked by downloading from the GitHub release and the SourceForge mirror and
+   confirming the two SHA-256s match. One consequence belongs to 3e:
+   the shipped binary now statically links Apache-2.0 (OpenSSL) and MIT (expat) code, both of which require their
+   notices in a binary distribution — two libraries to acknowledge at release time, not one.
+2. **A parsing bug in check 1, found by the fixture written to fail check 2.** `ldd` prints its own
+   ``version `GLIBC_x.y' not found`` diagnostic *unindented* and on *stdout*, ahead of the tab-indented dependency
+   lines it still lists. Check 1 as the plan spelled it — `ldd "$BIN" | awk '{print $1}' | sed 's|.*/||'` — has no
+   way to tell that line from a dependency: its first field is the binary's own path with a colon on the end,
+   which matches no allowed name. So the newer-glibc fixture failed check 1, naming the binary itself as a
+   phantom dependency, instead of check 2 with the message that says what to do — the gate rejecting for the
+   wrong reason, which is barely better than not rejecting. `verify-linux.sh` filters to leading-whitespace lines
+   before the `awk`, which excludes the diagnostic and nothing else: a genuinely missing library
+   (`libfoo.so.1 => not found`) keeps a real dependency line's indentation and is still caught.
+   Reproduced identically under x86_64 emulation, and it is inherent to `GLIBC_2.34`-versioned
+   `__libc_start_main`, which every dynamically linked binary calls, rather than an architecture quirk. Worth
+   recording precisely because the fixture existed to fail exactly one arm: that is the only reason the bug
+   surfaced at all, and it is section 4's argument for negative fixtures in miniature.
+3. **The allowlist gained `libutil.so.1` and `libanl.so.1`.** x3270's configure resolves `forkpty` to `-lutil` and
+   `getaddrinfo_a` to `-lanl`, so a built b3270 names both. Both belong to glibc's own package on the floor image
+   (`rpm -qf` answers `glibc-2.28-251.el8_10.40` for each) and both were folded into `libc.so.6` at glibc 2.34,
+   alongside the `libdl`, `libpthread` and `librt` section 4 already allows for exactly that reason, so permitting
+   them does not widen check 1 past "the glibc runtime": any system with `libc.so.6` has them. `libcrypt` was
+   considered and deliberately **not** added — nothing in a b3270 build calls it, and the `AC_SEARCH_LIBS` /
+   `AC_CHECK_LIB` set that reaches this build (`util`, `nsl`, `socket`, `iconv`, `anl`, `expat`, `crypto`, `ssl`)
+   is architecture-independent, so speculative entries would only weaken the check on both legs.
+4. **All three fixtures were substituted.** The floor arm is a `/bin/true` copied out of `debian:12-slim`, not a C
+   program compiled on the host runner: it imports `__libc_start_main@GLIBC_2.34` just as the compiled fixture
+   would, needs no compiler on the runner, and is the same fixture on a developer's Mac, where a host-compiled
+   binary would be Mach-O and could not be checked at all. The allowlist arm is `/usr/bin/bash`, which links
+   `libtinfo.so.6`, rather than `/usr/bin/curl`: bash is present in the image by definition. And the positive
+   fixture used while writing the gate is `/usr/bin/gzip`, not `/usr/bin/true`: AlmaLinux 8 packages
+   `coreutils-single`, so `/usr/bin/true` is a shebang script rather than an ELF, and the multi-call `coreutils`
+   binary behind it links five libraries outside the allowlist — it would have failed check 1 for reasons that
+   have nothing to do with what the fixture is for.
+5. **The container's package list gained `findutils` and `python3`** over section 3.3's `gcc make perl-core
+   diffutils tar binutils`, which that section left the first task to pin. `findutils` is configure's; `python3`
+   is x3270's, whose configure refuses to run without one ("Can't find Python using 'python3'") because the build
+   generates several C sources with Python scripts. Nothing extra was needed for OpenSSL — `perl-core` covered it
+   and OpenSSL built on the first attempt — and `expat-devel` is deliberately absent, per deviation 1.
+6. **The fetchers take whichever checksum tool is present.** Section 3.1 says the Linux fetcher uses `sha256sum`,
+   but `fetch-source.sh` now runs inside the container too — it is `build-linux.sh` that fetches x3270 — where
+   `shasum`, a Perl script, may be absent. All three fetchers therefore share a two-line helper that prefers
+   `sha256sum` and falls back to `shasum -a 256`, so the same script works on macOS and in the container.
+7. **`LIBS="-ldl -pthread"` proved unnecessary and is scheduled for removal.** Section 3.2 left this as discovery
+   work. Removing it on arm64 built and gated cleanly — configure's own link line already supplies what static
+   libcrypto needs — and its only observable effect is one extra dependency, `libdl.so.2`, on a library that is
+   glibc's own and folded into `libc` at 2.34. It was kept as a hedge for the x86_64 leg, which nobody had built
+   at that point. That leg is now green, so the hedge has expired: dropping `LIBS` from `build-linux.sh`'s
+   configure line is a follow-up this plan did not take, not settled design, and the gate re-proves it on both
+   legs when someone does.
+8. **`timeout-minutes` is 40, not section 5's 45.** From the first cold-cache run (PR #10, 2026-09-07): x64
+   17m47s, arm64 4m35s, and about 2m per leg once the caches are warm. 40 sits comfortably above double the
+   slower leg with headroom, rather than being a bare double. Almost all of the x64 leg's time was the two
+   negative-fixture steps, ~4m40s each against 26s and 29s on arm64: every invocation of `build-linux-docker.sh`
+   re-runs `dnf install` in a fresh container, nothing about that install is cached, and it was several times
+   slower on the x64 runner in that run. Section 5's pre-run reasoning was backwards — it expected the two-vCPU
+   arm64 runner to be the one needing headroom, and arm64 was the fast leg by a wide margin.
+9. **The check names are runner-qualified.** GitHub renders every `matrix.include` property in a job's check name,
+   not only the one that varies meaningfully, so section 7's `engine-linux (linux-x64)` and
+   `engine-linux (linux-arm64)` are really `engine-linux (ubuntu-24.04, linux-x64)` and
+   `engine-linux (ubuntu-24.04-arm, linux-arm64)`. Any document or branch-protection rule that names these checks
+   must use the full form; a required check under the short name matches nothing and waits forever.
+10. **Two `pipefail` traps were fixed in the plan's script text before implementation began**, from the plan's own
+    pre-flight scan; both would have failed a good build. `grep` exits 1 when it matches nothing, which is the
+    *passing* case for both of `verify-linux.sh`'s greps, so each ends `|| true` — without it on the symbol scan
+    the script aborts there instead of reaching the empty-symbol branch, which is the one with the useful message.
+    And GNU `head` closes the pipe once it has its lines, the writer takes SIGPIPE, and `pipefail` promotes that
+    141 to the script's exit status, so `"$BIN" --version | head -3` reports a passing binary as a failed gate;
+    `sed -n '1,3p'` reads to the end and does not. That substitution went in at all three sites in the shipped
+    scripts that used `head`, including `build-linux.sh`'s `find ... | head -1`, which also gained a `sort` so
+    the binary it picks is deterministic.
+
+The claim section 7 said this plan's first CI run would either prove or refute held: **no .NET source change was
+needed.** `$(NETCoreSdkRuntimeIdentifier)` in the App and integration test csproj files and
+`RuntimeInformation.RuntimeIdentifier` in `B3270Locator` both resolve to `linux-x64` and `linux-arm64` on these
+runners, so the existing copy rules placed the freshly built engine in the test output and `EngineSmokeTests`
+found it there and started it with `LIZTERM_REQUIRE_ENGINE=1` set, on both legs, with the copy rule and the
+locator untouched.
