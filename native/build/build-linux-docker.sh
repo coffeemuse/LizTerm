@@ -36,11 +36,13 @@ $COMMAND
 
 # The build path gets the whole gate. CI calls this script directly as well, because on a cache hit the
 # docker run above never happens and this is the only thing between a stale cached binary and an upload.
+#
+# The RID comes from the file build-linux.sh just wrote, never from the host's `uname -m`: the two disagree
+# whenever Docker's platform is not the host's — DOCKER_DEFAULT_PLATFORM=linux/amd64 on an arm64 Mac builds
+# native/out/linux-x64 inside the container while the host still reads arm64 — and a host-derived path would
+# send the start check somewhere this build never wrote, failing a good build on docker's bare "no such file".
 if [ "$#" -eq 0 ]; then
-  case "$(uname -m)" in
-    x86_64)         RID=linux-x64 ;;
-    arm64|aarch64)  RID=linux-arm64 ;;
-    *) echo "unsupported arch $(uname -m)" >&2; exit 1 ;;
-  esac
-  "$(dirname "$0")/verify-linux-start.sh" "$ROOT/native/out/$RID/b3270"
+  RID_FILE="$ROOT/native/build-tmp/rid"
+  [ -f "$RID_FILE" ] || { echo "$RID_FILE is missing: the build recorded no RID" >&2; exit 1; }
+  "$(dirname "$0")/verify-linux-start.sh" "$ROOT/native/out/$(cat "$RID_FILE")/b3270"
 fi

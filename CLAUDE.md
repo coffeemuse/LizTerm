@@ -87,19 +87,30 @@ outside `/usr/lib` or `/System/Library`), then rebuild the .NET projects. Withou
 works) as a development override. `native/cache`, `native/build-tmp`, and `native/out` are gitignored.
 
 Linux engines come from `native/build/build-linux-docker.sh`, which needs only Docker: it builds `linux-x64` or
-`linux-arm64` (whichever the host is) inside `almalinux:8`, pinned by digest in `native/build/linux-image.sh` —
+`linux-arm64` — whichever the *container* is, which is the host's architecture unless Docker has been pointed
+elsewhere — inside `almalinux:8`, pinned by digest in `native/build/linux-image.sh` —
 that image's glibc 2.28 is the oldest LizTerm supports and is also .NET 10's own, so on every glibc distribution
 .NET supports the engine never becomes the thing that decides where the app can run, and a floating tag could
 raise the base layer silently. The digest pins that base layer, not the toolchain: `dnf install` still pulls gcc,
 binutils and python3 from live AlmaLinux 8 repositories and glibc can move within the 2.28 stream, so what
 actually holds the floor is RHEL 8's frozen glibc ABI plus the gate's symbol check, which is the backstop. Use
 the multi-architecture *index* digest when bumping it (a platform manifest digest breaks exactly one leg of the
-matrix). OpenSSL 3.5.8 and expat 2.8.4 are built from pinned tarballs (`fetch-openssl.sh`, `fetch-expat.sh`) and
+matrix). `build-linux.sh` records the RID the container resolved in `native/build-tmp/rid` and the wrapper reads
+that back rather than deriving one from the host's `uname -m`: the two disagree whenever Docker's platform is not
+the host's — with `DOCKER_DEFAULT_PLATFORM=linux/amd64`, an arm64 Mac builds `native/out/linux-x64` while the
+host still reads arm64 — and a host-derived path would hand the start check a binary the build never wrote.
+OpenSSL 3.5.8 and expat 2.8.4 are built from pinned tarballs (`fetch-openssl.sh`, `fetch-expat.sh`) and
 linked statically rather than taken from the image, for the same reason in both cases: a statically linked
 library never receives the distribution's security updates, so its version has to be ours to bump deliberately.
-Each static prefix under `native/build-tmp` carries a `.pin` stamp holding its fetch script's SHA-256, and
-`build-linux.sh` reuses a prefix only when both the archive and a matching stamp are there — otherwise bumping a
-pin and rebuilding without clearing `build-tmp` would link the old library and skip the new checksum too.
+Each static prefix under `native/build-tmp` carries a `.pin` stamp holding the SHA-256 of its fetch script *and*
+of `build-linux.sh`, and `build-linux.sh` reuses a prefix only when both the archive and a matching stamp are
+there — otherwise bumping a pin and rebuilding without clearing `build-tmp` would link the old library and skip
+the new checksum too. Both files are in the stamp because a prefix has two owners: the fetcher holds the version
+and the checksum, `build-linux.sh` holds the configure flags that shape what gets built from them, and a stamp
+over the fetcher alone answers a CVE bump while missing "I dropped `no-shared` and rebuilt" — the same
+silent-wrong-library outcome by the other door. It hashes that script whole rather than just its configure lines,
+so editing these comments rebuilds both prefixes as well; over-rebuilding is the safe direction for a guard whose
+other outcome has no tell.
 expat is not a choice — b3270's configure hard-errors without it and offers no `--without-expat` — and AlmaLinux 8
 packages no static expat, so linking the image's would have put `libexpat.so.1` in the gate's rejection list,
 which is exactly the class of dependency the gate exists to catch. The gate is four checks, not one:
