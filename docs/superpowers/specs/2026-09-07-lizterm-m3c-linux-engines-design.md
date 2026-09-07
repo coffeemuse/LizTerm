@@ -316,15 +316,30 @@ Rulings made in planning and execution, recorded here rather than edited into th
    but `fetch-source.sh` now runs inside the container too — it is `build-linux.sh` that fetches x3270 — where
    `shasum`, a Perl script, may be absent. All three fetchers therefore share a two-line helper that prefers
    `sha256sum` and falls back to `shasum -a 256`, so the same script works on macOS and in the container.
-7. **`LIBS="-ldl -pthread"` proved unnecessary and was removed.** Section 3.2 left this as discovery work.
-   Removing it on arm64 built and gated cleanly — configure's own link line already supplies what static
-   libcrypto needs — and its only observable effect was one extra dependency, `libdl.so.2`, on a library that is
-   glibc's own and folded into `libc` at 2.34. It was kept for a while as a hedge for the x86_64 leg, which
-   nobody had built at that point. Once that leg was green the hedge had expired, and `LIBS` came off
-   `build-linux.sh`'s configure line in the branch's final fix wave. Because that edit changes `build-linux.sh`
-   and so the engine cache key, CI rebuilt both legs cold without it and both gated clean, with `libdl.so.2`
-   gone from the dependency list on each — the removal is re-proved on both architectures, not just the one it
-   was first tried on.
+7. **`LIBS="-ldl -pthread"` is required, and believing otherwise cost the gate a third check.** Section 3.2 left
+   this as discovery work, and an earlier version of this entry recorded it as an expired hedge "proved
+   unnecessary" because removing it on arm64 still built and still passed the gate. The final review asked for
+   the removal. Removing it does build and does pass the gate — and produces a b3270 that reports
+   `TLS provider: None`. `configure.log` says why, if anyone reads 1,000 lines in:
+   `checking for CRYPTO_malloc in -lcrypto... no`, then
+   `configure: WARNING: Disabling TLS -- missing OpenSSL libraries`. Static libcrypto needs `-ldl` and
+   `-pthread` at link time, so without them x3270's `AC_CHECK_LIB` probe fails to link and configure concludes
+   OpenSSL is unavailable. The earlier entry read the one observable difference — an extra `libdl.so.2` — as
+   cosmetic. It was the *symptom of OpenSSL being linked at all*.
+   The failure is silent in the worst way: the TLS-less binary is 4.7 MB against 11 MB, links **fewer**
+   libraries, and so passes checks 1 and 2 more comfortably than the real engine. A gate that only asks what a
+   binary links prefers the broken one. Measured on arm64, 2026-09-07: the full build exited 0,
+   `verify-linux.sh` and `verify-linux-start.sh` both printed `OK`, and the artifact could not have reached a
+   TLS host — with plan 3b's entire trust story built on top of it.
+   So `LIBS` stays, with a comment at the configure line saying it is load-bearing and why, and
+   `verify-linux.sh` gains a third check of its own — the banner must report an OpenSSL TLS provider — so the
+   gate is now four checks, not section 4's three (that section's check 3, starting on the floor, is still
+   `verify-linux-start.sh`). The TLS-less binary was kept only long enough to prove the new check rejects it and
+   that the real engine still passes; both were confirmed.
+   The lesson is deviation 10's, one level further out. The negative fixtures proved the gate could reject.
+   Nothing proved it asked about the thing that matters most, and what it did not ask, it silently allowed.
+   `verify-macos.sh` has no equivalent check and the same silent failure mode is possible there in principle;
+   that belongs with the `engine-macos` gate work, out of scope here.
 8. **`timeout-minutes` is 40, not section 5's 45.** From the first cold-cache run (PR #10, 2026-09-07): x64
    17m47s, arm64 4m35s; on the same PR with warm caches, 2m31s and 2m2s. 40 sits comfortably above double the
    slower leg with headroom, rather than being a bare double. Of the x64 leg's 1067s, the two negative-fixture
