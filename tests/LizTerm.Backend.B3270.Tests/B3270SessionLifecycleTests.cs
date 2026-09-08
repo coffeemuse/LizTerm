@@ -44,6 +44,28 @@ public class B3270SessionLifecycleTests
         await Assert.ThrowsAsync<BackendUnavailableException>(() => session.StartProcessAsync(CancellationToken.None));
     }
 
+    /// <summary>Review finding 2 on plan 3d task 8's race fix: completing <c>_hello</c> was correctly moved past
+    /// the whole initialize block's foreach (so a later item like tls-hello has already updated session state
+    /// before StartProcessAsync's awaiter can resume -- see the InitializeIndication case in Handle), but without
+    /// a finally, a later item throwing -- a malformed indication, or an external ScreenUpdated/StatusChanged
+    /// subscriber throwing, which the App's dispatch delegate can do during shutdown -- skipped the
+    /// TrySetResult entirely. The reader thread survives (ReadLoop's inner try/catch swallows the exception into
+    /// a HostMessage), but _hello never completes, so a healthy engine that answered hello fine gets blamed for
+    /// a spurious "did not answer within N seconds" timeout caused entirely by our own handler. StartupTimeout is
+    /// short so this test fails fast, not after a real 10 s wait, when the finally is missing.</summary>
+    [Fact]
+    public async Task A_later_initialize_item_that_makes_a_subscriber_throw_still_completes_startup()
+    {
+        var fake = new FakeB3270Process { AutoInitialize = false };
+        var session = new B3270Session(Profile, () => fake) { StartupTimeout = TimeSpan.FromMilliseconds(500) };
+        session.ScreenUpdated += (_, _) => throw new InvalidOperationException("subscriber boom");
+        fake.Emit("""{"initialize":[{"hello":{"version":"4.5.6","build":"fake b3270"}},{"screen-mode":{"model":2,"rows":24,"columns":80,"color":true,"oversize":false,"extended":true}}]}""");
+
+        await session.StartProcessAsync(CancellationToken.None);
+
+        Assert.Equal("4.5.6 (fake b3270)", session.Engine.Version);
+    }
+
     [Fact]
     public async Task Run_correlates_results_by_tag_even_out_of_order()
     {
