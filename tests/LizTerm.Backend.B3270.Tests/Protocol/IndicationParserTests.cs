@@ -155,6 +155,37 @@ public class IndicationParserTests
     }
 
     [Fact]
+    public void Parses_tls_hello()
+    {
+        var line = """{"tls-hello":{"supported":true,"provider":"OpenSSL 3.6.3 9 Jun 2026","options":["acceptHostname","verifyHostCert","startTls","caDir","caFile","certFile","certFileType","chainFile","keyFile","keyFileType","keyPasswd","tlsMinProtocol","tlsMaxProtocol","tlsSecurityLevel"]}}""";
+        var hello = Parse<TlsHelloIndication>(line);
+        Assert.True(hello.Supported);
+        Assert.Equal("OpenSSL 3.6.3 9 Jun 2026", hello.Provider);
+        Assert.Contains("caFile", hello.Options);
+        Assert.Equal(14, hello.Options.Count);
+    }
+
+    /// <summary>A Schannel engine (or any provider without TLS compiled in) sends supported:false with no
+    /// options at all; the parser must degrade to an empty list rather than throw.</summary>
+    [Fact]
+    public void Tls_hello_with_no_options_key_degrades_to_an_empty_list()
+    {
+        var hello = Parse<TlsHelloIndication>("""{"tls-hello":{"supported":false}}""");
+        Assert.False(hello.Supported);
+        Assert.Null(hello.Provider);
+        Assert.Empty(hello.Options);
+    }
+
+    /// <summary>A malformed options value (not an array) must not throw either: StringList already degrades
+    /// this the same way every other list field in the protocol does.</summary>
+    [Fact]
+    public void Tls_hello_with_malformed_options_degrades_to_an_empty_list()
+    {
+        var hello = Parse<TlsHelloIndication>("""{"tls-hello":{"supported":true,"options":"not-an-array"}}""");
+        Assert.Empty(hello.Options);
+    }
+
+    [Fact]
     public void Parses_ft()
     {
         var ft = Parse<FtIndication>("""{"ft":{"state":"running","bytes":4096,"cause":"ui"}}""");
