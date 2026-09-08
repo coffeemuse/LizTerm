@@ -33,7 +33,7 @@ public partial class SessionWindow : Window
         };
     }
 
-    /// <summary>One definition, two renderers, exactly one of them visible. Hiding the classic menu under the
+    /// <summary>One definition, two renderers, exactly one of them live. Hiding the classic menu under the
     /// native strategy is required rather than tidy: measured on macOS, a NativeMenu installed while the classic
     /// Menu was still visible drew both — an in-window bar beneath the system bar.</summary>
     private void ApplyMenuStrategy(bool useNativeMenu)
@@ -41,9 +41,21 @@ public partial class SessionWindow : Window
         ClassicMenu.IsVisible = !useNativeMenu;
         NativeBar.IsVisible = useNativeMenu;
 
+        // Hiding NativeMenuBar is not enough to turn the native path off, because NativeMenuBar is not what
+        // exports the menu. A window's NativeMenu goes out through the window's own
+        // ITopLevelNativeMenuExporter — NativeMenu.MenuProperty's own change handler calls SetNativeMenu on it —
+        // and NativeMenuBar only *consumes* the same property to draw an in-window fallback. Left attached under
+        // the classic strategy, the definition would still install AppKit key equivalents and draw a system menu
+        // bar on macOS beside the in-window one, and would still be handed to a Linux global-menu registrar
+        // (Plasma's Application Menu applet, Unity) while the classic bar drew it in-window too. LIZTERM_MENU
+        // exists so that a native gesture swallowing a 3270 key can be turned off; it has to actually turn it
+        // off. Detaching is safe on both backends: each treats a null menu as an empty one.
+        if (!useNativeMenu) NativeMenu.SetMenu(this, null);
+
         // macOS puts About in the application menu, so neither renderer's Help item may also carry one. Both get
         // the rule: LIZTERM_MENU=classic on macOS is reachable, and there the classic bar renders in-window while
-        // the application menu still supplies its own About.
+        // the application menu still supplies its own About. Under that strategy the lookup finds nothing,
+        // because the line above detached the menu — which is the point, not an omission.
         var aboutInHelp = MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS());
         AboutMenuItem.IsVisible = aboutInHelp;
         var nativeAbout = MenuLookup.Item(NativeMenu.GetMenu(this), "_Help", "_About LizTerm...");
@@ -75,7 +87,11 @@ public partial class SessionWindow : Window
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
     /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these
     /// three, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
-    /// carries one.</summary>
+    /// carries one.
+    ///
+    /// Under the classic strategy ApplyMenuStrategy has detached the native menu, so the three classic
+    /// InputGesture assignments still run and the three native ones find no item and do nothing — no key
+    /// equivalent is installed for a menu that is not exported.</summary>
     private void ShowPlatformGestures()
     {
         var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
@@ -84,6 +100,8 @@ public partial class SessionWindow : Window
         PasteMenuItem.InputGesture = hotkeys.Paste.FirstOrDefault();
         SelectAllMenuItem.InputGesture = hotkeys.SelectAll.FirstOrDefault();
 
+        // Null under the classic strategy; MenuLookup answers null for every lookup and the Gesture helper's
+        // own guard makes each assignment a no-op.
         var menu = NativeMenu.GetMenu(this);
         Gesture(menu, "_Copy", hotkeys.Copy.FirstOrDefault());
         Gesture(menu, "_Paste", hotkeys.Paste.FirstOrDefault());

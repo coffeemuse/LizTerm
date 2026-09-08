@@ -129,7 +129,6 @@ The variable joins the documented set in `README.md` and `CLAUDE.md`.
 <NativeMenu.Menu>
   <NativeMenu>
     <NativeMenuItem Header="About LizTerm" Click="OnAboutClick" />
-    <NativeMenuItem Header="Quit LizTerm" Gesture="Cmd+Q" Click="OnQuitClick" />
   </NativeMenu>
 </NativeMenu.Menu>
 ```
@@ -137,14 +136,21 @@ The variable joins the documented set in `README.md` and `CLAUDE.md`.
 This hangs off the application rather than a window, which is what gives the picker a menu bar on macOS and
 what closes the issue's complaint about the app's startup state.
 
-`Cmd+Q` is the one gesture outside the Edit menu in this whole plan, and it is deliberate. The application
-menu is macOS-only by construction; `Keymap` claims no Meta chord at all (its table is Escape, Pause, function
-keys, Alt and Ctrl chords, and the modifier taps), so nothing about `Cmd+Q` can reach the swallowing failure of
-section 2.1. Omitting it would be the riskier choice, since a replaced application menu may not inherit
-AppKit's own Quit item.
+**Amended (see section 9, deviation 3).** As drafted this section also declared
+`<NativeMenuItem Header="Quit LizTerm" Gesture="Cmd+Q" Click="OnQuitClick" />`, on the reasoning that "omitting
+it would be the riskier choice, since a replaced application menu may not inherit AppKit's own Quit item."
+**That is measured false.** `Avalonia.Native.AvaloniaNativeMenuExporter.SetMenu` appends AppKit's standard
+block — a separator, Services, Hide, Hide Others, Show All, and Quit with `Cmd+Q` — to the application-level
+`NativeMenu` unless `MacOSPlatformOptions.DisableDefaultApplicationMenuItems` is set, and `Program.cs` sets no
+`MacOSPlatformOptions`. Declaring our own Quit therefore shipped **two** Quit items with one chord and opposite
+behaviour: ours forced `Shutdown()` through `App.Quit()`, Avalonia's calls `TryShutdown(0)`, which a running
+IND$FILE transfer correctly refuses (`FileTransferViewModel.TryClose` cancels the close and Avalonia propagates
+that to the owner). The non-forcing one is the semantic this app wants, so the item was deleted and no
+`MacOSPlatformOptions` is set — suppressing the block instead would mean re-implementing Services, Hide, Hide
+Others and Show All to get back what is already there for free.
 
-`OnQuitClick` calls the existing public `App.Quit()` (`App.axaml.cs:144`), which is already the one spelling of
-shutdown under `ShutdownMode.OnExplicitShutdown`.
+So there is **no gesture outside the Edit menu anywhere in this plan**, application menu included, and no
+`OnQuitClick`. `App.Quit()` (`App.axaml.cs`) stays; the picker's Quit button is its remaining caller.
 
 ### 4.3 One spelling of About
 
@@ -186,8 +192,21 @@ system bar.
 
 `NativeMenuBar` hides itself on macOS, so under the native strategy on macOS both in-window renderers are
 invisible and the definition reaches the system menu bar; on Windows and Linux under the same strategy
-`NativeMenuBar` draws it in-window. Under the classic strategy the window-level `NativeMenu` still exists but
-nothing renders it, which is harmless — and section 6's once-only test is what proves it is also inert.
+`NativeMenuBar` draws it in-window.
+
+**Amended (see section 9, deviation 4).** As drafted this section said that under the classic strategy the
+window-level `NativeMenu` "still exists but nothing renders it, which is harmless." **That is false.** A
+window's `NativeMenu` is exported through the window's own `ITopLevelNativeMenuExporter` — `NativeMenu`'s
+`MenuProperty` change handler calls `SetNativeMenu` on it — with no `NativeMenuBar` involved at all;
+`NativeMenuBar` only *consumes* the same property to draw an in-window fallback, and hiding the control detaches
+nothing. Left attached under the classic strategy, the definition still installs AppKit key equivalents and
+draws a system menu bar on macOS beside the in-window one, and is still handed to a Linux global-menu registrar
+(Plasma's Application Menu applet, Unity) while the classic bar draws it in-window too — and the Linux case is
+the *default* strategy there, not the escape hatch. `LIZTERM_MENU=classic` exists precisely so someone can turn
+the native path off when a gesture is swallowing a 3270 key, so it has to turn it off: `ApplyMenuStrategy` calls
+`NativeMenu.SetMenu(this, null)` under the classic strategy. Both backends treat a null menu as an empty one,
+so the detach is safe. `ShowPlatformGestures` then finds no native Edit item — `MenuLookup` answers null for
+every lookup and each native assignment no-ops — while the three classic `InputGesture` assignments still run.
 
 ### 4.5 Gestures
 
@@ -302,9 +321,14 @@ real Linux machine with `LIZTERM_MENU=native`, neither of which is reachable fro
 2. **Appearance.** Whether `NativeMenuBar`'s in-window rendering is presentable next to `Menu`'s. The tests in
    section 6 cover structure and behaviour; they cannot say it looks right.
 
-A third question is macOS-only and answerable here, on the day the application menu first runs: whether
+A third question was macOS-only and answerable here, on the day the application menu first ran: whether
 supplying an application-level `NativeMenu` costs the AppKit-supplied items a Mac user expects beside Quit
-(Hide, Hide Others, Services). If it does, they are added explicitly.
+(Hide, Hide Others, Services). **It is answered: it does not.** `AvaloniaNativeMenuExporter.SetMenu` appends
+that whole block — separator, Services, separator, Hide, Hide Others, Show All, separator, Quit — to whatever
+application menu the app declares, unless `MacOSPlatformOptions.DisableDefaultApplicationMenuItems` is set,
+which this app does not set. Nothing has to be added explicitly; what had to be *removed* was our own Quit,
+which duplicated the appended one. See section 9, deviation 3. This question is closed and is not part of what
+the follow-up below still needs to verify.
 
 A fourth question does not belong on this list any more. Section 6 flagged whether `NativeMenuBar` dispatches
 a gesture as well as displaying it as "the one behaviour this machine cannot check," implying it too would
@@ -348,3 +372,56 @@ Rulings made during code review and execution, recorded here rather than edited 
    to state what it guards (regressions in dispatch wiring and in `TerminalScreen`'s routing) and what it does
    not (AppKit's real key-equivalent interception, which needs a live macOS GUI session and is not exercised by
    any test in this repo).
+3. **Our own Quit item is deleted from the application menu; section 4.2's reason for having it, and section 8's
+   third open question, were both settled by the same measurement.** A probe app on macOS 15 reproducing
+   `App.axaml`'s exact construction showed the real application menu as: About LizTerm / **Quit LizTerm Cmd+Q**
+   / — / Services / — / Hide LizTerm Cmd+H / Hide Others Alt+Cmd+Q / Show All / — / **Quit Cmd+Q**. Two Quit
+   items, one chord, opposite behaviour: ours called `App.Quit()` → `Shutdown()`, which forces; Avalonia's calls
+   `TryShutdown(0)`, which a running IND$FILE transfer correctly refuses (`FileTransferViewModel.TryClose`
+   cancels the close, and Avalonia propagates an owned dialog's cancel to its owner). The mechanism is
+   `Avalonia.Native.AvaloniaNativeMenuExporter.SetMenu`, which calls `PopulateStandardOSXMenuItems` on the
+   application-level `NativeMenu` — mutating that very instance — unless
+   `MacOSPlatformOptions.DisableDefaultApplicationMenuItems` is set; `Program.cs` sets no `MacOSPlatformOptions`.
+   (An upstream oddity the probe also caught, recorded so a later reader does not read it as a transcription
+   slip: Avalonia gives Hide Others `KeyGesture(Key.Q, Alt|Meta)` rather than AppKit's Alt+Cmd+H, so the block
+   claims Alt+Cmd+Q. Not ours to fix here, and `Keymap` claims no Meta chord, so it reaches no 3270 key.)
+   **What changed:** the `Quit LizTerm` item is gone from `App.axaml`, `App.axaml.cs`'s `OnQuitClick` is gone with
+   it (`App.Quit()` stays — the picker's Quit button calls it), and `DisableDefaultApplicationMenuItems` is
+   deliberately *not* set, because suppressing the block would mean re-implementing Services, Hide, Hide Others
+   and Show All to get back what is already there. Two consequences worth stating: the app now has **no gesture
+   outside the Edit menu at all**, so section 4.2's Cmd+Q carve-out no longer exists; and section 8's third
+   question — whether an app-supplied menu costs the AppKit items — is answered no, and closed there. The test
+   `The_application_menu_carries_about_and_quit` asserted a two-item shape that only ever existed under headless,
+   where the native exporter never runs; it was re-aimed at what the app *declares* and renamed
+   `The_application_menu_declares_about_and_no_quit_of_its_own`, with a docstring saying the standard block is
+   Avalonia's to supply and is not visible to any test here. `Quit_carries_cmd_q_and_about_carries_no_gesture`
+   became `The_application_menu_carries_no_gesture`.
+4. **`LIZTERM_MENU=classic` did not turn the native menu off; section 4.4's claim that the detached-renderer
+   window menu is "harmless" was wrong.** `ApplyMenuStrategy` hid the two *renderers* but never detached the
+   window's `NativeMenu`, and a window's `NativeMenu` is exported by the window's own
+   `ITopLevelNativeMenuExporter` — `NativeMenu.MenuProperty`'s change handler calls `SetNativeMenu` on it —
+   entirely independently of any `NativeMenuBar` control, which merely binds the same property to draw an
+   in-window fallback (`NativeMenuBar.SubscribeToToplevel` reads `NativeMenu.MenuProperty`; it never writes it).
+   Measured: `NativeMenu.GetIsNativeMenuExported(window) == true` for a window with a `NativeMenu` and no
+   `NativeMenuBar` at all. So on macOS `LIZTERM_MENU=classic` still installed the AppKit key equivalents and
+   showed the system bar beside the in-window one, and on Linux under a global-menu registrar (Plasma's
+   Application Menu applet, Unity) the **default** classic strategy exported the window menu to the desktop bar
+   while the classic menu also drew in-window. That escape hatch exists precisely so a gesture swallowing a 3270
+   key can be turned off, so it has to work. **What changed:** `ApplyMenuStrategy` calls
+   `NativeMenu.SetMenu(this, null)` under the classic strategy. Both native backends normalise a null menu to an
+   empty one (`AvaloniaNativeMenuExporter.SetNativeMenu` and `DBusMenuExporterImpl.SetNativeMenu` each substitute
+   `new NativeMenu()`), so nothing throws and nothing is exported. `ShowPlatformGestures` was already safe with a
+   null menu — `MenuLookup` answers null for every lookup and its local `Gesture` helper guards on it — so the
+   three classic `InputGesture` assignments still run and the three native ones no-op; two new tests hold both
+   halves, `The_classic_strategy_detaches_the_window_native_menu` and
+   `The_classic_menu_keeps_its_gestures_when_the_native_menu_is_detached`. The first asserts the attached
+   property rather than `GetIsNativeMenuExported`, because headless offers no `ITopLevelNativeMenuExporter` and
+   so reports `false` either way; the attached property is the input every exporter reads.
+5. **The parity guard never compared `Command`.** `The_native_menu_matches_the_classic_menu_item_for_item`
+   compared headers, separator positions and the Keys menu's `CommandParameter`, so `_Connect` bound to
+   `DisconnectCommand` on one side would have passed every assertion in it. A reference-equality comparison of
+   `Command` was added for every top-level menu but Edit, whose exclusion (Click on the native side, `Command` on
+   the classic side, deliberately) stays exactly as it was and still carries its comment. Verified by mutation:
+   pointing the native `_Connect` at `DisconnectCommand` fails the test with
+   `_File > _Connect: classic and native bind different commands`, which also confirms `NativeMenuItem.Command`
+   bindings resolve under headless rather than the comparison passing vacuously on two nulls.
