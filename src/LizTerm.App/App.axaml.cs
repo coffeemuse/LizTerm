@@ -155,8 +155,6 @@ public partial class App : Application
         catch { /* nothing to report it on, and nothing about About is worth a crash */ }
     }
 
-    private void OnQuitClick(object? sender, EventArgs e) => Quit();
-
     /// <summary>The one spelling of About, shared by a session window's Help item and the macOS application
     /// menu. The application menu may fire with no session at all, which is why the engine has a session-less
     /// fallback and the owner has a null one.</summary>

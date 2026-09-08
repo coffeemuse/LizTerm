@@ -9,11 +9,20 @@
 
   <!-- The macOS application menu. It hangs off the application rather than a window, which is what gives the
        profile picker a menu bar: the picker is the app's startup state and the state it returns to when the
-       last session closes, and until now macOS showed nothing there. Other platforms render none of this. -->
+       last session closes, and until now macOS showed nothing there. Other platforms render none of this.
+
+       About is the whole of what we declare, deliberately. Avalonia.Native's AvaloniaNativeMenuExporter.SetMenu
+       appends AppKit's standard block — Services, Hide, Hide Others, Show All and Quit — to this very menu
+       unless MacOSPlatformOptions.DisableDefaultApplicationMenuItems is set, and Program.cs sets no
+       MacOSPlatformOptions. Measured on macOS 15 / Avalonia 12.1.2: our own "Quit LizTerm Cmd+Q" shipped
+       alongside Avalonia's "Quit Cmd+Q", two items with one chord and opposite behaviour — ours forced
+       Shutdown(), Avalonia's calls TryShutdown(0), which a running IND$FILE transfer correctly refuses through
+       FileTransferViewModel.TryClose. The non-forcing one is the semantic this app wants, so ours is gone;
+       suppressing the block instead would mean re-implementing Services, Hide, Hide Others and Show All to get
+       back what is already there for free. -->
   <NativeMenu.Menu>
     <NativeMenu>
       <NativeMenuItem Header="About LizTerm" Click="OnAboutClick" />
-      <NativeMenuItem Header="Quit LizTerm" Gesture="Cmd+Q" Click="OnQuitClick" />
     </NativeMenu>
   </NativeMenu.Menu>
 </Application>

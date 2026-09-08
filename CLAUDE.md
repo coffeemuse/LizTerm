@@ -199,7 +199,9 @@ Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
 be started from Help > Wire Log in a session window; files go to `<config>/logs/wire-<profile>-<timestamp>.log`,
 and Show Wire Logs opens that folder. `LIZTERM_MENU` (`native` or `classic`, overriding `MenuStrategy`'s
-platform default; anything else falls back to the default). `LIZTERM_TEST_HOST`
+platform default; anything else falls back to the default; `classic` detaches the window's `NativeMenu` as well
+as drawing the in-window one, so nothing is exported and no key equivalent of its own is installed).
+`LIZTERM_TEST_HOST`
 (`host[:port]`, enables `tests/LizTerm.Integration.Tests`, whose five live tests otherwise skip; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
 `LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
@@ -478,20 +480,35 @@ the backend tests.
   carries its own guard, and a keystroke is never dropped for arriving while the previous one's round trip is
   still open. The `[RelayCommand]`s on the same methods serve the menus, which keep CommunityToolkit's default of
   disabling an async command while it runs.
-- Menus: one `NativeMenu` definition per window plus an application-level one in `App.axaml` (About, Quit —
-  the only thing that gives the picker a menu bar on macOS), rendered by either `NativeMenuBar` or the classic
-  in-window `<Menu>`, which is still present. `MenuStrategy` (`Menus/`) picks: `LIZTERM_MENU=native|classic`,
+- Menus: one `NativeMenu` definition per window plus an application-level one in `App.axaml` — **About and
+  nothing else**, which is what gives the picker a menu bar on macOS — rendered by either `NativeMenuBar` or the
+  classic in-window `<Menu>`, which is still present. The application menu declares no Quit on purpose:
+  `Avalonia.Native.AvaloniaNativeMenuExporter.SetMenu` appends AppKit's standard block (Services, Hide, Hide
+  Others, Show All, and Quit with `Cmd+Q`) to that very `NativeMenu` unless
+  `MacOSPlatformOptions.DisableDefaultApplicationMenuItems` is set, which `Program.cs` does not set; a declared
+  Quit shipped a second `Cmd+Q` item beside Avalonia's, and Avalonia's is the one this app wants because it calls
+  `TryShutdown(0)` — which a running IND$FILE transfer correctly refuses — where ours forced `Shutdown()`. Do not
+  set `DisableDefaultApplicationMenuItems` to "own" the block: that means re-implementing Services, Hide, Hide
+  Others and Show All to get back what is already free.
+  `MenuStrategy` (`Menus/`) picks the renderer: `LIZTERM_MENU=native|classic`,
   else native on macOS and classic elsewhere, because `NativeMenuBar`'s in-window rendering has never been
   looked at on Windows or Linux. In the pinned Avalonia 12.1.2, that in-window rendering binds
   `NativeMenuItem.Gesture` only to `MenuItem.InputGestureProperty` — display only, Avalonia's own doc says so
   — and `MenuItem.OnKeyDown`/`MenuBase.OnKeyDown` are both empty bodies; only `MenuItem.HotKey` (via
   `HotKeyManager`) dispatches, so the fallback bar shows a shortcut but never fires it, which closes the
   double-dispatch worry by construction on Windows and Linux — what is still open there is mnemonics and
-  appearance, not dispatch. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
+  appearance, not dispatch. The classic strategy also calls `NativeMenu.SetMenu(this, null)`: hiding
+  `NativeMenuBar` detaches nothing, because a window's `NativeMenu` is exported by the window's own
+  `ITopLevelNativeMenuExporter` (`NativeMenu.MenuProperty`'s change handler calls `SetNativeMenu` on it) while
+  `NativeMenuBar` only *consumes* the same property to draw the fallback bar. Left attached, `LIZTERM_MENU=classic`
+  on macOS would still install the AppKit key equivalents and draw the system bar beside the in-window one, and
+  on Linux the *default* strategy would still hand the menu to a global-menu registrar (Plasma's Application Menu
+  applet, Unity). Both backends normalise a null menu to an empty one, so the detach is safe;
+  `ShowPlatformGestures` then finds no native Edit item and no-ops there while the classic `InputGesture`
+  assignments still run. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
   an argument, as `EngineRequirement.Decide` does, so every combination is testable anywhere. **No menu item
-  outside Edit ever carries a `Gesture`, except `Cmd+Q` on the macOS application menu**: the application menu
-  is macOS-only by construction and `Keymap` claims no Meta chord, so `Cmd+Q` cannot collide with any 3270
-  command. Measured on macOS, a `NativeMenuItem` gesture is an AppKit key equivalent that
+  anywhere outside Edit ever carries a `Gesture`** — the application menu included, since AppKit supplies its
+  own. Measured on macOS, a `NativeMenuItem` gesture is an AppKit key equivalent that
   `NSApplication.sendEvent:` dispatches before the key window's responder chain, so `Gesture="F1"` would
   silently swallow PF1 — `TerminalScreen` never sees the key. Edit's Cmd/Ctrl+C, V and A come from
   `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`/`PasteAsync`/`SelectAll` directly,

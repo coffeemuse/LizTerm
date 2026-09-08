@@ -18,27 +18,35 @@ namespace LizTerm.App.Tests.Views;
 /// headless platform, two-way write-back included, which is what makes these assertions possible.</summary>
 public class NativeMenuTests
 {
+    /// <summary>What the application menu *declares*, which on macOS is not what a user sees. Avalonia's
+    /// AvaloniaNativeMenuExporter.SetMenu appends AppKit's standard block — Services, Hide, Hide Others, Show All
+    /// and Quit — to this very NativeMenu instance unless MacOSPlatformOptions.DisableDefaultApplicationMenuItems
+    /// is set, which Program.cs does not set. The standard block is therefore Avalonia's to supply and is
+    /// invisible to this test: the native exporter never runs under headless, so nothing here can observe it.
+    ///
+    /// Which is why there is no Quit of our own. Measured on macOS 15 / Avalonia 12.1.2, declaring one shipped
+    /// two Quit items with the same Cmd+Q and opposite behaviour: ours called App.Quit() → Shutdown() (forced),
+    /// Avalonia's calls TryShutdown(0), which a running IND$FILE transfer correctly refuses. The non-forcing one
+    /// is the semantic this app wants.</summary>
     [AvaloniaFact]
-    public void The_application_menu_carries_about_and_quit()
+    public void The_application_menu_declares_about_and_no_quit_of_its_own()
     {
         var menu = NativeMenu.GetMenu(Application.Current!);
 
         Assert.NotNull(menu);
         var headers = menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header!).ToArray();
-        Assert.Equal(["About LizTerm", "Quit LizTerm"], headers);
+        Assert.Equal(["About LizTerm"], headers);
     }
 
-    /// <summary>The one gesture outside the Edit menu in this whole feature. The application menu is macOS-only
-    /// by construction and Keymap claims no Meta chord, so Cmd+Q cannot swallow a key the host needed; omitting
-    /// it is the riskier choice, since a replaced application menu may not inherit AppKit's own Quit item.</summary>
+    /// <summary>Not one gesture outside the Edit menu, the application menu included. Cmd+Q was ours until the
+    /// measurement recorded above; AppKit's own Quit item carries it now, and a second declaration of the same
+    /// chord would be a second key equivalent for it.</summary>
     [AvaloniaFact]
-    public void Quit_carries_cmd_q_and_about_carries_no_gesture()
+    public void The_application_menu_carries_no_gesture()
     {
         var menu = NativeMenu.GetMenu(Application.Current!)!;
-        var items = menu.Items.OfType<NativeMenuItem>().ToArray();
 
-        Assert.Null(items.Single(i => i.Header == "About LizTerm").Gesture);
-        Assert.Equal(new KeyGesture(Key.Q, KeyModifiers.Meta), items.Single(i => i.Header == "Quit LizTerm").Gesture);
+        Assert.All(menu.Items.OfType<NativeMenuItem>(), item => Assert.Null(item.Gesture));
     }
 
     private static (SessionWindow Window, SessionViewModel Vm, FakeEmulatorSession Session, FakeTextClipboard Clipboard) Show(bool useNativeMenu = true)
@@ -135,12 +143,49 @@ public class NativeMenuTests
         Assert.False(classic.FindControl<NativeMenuBar>("NativeBar")!.IsVisible);
     }
 
+    /// <summary>Hiding the renderers is not what turns the native path off, so this asserts the thing that does.
+    /// A window's NativeMenu is exported through the window's own ITopLevelNativeMenuExporter — NativeMenu's
+    /// MenuProperty change handler calls SetNativeMenu on it — with no NativeMenuBar involved at all;
+    /// NativeMenuBar merely binds the same property to draw an in-window fallback. So a hidden NativeMenuBar
+    /// still leaves AppKit key equivalents installed and a system menu bar drawn beside the classic one on
+    /// macOS, and still hands the menu to a Linux global-menu registrar (Plasma's Application Menu applet,
+    /// Unity) while the classic bar draws it in-window. LIZTERM_MENU=classic is the escape hatch for exactly the
+    /// case where a native gesture is swallowing a 3270 key, so it has to detach the definition, not just hide a
+    /// control. The attached property is the assertion because it is the input to every exporter; headless
+    /// offers no ITopLevelNativeMenuExporter, so NativeMenu.GetIsNativeMenuExported is false either way here and
+    /// would prove nothing.</summary>
+    [AvaloniaFact]
+    public void The_classic_strategy_detaches_the_window_native_menu()
+    {
+        var (native, _, _, _) = Show(useNativeMenu: true);
+        Assert.NotNull(NativeMenu.GetMenu(native));
+
+        var (classic, _, _, _) = Show(useNativeMenu: false);
+        Assert.Null(NativeMenu.GetMenu(classic));
+    }
+
+    /// <summary>The detach must not cost the classic menu its shortcut hints: ShowPlatformGestures sets the
+    /// three classic InputGestures and then looks the three native Edit items up through NativeMenu.GetMenu,
+    /// which is null under this strategy. Every native lookup finding nothing has to be a no-op, not a throw.</summary>
+    [AvaloniaFact]
+    public void The_classic_menu_keeps_its_gestures_when_the_native_menu_is_detached()
+    {
+        var (window, _, _, _) = Show(useNativeMenu: false);
+        var hotkeys = window.GetPlatformSettings()!.HotkeyConfiguration;
+
+        Assert.Equal(hotkeys.Copy.FirstOrDefault(), window.FindControl<MenuItem>("CopyMenuItem")!.InputGesture);
+        Assert.Equal(hotkeys.Paste.FirstOrDefault(), window.FindControl<MenuItem>("PasteMenuItem")!.InputGesture);
+        Assert.Equal(hotkeys.SelectAll.FirstOrDefault(), window.FindControl<MenuItem>("SelectAllMenuItem")!.InputGesture);
+    }
+
     /// <summary>The mechanical parity guard the other tests above do not provide: none of them walk the full
-    /// Keys or Edit submenu, so a dropped separator, a reordered item, or — the case that matters most on a
-    /// 3270 client — a CommandParameter copied from the wrong line (a "PA1"-headed item silently wired to
-    /// TerminalKey.PA2) would pass every test above while still sending the wrong key to the mainframe. This
-    /// test walks all four top-level menus item for item, normalising across the two menu kinds' different
-    /// item types (MenuItem/NativeMenuItem) and separator types (Separator/NativeMenuItemSeparator).</summary>
+    /// Keys or Edit submenu, so a dropped separator, a reordered item, a Command copied from the wrong line
+    /// (a "_Connect"-headed item wired to DisconnectCommand) or — the case that matters most on a 3270 client —
+    /// a CommandParameter copied from the wrong line (a "PA1"-headed item silently wired to TerminalKey.PA2)
+    /// would pass every test above while still doing the wrong thing to the mainframe. This test walks all four
+    /// top-level menus item for item, comparing header, separator position, Command and (on Keys)
+    /// CommandParameter, normalising across the two menu kinds' different item types (MenuItem/NativeMenuItem)
+    /// and separator types (Separator/NativeMenuItemSeparator).</summary>
     [AvaloniaFact]
     public void The_native_menu_matches_the_classic_menu_item_for_item()
     {
@@ -171,6 +216,23 @@ public class NativeMenuTests
                 var classicHeader = ((MenuItem)classicChildren[j]).Header as string;
                 var nativeHeader = ((NativeMenuItem)nativeChildren[j]).Header;
                 Assert.Equal(classicHeader, nativeHeader);
+            }
+
+            // Command, for every menu but Edit. Everything checked above — headers, separator positions, and
+            // the Keys CommandParameter walk below — passes with "_Connect" bound to DisconnectCommand; only
+            // this comparison sees it. Reference equality is the right test: both sides bind the same
+            // [RelayCommand] instance off the one view model, and a null Command on both is what a Click-driven
+            // item (New Session, File Transfer, Close, About) correctly looks like.
+            if (topHeader != "_Edit")
+            {
+                for (var j = 0; j < classicChildren.Length; j++)
+                {
+                    if (classicChildren[j] is Separator) continue;
+                    var classicItem = (MenuItem)classicChildren[j];
+                    var nativeItem = (NativeMenuItem)nativeChildren[j];
+                    Assert.True(ReferenceEquals(classicItem.Command, nativeItem.Command),
+                        $"{topHeader} > {classicItem.Header}: classic and native bind different commands");
+                }
             }
 
             if (topHeader == "_Edit")
