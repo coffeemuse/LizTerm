@@ -74,4 +74,26 @@ public class SessionFactoryTests
 
         Assert.Same(SystemTrustAnchors.Default, session.TrustAnchors);
     }
+
+    /// <summary>About must render something for every outcome, so the not-found case is a value rather than an
+    /// exception — and it says Unknown rather than borrowing a provenance it does not have, which is what
+    /// StatusFormatter renders as "b3270, not found".</summary>
+    [Fact]
+    public void CheckBackendOrUnknown_reports_a_missing_engine_as_unknown_rather_than_throwing()
+    {
+        var empty = Directory.CreateTempSubdirectory("lizterm-factory-").FullName;
+        try
+        {
+            var engine = SessionFactory.CheckBackendOrUnknown("/nonexistent/b3270", empty);
+
+            Assert.Equal(EngineSource.Unknown, engine.Source);
+            Assert.Equal("b3270", engine.Name);
+            Assert.Null(engine.Version);
+            Assert.Equal("", engine.Path);
+        }
+        finally
+        {
+            Directory.Delete(empty, recursive: true);
+        }
+    }
 }
