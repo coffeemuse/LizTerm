@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using LizTerm.App.Menus;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
@@ -196,5 +198,47 @@ public class NativeMenuTests
                 }
             }
         }
+    }
+
+    /// <summary>Gestures come from the platform hotkey table, not a hardcoded modifier, so macOS shows Cmd and
+    /// the others Ctrl from the one table ShowPlatformGestures already reads for the classic menu.</summary>
+    [AvaloniaFact]
+    public void Only_the_edit_menu_carries_gestures()
+    {
+        var (window, _, _, _) = Show();
+        var hotkeys = window.GetPlatformSettings()!.HotkeyConfiguration;
+
+        Assert.Equal(hotkeys.Copy.FirstOrDefault(), Item(window, "_Edit", "_Copy").Gesture);
+        Assert.Equal(hotkeys.Paste.FirstOrDefault(), Item(window, "_Edit", "_Paste").Gesture);
+        Assert.Equal(hotkeys.SelectAll.FirstOrDefault(), Item(window, "_Edit", "Select _All").Gesture);
+
+        // A gesture here would be a 3270 client that cannot send the key, silently, with nothing in the wire log.
+        foreach (var (top, child) in new[]
+                 {
+                     ("_File", "_Connect"), ("_File", "C_lose"),
+                     ("_Keys", "PA1"), ("_Keys", "PF13"), ("_Keys", "Clear"),
+                     ("_Help", "_Wire Log"),
+                 })
+        {
+            Assert.Null(Item(window, top, child).Gesture);
+        }
+    }
+
+    /// <summary>The double-dispatch guard. On macOS the OS takes the keystroke before TerminalScreen exists, so
+    /// nothing can fire twice; on Windows and Linux the gesture reaches NativeMenuBar instead, and whether that
+    /// dispatches as well as displays cannot be checked from a Mac. A second paste is a real bug, not a cosmetic
+    /// one, so it is asserted on every CI push under both strategies rather than reasoned about.</summary>
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_paste_hotkey_reaches_the_host_exactly_once(bool useNativeMenu)
+    {
+        var (window, _, session, clipboard) = Show(useNativeMenu);
+        clipboard.Text = "claude";
+        session.RaiseConnection(ConnectionState.Connected3270);
+
+        window.KeyPressQwerty(PhysicalKey.V, RawInputModifiers.Control);
+
+        Assert.Equal(["paste:claude"], session.Calls);
     }
 }
