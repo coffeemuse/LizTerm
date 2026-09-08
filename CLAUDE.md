@@ -335,8 +335,12 @@ the backend tests.
   `ConnectAsync` waits for the `Disconnected` state, bounded by the same `DisconnectTimeout` (5 s), before
   throwing, the same wait `DisconnectAsync` uses; b3270 answers the run before it reports `not-connected`, and on the real gateway that
   report lags by up to a few seconds. `Engine` names the binary, its source (`Bundled`, `Override`, or `Unknown`
-  when it was never located, which About renders as "not found" rather than borrowing a provenance), and after
-  the hello its version. `WireLogPath`, `StartWireLog`, `StopWireLog` make the wire log a session capability
+  when there is no b3270 anywhere the locator looked, which About renders as "not found" rather than borrowing a
+  provenance), and after the hello its version. `Unknown` means *absent*, not merely unusable: `B3270Locator.Find`
+  throws the same exception for "nothing found" and "found and not executable", and `SessionFactory.Refused` uses
+  `B3270Locator.Candidates` to tell them apart, so a file that is present keeps its own path and source and About
+  and the status bar name the thing to `chmod` instead of calling it missing. `CheckBackendOrUnknown` and `Create`
+  both go through it, so the two cannot disagree about the same binary. `WireLogPath`, `StartWireLog`, `StopWireLog` make the wire log a session capability
   that survives an engine restart. `AppPaths` owns the per-OS config root with `profiles` and `logs` beneath it.
 
 ### Backend (src/LizTerm.Backend.B3270)
@@ -546,6 +550,20 @@ the backend tests.
   model those are two toggles and the click does nothing. Drive these items from
   `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()` in tests: it is the one entry point both real
   renderers use, and assigning `IsChecked` instead only proves a binding round-trips.
+  A Click-driven native item also has to bind `IsEnabled` for itself, since it gets none of the greying a
+  command's `CanExecute` gives the classic one — Edit binds `CanCopy`, `IsConnected` and `CanSelectAll` (public
+  on `SessionViewModel` for exactly this, and still the commands' `CanExecute`, so the two menus cannot drift),
+  because on macOS those items are key equivalents and an enabled one is an offer the app cannot honour. Safe to
+  bind because `NativeMenuItem` overwrites `IsEnabled` only when its `Command` changes, and these carry none.
+  `MenuLookup.Required` is what the code-behind uses rather than `Item`: it answers null when the *menu* is
+  absent, which under the classic strategy is the deliberate state, and throws when a menu that is there does
+  not declare the item — a header renamed in both menus at once keeps the parity guard green, so a silent null
+  would leave About duplicated on macOS or the Edit key equivalents quietly gone. Hiding an item at the end of a
+  menu means hiding its separator too (`MenuLookup.SeparatorAbove`, and `AboutSeparator` in the classic one):
+  nothing collapses a trailing divider, and the exporter honours `IsVisible` on a separator because
+  `NativeMenuItemSeparator` derives from `NativeMenuItem`.
+  Note `x:Name` does not compile on a `NativeMenuItem` (AVLN2000: it is not a `StyledElement` and has no `Name`),
+  which is why these are header-string lookups at all.
 - Mouse selection is a `ScreenRegion` (Core; inclusive, zero-based, always normalized). `SelectionGesture`
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the
@@ -606,7 +624,15 @@ the backend tests.
   certificate reopens the same window titled "Certificate changed" with both fingerprints; the editor shows a pinned
   profile's fingerprint with a Forget button, the only way back to default trust; the prompt and the save run after
   the connect's catch clauses, never inside one, so their own failures reach the error banner instead of faulting
-  the command), and owns the Help menu's wire log toggle and `Engine` for `AboutWindow`. Wire log names gain `-2`,
+  the command), and owns the Help menu's wire log toggle and `Engine` for `AboutWindow`.
+  `App.ShowAboutAsync` is the one spelling of About, for a session's Help item and the macOS application menu
+  alike, and holds one dialog at a time in `_about` — a second request activates it instead of stacking, because
+  the macOS menu bar stays live over a modal dialog and the second would be owned by the first. Which engine it
+  names is `App.AboutEngine`, deliberately not "whatever window is in front": the owner's session if it has one,
+  else the last session the user was in (`_lastActiveSession`, tracked on `Activated`), and only then the located
+  binary — resolving it from the owner alone would report no version whenever a dialog or the picker was on top
+  of a running session. `ActiveWindow` skips `SplashWindow`, which closes itself on a timer and would take an
+  owned About with it. Wire log names gain `-2`,
   `-3` when two starts land in the same second (`SessionViewModel.UniquePath`). When `IsWireLogging` cannot
   start a log it marshals its own correction back to false through `dispatch` rather than assigning inline: a
   value corrected from inside its own change notification is invisible to the menu item's two-way binding, which

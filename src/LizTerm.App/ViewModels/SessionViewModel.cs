@@ -43,6 +43,8 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CopyCommand))]
     [NotifyCanExecuteChangedFor(nameof(SelectAllCommand))]
+    [NotifyPropertyChangedFor(nameof(CanCopy))]
+    [NotifyPropertyChangedFor(nameof(CanSelectAll))]
     private ScreenSnapshot? _screen;
 
     [ObservableProperty] private string _connectionText = "";
@@ -60,6 +62,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// <summary>The mouse selection, bound two-way to the screen control. Cleared here whenever input goes to the host.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CopyCommand))]
+    [NotifyPropertyChangedFor(nameof(CanCopy))]
     private ScreenRegion? _selection;
 
     /// <param name="dispatch">Marshals a callback onto the UI thread. Tests pass <c>a => a()</c>.</param>
@@ -427,7 +430,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         return Guard(_session.MoveCursorAsync(row, column));
     }
 
-    private bool CanCopy => Selection is not null && Screen is not null;
+    /// <summary>Public because the native Edit menu binds IsEnabled to it directly: those items are driven by
+    /// Click handlers rather than commands, so they get none of the greying a command's CanExecute gives the
+    /// classic ones. Kept as the CopyCommand's CanExecute too, so the two menus cannot drift.</summary>
+    public bool CanCopy => Selection is not null && Screen is not null;
 
     /// <summary>Copies the selection as trimmed lines. Copying is not host input, so the selection stays.</summary>
     [RelayCommand(CanExecute = nameof(CanCopy))]
@@ -465,7 +471,8 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         await Guard(_session.PasteTextAsync(text.Replace("\r\n", "\n").Replace('\r', '\n')));
     }
 
-    private bool CanSelectAll => Screen is not null;
+    /// <inheritdoc cref="CanCopy"/>
+    public bool CanSelectAll => Screen is not null;
 
     [RelayCommand(CanExecute = nameof(CanSelectAll))]
     public void SelectAll()

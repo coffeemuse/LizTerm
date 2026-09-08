@@ -216,6 +216,66 @@ public class NativeMenuTests
         Assert.Equal(expected, window.FindControl<MenuItem>("AboutMenuItem")!.IsVisible);
     }
 
+    /// <summary>And the divider above it goes too. Nothing collapses a trailing separator — not NSMenu, not the
+    /// classic Menu — so hiding About on its own leaves the macOS Help menu ending in a line with nothing under
+    /// it. The exporter honours IsVisible on a separator because NativeMenuItemSeparator derives from
+    /// NativeMenuItem.</summary>
+    [AvaloniaFact]
+    public void The_separator_above_about_is_hidden_with_it()
+    {
+        var (window, _, _, _) = Show();
+        var expected = MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS());
+
+        var separator = MenuLookup.SeparatorAbove(Item(window, "_Help", "_About LizTerm..."));
+        Assert.NotNull(separator);
+        Assert.Equal(expected, separator!.IsVisible);
+        Assert.Equal(expected, window.FindControl<Separator>("AboutSeparator")!.IsVisible);
+    }
+
+    /// <summary>The native Edit items are driven by Click handlers, so they get none of the greying a command's
+    /// CanExecute gives the classic ones — and on macOS they are also key equivalents, so an enabled item is an
+    /// offer the app cannot honour. They bind the same predicates instead.</summary>
+    [AvaloniaFact]
+    public void The_edit_items_follow_the_same_predicates_as_the_classic_commands()
+    {
+        var (window, vm, session, _) = Show();
+        var copy = Item(window, "_Edit", "_Copy");
+        var paste = Item(window, "_Edit", "_Paste");
+        var selectAll = Item(window, "_Edit", "Select _All");
+
+        // A screen but no selection: copying has nothing to copy, selecting all has something to select.
+        Assert.False(copy.IsEnabled);
+        Assert.True(selectAll.IsEnabled);
+        Assert.False(paste.IsEnabled);
+
+        vm.Selection = ScreenRegion.FromCorners(2, 3, 2, 7);
+        Assert.True(copy.IsEnabled);
+
+        session.RaiseConnection(ConnectionState.Connected3270);
+        Assert.True(paste.IsEnabled);
+        session.RaiseConnection(ConnectionState.Disconnected);
+        Assert.False(paste.IsEnabled);
+    }
+
+    /// <summary>MenuLookup.Required is what stops a renamed header from being swallowed. Null means one thing
+    /// only — the classic strategy detached the menu — and a menu that is there without the item is a typo the
+    /// code-behind would otherwise answer by silently skipping, leaving About duplicated on macOS or the Edit
+    /// key equivalents quietly gone. Renaming a header in both menus at once keeps the parity guard green, so
+    /// nothing else would notice.</summary>
+    [AvaloniaFact]
+    public void A_lookup_that_misses_on_an_attached_menu_throws_rather_than_no_opping()
+    {
+        var (window, _, _, _) = Show();
+        var menu = NativeMenu.GetMenu(window);
+
+        Assert.Null(MenuLookup.Required(null, "_Help", "_About LizTerm..."));
+        Assert.NotNull(MenuLookup.Required(menu, "_Help", "_About LizTerm..."));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => MenuLookup.Required(menu, "_Help", "_About LizTerm"));
+        Assert.Contains("_About LizTerm", ex.Message);
+        Assert.Throws<InvalidOperationException>(() => MenuLookup.Required(menu, "_Halp", "_Wire Log"));
+    }
+
     /// <summary>Measured: with a NativeMenu installed and the classic Menu still visible, macOS drew both — an
     /// in-window bar beneath a system bar. Hiding the classic one under the native strategy is required, not tidy.</summary>
     [AvaloniaFact]

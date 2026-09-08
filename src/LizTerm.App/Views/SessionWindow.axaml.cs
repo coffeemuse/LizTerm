@@ -54,12 +54,20 @@ public partial class SessionWindow : Window
 
         // macOS puts About in the application menu, so neither renderer's Help item may also carry one. Both get
         // the rule: LIZTERM_MENU=classic on macOS is reachable, and there the classic bar renders in-window while
-        // the application menu still supplies its own About. Under that strategy the lookup finds nothing,
-        // because the line above detached the menu — which is the point, not an omission.
+        // the application menu still supplies its own About. Under that strategy the lookup answers null,
+        // because the line above detached the menu — which is the point, not an omission. MenuLookup.Required
+        // answers null for that and only that: a menu that is there and does not declare the item throws.
+        //
+        // The separator above About goes with it, in both menus. Nothing collapses a trailing divider, so an
+        // About hidden on its own leaves the Help menu ending in one.
         var aboutInHelp = MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS());
         AboutMenuItem.IsVisible = aboutInHelp;
-        var nativeAbout = MenuLookup.Item(NativeMenu.GetMenu(this), "_Help", "_About LizTerm...");
-        if (nativeAbout is not null) nativeAbout.IsVisible = aboutInHelp;
+        AboutSeparator.IsVisible = aboutInHelp;
+        if (MenuLookup.Required(NativeMenu.GetMenu(this), "_Help", "_About LizTerm...") is { } nativeAbout)
+        {
+            nativeAbout.IsVisible = aboutInHelp;
+            if (MenuLookup.SeparatorAbove(nativeAbout) is { } separator) separator.IsVisible = aboutInHelp;
+        }
     }
 
     // MenuItem.Click is EventHandler<RoutedEventArgs> and NativeMenuItem.Click is EventHandler<EventArgs>, so
@@ -123,8 +131,9 @@ public partial class SessionWindow : Window
         PasteMenuItem.InputGesture = hotkeys.Paste.FirstOrDefault();
         SelectAllMenuItem.InputGesture = hotkeys.SelectAll.FirstOrDefault();
 
-        // Null under the classic strategy; MenuLookup answers null for every lookup and the Gesture helper's
-        // own guard makes each assignment a no-op.
+        // Null under the classic strategy, where the menu is detached and there is nothing to install a key
+        // equivalent on. Required draws the line the plain lookup could not: null here means only that, and a
+        // menu missing one of these three items throws rather than dropping its gesture silently.
         var menu = NativeMenu.GetMenu(this);
         Gesture(menu, "_Copy", hotkeys.Copy.FirstOrDefault());
         Gesture(menu, "_Paste", hotkeys.Paste.FirstOrDefault());
@@ -132,8 +141,7 @@ public partial class SessionWindow : Window
 
         static void Gesture(NativeMenu? menu, string child, KeyGesture? gesture)
         {
-            var item = MenuLookup.Item(menu, "_Edit", child);
-            if (item is not null) item.Gesture = gesture;
+            if (MenuLookup.Required(menu, "_Edit", child) is { } item) item.Gesture = gesture;
         }
     }
 

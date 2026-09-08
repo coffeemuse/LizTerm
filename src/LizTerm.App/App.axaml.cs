@@ -18,6 +18,9 @@ namespace LizTerm.App;
 public partial class App : Application
 {
     private readonly List<SessionWindow> _sessions = [];
+    /// <summary>The session window the user was in most recently, which is what About describes when it is
+    /// opened from the application menu with something else — the picker, a dialog — in front.</summary>
+    private SessionWindow? _lastActiveSession;
     private ProfilePickerWindow? _picker;
     private ProfileStore? _store;
 
@@ -110,6 +113,8 @@ public partial class App : Application
             new SslStreamCertificateFetcher());
         window.DataContext = viewModel;
         _sessions.Add(window);
+        _lastActiveSession ??= window;
+        window.Activated += (_, _) => _lastActiveSession = window;
         // Read in Closing, because Closed carries no reason and by then the shutdown that is closing this window
         // is already counting the windows that are left. A close the owned File Transfer dialog refuses never
         // reaches Closing at all (Window.ShouldCancelClose asks the children first), and the next close attempt
@@ -119,6 +124,8 @@ public partial class App : Application
         window.Closed += async (_, _) =>
         {
             _sessions.Remove(window);
+            // A closed window must not keep answering for About; fall back to whichever session is left.
+            if (ReferenceEquals(_lastActiveSession, window)) _lastActiveSession = _sessions.LastOrDefault();
             try { await viewModel.DisposeAsync(); }
             catch { /* the window is gone; nothing more to do with a failed disposal */ }
             if (ShutdownPolicy.UserClosedLastWindow(_quitting, shutdownClose, _sessions.Count)) ShowPicker();
@@ -166,25 +173,52 @@ public partial class App : Application
         catch { /* nothing to report it on, and nothing about About is worth a crash */ }
     }
 
+    private AboutWindow? _about;
+
     /// <summary>The one spelling of About, shared by a session window's Help item and the macOS application
     /// menu. The application menu may fire with no session at all, which is why the engine has a session-less
     /// fallback and the owner has a null one.</summary>
     public async Task ShowAboutAsync(Window? preferredOwner)
     {
+        // One at a time. A session's Help item cannot be reached while About is modal over that window, but the
+        // macOS menu bar stays live over a modal dialog, so the application menu could open About again — owned
+        // by the About already showing, and reporting no engine, because an AboutWindow is not a session.
+        if (_about is { } showing)
+        {
+            showing.Activate();
+            return;
+        }
+
         // A session's own Help item stays modal to that session even if another window is active; the
         // application menu passes null and takes whatever the user is looking at.
         var owner = preferredOwner ?? ActiveWindow();
-        // About describes the session being looked at, version and all, when there is one; otherwise the
-        // located binary, which has never been started and so reports no version.
-        var engine = (owner?.DataContext as SessionViewModel)?.Engine ?? SessionFactory.CheckBackendOrUnknown();
-        var about = new AboutWindow(AppVersion.Current, engine, SessionFactory.OverrideOrigin);
+        var about = new AboutWindow(AppVersion.Current, AboutEngine(preferredOwner), SessionFactory.OverrideOrigin);
+        _about = about;
+        about.Closed += (_, _) => { if (ReferenceEquals(_about, about)) _about = null; };
         if (owner is null) about.Show();
         else await about.ShowDialog(owner);
     }
 
+    /// <summary>Which engine About describes. Deliberately not "whatever the owner window happens to be": the
+    /// application menu's owner is only the window in front, and a File Transfer dialog, the picker or the
+    /// splash would each answer with no session and send About back to the located binary — reporting no
+    /// version for an engine that has been running and has told us one. The session the user was last in is the
+    /// honest answer, and only a run with no session at all falls back to the binary on disk.</summary>
+    private EngineInfo AboutEngine(Window? preferredOwner) =>
+        AboutEngine(preferredOwner?.DataContext, _lastActiveSession?.DataContext, SessionFactory.CheckBackendOrUnknown);
+
+    /// <summary>The rule alone, so it can be asserted without a window manager.</summary>
+    internal static EngineInfo AboutEngine(object? ownerContext, object? lastSessionContext, Func<EngineInfo> located) =>
+        (ownerContext as SessionViewModel)?.Engine
+        ?? (lastSessionContext as SessionViewModel)?.Engine
+        ?? located();
+
+    /// <summary>The window an ownerless About should be modal over. The splash is skipped: it closes itself on a
+    /// timer and takes its owned windows with it, so an About parented to it would vanish mid-read.</summary>
     private Window? ActiveWindow()
     {
-        var windows = (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Windows;
+        var windows = (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Windows
+            .Where(w => w is not SplashWindow).ToList();
         return windows?.FirstOrDefault(w => w.IsActive) ?? windows?.FirstOrDefault();
     }
 }

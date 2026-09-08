@@ -16,37 +16,51 @@ public static class SessionFactory
     internal static (string? OverridePath, string BaseDirectory) DefaultLocation =>
         (Environment.GetEnvironmentVariable(B3270Locator.EnvironmentOverride), AppContext.BaseDirectory);
 
+    /// <summary>The one spelling of an engine that has been located but never run, so every caller below
+    /// describes the same binary the same way.</summary>
+    private static EngineInfo Describe(B3270Location location) =>
+        new("b3270", null, location.Path, location.Source);
+
+    /// <summary>What to call an engine the locator refused. Find throws the same type for "no binary anywhere"
+    /// and "a binary is there and unusable", which is what B3270Locator.Candidates exists to tell apart: a file
+    /// that is present keeps its own path and source, so About and the status bar name the thing to chmod
+    /// instead of claiming nothing was found. Only a genuinely absent engine is Unknown.</summary>
+    private static B3270Location Refused(string? overridePath, string baseDirectory) =>
+        B3270Locator.Candidates(overridePath, baseDirectory).FirstOrDefault(c => File.Exists(c.Path))
+        ?? B3270Location.Unknown;
+
     /// <summary>Locates the engine without starting it. Throws <see cref="BackendUnavailableException"/> with the
     /// locator's explanation when it is missing or not executable.</summary>
     public static EngineInfo CheckBackend()
     {
         var (overridePath, baseDirectory) = DefaultLocation;
-        var location = B3270Locator.Find(overridePath, baseDirectory);
-        return new EngineInfo("b3270", null, location.Path, location.Source);
+        return CheckBackend(overridePath, baseDirectory);
     }
 
+    /// <summary>Test seam, matching Create's: resolves from an explicit override and base directory instead of
+    /// the process environment and the app's own directory.</summary>
+    internal static EngineInfo CheckBackend(string? overridePath, string baseDirectory) =>
+        Describe(B3270Locator.Find(overridePath, baseDirectory));
+
     /// <summary>CheckBackend's non-throwing sibling, for About, which must render something whatever the
-    /// outcome. A binary that was never located becomes EngineSource.Unknown, which StatusFormatter renders
-    /// as "b3270, not found" — the same value SessionFactory.Create already hands a session that has nothing
-    /// to run, so the two paths cannot disagree about what a missing engine looks like.</summary>
+    /// outcome. It answers with <see cref="Refused"/>, the same value Create hands a session that has nothing to
+    /// run, so the two paths cannot disagree about what an unusable engine looks like.</summary>
     public static EngineInfo CheckBackendOrUnknown()
     {
         var (overridePath, baseDirectory) = DefaultLocation;
         return CheckBackendOrUnknown(overridePath, baseDirectory);
     }
 
-    /// <summary>Test seam, matching Create's: resolves from an explicit override and base directory instead of
-    /// the process environment and the app's own directory.</summary>
+    /// <inheritdoc cref="CheckBackendOrUnknown()"/>
     internal static EngineInfo CheckBackendOrUnknown(string? overridePath, string baseDirectory)
     {
         try
         {
-            var location = B3270Locator.Find(overridePath, baseDirectory);
-            return new EngineInfo("b3270", null, location.Path, location.Source);
+            return CheckBackend(overridePath, baseDirectory);
         }
         catch (BackendUnavailableException)
         {
-            return new EngineInfo("b3270", null, B3270Location.Unknown.Path, B3270Location.Unknown.Source);
+            return Describe(Refused(overridePath, baseDirectory));
         }
     }
 
@@ -72,8 +86,9 @@ public static class SessionFactory
         catch (BackendUnavailableException ex)
         {
             // Nothing to run: let the first connect fail the way the view model already reports, with the
-            // locator's own explanation of where it looked.
-            location = B3270Location.Unknown;
+            // locator's own explanation of where it looked. The status bar still names the binary that is
+            // there but unusable, rather than calling it missing.
+            location = Refused(overridePath, baseDirectory);
             processFactory = () => throw ex;
         }
         var wireLog = WireLog.TryFromEnvironment(out var wireLogError);
