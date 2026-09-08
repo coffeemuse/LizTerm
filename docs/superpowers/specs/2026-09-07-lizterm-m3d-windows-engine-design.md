@@ -279,5 +279,82 @@ plan; `dotnet publish`, bundles, version stamping and releases (3e); the integra
 
 ## 9. Deviations from this spec (as-built)
 
-To be filled in during execution, as plan 3c's section 9 was: rulings made in planning and execution recorded
-here rather than edited into the sections above.
+Rulings made in planning and execution, recorded here rather than edited into the sections above, as plan 3c's
+section 9 was:
+
+1. **The container's package list gained `curl` and `ca-certificates`, which section 3.3 did not anticipate.**
+   The feasibility spike in section 2 extracted the pinned `suite3270-4.5ga6` tarball on the host and mounted
+   it into the container it timed; `build-windows.sh` instead calls the unmodified `fetch-source.sh`, which
+   delegates to `shared-fetch-tarball.sh` — and that script runs *inside* the container on every real build,
+   exactly as it does for Linux. `debian:12-slim` is a minimal image and ships neither package, so the first
+   build through the actual wrapper failed at the download step, not at anything Windows-specific. Both went
+   into `build-windows-docker.sh`'s `PACKAGES` beside the mingw-w64 toolchain, for the same reason the
+   toolchain is a layer of a derived image rather than an `apt-get install` on every invocation: the spike's
+   escape from the problem — extracting on the host — could not survive contact with the real entry point,
+   whose whole point is that `fetch-source.sh` runs identically wherever it is called from.
+2. **The negative fixture is a DLL built on the spot, not the `libwinpthread-1.dll` import section 4.3 names.**
+   The spec proposed a two-line C file linked with `-shared-libgcc -pthread` to produce an executable that
+   imports `libwinpthread-1.dll`. Execution found that this container's `gcc-mingw-w64-x86-64` is GCC 12
+   configured for the **win32** thread model, not **posix** (`x86_64-w64-mingw32-gcc --version` reports
+   `12-win32`) — no program this toolchain produces links `libwinpthread-1.dll` at all, whatever flags it is
+   given. A fixture built the spec's way would have linked cleanly, imported only system DLLs, passed
+   `verify-windows.sh`, and the CI step would have reported a rejection that never actually happened: a guard
+   whose failure mode depends on a package default it does not control, caught here before the gate shipped
+   rather than after, which is exactly plan 3c's "a guard that cannot fail is not a guard" one level earlier.
+   The fixture actually used — and the one `platforms.yml`'s `engine-windows` job builds inline from a
+   here-doc, never committed, for the same "it exists only to be rejected" reason plan 3c gives — is two
+   files: `dll.c` exports a function with `__declspec(dllexport)` and is compiled to `libfixture.dll` with
+   `--out-implib` to produce the import library, and `uses-dll.c` declares the same function
+   `__declspec(dllimport)` and calls it, linked against that import library. The resulting `dirty.exe` imports
+   `libfixture.dll`, a name that can never appear on the allowlist by construction, and the fixture no longer
+   depends on a toolchain default this container happens not to set.
+3. **`verify-windows.sh` gained a machine-type check the spec did not call for.** Section 4.1 describes only
+   the import-table allowlist. Execution added a first check — `objdump -f` must report `i386:x86-64` — because
+   a 32-bit build is a plausible accident rather than a hypothetical one: `i686-w64-mingw32` is a host the same
+   `suite3270-4.5ga6` source tree and the same `./configure --host=... --enable-b3270 ...` line accept without
+   complaint, and its output would import the *same* eleven system DLLs a correct `win-x64` build does — the
+   import allowlist has no way to see the difference between a 32-bit and a 64-bit PE. Left unchecked, a
+   transcription slip in `build-windows.sh`'s `HOST` variable would produce a binary that passes every check
+   section 4.1 describes and then fails to load in a `win-x64` .NET process. The check runs before the import
+   scan, so a wrong-architecture binary is rejected by a message naming the mistake rather than by an opaque
+   import failure downstream.
+4. **The implementation plan's Task 1 step 1 verification method is defective; the pin it was checking is
+   not.** That step asked for `docker pull --platform linux/amd64 ...` and
+   `docker pull --platform linux/arm64 ...` against the pinned digest, expecting both to succeed as proof the
+   digest is the multi-architecture index rather than one platform's manifest. Both calls instead failed on
+   the machine that ran them, each along the lines of `cannot overwrite digest ...`: the local Docker
+   image store already held one platform under that reference from an earlier pull, and asking it to store a
+   second platform under the *same* local reference is a local image-cache conflict, not a registry fact — a
+   machine that had never pulled the image at all would need two full platform pulls just to run the check,
+   which is a strange thing for a "does this pin resolve" step to require. The authoritative alternative,
+   `docker buildx imagetools inspect debian:12-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171`
+   (the same incantation `windows-image.sh`'s own header names), lists `linux/386`, `linux/amd64`,
+   `linux/arm/v7`, `linux/arm64/v8`, and `linux/ppc64le` under the pinned index digest straight from the
+   registry's manifest list, with no local image-store state involved at all — confirming both the arm64 Mac
+   this plan was built on and CI's x64 runner resolve the same digest. The pin recorded in `windows-image.sh`
+   needed no change; only the plan's own verification recipe was wrong, and a later plan should reach for
+   `imagetools inspect` first rather than two `docker pull --platform` calls that can fail on a healthy pin.
+5. **Still pending: whether `actions/download-artifact@v7` resolves.** `test-windows`'s download step was
+   written to match this repository's existing `actions/upload-artifact@v7`, on the assumption that GitHub
+   ships matching majors for the two actions together. Nothing has exercised that assumption: the branch stays
+   unpushed pending the user's separate authorization to publish it (a push and a PR are outward-facing side
+   effects execution does not take on its own), so `engine-windows` and `test-windows` have not run once. This
+   entry stays open until the first CI run confirms the version or shows it needs correcting — and if it does,
+   the correction belongs here too, not as a silent edit to the workflow file.
+6. **Still pending: `engine-windows`'s `timeout-minutes`.** It is currently the provisional `20` the
+   implementation plan proposed, unmeasured against the runner it actually bounds. The only wall-clock numbers
+   in hand are local and on the wrong architecture for the question: section 2's spike measured 95 seconds
+   cold on an arm64 Mac, and building the real engine measured 48.9 and 53 seconds warm, also on an arm64 Mac.
+   `engine-windows` runs on `ubuntu-24.04`, an x64 runner, and plan 3c's own history is the reason not to
+   assume the two behave alike — its `dnf install` alone ran several times slower on an x64 leg than on the
+   matching arm64 one in that plan's first cold run. Following plan 3c's practice, `timeout-minutes` should be
+   tightened only once a real run has measured the thing it bounds, not guessed down from a spike on different
+   hardware; a later task must set it from the first real cold- and warm-cache runs on the actual runner and
+   record both numbers here.
+7. **No .NET change proved necessary, confirming section 6's expectation.** Section 6 predicted this and asked
+   that any change that did prove necessary be recorded here rather than made quietly. None was needed across
+   any of the tasks that built and gated the engine: `B3270Locator` already names `b3270.exe` on Windows and
+   already skips the executable-bit check there, and the App csproj's copy item already links by
+   `%(Filename)%(Extension)`, so `native/out/win-x64/b3270.exe` lands at `runtimes/win-x64/native/b3270.exe`
+   through the existing rule with no project edit. This entry is the confirmation section 6 asked for, not a
+   gap.
