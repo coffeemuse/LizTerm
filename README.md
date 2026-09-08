@@ -21,14 +21,15 @@ Environment variables:
 
 - `LIZTERM_B3270_PATH`: use this b3270 instead of the bundled one. The app and the integration
   test project use the bundled b3270 when built after `native/build/build-macos.sh` (or, on Linux,
-  `native/build/build-linux-docker.sh`) has run; otherwise set this.
+  `native/build/build-linux-docker.sh`, or on Windows, `native/build/build-windows-docker.sh`) has run;
+  otherwise set this.
 - `LIZTERM_WIRE_LOG`: append every protocol line in both directions to this file (attach to bug reports).
 - `LIZTERM_TEST_HOST`: `host[:port]` for the opt-in integration tests. Add `LIZTERM_TEST_TLS=1` for a TLS host
   and `LIZTERM_TEST_VERIFY_CERT=0` to accept a self-signed certificate.
 - `LIZTERM_REQUIRE_ENGINE`: any non-blank value makes the engine smoke test fail instead of skip when no bundled
-  b3270 is in the test output. CI sets it on the macOS and Linux engine jobs; leave it unset locally. A b3270 that
-  *is* in the test output but is not executable fails the test either way, so a forgotten `chmod +x` cannot pass
-  as a skip.
+  b3270 is in the test output. CI sets it on the macOS and Linux engine jobs and on `test-windows`; leave it unset
+  locally. A b3270 that *is* in the test output but is not executable fails the test either way, so a forgotten
+  `chmod +x` cannot pass as a skip.
 
 `native/build/build-playback.sh` builds x3270's `playback` tool, for replaying a captured host
 trace against a live b3270 during local development.
@@ -51,6 +52,27 @@ OpenSSL TLS provider, and `verify-linux-start.sh` then runs the result in a bare
 TLS check is `shared-verify-tls.sh`, which the macOS gate calls too. Alpine and other musl distributions are a
 different runtime identifier and are not built here.
 
+## Building the Windows engine
+
+`native/build/build-windows-docker.sh` needs only Docker and always produces `native/out/win-x64/b3270.exe`,
+whatever architecture the host or the container is — x3270 knows only one 64-bit Windows host, so unlike Linux
+there is no runtime identifier to resolve. The cross build runs inside `debian:12-slim`, pinned by digest in
+`native/build/windows-image.sh`: chosen as a build host rather than a floor, because a PE binary shares no ABI
+with the Linux container that cross-compiled it, so none of the image's own properties reach a Windows user the
+way AlmaLinux's glibc floor reaches a Linux one. Nothing but the x3270 source itself needs pinning: TLS is
+Schannel, reached through the ordinary Windows import libraries rather than a linked OpenSSL (the source
+references an `SSLLIB` that is never defined), and expat is bundled in the source tree and built by the suite's
+own target, so there is no OpenSSL or expat prefix to fetch, pin, or stamp the way Linux needs.
+
+The gate is split across the two machines that can each check half of it, because a PE binary cannot run on the
+Linux box that built it: `verify-windows.sh`, inside the container, fails the build if the binary is not a
+64-bit PE (`i386:x86-64`, so a plausible `i686-w64-mingw32` accident cannot pass as `win-x64`) or if it imports
+any DLL outside eleven Windows system DLLs — a `libwinpthread-1.dll` or `libgcc_s_seh-1.dll` here would mean the
+engine cannot start without the MinGW runtime beside it. `shared-verify-tls.sh` then runs on a real Windows
+machine in CI and asserts the banner reports `Windows Schannel`, the same check the macOS and Linux gates make of
+their own OpenSSL builds. `win-arm64` ships this same `win-x64` binary rather than a native build: x3270 4.5ga6
+knows no aarch64 Windows host, so Windows 11's x64 emulation is the only route until upstream is patched.
+
 ## Continuous integration
 
 Two GitHub Actions workflows under `.github/workflows`:
@@ -68,13 +90,21 @@ Two GitHub Actions workflows under `.github/workflows`:
   message that arm of the gate prints — so a gate that has stopped rejecting anything fails the job instead of
   passing everything. The arm64 Linux leg runs the whole solution; the x64 one runs only
   `tests/LizTerm.Integration.Tests`, since `ci.yml`'s `test` already covers that solution on the same OS and
-  architecture. `test-windows` runs the suite on Windows.
+  architecture. `engine-windows` cross-builds `win-x64` inside a pinned Debian container and proves only the half
+  of the gate a Linux runner can check about a binary it cannot start — machine type and DLL imports; `test-windows`
+  now depends on it (`needs: engine-windows`), downloads that unverified engine, proves on a real Windows machine
+  that it starts and reports `Windows Schannel`, runs the suite with `LIZTERM_REQUIRE_ENGINE=1`, and republishes it
+  as the verified `b3270-win-x64` artifact.
 
 To run the platform jobs by hand: Actions, Platforms, "Run workflow", or `gh workflow run platforms.yml`. A run that
 fails or is cancelled uploads `test-results-<os>` with its `.trx` files and any hang dump. The `b3270-osx-arm64`,
-`b3270-linux-x64` and `b3270-linux-arm64` artifacts are CI-built engines that have been started by the smoke test
-before being published; you can download one and drop it into the matching `native/out/<rid>/`, but downloaded
-artifacts lose the executable bit, so run `chmod +x native/out/<rid>/b3270` and rebuild.
+`b3270-linux-x64`, `b3270-linux-arm64` and `b3270-win-x64` artifacts are CI-built engines that have been started by
+the smoke test before being published (the last one twice over: `engine-windows` uploads it first as
+`b3270-win-x64-unverified`, before anything has run it, and `test-windows` republishes the same bytes as
+`b3270-win-x64` only once a Windows machine has); you can download one and drop it into the matching
+`native/out/<rid>/`, but a downloaded macOS or Linux artifact loses its executable bit, so run
+`chmod +x native/out/<rid>/b3270` and rebuild — `native/out/win-x64/b3270.exe` needs no such fix, since Windows has
+no executable bit to lose.
 
 ## Recording protocol fixtures
 

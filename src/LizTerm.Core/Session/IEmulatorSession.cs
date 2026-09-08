@@ -17,6 +17,12 @@ public interface IEmulatorSession : IAsyncDisposable
     /// <summary>The engine binary in use; <see cref="EngineInfo.Version"/> fills in once the engine has started.</summary>
     EngineInfo Engine { get; }
 
+    /// <summary>Whether this session's engine can honour a certificate pin at all. True until the engine says
+    /// otherwise (a Windows/Schannel engine cannot: see plan 3d task 8), so a caller offering to pin must gate on
+    /// this rather than assume every engine can — connecting with a pin the engine cannot honour would silently
+    /// verify against the platform's own trust store instead, while the caller still believes a pin is in force.</summary>
+    bool CanPinCertificates { get; }
+
     /// <summary>Path of the active wire log, or null. Every protocol line in both directions is appended there,
     /// timestamped. The log belongs to the session, not to one engine process, so it survives an engine restart.</summary>
     string? WireLogPath { get; }

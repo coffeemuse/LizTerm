@@ -11,6 +11,7 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public TlsInfo? Tls { get; set; }
     public KeyboardStatus KeyboardStatus { get; set; } = KeyboardStatus.Initial;
     public EngineInfo Engine { get; set; } = new("fake", null, "/fake/engine", EngineSource.Bundled);
+    public bool CanPinCertificates { get; set; } = true;
     public string? WireLogPath { get; set; }
     /// <summary>When set, StartWireLog throws it.</summary>
     public Exception? WireLogException { get; set; }

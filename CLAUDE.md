@@ -38,8 +38,16 @@ dispatch: Release build with `-warnaserror`, then the suite with a 5 minute blam
 never published; `engine-linux` does the same on a two-leg matrix, `ubuntu-24.04` and `ubuntu-24.04-arm` — pinned
 rather than `ubuntu-latest` so the legs differ only in architecture — uploading `b3270-linux-x64` and
 `b3270-linux-arm64`, with `fail-fast: false`, because one
-architecture failing is information about that architecture and cancelling the other leg throws it away; `test-windows`
-runs the suite). `engine-macos`, `test-windows` and `engine-linux`'s arm64 leg run the whole solution, which is why the
+architecture failing is information about that architecture and cancelling the other leg throws it away; `engine-windows`
+on `ubuntu-24.04` cross-builds `win-x64` inside a pinned `debian:12-slim` container and gates it on machine type and DLL
+imports — the one half of the gate a Linux runner can check about a binary it cannot start — then uploads it as
+`b3270-win-x64-unverified`, the `-unverified` name marking that nothing has yet run it; `test-windows` now
+`needs: engine-windows`, downloads that artifact, runs `shared-verify-tls.sh` against it to prove it starts and reports
+`Windows Schannel` (the half of the gate that needed a real Windows machine), runs the suite with
+`LIZTERM_REQUIRE_ENGINE=1`, and republishes the same bytes as `b3270-win-x64` — two names for one binary, so an
+`-unverified` download can never be mistaken for one a Windows machine has actually started, matching by a second hop
+the same publish-only-after-a-spawn rule `engine-macos` and `engine-linux` each satisfy in one job). `engine-macos`,
+`test-windows` and `engine-linux`'s arm64 leg run the whole solution, which is why the
 path filter covers all of `src/` and `tests/` rather than the native build alone. `engine-linux`'s **x64** leg is the
 exception: `ci.yml`'s `test` already runs that same solution, in the same configuration, on the same OS and
 architecture, so this leg runs only `tests/LizTerm.Integration.Tests` — the engine smoke test is the one claim it adds.
@@ -83,7 +91,8 @@ check runs named `test` — one over the branch tip, one over the merge with `ma
 them apart, so a PR could go green for a tree that does not build when merged. Branch protection on `main` requires
 `test` only; the platform jobs are path-filtered on PRs and would never report on a docs-only PR, so a rule requiring
 them directly would leave those waiting forever (the fix, when it matters, is a `platforms-gate` job with
-`needs: [engine-macos, engine-linux, test-windows]` and `if: always()` that passes when they are skipped). A rule
+`needs: [engine-macos, engine-linux, engine-windows, test-windows]` and `if: always()` that passes when they are
+skipped). A rule
 naming the Linux checks directly would have to spell them `engine-linux (ubuntu-24.04, linux-x64)` and
 `engine-linux (ubuntu-24.04-arm, linux-arm64)`: GitHub renders every `matrix.include` property in a check name, not
 just the one that varies meaningfully, and a rule requiring the short form matches nothing and waits forever.
@@ -96,7 +105,9 @@ one means a fresh `.NET 10 SDK` install cannot run `dotnet` in this repo at all.
 ### The b3270 binary
 
 The app and the integration test project copy `native/out/<host-rid>/b3270*` into their output as
-`runtimes/<rid>/native/b3270`, but only if that directory exists **at build time**. The App test project inherits that
+`runtimes/<rid>/native/<filename>` — `b3270` on macOS and Linux, `b3270.exe` on `win-x64`, since the copy item
+links by `%(Filename)%(Extension)` rather than a hardcoded name — but only if that directory exists **at build
+time**. The App test project inherits that
 copy through its project reference to the App, so a built engine lands in its output too. Build it once with
 `native/build/build-macos.sh` (needs Xcode CLT and Homebrew `openssl@3`; downloads and checksums x3270
 4.5ga6, links OpenSSL statically, and `verify-macos.sh` fails the build if `otool -L` shows anything
@@ -142,9 +153,11 @@ packages no static expat, so linking the image's would have put `libexpat.so.1` 
 which is exactly the class of dependency the gate exists to catch. The gate is four checks, not one:
 `verify-linux.sh` (inside the container) rejects a dynamic dependency outside the glibc runtime, any imported
 glibc symbol above 2.28 — `ldd` alone passes a binary built on Ubuntu 24.04 that cannot start on RHEL 9 — and a
-banner that does not report an OpenSSL TLS provider — that last one through `shared-verify-tls.sh`, which
-`verify-macos.sh` now calls too, because the failure is x3270's rather than either platform's, and which reports an
-engine that could not run at all as its own fault rather than as a missing provider; then `verify-linux-start.sh`
+banner that does not report an OpenSSL TLS provider — that last one through `shared-verify-tls.sh`, which takes the
+expected provider as an optional second argument, defaulting to `OpenSSL` so this call and `verify-macos.sh`'s need no
+change, and which `test-windows` calls too, passing `Windows Schannel`, because the failure it catches is x3270's
+rather than any one platform's, and which reports an engine that could not run at all as its own fault rather than as
+a missing provider; then `verify-linux-start.sh`
 (on the host, because a script already inside a container cannot start another) runs the result in a bare container
 from the same image. The TLS
 check earns its place: x3270's configure probes OpenSSL by *linking*, and static libcrypto needs the
@@ -157,6 +170,30 @@ which links `libtinfo`, for the allowlist, and a `/bin/true` copied out of a dig
 the floor, which needs no compiler and so is the same fixture on a developer's Mac — and asserts each rejection
 by the message that arm prints, not by a bare non-zero exit, which the wrapper also returns for a Docker Hub rate
 limit or a failed `dnf install`. Alpine and any other musl target is a different RID and out of scope.
+
+`native/build/build-windows-docker.sh` needs only Docker and always produces `win-x64`, whatever architecture the
+host or the container is — x3270 knows exactly one 64-bit Windows host, so unlike Linux there is no RID for the
+container to resolve and hand back. It cross-builds inside `debian:12-slim`, pinned by digest in
+`native/build/windows-image.sh`, chosen as a build host rather than a floor: a PE binary shares no ABI with its
+builder, so none of the image's own properties — unlike AlmaLinux's glibc — reach a Windows user, and the choice is
+free to be "whichever distribution has the mingw-w64 toolchain". `gcc-mingw-w64-x86-64`, `binutils-mingw-w64-x86-64`,
+`make`, `python3`, `curl`, and `ca-certificates` go into a derived image the same way the Linux packages do, tagged
+by base digest and package list and built once rather than `apt-get install`ed per invocation. Nothing but the
+x3270 source itself is pinned: `wb3270/Makefile.obj.in`'s `LIBS` line references `SSLLIB`, which is never defined
+anywhere in the tree, so TLS reaches Schannel through the ordinary Windows import libraries
+(`-lcrypt32 -lsecur32`) rather than a linked OpenSSL, and expat is bundled upstream at `extern/libexpat` and built
+by the suite's own target — so there is no `fetch-openssl.sh`/`fetch-expat.sh` equivalent and no `.pin` stamp
+machinery, because there is no static prefix for either to guard. The gate is split across the two machines that
+can each check half of it, because a PE binary cannot run on the Linux box that built it: `verify-windows.sh`,
+inside the container, fails the build if `objdump -f` does not report `i386:x86-64` (a plausible
+`i686-w64-mingw32` accident that the import check alone cannot see, since a 32-bit build would import the same
+system DLLs) or if the import table names anything outside eleven Windows system DLLs — measured as exactly
+`advapi32.dll`, `comdlg32.dll`, `crypt32.dll`, `gdi32.dll`, `kernel32.dll`, `msvcrt.dll`, `secur32.dll`,
+`shell32.dll`, `user32.dll`, `winspool.drv`, `ws2_32.dll`, notably neither `libgcc_s_seh-1.dll` nor
+`libwinpthread-1.dll` — and `shared-verify-tls.sh`, on the Windows runner, proves the binary starts at all and
+reports `Windows Schannel`. `win-arm64` ships this same `win-x64` binary rather than a native build: 4.5ga6's
+`Common/dirnames` defines exactly two Windows hosts, `win64=x86_64-w64-mingw32` and `win32=i686-w64-mingw32`, and
+no aarch64 one, so Windows 11's x64 emulation is the only route until upstream's host detection is patched.
 
 Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG` (append every protocol
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
@@ -360,13 +397,25 @@ the backend tests.
   success is still a success). Every action goes through `RequireProcess`: after the engine dies it throws
   `BackendUnavailableException` carrying the last fault, and `InvalidOperationException` ("The session has not
   been started.") is reserved for a session that was never started.
-- Every connect sends one `Set(verifyHostCert,…,caFile,…,acceptHostname,…)` with all three explicit, so an attempt
-  never inherits the previous one's trust settings (verified: empty values clear them in the same engine). What
-  fills `caFile` is one rule: a pin in force means the pin file (its PEM verbatim, so a pin that lost its `pem` in a
-  hand-edited profile writes an empty file and fails the connect rather than quietly widening to the anchors);
-  otherwise, whenever the attempt verifies, the trust anchors `TrustAnchors` yields, written to
-  `lizterm-roots-<guid>.pem`; and everything else — verification off, or a source with no anchors — means empty,
-  because an empty *file* makes b3270 fail the connect with "CA database load … failed" rather than falling back.
+- Every connect gates `verifyHostCert`, `caFile`, and `acceptHostname` independently on the toggle names the
+  engine's own `tls-hello` indication reported at startup (parsed alongside `hello`, from the same `initialize`
+  block; see `B3270Session.EffectiveTlsOptions`/`SupportsTlsOption`) — never on `Profile.UseTls`, the OS, or the
+  provider string. An engine whose `tls-hello` omits `caFile` (Schannel does: x3270 4.5ga6's
+  `Common/Win32/sio_schannel.c` reports only `clientCert`/`tlsMinProtocol`/`tlsMaxProtocol` on top of the
+  TLS-required set) gets a `Set` with `verifyHostCert` and `acceptHostname` only and connects verifying against the
+  platform certificate store instead; `DecideCaFile` reads no trust anchors and writes no file for it, since
+  nothing would ever point the engine at one (`CanPinCertificates` is false, and the anchor read is a measured
+  210 ms this path has no reason to pay). A pin in force — profile or one-shot — against such an engine throws
+  (`ConnectionFailedException`, before either the `Set` or the `Connect` action is written) rather than silently
+  connecting against the platform store while the caller still believes their pin holds; that refusal is the one
+  case this gate treats as a hard failure rather than a quiet, capability-appropriate downgrade. Every toggle that
+  IS sent is still sent explicit on every connect, so an attempt never inherits the previous one's trust settings
+  (verified: empty values clear them in the same engine). When the engine supports `caFile`, what fills it is one
+  rule: a pin in force means the pin file (its PEM verbatim, so a pin that lost its `pem` in a hand-edited profile
+  writes an empty file and fails the connect rather than quietly widening to the anchors); otherwise, whenever the
+  attempt verifies, the trust anchors `TrustAnchors` yields, written to `lizterm-roots-<guid>.pem`; and everything
+  else — verification off, or a source with no anchors — means empty, because an empty *file* makes b3270 fail the
+  connect with "CA database load … failed" rather than falling back.
   Do **not** gate the anchors on `Profile.UseTls`, however tempting the saved work looks: b3270 implements the
   TELNET START-TLS option, so a plain profile can be upgraded to TLS by the host mid-session, and that upgrade
   would then verify against the engine's own compiled-in directory — the nonexistent Homebrew path this milestone
