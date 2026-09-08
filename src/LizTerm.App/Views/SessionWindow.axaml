@@ -64,7 +64,10 @@
       <NativeMenuItem Header="_Help">
         <NativeMenuItem.Menu>
           <NativeMenu>
-            <NativeMenuItem Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=TwoWay}" />
+            <!-- OneWay plus a Click handler, unlike the classic item's TwoWay: a NativeMenuItem never toggles
+                 itself. See OnWireLogClickNative. -->
+            <NativeMenuItem Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=OneWay}"
+                            Click="OnWireLogClickNative" />
             <NativeMenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="_About LizTerm..." Click="OnAboutClickNative" />

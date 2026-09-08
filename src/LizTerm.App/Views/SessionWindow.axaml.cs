@@ -83,6 +83,29 @@ public partial class SessionWindow : Window
 
     private void OnSelectAllClickNative(object? sender, EventArgs e) => ViewModel?.SelectAll();
 
+    /// <summary>The native Wire Log item needs this handler for two independent reasons, and the classic item
+    /// needs it for neither — which is why it is the one place the two menus' bindings differ (OneWay here,
+    /// TwoWay there).
+    ///
+    /// First, it is what makes the item usable at all on macOS. Avalonia's exporter gives every NSMenuItem the
+    /// validation predicate <c>(Command != null || HasClickHandlers) &amp;&amp; IsEnabled</c>
+    /// (<c>__MicroComIAvnMenuItemProxy.UpdateAction</c>); an item carrying only a binding satisfies neither
+    /// disjunct, so AppKit greys it out and never calls back. Second, a NativeMenuItem does not toggle itself:
+    /// <c>NativeMenuItem.RaiseClicked</c> raises Click and executes Command and never touches IsChecked, so
+    /// even an enabled item would leave the check mark and the log alone. The view model is therefore the only
+    /// thing that flips, and the OneWay binding carries the new state back to the check mark — including the
+    /// correction to false that SessionViewModel.OnIsWireLoggingChanged marshals when the log will not open.
+    ///
+    /// The classic item is the other way round because <c>DefaultMenuInteractionHandler.Click</c> toggles a
+    /// MenuItem's IsChecked *before* raising Click, and its TwoWay binding carries that to the view model. The
+    /// in-window NativeMenuBar fallback runs that same handler over a MenuItem bound TwoWay to this
+    /// NativeMenuItem, so it toggles too and then calls RaiseClicked: OneWay here is what stops that path
+    /// toggling twice and ending where it started.</summary>
+    private void OnWireLogClickNative(object? sender, EventArgs e)
+    {
+        if (ViewModel is { } vm) vm.IsWireLogging = !vm.IsWireLogging;
+    }
+
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
     /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these
