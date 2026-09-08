@@ -8,8 +8,82 @@
         Title="{Binding Title}"
         Width="960" Height="680" MinWidth="480" MinHeight="360"
         Background="Black">
+  <NativeMenu.Menu>
+    <NativeMenu>
+      <NativeMenuItem Header="_File">
+        <NativeMenuItem.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="_New Session..." Click="OnNewSessionClickNative" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="_Connect" Command="{Binding ConnectCommand}" />
+            <NativeMenuItem Header="_Disconnect" Command="{Binding DisconnectCommand}" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="File _Transfer..." Click="OnFileTransferClickNative" IsEnabled="{Binding IsConnected}" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="C_lose" Click="OnCloseClickNative" />
+          </NativeMenu>
+        </NativeMenuItem.Menu>
+      </NativeMenuItem>
+      <NativeMenuItem Header="_Edit">
+        <NativeMenuItem.Menu>
+          <NativeMenu>
+            <!-- Click rather than Command (a native gesture is a keystroke, and must not be swallowed by a
+                 command disabled mid-round-trip), but the same enablement the classic items get from their
+                 commands' CanExecute — otherwise macOS offers a live Copy with nothing selected. Safe to bind
+                 here because NativeMenuItem only overwrites IsEnabled when its Command changes, and these
+                 carry none. -->
+            <NativeMenuItem Header="_Copy" Click="OnCopyClickNative" IsEnabled="{Binding CanCopy}" />
+            <NativeMenuItem Header="_Paste" Click="OnPasteClickNative" IsEnabled="{Binding IsConnected}" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Select _All" Click="OnSelectAllClickNative" IsEnabled="{Binding CanSelectAll}" />
+          </NativeMenu>
+        </NativeMenuItem.Menu>
+      </NativeMenuItem>
+      <NativeMenuItem Header="_Keys">
+        <NativeMenuItem.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="Clear" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Clear}" />
+            <NativeMenuItem Header="Reset" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Reset}" />
+            <NativeMenuItem Header="Attn" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Attn}" />
+            <NativeMenuItem Header="SysReq" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.SysReq}" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="PA1" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA1}" />
+            <NativeMenuItem Header="PA2" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA2}" />
+            <NativeMenuItem Header="PA3" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA3}" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="PF13" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF13}" />
+            <NativeMenuItem Header="PF14" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF14}" />
+            <NativeMenuItem Header="PF15" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF15}" />
+            <NativeMenuItem Header="PF16" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF16}" />
+            <NativeMenuItem Header="PF17" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF17}" />
+            <NativeMenuItem Header="PF18" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF18}" />
+            <NativeMenuItem Header="PF19" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF19}" />
+            <NativeMenuItem Header="PF20" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF20}" />
+            <NativeMenuItem Header="PF21" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF21}" />
+            <NativeMenuItem Header="PF22" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF22}" />
+            <NativeMenuItem Header="PF23" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF23}" />
+            <NativeMenuItem Header="PF24" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF24}" />
+          </NativeMenu>
+        </NativeMenuItem.Menu>
+      </NativeMenuItem>
+      <NativeMenuItem Header="_Help">
+        <NativeMenuItem.Menu>
+          <NativeMenu>
+            <!-- OneWay plus a Click handler, unlike the classic item's TwoWay: a NativeMenuItem never toggles
+                 itself. See OnWireLogClickNative. -->
+            <NativeMenuItem Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=OneWay}"
+                            Click="OnWireLogClickNative" />
+            <NativeMenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="_About LizTerm..." Click="OnAboutClickNative" />
+          </NativeMenu>
+        </NativeMenuItem.Menu>
+      </NativeMenuItem>
+    </NativeMenu>
+  </NativeMenu.Menu>
   <DockPanel>
-    <Menu DockPanel.Dock="Top">
+    <NativeMenuBar x:Name="NativeBar" DockPanel.Dock="Top" />
+    <Menu x:Name="ClassicMenu" DockPanel.Dock="Top">
       <MenuItem Header="_File">
         <MenuItem Header="_New Session..." Click="OnNewSessionClick" />
         <Separator />
@@ -52,8 +126,10 @@
       <MenuItem Header="_Help">
         <MenuItem x:Name="WireLogMenuItem" Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=TwoWay}" />
         <MenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />
-        <Separator />
-        <MenuItem Header="_About LizTerm..." Click="OnAboutClick" />
+        <!-- Hidden with the item below it on macOS, where About lives in the application menu: a menu that ends
+             in a divider is what leaving it behind looks like. -->
+        <Separator x:Name="AboutSeparator" />
+        <MenuItem x:Name="AboutMenuItem" Header="_About LizTerm..." Click="OnAboutClick" />
       </MenuItem>
     </Menu>
 
