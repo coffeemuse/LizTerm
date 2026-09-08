@@ -506,7 +506,12 @@ the backend tests.
   Quit shipped a second `Cmd+Q` item beside Avalonia's, and Avalonia's is the one this app wants because it calls
   `TryShutdown(0)` — which a running IND$FILE transfer correctly refuses — where ours forced `Shutdown()`. Do not
   set `DisableDefaultApplicationMenuItems` to "own" the block: that means re-implementing Services, Hide, Hide
-  Others and Show All to get back what is already free.
+  Others and Show All to get back what is already free. The application menu is not the only one AppKit adds to:
+  a menu titled **Edit** gets Start Dictation and Emoji &amp; Symbols appended by macOS itself (observed
+  2026-09-08 on a real GUI session). Both are harmless here — they reach the host through the same text input
+  `TerminalScreen` already handles, and `Ctrl+Cmd+Space` collides with nothing in `DefaultKeymap` — but like the
+  app menu's block they are invisible to the parity guard, which walks the *declared* `NativeMenu`. Expect macOS
+  to show more Edit items than any test asserts.
   `MenuStrategy` (`Menus/`) picks the renderer: `LIZTERM_MENU=native|classic`,
   else native on macOS and classic elsewhere, because `NativeMenuBar`'s in-window rendering has never been
   looked at on Windows or Linux. In the pinned Avalonia 12.1.2, that in-window rendering binds
