@@ -270,9 +270,15 @@ jobs:
 
   engine-windows:
     runs-on: ubuntu-24.04
-    # Provisional. Step 6 lowers it from the first real runs, as engine-linux's was: the spike measured 95s
-    # cold on an arm64 Mac, and an x64 runner is a different machine.
-    timeout-minutes: 20
+    # 8, from two runs on PR #11 (2026-09-08): 152s cold (34220119068/34220119073, every cache missed, the
+    # source tarball downloaded, the derived image built) and 48s warm (34226268415, engine restored from
+    # cache). These are the only two runs in hand -- engine-linux's comment above has three cold-cache
+    # measurements taken across successive changes to the build, and this job has had no such iteration to
+    # measure, so there is no trend to report, only the two numbers. 8 is ~3.2x the slowest of them (152s),
+    # matching engine-linux's ~3.3x ratio of timeout to worst cold run -- room for a bad day on the runner
+    # without the old provisional 20, which could let a genuinely wedged build run more than twice as long as
+    # the worst run actually observed.
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v7
 

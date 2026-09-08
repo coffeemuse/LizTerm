@@ -334,35 +334,88 @@ section 9 was:
    this plan was built on and CI's x64 runner resolve the same digest. The pin recorded in `windows-image.sh`
    needed no change; only the plan's own verification recipe was wrong, and a later plan should reach for
    `imagetools inspect` first rather than two `docker pull --platform` calls that can fail on a healthy pin.
-5. **Still pending: whether `actions/download-artifact@v7` resolves.** `test-windows`'s download step was
-   written to match this repository's existing `actions/upload-artifact@v7`, on the assumption that GitHub
-   ships matching majors for the two actions together. Nothing has exercised that assumption: the branch stays
-   unpushed pending the user's separate authorization to publish it (a push and a PR are outward-facing side
-   effects execution does not take on its own), so `engine-windows` and `test-windows` have not run once. This
-   entry stays open until the first CI run confirms the version or shows it needs correcting — and if it does,
-   the correction belongs here too, not as a silent edit to the workflow file.
-6. **Still pending: `engine-windows`'s `timeout-minutes`.** It is currently the provisional `20` the
-   implementation plan proposed, unmeasured against the runner it actually bounds. The only wall-clock numbers
-   in hand are local and on the wrong architecture for the question: section 2's spike measured 95 seconds
-   cold on an arm64 Mac, and building the real engine measured 48.9 and 53 seconds warm, also on an arm64 Mac.
-   `engine-windows` runs on `ubuntu-24.04`, an x64 runner, and plan 3c's own history is the reason not to
-   assume the two behave alike — its `dnf install` alone ran several times slower on an x64 leg than on the
-   matching arm64 one in that plan's first cold run. Following plan 3c's practice, `timeout-minutes` should be
-   tightened only once a real run has measured the thing it bounds, not guessed down from a spike on different
-   hardware; a later task must set it from the first real cold- and warm-cache runs on the actual runner and
-   record both numbers here.
-7. **Still pending: whether no .NET change is actually needed.** Section 6 predicted this and asked that any
-   change that did prove necessary be recorded here rather than made quietly. The case for "none needed" is a
-   source reading, not yet an execution: `B3270Locator.cs:20` already picks `b3270.exe` when
-   `OperatingSystem.IsWindows()`, `:46` already skips the executable-bit check on that platform, and the App
-   csproj's copy item already links by `%(Filename)%(Extension)`, so `native/out/win-x64/b3270.exe` lands at
-   `runtimes/win-x64/native/b3270.exe` through the existing rule with no project edit. That reading is sound as
-   far as it goes, but nothing has exercised it: the branch stays unpushed pending the user's separate
-   authorization, so CI has not run `engine-windows` or `test-windows` once, and `EngineSmokeTests` has never
-   started the real `win-x64` binary on an actual Windows machine — the same unverified status as entries 5 and
-   6 above, not a settled fact ahead of them. This entry stays open until the first green `test-windows` run
-   shows `EngineSmokeTests` running rather than skipping under `LIZTERM_REQUIRE_ENGINE=1`; only then does the
-   reading above become the confirmation section 6 asked for, rather than an argument for one.
+5. **RESOLVED: `actions/download-artifact@v7` resolves.** `test-windows`'s download step was written to match
+   this repository's existing `actions/upload-artifact@v7`, on the assumption that GitHub ships matching majors
+   for the two actions together. PR #11 (2026-09-08) exercised that assumption for the first time:
+   `test-windows` downloaded `b3270-win-x64-unverified` into `native/out/win-x64` without error, on both the
+   cold run and the warm one. No version correction was needed; the assumption held.
+6. **SETTLED: `engine-windows`'s `timeout-minutes` is `8`.** The provisional `20` the implementation plan
+   proposed was unmeasured against the runner it actually bounds; section 2's spike (95s cold) and the local
+   engine build (48.9s and 53s warm) were both on an arm64 Mac, and plan 3c's own history — `dnf install`
+   running several times slower on an x64 leg than the matching arm64 leg in that plan's first cold run — was
+   the reason not to assume the two behave alike. PR #11 (2026-09-08) supplied the two real numbers on the
+   actual `ubuntu-24.04` runner: **152s cold** (runs 34220119068/34220119073, every cache missed, the source
+   tarball downloaded, the derived image built) and **48s warm** (run 34226268415, engine restored from
+   cache). Following plan 3c's practice of setting `timeout-minutes` at roughly the ratio its own history
+   established — 15 against a 271s slowest cold leg there, ~3.3x — `platforms.yml` now sets `8` against the
+   152s slowest run here, ~3.2x. Only two runs are in hand, against plan 3c's three measured across successive
+   changes to the build; there is no trend line to report, only these two numbers, and the comment in
+   `platforms.yml` says so plainly rather than implying a maturity this job's measurement history does not yet
+   have.
+7. **RESOLVED — and the answer is NO: a .NET change was required.** This contradicts section 2's own
+   expectation, "This plan is expected to touch no C#," and section 6's, "No C# change is expected. If one
+   proves necessary, it is a finding worth recording in section 9 rather than a quiet edit." The contradiction
+   is the finding, not a failure of this plan: plan 3d's own deliverable — the engine builds, is gated, starts,
+   and reports `TLS provider: Windows Schannel` on a real Windows runner — passed on its first CI run (PR #11,
+   run 34220119073, `engine-windows` green at 152s cold). What failed on that same run was `test-windows`, at
+   the suite step, with two `TrustAnchorVerificationTests` failing:
+   `EmulatorActionException: Set(): Unknown toggle name 'caFile'`.
+
+   **Root cause.** x3270 4.5ga6's `Common/Win32/sio_schannel.c` reports a far smaller TLS option set than
+   `Common/sio_openssl.c` does: `sio_options_supported()` returns
+   `TLS_OPT_CLIENT_CERT | TLS_OPT_MIN_PROTOCOL | TLS_OPT_MAX_PROTOCOL`, with no `TLS_OPT_CA_FILE`.
+   `B3270Session.TlsSettings` sent `Set(verifyHostCert, caFile, acceptHostname)` on every connect with
+   `throwOnFailure: true`, so **every connect failed on Windows** — the build could not reach any host. This
+   was a gap in plan 3b's design, not plan 3d's: 3b exported the OS trust anchors to `caFile` because a
+   statically linked OpenSSL b3270 carries a trust directory that exists only on the build machine that
+   produced it. Schannel has no such problem — it verifies against the Windows certificate store natively,
+   which is exactly the outcome 3b engineered for the other two platforms by a different route. No amount of
+   source reading could have surfaced this; only a real Windows engine, actually attempting a connect, could
+   reveal it, which is the entire reason this plan exists to put one in CI.
+
+   **The fix (Task 8, added mid-execution on the user's ruling of 2026-09-08).** The connect path now gates
+   each TLS toggle on the option list the engine itself announces at startup, in the `tls-hello` indication
+   inside the same `initialize` block that carries `hello`:
+   `{"tls-hello": {"supported": true, "provider": "...", "options": [...]}}`
+   (`TlsHelloIndication`, `Protocol/Indications.cs:24`; parsed at `IndicationParser.cs:48`, never throwing on
+   a malformed or absent `options` array, matching the parser's existing contract). `B3270Session` records the
+   list once, synchronously, before its `hello` completion source completes, and clears it alongside
+   `_process` wherever that is cleared (`TearDown`, and `OnProcessEnded`'s non-shutdown path) so a dead
+   process's answer can never gate a toggle for the fresh process a later `ConnectAsync` spawns.
+   `EffectiveTlsOptions` (`B3270Session.cs:96`) reads the engine's reported list, or every gateable toggle —
+   `verifyHostCert`, `caFile`, `acceptHostname` — when no `tls-hello` has arrived yet, because every b3270
+   build before this indication existed behaved that way and treating "unknown" as "unsupported" would
+   silently take `caFile`-backed trust away from macOS and Linux engines that always had it. `TlsSettings`
+   (`B3270Session.cs:783`) adds each toggle to the `Set` only when that list contains it. Explicitly **NOT**
+   gated on `OperatingSystem.IsWindows()` and **NOT** on the provider string: the option list is the engine's
+   own statement of what it accepts, it is already on the wire, `LIZTERM_B3270_PATH` means the provider is not
+   a function of the host OS, and the list stays correct for providers that do not exist yet. A real Schannel
+   engine DOES announce `acceptHostname` and `verifyHostCert` — only `caFile` is missing — so Windows still
+   gets an explicit `Set` of those two toggles on every connect attempt, unchanged from the other platforms.
+
+   `DecideCaFile` now throws `ConnectionFailedException`, before a single `Set` or `Connect` action is ever
+   built, when a pin is in force (profile pin or one-shot Connect Anyway pin) and `CanPinCertificates`
+   (`B3270Session.cs:88`, `=> SupportsTlsOption("caFile")`) is false: a pin the engine cannot honour now FAILS
+   the connect rather than connecting unpinned, because verifying against the platform store while the user
+   believes a specific certificate is required is a silent security downgrade — the worst outcome available
+   here. Windows certificate pinning itself is deferred to its own plan by the user's ruling; this task makes
+   it impossible to *believe* a pin is in force on Windows when it is not, without making pinning work. When no
+   pin is in force and the engine cannot accept `caFile`, `DecideCaFile` reads no trust anchors and writes no
+   file at all — a Schannel engine's native store already is the anchor plan 3b built for the other two
+   platforms, so reading `TrustAnchors` (a measured 210 ms) and writing its PEM would be work spent restoring
+   an anchor Windows never lost. `SessionViewModel`'s existing `CanPin` / `CannotPinReason` derivation was
+   extended rather than duplicated, so the certificate prompt never offers a pin the session cannot honour; and
+   `TrustAnchorVerificationTests` gate on the engine's actual `caFile` support rather than the operating
+   system — the same ask-the-engine discipline applied to the very tests that caught the bug.
+
+   **Confirmation.** The second CI run (PR #11, run 34226268415, warm, 48s) went fully green, including
+   `test-windows`. The integration project reported 14 passed / 7 skipped — one more test passing than a local
+   run, which is `EngineSmokeTests` executing under `LIZTERM_REQUIRE_ENGINE=1` rather than skipping — and the
+   `test-windows` log shows `TLS provider: Windows Schannel`. This entry's own closing condition — "until the
+   first green `test-windows` run shows `EngineSmokeTests` running rather than skipping" — is now satisfied,
+   and the source reading section 6 asked to be confirmed is no longer an argument for a conclusion but the
+   conclusion itself, reversed from what it argued: yes, a .NET change proved necessary, it is entirely the
+   one recorded above, and it is recorded here rather than as a quiet edit, exactly as section 6 asked.
 8. **`verify-windows.sh` gained a required-imports check section 4.1 did not call for.** Section 4.1 argues
    only one direction of the allowlist: an unexpected DLL means the build found a cryptographic library it
    should not have — OpenSSL, in the running example. It never considers the direction that actually gets a
