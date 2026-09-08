@@ -363,3 +363,22 @@ section 9 was:
    6 above, not a settled fact ahead of them. This entry stays open until the first green `test-windows` run
    shows `EngineSmokeTests` running rather than skipping under `LIZTERM_REQUIRE_ENGINE=1`; only then does the
    reading above become the confirmation section 6 asked for, rather than an argument for one.
+8. **`verify-windows.sh` gained a required-imports check section 4.1 did not call for.** Section 4.1 argues
+   only one direction of the allowlist: an unexpected DLL means the build found a cryptographic library it
+   should not have — OpenSSL, in the running example. It never considers the direction that actually gets a
+   gate to pass a broken binary, because nothing in a permit list can be missing without help: the check is
+   satisfied by an import table with two entries exactly as completely as by one with eleven, and a b3270.exe
+   built without Schannel imports strictly fewer of the allowed DLLs than a correct one, never a disallowed
+   one. That is this platform's own instance of `shared-verify-tls.sh`'s hardest-won lesson — a link-only gate
+   gets *happier* without TLS — and Windows is the one platform whose own build never calls that check to catch
+   it locally: `build-macos.sh` and `build-linux.sh` both run it as their last act, but section 4.2 puts
+   Windows's half on the Windows runner, after the binary is already built and cached, because nothing on the
+   Linux builder can execute a PE file. A final review of the branch found the gap this leaves open — a clean
+   local build, and a clean `engine-windows` run all the way to the cache upload, for an engine with no TLS at
+   all — and added a third check requiring both `crypt32.dll` and `secur32.dll`, the two DLLs
+   `Common/Win32/sio_schannel.c` references, among the imports, failing with a message naming what is missing
+   and stating plainly that the binary has no Schannel TLS. It is a proxy, not a replacement: an import proves
+   only that the object code was linked, never that the provider initialises at runtime, so
+   `shared-verify-tls.sh` still runs, unconditionally, before anything is published. What the new check buys is
+   catching the same class of mistake on every build, on the machine building it, instead of only in the one CI
+   job with a Windows runner to ask.

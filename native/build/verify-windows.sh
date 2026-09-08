@@ -33,10 +33,33 @@ if [ -n "$BAD" ]; then
   exit 1
 fi
 
-# There is deliberately no third check here, and no TLS check. verify-linux.sh's check 2 (the highest imported
-# glibc symbol version) has no PE analogue: Windows import tables carry no symbol versioning, and the API
-# surface b3270 uses predates every Windows version LizTerm supports. The TLS check is the one that cannot run
-# on this machine at all -- a PE binary will not execute on the Linux builder -- so it happens on the Windows
-# runner instead, through shared-verify-tls.sh in the test-windows job. See section 4 of the plan 3d spec.
-echo "OK: $BIN is a 64-bit PE importing only Windows system DLLs"
+# There is deliberately no analogue of verify-linux.sh's check 2 (the highest imported glibc symbol version):
+# Windows import tables carry no symbol versioning, and the API surface b3270 uses predates every Windows
+# version LizTerm supports.
+
+# 3. crypt32.dll and secur32.dll must BOTH be among the imports. Common/Win32/sio_schannel.c is what references
+# the Schannel APIs -- AcquireCredentialsHandle and the rest of SSPI come from secur32.dll, with crypt32.dll
+# supplying the certificate-store calls beside them -- so an engine built without it stops importing them,
+# secur32.dll above all. Check 2 above is a permit list, not a require list: it is satisfied by an import table
+# missing both of these just as completely as by one that has them, because a b3270.exe with no Schannel simply
+# imports fewer of the DLLs already on the allowlist. That is this project's hardest-won lesson, restated for
+# PE: a link-only gate gets *happier* without TLS, and Windows is the one platform whose own build never calls
+# shared-verify-tls.sh to catch it locally the way build-macos.sh and build-linux.sh do.
+#
+# This check is a proxy, not the real thing, and cannot be more than that: an import can prove only that the
+# object code implementing Schannel was linked in, never that the provider initialises at runtime. The check
+# that can prove that -- reading the actual "TLS provider: ..." line the binary prints -- needs a machine that
+# can run a PE executable, which this container is not; it still runs, unconditionally, before anything is
+# published: shared-verify-tls.sh, called from the test-windows job once a Windows runner has the binary. What
+# this arm buys is catching the same class of mistake here, on every build, rather than only in the one CI job
+# with a Windows machine to ask.
+MISSING=""
+printf '%s\n' "$IMPORTS" | grep -qxF 'crypt32.dll' || MISSING="$MISSING crypt32.dll"
+printf '%s\n' "$IMPORTS" | grep -qxF 'secur32.dll' || MISSING="$MISSING secur32.dll"
+if [ -n "$MISSING" ]; then
+  echo "ERROR: $BIN does not import:$MISSING -- this binary has no Schannel TLS." >&2
+  exit 1
+fi
+
+echo "OK: $BIN is a 64-bit PE importing only Windows system DLLs, Schannel included"
 printf '%s\n' "$IMPORTS"
