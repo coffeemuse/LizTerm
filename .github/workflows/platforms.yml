@@ -276,14 +276,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The same entry engine-linux uses: source tarballs are architecture- and platform-independent, and this
-      # job needs only the x3270 one of them. Whichever job saves first, the other finds what it needs or
-      # downloads the rest; a lost save race is a warning, not a failure.
-      - name: Cache the pinned source tarballs
+      # Its own key, shaped like engine-macos's, not engine-linux's shared `sources-` entry: engine-linux fetches
+      # three tarballs (x3270, OpenSSL, expat) and hashes all of fetch-*.sh to key them together, but this job
+      # fetches only x3270, and that expression hashes the same three scripts regardless of which job evaluates
+      # it -- so reusing it would give this job the identical key engine-linux uses. On a cold key, whichever of
+      # this job and engine-macos finishes first (both are far cheaper than engine-linux) would save a
+      # one-tarball native/cache under a key engine-linux's own hash also resolves to; engine-linux would then
+      # get an exact hit on a cache holding a third of what it needs, restore that subset, and re-download
+      # OpenSSL and expat on every run until a fetch-*.sh edit next rotates the key. A subset saved under a
+      # shared key cannot be repaired by the jobs that need the rest, so the fix is a key of its own.
+      - name: Cache the pinned x3270 source tarball
         uses: actions/cache@v6
         with:
           path: native/cache
-          key: sources-${{ hashFiles('native/build/fetch-*.sh') }}
+          key: x3270-src-${{ hashFiles('native/build/fetch-source.sh') }}
 
       # Keyed on the Windows scripts (windows-image.sh included, so changing the base image forces a real
       # build), the x3270 fetcher, and the shared machinery -- but not on the Linux or macOS scripts, which

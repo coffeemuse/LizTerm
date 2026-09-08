@@ -91,7 +91,8 @@ check runs named `test` — one over the branch tip, one over the merge with `ma
 them apart, so a PR could go green for a tree that does not build when merged. Branch protection on `main` requires
 `test` only; the platform jobs are path-filtered on PRs and would never report on a docs-only PR, so a rule requiring
 them directly would leave those waiting forever (the fix, when it matters, is a `platforms-gate` job with
-`needs: [engine-macos, engine-linux, test-windows]` and `if: always()` that passes when they are skipped). A rule
+`needs: [engine-macos, engine-linux, engine-windows, test-windows]` and `if: always()` that passes when they are
+skipped). A rule
 naming the Linux checks directly would have to spell them `engine-linux (ubuntu-24.04, linux-x64)` and
 `engine-linux (ubuntu-24.04-arm, linux-arm64)`: GitHub renders every `matrix.include` property in a check name, not
 just the one that varies meaningfully, and a rule requiring the short form matches nothing and waits forever.
