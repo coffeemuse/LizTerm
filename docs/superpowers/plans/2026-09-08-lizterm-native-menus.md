@@ -276,7 +276,7 @@ git commit -m "Add CheckBackendOrUnknown: an engine value for About with no sess
 
 **Interfaces:**
 - Consumes: `SessionFactory.CheckBackendOrUnknown()` from Task 2.
-- Produces: `public Task App.ShowAboutAsync(Window? preferredOwner)`. Task 4's application-menu handler calls it with `null`.
+- Produces: `public Task App.ShowAboutAsync(Window? preferredOwner)`, which Task 4's application-menu handler calls with `null`; and `SessionWindow.ShowAboutAsync()`, the private body Task 5's native About handler reuses.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -340,10 +340,8 @@ Then replace the body of `OnAboutClick` in `src/LizTerm.App/Views/SessionWindow.
 ```csharp
     private async void OnAboutClick(object? sender, RoutedEventArgs e) => await ShowAboutAsync();
 
-    /// <summary>Both menus' About items, over one method: MenuItem.Click and NativeMenuItem.Click have
-    /// different delegate shapes, so each is a one-line handler rather than a second implementation.</summary>
-    private async void OnAboutClickNative(object? sender, EventArgs e) => await ShowAboutAsync();
-
+    /// <summary>The shared body. Task 5 adds the native menu's About handler over this same method — the two
+    /// menus' Click events have different delegate shapes, so neither can reuse the other's handler.</summary>
     private async Task ShowAboutAsync()
     {
         if (ViewModel is not { } vm) return;
@@ -496,7 +494,7 @@ git commit -m "Add the macOS application menu, which is what gives the picker a 
 - Test: `tests/LizTerm.App.Tests/Views/NativeMenuTests.cs`
 
 **Interfaces:**
-- Consumes: `MenuStrategy.UseNativeMenu` and `MenuStrategy.AboutInHelpMenu(bool)` from Task 1; `OnAboutClickNative` from Task 3.
+- Consumes: `MenuStrategy.UseNativeMenu` and `MenuStrategy.AboutInHelpMenu(bool)` from Task 1; `SessionWindow.ShowAboutAsync()` from Task 3.
 - Produces: `internal static NativeMenuItem? MenuLookup.Item(NativeMenu? menu, string top, string child)`; `internal SessionWindow(bool useNativeMenu)`, the seam Task 6's two-strategy test needs.
 
 `x:Name` is not relied upon for `NativeMenuItem`: it is not a `Control`, `FindControl` cannot reach it, and whether the XAML compiler generates a usable field for it is not something this plan needs to depend on. One lookup helper serves the window's code-behind and the tests, so both agree on how an item is found.
@@ -756,13 +754,25 @@ In `src/LizTerm.App/Views/SessionWindow.axaml.cs`, add `using LizTerm.App.Menus;
     }
 
     // MenuItem.Click is EventHandler<RoutedEventArgs> and NativeMenuItem.Click is EventHandler<EventArgs>, so
-    // each shared action is two one-line handlers over one method rather than two implementations.
+    // each shared action is two one-line handlers over one method rather than two implementations. All seven
+    // live here, in the task that adds the XAML referencing them, so nothing is defined without a caller.
     private void OnCloseClickNative(object? sender, EventArgs e) => Close();
 
     private void OnNewSessionClickNative(object? sender, EventArgs e) =>
         (Avalonia.Application.Current as App)?.ShowPicker();
 
     private async void OnFileTransferClickNative(object? sender, EventArgs e) => await ShowFileTransferAsync();
+
+    private async void OnAboutClickNative(object? sender, EventArgs e) => await ShowAboutAsync();
+
+    // Deliberately the view model's methods, never the [RelayCommand]s. Each method carries its own guard; the
+    // commands keep CommunityToolkit's default of disabling while running, which is fine for a click and wrong
+    // for a keystroke — and on macOS Task 6's gestures make these keystrokes, activated by the OS.
+    private void OnCopyClickNative(object? sender, EventArgs e) => _ = ViewModel?.CopyAsync();
+
+    private void OnPasteClickNative(object? sender, EventArgs e) => _ = ViewModel?.PasteAsync();
+
+    private void OnSelectAllClickNative(object? sender, EventArgs e) => ViewModel?.SelectAll();
 ```
 
 Refactor the two existing handlers to share their bodies rather than duplicating them:
@@ -813,12 +823,14 @@ git commit -m "Add the native window menu beside the classic one, behind MenuStr
 
 ### Task 6: Edit gestures, and proof they fire exactly once
 
+Task 5 added the Edit menu items and their `Click` handlers. This task gives those items their platform gesture, which is the change that makes them reachable from the keyboard — and on macOS hands the keystroke to the OS.
+
 **Files:**
 - Modify: `src/LizTerm.App/Views/SessionWindow.axaml.cs`
 - Test: `tests/LizTerm.App.Tests/Views/NativeMenuTests.cs`
 
 **Interfaces:**
-- Consumes: `MenuLookup.Item` and `internal SessionWindow(bool)` from Task 5.
+- Consumes: `MenuLookup.Item`, `internal SessionWindow(bool)`, the four-tuple `Show` test helper, and the `OnCopyClickNative`/`OnPasteClickNative`/`OnSelectAllClickNative` handlers, all from Task 5.
 - Produces: nothing later tasks depend on.
 
 - [ ] **Step 1: Write the failing tests**
@@ -876,9 +888,9 @@ Append to `tests/LizTerm.App.Tests/Views/NativeMenuTests.cs`:
 Run: `dotnet test tests/LizTerm.App.Tests --filter "FullyQualifiedName~Only_the_edit_menu_carries_gestures"`
 Expected: FAIL — the Edit gestures are null, because nothing assigns them yet.
 
-- [ ] **Step 3: Assign the gestures and add the Edit handlers**
+- [ ] **Step 3: Assign the gestures**
 
-In `src/LizTerm.App/Views/SessionWindow.axaml.cs`, extend `ShowPlatformGestures` and add the three handlers:
+In `src/LizTerm.App/Views/SessionWindow.axaml.cs`, extend `ShowPlatformGestures`. The three Edit `Click` handlers already exist from Task 5; this task only gives their items a gesture:
 
 ```csharp
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
@@ -906,14 +918,6 @@ In `src/LizTerm.App/Views/SessionWindow.axaml.cs`, extend `ShowPlatformGestures`
         }
     }
 
-    // Deliberately the view model's methods, never the [RelayCommand]s. Each method carries its own guard; the
-    // commands keep CommunityToolkit's default of disabling while running, which is fine for a click and wrong
-    // for a keystroke — and on macOS these gestures ARE keystrokes, activated by the OS.
-    private void OnCopyClickNative(object? sender, EventArgs e) => _ = ViewModel?.CopyAsync();
-
-    private void OnPasteClickNative(object? sender, EventArgs e) => _ = ViewModel?.PasteAsync();
-
-    private void OnSelectAllClickNative(object? sender, EventArgs e) => ViewModel?.SelectAll();
 ```
 
 Add `using Avalonia.Input;` for `KeyGesture` if it is not already there.
