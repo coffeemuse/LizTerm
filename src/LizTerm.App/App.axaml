@@ -1,8 +1,19 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="LizTerm.App.App"
+             Name="LizTerm"
              RequestedThemeVariant="Dark">
   <Application.Styles>
     <FluentTheme />
   </Application.Styles>
+
+  <!-- The macOS application menu. It hangs off the application rather than a window, which is what gives the
+       profile picker a menu bar: the picker is the app's startup state and the state it returns to when the
+       last session closes, and until now macOS showed nothing there. Other platforms render none of this. -->
+  <NativeMenu.Menu>
+    <NativeMenu>
+      <NativeMenuItem Header="About LizTerm" Click="OnAboutClick" />
+      <NativeMenuItem Header="Quit LizTerm" Gesture="Cmd+Q" Click="OnQuitClick" />
+    </NativeMenu>
+  </NativeMenu.Menu>
 </Application>

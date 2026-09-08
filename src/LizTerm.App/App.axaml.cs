@@ -147,6 +147,16 @@ public partial class App : Application
         (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
     }
 
+    /// <summary>The application menu fires with no owner of its own: ShowAboutAsync takes the active window.
+    /// A failure here has no error banner to reach, and About is not worth taking the process down for.</summary>
+    private async void OnAboutClick(object? sender, EventArgs e)
+    {
+        try { await ShowAboutAsync(null); }
+        catch { /* nothing to report it on, and nothing about About is worth a crash */ }
+    }
+
+    private void OnQuitClick(object? sender, EventArgs e) => Quit();
+
     /// <summary>The one spelling of About, shared by a session window's Help item and the macOS application
     /// menu. The application menu may fire with no session at all, which is why the engine has a session-less
     /// fallback and the owner has a null one.</summary>
