@@ -417,13 +417,27 @@ public sealed class B3270Session : IEmulatorSession
                 // this task exists to close, by a second door. Deferring the TrySetResult to the end of this loop
                 // closes it deliberately: every item this initialize block carries, including tls-hello, has already
                 // updated session state (synchronously, on this thread) before anything waiting on hello can resume.
+                // The foreach is wrapped in try/finally for the same reason, one door over (review finding 2 on
+                // this task): a later item can itself throw -- a malformed indication, or an external
+                // ScreenUpdated/StatusChanged subscriber throwing, which the App's dispatch delegate can do during
+                // shutdown -- and ReadLoop's inner try/catch (see below) only swallows that into a HostMessage, it
+                // does not resume this loop. Without the finally, that throw would skip TrySetResult entirely and
+                // leave _hello incomplete, so a healthy engine that answered hello just fine gets blamed for a
+                // spurious "did not answer within N seconds" report -- a fault in our own handler misreported as
+                // the engine's.
                 HelloIndication? hello = null;
-                foreach (var item in init.Items)
+                try
                 {
-                    if (item is HelloIndication h) hello = h;
-                    else Handle(item);
+                    foreach (var item in init.Items)
+                    {
+                        if (item is HelloIndication h) hello = h;
+                        else Handle(item);
+                    }
                 }
-                if (hello is not null) _hello?.TrySetResult(hello);
+                finally
+                {
+                    if (hello is not null) _hello?.TrySetResult(hello);
+                }
                 break;
             case HelloIndication bareHello:
                 // Reached only if a hello ever arrives outside an initialize block — not how the real engine
