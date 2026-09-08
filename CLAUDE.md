@@ -104,7 +104,9 @@ one means a fresh `.NET 10 SDK` install cannot run `dotnet` in this repo at all.
 ### The b3270 binary
 
 The app and the integration test project copy `native/out/<host-rid>/b3270*` into their output as
-`runtimes/<rid>/native/b3270`, but only if that directory exists **at build time**. The App test project inherits that
+`runtimes/<rid>/native/<filename>` — `b3270` on macOS and Linux, `b3270.exe` on `win-x64`, since the copy item
+links by `%(Filename)%(Extension)` rather than a hardcoded name — but only if that directory exists **at build
+time**. The App test project inherits that
 copy through its project reference to the App, so a built engine lands in its output too. Build it once with
 `native/build/build-macos.sh` (needs Xcode CLT and Homebrew `openssl@3`; downloads and checksums x3270
 4.5ga6, links OpenSSL statically, and `verify-macos.sh` fails the build if `otool -L` shows anything

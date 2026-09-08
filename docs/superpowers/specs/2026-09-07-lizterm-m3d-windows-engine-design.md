@@ -351,10 +351,15 @@ section 9 was:
    tightened only once a real run has measured the thing it bounds, not guessed down from a spike on different
    hardware; a later task must set it from the first real cold- and warm-cache runs on the actual runner and
    record both numbers here.
-7. **No .NET change proved necessary, confirming section 6's expectation.** Section 6 predicted this and asked
-   that any change that did prove necessary be recorded here rather than made quietly. None was needed across
-   any of the tasks that built and gated the engine: `B3270Locator` already names `b3270.exe` on Windows and
-   already skips the executable-bit check there, and the App csproj's copy item already links by
-   `%(Filename)%(Extension)`, so `native/out/win-x64/b3270.exe` lands at `runtimes/win-x64/native/b3270.exe`
-   through the existing rule with no project edit. This entry is the confirmation section 6 asked for, not a
-   gap.
+7. **Still pending: whether no .NET change is actually needed.** Section 6 predicted this and asked that any
+   change that did prove necessary be recorded here rather than made quietly. The case for "none needed" is a
+   source reading, not yet an execution: `B3270Locator.cs:20` already picks `b3270.exe` when
+   `OperatingSystem.IsWindows()`, `:46` already skips the executable-bit check on that platform, and the App
+   csproj's copy item already links by `%(Filename)%(Extension)`, so `native/out/win-x64/b3270.exe` lands at
+   `runtimes/win-x64/native/b3270.exe` through the existing rule with no project edit. That reading is sound as
+   far as it goes, but nothing has exercised it: the branch stays unpushed pending the user's separate
+   authorization, so CI has not run `engine-windows` or `test-windows` once, and `EngineSmokeTests` has never
+   started the real `win-x64` binary on an actual Windows machine — the same unverified status as entries 5 and
+   6 above, not a settled fact ahead of them. This entry stays open until the first green `test-windows` run
+   shows `EngineSmokeTests` running rather than skipping under `LIZTERM_REQUIRE_ENGINE=1`; only then does the
+   reading above become the confirmation section 6 asked for, rather than an argument for one.
