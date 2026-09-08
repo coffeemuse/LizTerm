@@ -26,10 +26,14 @@ public sealed class B3270Session : IEmulatorSession
     /// <summary>The Set() toggle names the engine's own tls-hello reported (plan 3d task 8), or null when
     /// tls-hello has never been observed on this process. Set once, synchronously, before <see cref="_hello"/>
     /// completes (see the InitializeIndication case in <see cref="Handle"/>), so anything that awaited
-    /// <see cref="StartProcessAsync"/> sees it. Null is read as "supports everything this session ever gates",
-    /// not "supports nothing": every b3270 build before this indication existed behaved that way, and treating
-    /// unknown as unsupported would silently take caFile-backed trust away from macOS/Linux engines that always
-    /// had it, purely because a test double or an old override never sent the indication.</summary>
+    /// <see cref="StartProcessAsync"/> sees it, and cleared alongside <see cref="_process"/> and <see cref="_hello"/>
+    /// wherever they are (TearDown, and OnProcessEnded's non-shutdown path) so a dead process's option set can
+    /// never gate a toggle for the fresh one a later ConnectAsync spawns. Null is read as "supports everything
+    /// this session ever gates", not "supports nothing": every b3270 build before this indication existed behaved
+    /// that way, and treating unknown as unsupported would silently take caFile-backed trust away from
+    /// macOS/Linux engines that always had it, purely because a test double or an old override never sent the
+    /// indication -- the same reading applies to the gap between a process ending and its replacement's own
+    /// tls-hello arriving.</summary>
     private IReadOnlyList<string>? _tlsOptions;
     private int _tagCounter;
     private volatile bool _shuttingDown;
@@ -263,6 +267,10 @@ public sealed class B3270Session : IEmulatorSession
                 process.Dispose();
                 _process = null;
                 _hello = null;
+                // The dead process's tls-hello answer dies with it (finding 4, plan 3d task 8 review): the next
+                // process gets its own hello/tls-hello round trip, and until that arrives _tlsOptions must read
+                // as "not yet known" (null), not as whatever this process happened to report.
+                _tlsOptions = null;
             }
         }
         catch (Exception)
@@ -280,6 +288,7 @@ public sealed class B3270Session : IEmulatorSession
         var process = _process;
         _process = null;
         _hello = null;
+        _tlsOptions = null;
         process?.Kill();
         process?.Dispose();
     }
