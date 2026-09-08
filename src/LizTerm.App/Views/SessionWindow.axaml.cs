@@ -46,12 +46,16 @@ public partial class SessionWindow : Window
 
     private void OnNewSessionClick(object? sender, RoutedEventArgs e) => (Avalonia.Application.Current as App)?.ShowPicker();
 
-    private async void OnAboutClick(object? sender, RoutedEventArgs e)
+    private async void OnAboutClick(object? sender, RoutedEventArgs e) => await ShowAboutAsync();
+
+    /// <summary>The shared body. Task 5 adds the native menu's About handler over this same method — the two
+    /// menus' Click events have different delegate shapes, so neither can reuse the other's handler.</summary>
+    private async Task ShowAboutAsync()
     {
         if (ViewModel is not { } vm) return;
         try
         {
-            await new AboutWindow(AppVersion.Current, vm.Engine, SessionFactory.OverrideOrigin).ShowDialog(this);
+            if (Avalonia.Application.Current is App app) await app.ShowAboutAsync(this);
         }
         catch (Exception ex)
         {
