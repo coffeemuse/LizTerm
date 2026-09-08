@@ -16,10 +16,8 @@ public class NativeMenuTests
         var menu = NativeMenu.GetMenu(Application.Current!);
 
         Assert.NotNull(menu);
-#pragma warning disable CS8631
-        var headers = menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header).ToArray();
+        var headers = menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header!).ToArray();
         Assert.Equal(["About LizTerm", "Quit LizTerm"], headers);
-#pragma warning restore CS8631
     }
 
     /// <summary>The one gesture outside the Edit menu in this whole feature. The application menu is macOS-only
