@@ -397,13 +397,25 @@ the backend tests.
   success is still a success). Every action goes through `RequireProcess`: after the engine dies it throws
   `BackendUnavailableException` carrying the last fault, and `InvalidOperationException` ("The session has not
   been started.") is reserved for a session that was never started.
-- Every connect sends one `Set(verifyHostCert,…,caFile,…,acceptHostname,…)` with all three explicit, so an attempt
-  never inherits the previous one's trust settings (verified: empty values clear them in the same engine). What
-  fills `caFile` is one rule: a pin in force means the pin file (its PEM verbatim, so a pin that lost its `pem` in a
-  hand-edited profile writes an empty file and fails the connect rather than quietly widening to the anchors);
-  otherwise, whenever the attempt verifies, the trust anchors `TrustAnchors` yields, written to
-  `lizterm-roots-<guid>.pem`; and everything else — verification off, or a source with no anchors — means empty,
-  because an empty *file* makes b3270 fail the connect with "CA database load … failed" rather than falling back.
+- Every connect gates `verifyHostCert`, `caFile`, and `acceptHostname` independently on the toggle names the
+  engine's own `tls-hello` indication reported at startup (parsed alongside `hello`, from the same `initialize`
+  block; see `B3270Session.EffectiveTlsOptions`/`SupportsTlsOption`) — never on `Profile.UseTls`, the OS, or the
+  provider string. An engine whose `tls-hello` omits `caFile` (Schannel does: x3270 4.5ga6's
+  `Common/Win32/sio_schannel.c` reports only `clientCert`/`tlsMinProtocol`/`tlsMaxProtocol` on top of the
+  TLS-required set) gets a `Set` with `verifyHostCert` and `acceptHostname` only and connects verifying against the
+  platform certificate store instead; `DecideCaFile` reads no trust anchors and writes no file for it, since
+  nothing would ever point the engine at one (`CanPinCertificates` is false, and the anchor read is a measured
+  210 ms this path has no reason to pay). A pin in force — profile or one-shot — against such an engine throws
+  (`ConnectionFailedException`, before either the `Set` or the `Connect` action is written) rather than silently
+  connecting against the platform store while the caller still believes their pin holds; that refusal is the one
+  case this gate treats as a hard failure rather than a quiet, capability-appropriate downgrade. Every toggle that
+  IS sent is still sent explicit on every connect, so an attempt never inherits the previous one's trust settings
+  (verified: empty values clear them in the same engine). When the engine supports `caFile`, what fills it is one
+  rule: a pin in force means the pin file (its PEM verbatim, so a pin that lost its `pem` in a hand-edited profile
+  writes an empty file and fails the connect rather than quietly widening to the anchors); otherwise, whenever the
+  attempt verifies, the trust anchors `TrustAnchors` yields, written to `lizterm-roots-<guid>.pem`; and everything
+  else — verification off, or a source with no anchors — means empty, because an empty *file* makes b3270 fail the
+  connect with "CA database load … failed" rather than falling back.
   Do **not** gate the anchors on `Profile.UseTls`, however tempting the saved work looks: b3270 implements the
   TELNET START-TLS option, so a plain profile can be upgraded to TLS by the host mid-session, and that upgrade
   would then verify against the engine's own compiled-in directory — the nonexistent Homebrew path this milestone
