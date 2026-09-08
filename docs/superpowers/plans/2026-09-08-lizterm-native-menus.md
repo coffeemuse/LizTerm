@@ -166,7 +166,7 @@ internal static class MenuStrategy
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `dotnet test tests/LizTerm.App.Tests --filter "FullyQualifiedName~MenuStrategyTests"`
-Expected: PASS, 15 cases.
+Expected: PASS, 13 cases.
 
 - [ ] **Step 5: Commit**
 
