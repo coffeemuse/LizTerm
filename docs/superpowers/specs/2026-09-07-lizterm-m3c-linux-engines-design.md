@@ -1,0 +1,505 @@
+# LizTerm Milestone 3, plan 3c: Linux engines
+
+Date: 2026-09-07. Parent spec: `2026-09-03-lizterm-v1-design.md` (section 8.1 names all six targets for v1;
+section 8.2 asks for one build script per OS and makes the dependency check the CI gate). Predecessors:
+`2026-09-06-lizterm-m3-ci-design.md` (plan 3a, whose `platforms.yml` this plan adds a job to) and
+`2026-09-06-lizterm-m3-trust-design.md` (plan 3b, which is why a statically linked engine can verify a
+certificate at all). Status: approved in discussion on 2026-09-07; awaiting review of this text.
+
+## 1. Purpose
+
+`b3270` exists for one target, `osx-arm64`, built by `native/build/build-macos.sh` and proven by the
+`engine-macos` job. This plan produces `linux-x64` and `linux-arm64` the same way: a build script, a
+verification gate that is the build's pass/fail, and a CI job that builds, proves LizTerm can spawn what it
+built, and only then uploads the binary.
+
+Milestone 3 after this plan: **3d** Windows engines, **3e** publish and release, **3f** the scheduled
+integration lane.
+
+Decisions taken in the brainstorm on 2026-09-07:
+
+- **The glibc floor is 2.28**, which is AlmaLinux 8 / RHEL 8. That is also .NET 10's own floor, so on every
+  glibc distribution .NET supports the engine never becomes the thing that decides where LizTerm runs. (The one
+  exception is deliberate and named in section 2: .NET 10 supports Alpine, and a glibc engine will not run
+  there. musl is out of scope for this plan.) A floor above it — Debian 12's 2.36 is the tempting one, because
+  the toolchain is current and the image is small — would ship a binary that cannot start on
+  Ubuntu 22.04 (2.35) or RHEL 9 (2.34), both supported for years yet, and a binary that cannot start is exactly
+  the failure this plan's gate exists to prevent.
+- **OpenSSL comes from pinned 3.5.x LTS source, built inside the container**, not from the base image's
+  package. AlmaLinux 8 ships 1.1.1, which has been end-of-life upstream since September 2023, and because the
+  engine links statically the distribution's security updates would never reach our binary anyway. Pinning it
+  the way `fetch-source.sh` pins x3270 makes every bump a deliberate PR that reruns the gate, and it keeps
+  macOS and Linux on the same OpenSSL major.
+- **Both architectures land in this plan**, each on its own native runner. Cross-compiling both from one x64
+  container was the fallback while arm64 runners looked unavailable on a private repository; that is no longer
+  true (section 2), and cross-building trades fiddly autotools host triplets for a binary the job cannot
+  execute to test.
+
+## 2. Facts that shape the design
+
+- GitHub made arm64 standard runners available in private repositories on 2026-01-29. They are free-tier
+  eligible and carry two vCPUs on a private repository against four on a public one. The label is
+  `ubuntu-24.04-arm`; there is no `ubuntu-latest-arm`.
+- .NET 10's supported-OS list starts at Ubuntu 22.04 (glibc 2.35); the oldest glibc anywhere on it is RHEL 8's
+  2.28. Building the engine at 2.28 therefore puts it at exactly .NET's own floor, not one step below it — so
+  no glibc system .NET 10 supports is ruled out by the engine.
+- AlmaLinux 8 is glibc 2.28 on both `x86_64` and `aarch64`, publishes both images, and is supported until 2029.
+- OpenSSL 3.5 is the current LTS, released 2025-04-08 and supported until 2030-04-08. The next LTS is 4.2 in
+  April 2027, which is when this pin next wants a look.
+- `build-macos.sh` has the shape this plan copies: resolve the RID from the host architecture, fetch the pinned
+  source, stage a directory holding only static archives so the linker cannot reach a shared object, configure
+  with `--enable-b3270` and every other component disabled, make, copy to `native/out/<rid>/b3270`, then run
+  the verification script as the last step. `fetch-source.sh` echoes the extracted source directory on stdout
+  and caches the tarball under `native/cache`; a Linux fetcher follows the same contract.
+- The App and integration test csproj files copy `native/out/$(NETCoreSdkRuntimeIdentifier)/b3270*` into
+  `runtimes/<rid>/native/`, and `B3270Locator` looks for it at `runtimes/<RuntimeInformation.RuntimeIdentifier>/native/`.
+  On these runners both resolve to `linux-x64` and `linux-arm64`, so **no .NET source changes at all**. Alpine
+  is a different RID (`linux-musl-x64`) and a glibc binary will not run there; musl is out of scope.
+- Plan 3b writes an explicit `caFile` on every connect. That matters here more than anywhere: a statically
+  linked OpenSSL carries a compiled-in trust directory that, for these binaries, is a path inside a build
+  container that exists on no user's machine. Without 3b this plan would ship a client that can verify nothing.
+- glibc 2.34 merged `libdl`, `libpthread` and `librt` into `libc`. A binary built against 2.28 references them
+  as separate sonames and still resolves on newer systems through the stub libraries left behind for exactly
+  that reason. Compatibility runs old-to-new only, which is the whole argument for building on the floor.
+- On glibc 2.34 and later, `__libc_start_main` is versioned `GLIBC_2.34`. Any trivial C program compiled on the
+  runner therefore imports a symbol above our floor while linking nothing but `libc` — a ready-made negative
+  fixture for section 4's floor check (`/usr/bin/curl` inside the container is the fixture for the other arm,
+  since it links OpenSSL and zlib).
+- The `ubuntu-24.04` runner images ship Docker and gcc. The arm64 image is the same family; the first run
+  confirms it.
+- `SystemTrustAnchorsTests` asserts the OS store yields at least five certificates, deliberately with no skip
+  (plan 3b, deviation 5). A bare container with no `ca-certificates` would fail it. The suite therefore runs on
+  the host runner, which has a root store, and never inside the build container.
+
+## 3. The build scripts
+
+Four new scripts under `native/build`, all `set -euo pipefail`, matching the existing ones in shape and size;
+the two verification scripts are section 4. A fifth file, `native/build/linux-image.sh`, is not a script but a
+sourced one-liner holding the pinned base image (section 3.3).
+
+### 3.1 `fetch-openssl.sh`
+
+`fetch-openssl.sh <dest-dir>`: the newest OpenSSL 3.5.x patch as of implementation, and its SHA-256, as shell
+constants, downloaded from
+`https://github.com/openssl/openssl/releases/download/openssl-<version>/openssl-<version>.tar.gz` into
+`native/cache`, checksummed, extracted into the destination, extracted path echoed on stdout. Deliberately a
+copy of `fetch-source.sh`'s structure rather than a generalisation of it: two ten-line scripts that each read
+top to bottom beat one parameterised fetcher, and the pin is the point — it should be visible in the file that
+owns it. Bumping either version is a one-line edit that invalidates the CI cache on its own, because the cache
+key hashes the scripts.
+
+`shasum` is macOS-flavoured; `sha256sum` is what AlmaLinux has. The Linux fetcher uses `sha256sum`.
+
+### 3.2 `build-linux.sh`
+
+Runs **inside** the container, assuming its toolchain the way `build-macos.sh` assumes Xcode command line tools
+and Homebrew. Steps:
+
+1. Map `uname -m` to the RID: `x86_64` → `linux-x64`, `aarch64` → `linux-arm64`, anything else is an error.
+2. Fetch OpenSSL, then build it static into a staging prefix:
+   `./config no-shared no-tests no-docs --prefix=$STAGE --libdir=lib`, `make`, `make install_sw`. `--libdir=lib`
+   is not cosmetic: OpenSSL installs to `lib64` on x86_64 by default, and pinning it to `lib` makes the staged
+   layout identical on both architectures and matches what x3270's `--with-openssl` expects. `no-shared` means
+   the staging prefix holds no `.so` at all, so the macOS script's "copy only the archives" trick is unnecessary
+   here — there is nothing else to pick up.
+3. Fetch x3270, configure with the macOS script's flag set (`--enable-b3270`, everything else disabled) plus
+   `--with-openssl="$STAGE"`, and make. Static libcrypto wants `-ldl -pthread` at link time; if x3270's
+   configure does not supply them, `LIBS` on the configure line does. Whether that is needed is discovery work
+   for the plan's first task, not a decision for this spec.
+4. Copy to `native/out/<rid>/b3270`, `chmod +x`, and run `verify-linux.sh` on it as the final step, so the gate
+   is part of the build rather than a thing CI remembers to call.
+
+`configure` and `make` output goes to `$BUILD/{configure,make}.log` as on macOS, which is why `platforms.yml`
+already has a failure step that dumps those logs.
+
+### 3.3 `build-linux-docker.sh`
+
+The wrapper, and the only script CI or a developer calls directly to build. It requires Docker on the host and
+nothing else:
+
+- Sources `native/build/linux-image.sh`, which holds the base image **pinned by digest**
+  (`almalinux:8@sha256:...`) and nothing else. The digest pins the base layer the floor comes from. It does not
+  pin the toolchain, which `dnf install` still pulls live, so the floor ultimately rests on RHEL 8's frozen
+  glibc ABI with section 4's symbol check as the backstop. Two scripts need the digest — this wrapper and
+  `verify-linux-start.sh` — so it lives in one file they both read rather than in both of them, where the two
+  copies could drift and quietly stop testing the same floor. It is a `.sh` under `native/build`, so
+  `hashFiles('native/build/*.sh')` covers it: changing the image forces a rebuild and a fresh gate run.
+- `docker run --rm -v <repo>:/src -w /src <image>` a small inline preamble that `dnf install`s the toolchain
+  (`gcc make perl-core diffutils tar binutils` — `binutils` for the `readelf` the gate needs; the plan's first
+  task pins the final list) and then runs the requested command.
+- With no arguments it runs `native/build/build-linux.sh`, then `verify-linux-start.sh` on the result, so a
+  developer who runs the wrapper gets the whole gate. With arguments it runs those instead, inside the same
+  image — which is how section 4's negative fixture invokes the gate without a second wrapper.
+- Ends by chowning `native/out`, `native/build-tmp` and `native/cache` back to the calling user's uid/gid from
+  inside the container. On a Linux runner the container writes as root, and root-owned files break the
+  `actions/cache` save and the artifact upload that follow. On Docker Desktop the ownership is virtualised and
+  the chown is a no-op, so the same script serves Robert's Mac (native aarch64; x64 through emulation if he
+  ever wants it locally).
+
+## 4. The gate: `verify-linux.sh`
+
+`verify-macos.sh` is one check — no dynamic dependency outside the system paths. Its Linux counterpart needs
+three, because on Linux `ldd` alone is not a portability claim: a binary built on Ubuntu 24.04 links only
+system libraries too and passes it while being unable to start on RHEL 9.
+
+1. **Dependency allowlist.** Every `ldd` entry must be one of `linux-vdso`, `libc`, `libm`, `libdl`,
+   `libpthread`, `librt`, `libresolv`, `libgcc_s`, `ld-linux-*`. A `libssl.so`, `libcrypto.so` or `libtinfo.so`
+   fails the build. This is `verify-macos.sh`'s check, spelled for glibc.
+2. **Symbol floor.** The highest `GLIBC_2.x` version the binary imports must be `<= 2.28`, read from
+   `readelf --dyn-syms` (or `objdump -T`) and compared with `sort -V`. This is the check that actually catches
+   base-image drift, and the one that fails if someone builds outside the container.
+3. **It starts on the floor.** `b3270 --version` inside a **bare** container from the same pinned image, with
+   no build tools installed. The binary starting on the floor OS with nothing else present is the portability
+   claim itself, and it costs one `docker run`. This cannot live in `verify-linux.sh`, which itself runs inside
+   a container and cannot start another, so it is its own host-side script, `verify-linux-start.sh <binary>`,
+   sourcing the same pinned digest (section 3.3). Two callers: the wrapper runs it after a build, and the
+   workflow runs it directly, which is what covers the cache-hit path where the wrapper never executes.
+
+Plan 3b's deviation 5 recorded the lesson that a guard which cannot fail is not a guard: mutating
+`SystemTrustAnchors.ReadStore` to return nothing left every test passing. So the job also proves this gate
+rejects bad binaries, one fixture per arm:
+
+- `native/build/build-linux-docker.sh native/build/verify-linux.sh /usr/bin/curl` — curl inside the container
+  links OpenSSL and zlib, so check 1 must reject it.
+- A trivial C file compiled on the host runner (`int main(void){return 0;}`), which links only `libc` and so
+  passes check 1, but imports `__libc_start_main@GLIBC_2.34` and so check 2 must reject it.
+
+Both steps assert a non-zero exit. If either fixture turns out not to behave as described, the fix is a
+different fixture, not a dropped check.
+
+## 5. `engine-linux` in `platforms.yml`
+
+One new job, a two-leg matrix, mirroring `engine-macos` step for step:
+
+```
+strategy:
+  fail-fast: false
+  matrix:
+    include:
+      - { runner: ubuntu-24.04,     rid: linux-x64 }
+      - { runner: ubuntu-24.04-arm, rid: linux-arm64 }
+```
+
+`ubuntu-24.04` rather than `ubuntu-latest`: the two legs must differ only in architecture, and `ubuntu-latest`
+rolling to 26.04 while the arm label stays at 24.04 would quietly make them incomparable. `fail-fast: false`
+because one architecture failing is information about that architecture, and cancelling the other leg throws it
+away.
+
+Steps:
+
+1. `actions/checkout`.
+2. `actions/cache` on `native/cache`, key `sources-${{ hashFiles('native/build/fetch-*.sh') }}` — now two
+   tarballs, and the key follows both fetchers. Deliberately not keyed on the architecture: source tarballs are
+   arch-independent, so the two legs share one entry. Both legs missing at once means both download and both
+   try to save; one loses the race and logs a warning, which is harmless.
+3. `actions/cache` on `native/out/${{ matrix.rid }}`, key
+   `b3270-${{ matrix.rid }}-${{ hashFiles('native/build/*.sh') }}`, as macOS does: keyed on every build script,
+   so any change to how the engine is built forces a real build and a fresh gate run.
+4. `native/build/build-linux-docker.sh`, skipped on a cache hit. The gate runs inside it.
+5. `native/build/verify-linux-start.sh` on the built binary, then the two negative-fixture steps. All three run
+   **whether or not** the engine came from the cache: on a cache hit the wrapper never executes, so this is the
+   only thing standing between a stale cached binary and an artifact upload. The negative fixtures pay the
+   wrapper's `dnf install` preamble each time, about half a minute, which is the price of a gate that is proven
+   rather than assumed.
+6. `actions/setup-dotnet` from `global.json`, `dotnet build LizTerm.slnx --configuration Release -warnaserror`,
+   then the suite with `LIZTERM_REQUIRE_ENGINE: "1"` in the job environment, so `EngineSmokeTests` must run
+   rather than skip. `native/out/<rid>` exists by now, so the csproj copy rules place the fresh binary in the
+   test output with no workflow-side copying.
+7. `actions/upload-artifact` of `native/out/<rid>/b3270` as `b3270-<rid>`, after the tests, so a binary that
+   links cleanly but cannot be spawned is never published — the rule `engine-macos` already follows.
+8. `test-results-linux-<arch>` on `failure() || cancelled()`, with the `.trx`, `*.dmp` and `*Sequence*.xml`
+   paths the other jobs use.
+
+`timeout-minutes: 45`. The arm64 private-repository runner has two vCPUs and this job builds OpenSSL and x3270
+from source on a cold cache; 30 (the macOS number, on a four-core runner with Homebrew's prebuilt OpenSSL) is
+too tight to trust. The first run tells us the real number.
+
+The workflow's `paths` filter already covers `native/**`, `src/**` and `tests/**`, so this job is exercised on
+its own PR with no trigger change. Adding scripts under `native/build` changes `hashFiles('native/build/*.sh')`
+and so invalidates the macOS engine cache once — one rebuild, no behaviour change.
+
+## 6. Repository changes
+
+- `CLAUDE.md`, "The b3270 binary": it currently names `build-macos.sh` alone. Add the Linux story — the wrapper
+  is the entry point, the container and its digest are where the floor comes from, and `LIZTERM_B3270_PATH`
+  remains the development override. Add `engine-linux` to the CI paragraph beside `engine-macos` and
+  `test-windows`.
+- `README.md`: the platform table or equivalent gains Linux x64 and arm64 as built targets, and the CI section
+  gains the new job.
+- No `.gitignore` change: `native/out`, `native/cache` and `native/build-tmp` are already ignored.
+
+## 7. Testing and verification
+
+There is no new .NET code, so the verification is the scripts and the CI run:
+
+1. `build-linux-docker.sh` locally on Robert's Mac, which produces `linux-arm64` natively under Docker Desktop.
+   The gate must pass, and `native/out/linux-arm64/b3270` must exist.
+2. Both negative fixtures locally: each must exit non-zero, and the failure message must name which check
+   rejected it.
+3. `dotnet test tests/LizTerm.Integration.Tests` locally on the Mac afterwards is **not** a proof of this plan —
+   the Mac's RID is `osx-arm64` and it will pick up the macOS engine. The Linux engine is proven only in CI.
+4. Workflow YAML validated locally (`actionlint` if present, otherwise a YAML parse) before pushing, because a
+   syntax error surfaces only when GitHub tries to run the file.
+5. Push, open the PR, and watch both legs. Done when `test`, `engine-macos`, `test-windows`,
+   `engine-linux (linux-x64)` and `engine-linux (linux-arm64)` are green, both `b3270-linux-*` artifacts are
+   downloadable, and the negative-fixture steps show as passing (that is, having rejected their fixtures).
+
+The claim this plan's first CI run either proves or refutes, stated plainly so a refutation is a finding rather
+than a surprise: **no .NET source change is needed** for the Linux RIDs (section 2). If the copy rule or the
+locator turns out to need one, that is part of this plan.
+
+## 8. Out of scope
+
+Windows engines (3d); `dotnet publish`, bundles, version stamping, releases (3e); the integration lane and its
+container (3f); `osx-x64`; Alpine and any other musl target; a Dockerfile or a registry-hosted build image (the
+inline `dnf install` in the wrapper is cheaper than an image to publish and version); code signing; running the
+live tests in CI; and applying the section 4 negative-fixture idea to `verify-macos.sh`, which is worth doing
+and is not this plan.
+
+## 9. Deviations from this spec (as-built)
+
+Rulings made in planning and execution, recorded here rather than edited into the sections above:
+
+1. **expat is pinned and built static too, so `native/build` gained a seventh file rather than the six this spec
+   lists** (`linux-image.sh`, `fetch-openssl.sh`, `build-linux.sh`, `build-linux-docker.sh`, `verify-linux.sh`,
+   `verify-linux-start.sh`, and now `fetch-expat.sh`). Section 3.2 names only OpenSSL, but b3270 requires libexpat
+   and offers no way to build without it: `b3270/configure.in` searches for `XML_ParserCreate` and then
+   hard-errors on a missing `expat.h`, and there is no `--without-expat`. macOS never noticed because expat lives
+   in `/usr/lib`, which `verify-macos.sh` allows as part of that OS; Linux has no distribution-independent
+   libexpat. AlmaLinux 8 ships `expat` and `expat-devel` but no static package (`dnf provides '*/libexpat.a'`
+   finds nothing, `powertools` included), and the binary built against the shared one put `libexpat.so.1` in the
+   gate's rejection list — the exact class of dependency section 4 exists to catch. Admitting it would have
+   changed check 1's meaning from "the glibc runtime" to "the glibc runtime plus whatever we happened to link",
+   so instead `fetch-expat.sh` pins expat 2.8.4 beside `fetch-openssl.sh`, `build-linux.sh` builds it
+   `--disable-shared` into its own prefix, and `expat-devel` is deliberately kept out of the container's packages
+   so `-lexpat` cannot resolve to anything but our archive. libexpat publishes a GPG signature but no checksum
+   file, so the pin was cross-checked by downloading from the GitHub release and the SourceForge mirror and
+   confirming the two SHA-256s match. One consequence belongs to 3e:
+   the shipped binary now statically links Apache-2.0 (OpenSSL) and MIT (expat) code, both of which require their
+   notices in a binary distribution — two libraries to acknowledge at release time, not one.
+2. **A parsing bug in check 1, found by the fixture written to fail check 2.** `ldd` prints its own
+   ``version `GLIBC_x.y' not found`` diagnostic *unindented* and on *stdout*, ahead of the tab-indented dependency
+   lines it still lists. Check 1 as the plan spelled it — `ldd "$BIN" | awk '{print $1}' | sed 's|.*/||'` — has no
+   way to tell that line from a dependency: its first field is the binary's own path with a colon on the end,
+   which matches no allowed name. So the newer-glibc fixture failed check 1, naming the binary itself as a
+   phantom dependency, instead of check 2 with the message that says what to do — the gate rejecting for the
+   wrong reason, which is barely better than not rejecting. `verify-linux.sh` filters to leading-whitespace lines
+   before the `awk`, which excludes the diagnostic and nothing else: a genuinely missing library
+   (`libfoo.so.1 => not found`) keeps a real dependency line's indentation and is still caught.
+   Reproduced identically under x86_64 emulation, and it is inherent to `GLIBC_2.34`-versioned
+   `__libc_start_main`, which every dynamically linked binary calls, rather than an architecture quirk. Worth
+   recording precisely because the fixture existed to fail exactly one arm: that is the only reason the bug
+   surfaced at all, and it is section 4's argument for negative fixtures in miniature.
+3. **The allowlist gained `libutil.so.1` and `libanl.so.1`.** x3270's configure resolves `forkpty` to `-lutil` and
+   `getaddrinfo_a` to `-lanl`, so a built b3270 names both. Both belong to glibc's own package on the floor image
+   (`rpm -qf` answers `glibc-2.28-251.el8_10.40` for each) and both were folded into `libc.so.6` at glibc 2.34,
+   alongside the `libdl`, `libpthread` and `librt` section 4 already allows for exactly that reason, so permitting
+   them does not widen check 1 past "the glibc runtime": any system with `libc.so.6` has them. `libcrypt` was
+   considered and deliberately **not** added — nothing in a b3270 build calls it, and the `AC_SEARCH_LIBS` /
+   `AC_CHECK_LIB` set that reaches this build (`util`, `nsl`, `socket`, `iconv`, `anl`, `expat`, `crypto`, `ssl`)
+   is architecture-independent, so speculative entries would only weaken the check on both legs.
+4. **All three fixtures were substituted.** The floor arm is a `/bin/true` copied out of `debian:12-slim`, not a C
+   program compiled on the host runner: it imports `__libc_start_main@GLIBC_2.34` just as the compiled fixture
+   would, needs no compiler on the runner, and is the same fixture on a developer's Mac, where a host-compiled
+   binary would be Mach-O and could not be checked at all. The allowlist arm is `/usr/bin/bash`, which links
+   `libtinfo.so.6`, rather than `/usr/bin/curl`: bash is present in the image by definition. And the positive
+   fixture used while writing the gate is `/usr/bin/gzip`, not `/usr/bin/true`: AlmaLinux 8 packages
+   `coreutils-single`, so `/usr/bin/true` is a shebang script rather than an ELF, and the multi-call `coreutils`
+   binary behind it links five libraries outside the allowlist — it would have failed check 1 for reasons that
+   have nothing to do with what the fixture is for.
+5. **The container's package list gained `findutils` and `python3`** over section 3.3's `gcc make perl-core
+   diffutils tar binutils`, which that section left the first task to pin. `findutils` is configure's; `python3`
+   is x3270's, whose configure refuses to run without one ("Can't find Python using 'python3'") because the build
+   generates several C sources with Python scripts. Nothing extra was needed for OpenSSL — `perl-core` covered it
+   and OpenSSL built on the first attempt — and `expat-devel` is deliberately absent, per deviation 1.
+6. **The fetchers take whichever checksum tool is present.** Section 3.1 says the Linux fetcher uses `sha256sum`,
+   but `fetch-source.sh` now runs inside the container too — it is `build-linux.sh` that fetches x3270 — where
+   `shasum`, a Perl script, may be absent. All three fetchers therefore share a two-line helper that prefers
+   `sha256sum` and falls back to `shasum -a 256`, so the same script works on macOS and in the container.
+7. **`LIBS="-ldl -pthread"` is required, and believing otherwise cost the gate a third check.** Section 3.2 left
+   this as discovery work, and an earlier version of this entry recorded it as an expired hedge "proved
+   unnecessary" because removing it on arm64 still built and still passed the gate. The final review asked for
+   the removal. Removing it does build and does pass the gate — and produces a b3270 that reports
+   `TLS provider: None`. `configure.log` says why, if anyone reads 1,000 lines in:
+   `checking for CRYPTO_malloc in -lcrypto... no`, then
+   `configure: WARNING: Disabling TLS -- missing OpenSSL libraries`. Static libcrypto needs `-ldl` and
+   `-pthread` at link time, so without them x3270's `AC_CHECK_LIB` probe fails to link and configure concludes
+   OpenSSL is unavailable. The earlier entry read the one observable difference — an extra `libdl.so.2` — as
+   cosmetic. It was the *symptom of OpenSSL being linked at all*.
+   The failure is silent in the worst way: the TLS-less binary is 4.7 MB against 11 MB, links **fewer**
+   libraries, and so passes checks 1 and 2 more comfortably than the real engine. A gate that only asks what a
+   binary links prefers the broken one. Measured on arm64, 2026-09-07: the full build exited 0,
+   `verify-linux.sh` and `verify-linux-start.sh` both printed `OK`, and the artifact could not have reached a
+   TLS host — with plan 3b's entire trust story built on top of it.
+   So `LIBS` stays, with a comment at the configure line saying it is load-bearing and why, and
+   `verify-linux.sh` gains a third check of its own — the banner must report an OpenSSL TLS provider — so the
+   gate is now four checks, not section 4's three (that section's check 3, starting on the floor, is still
+   `verify-linux-start.sh`). The TLS-less binary was kept only long enough to prove the new check rejects it and
+   that the real engine still passes; both were confirmed.
+   The lesson is deviation 10's, one level further out. The negative fixtures proved the gate could reject.
+   Nothing proved it asked about the thing that matters most, and what it did not ask, it silently allowed.
+   `verify-macos.sh` has no equivalent check and the same silent failure mode is possible there in principle;
+   that belongs with the `engine-macos` gate work, out of scope here.
+8. **`timeout-minutes` is 40, not section 5's 45.** From the first cold-cache run (PR #10, 2026-09-07): x64
+   17m47s, arm64 4m35s; on the same PR with warm caches, 2m31s and 2m2s. 40 sits comfortably above double the
+   slower leg with headroom, rather than being a bare double. Of the x64 leg's 1067s, the two negative-fixture
+   steps took 279s and 281s, roughly half the leg between them, against 28s and 30s on arm64, and the main build
+   step took 432s, not far behind: every invocation of `build-linux-docker.sh`, main build included, re-runs
+   `dnf install` in a fresh container, nothing about that install is cached, and it was several times slower on
+   the x64 runner than the corresponding arm64 steps in that run. Section 5's pre-run reasoning was backwards —
+   it expected the two-vCPU arm64 runner to be the one needing headroom, and arm64 was the fast leg by a wide
+   margin. Those two steps were later folded into one (deviation 11), which removes one of the three container
+   invocations and so one `dnf install` per leg. Cold-cache again after that fold, on the same PR: x64 678s and
+   arm64 238s, the single gate step 219s and 31s against 560s and 58s for the pair it replaced — the x64 leg
+   lost a third of its total. `timeout-minutes` stays at 40 rather than following the numbers down, because the
+   variance that produced 1067s was `dnf`, which is still on the critical path twice.
+9. **The check names are runner-qualified.** GitHub renders every `matrix.include` property in a job's check name,
+   not only the one that varies meaningfully, so section 7's `engine-linux (linux-x64)` and
+   `engine-linux (linux-arm64)` are really `engine-linux (ubuntu-24.04, linux-x64)` and
+   `engine-linux (ubuntu-24.04-arm, linux-arm64)`. Any document or branch-protection rule that names these checks
+   must use the full form; a required check under the short name matches nothing and waits forever.
+10. **Two `pipefail` traps were fixed in the plan's script text before implementation began**, from the plan's own
+    pre-flight scan; both would have failed a good build. `grep` exits 1 when it matches nothing, which is the
+    *passing* case for both of `verify-linux.sh`'s greps, so each ends `|| true` — without it on the symbol scan
+    the script aborts there instead of reaching the empty-symbol branch, which is the one with the useful message.
+    And GNU `head` closes the pipe once it has its lines, the writer takes SIGPIPE, and `pipefail` promotes that
+    141 to the script's exit status, so `"$BIN" --version | head -3` reports a passing binary as a failed gate;
+    `sed -n '1,3p'` reads to the end and does not. That substitution went in at all three sites in the shipped
+    scripts that used `head`, including `build-linux.sh`'s `find ... | head -1`, which also gained a `sort` so
+    the binary it picks is deterministic.
+11. **The two negative-fixture steps became one step that also runs the gate against the real binary.** As first
+    shipped, each fixture step asserted only that `build-linux-docker.sh` exited non-zero — and the wrapper exits
+    non-zero for a Docker Hub rate limit, a failed `dnf install` (its own `exit 1`) or a network hiccup, every one
+    of which then read as "the gate rejected the fixture". Exit codes cannot separate them: a `dnf` failure and a
+    real rejection are both 1. That is deviation 10's lesson — a guard that cannot fail is not a guard —
+    reappearing one level up, in the check on the guard. Worse, section 5 claimed those steps stood between a
+    stale cached binary and the upload, and on a cache hit `verify-linux.sh` never ran against
+    `native/out/<rid>/b3270` at all: only `verify-linux-start.sh` touched the real artifact, and starting on
+    `almalinux:8` is a strictly weaker claim than the allowlist — a binary linking `libexpat.so.1` or
+    `libtinfo.so.6` starts there fine. One step now makes a single container invocation run `verify-linux.sh`
+    three times: the built binary must pass, `/usr/bin/bash` must be rejected with `dynamic dependencies outside
+    the glibc runtime`, and the `debian:12-slim` `/bin/true` with `above the 2.28 floor`. Each arm is asserted on
+    its own message, so a wrapper failure fails the step instead of counting as a rejection, and the fixture
+    output is captured into a variable rather than piped into `grep -q`, which would stop at its first match and
+    SIGPIPE the writer into the 141 deviation 10 already recorded. It also removes one of the three container
+    invocations, and so one `dnf install`, from every run. `verify-linux-start.sh` stays a separate step: it runs
+    on the host rather than in the build container, and it is a different claim. `debian:12-slim` is now pinned by
+    digest like the build image, to the multi-architecture *index* digest so both legs resolve — the pin lives in
+    the workflow rather than in `linux-image.sh` on purpose, because that file is hashed into the engine cache key
+    and a fixture image has nothing to do with how the engine is built. Both legs ran it cold and green: the
+    engine accepted, `/usr/bin/bash` rejected by the allowlist, the `/bin/true` rejected by the floor, in 219s on
+    x64 and 31s on arm64 (deviation 8).
+12. **Each static prefix is stamped with the SHA-256 of the fetch script that filled it.** `build-linux.sh` guarded
+    the OpenSSL and expat builds on the archive alone (`[ ! -f "$STAGE/lib/libssl.a" ]`), so bumping a version in a
+    fetcher and rebuilding locally without clearing `native/build-tmp` silently linked the old library — and
+    because the fetch is *inside* the guard, the new checksum was never verified either. A stale OpenSSL at least
+    shows up in `b3270 --version`; a stale expat has no tell at all. CI never saw it (it caches `native/out`,
+    never `build-tmp`), but the CVE-bump story for both pins is "a one-line edit in the fetcher", and locally that
+    has to be true. Each prefix now gets a `.pin` file holding its fetcher's SHA-256 on a successful build, and the
+    guard requires the archive *and* a matching stamp, so a bumped pin rebuilds.
+13. **The `--version` filter at the end of both verify scripts was inert.** b3270 writes its whole banner to
+    stderr, so `"$BIN" --version | sed -n '1,3p'` filtered an empty stream while about a dozen unfiltered lines
+    went to the log anyway. Both now redirect `2>&1` into the `sed`. `verify-macos.sh` was deliberately left alone:
+    it still ends `| head -3`, which is safe only *because* nothing reaches it — adding the redirection there
+    without also replacing `head` would newly expose it to the SIGPIPE-under-pipefail failure of deviation 10.
+    Fixing that pair together is worth doing and belongs with the `engine-macos` gate work, not here.
+14. **The wrapper no longer derives the RID from the host.** `build-linux-docker.sh` mapped its own `uname -m`
+    to a RID for the closing `verify-linux-start.sh` call, while `build-linux.sh` mapped the *container's*
+    `uname -m` for the path it actually wrote to. The two agree only while Docker's platform is the host's:
+    with `DOCKER_DEFAULT_PLATFORM=linux/amd64` (or an amd64 default in Docker Desktop) an arm64 Mac builds
+    `native/out/linux-x64` and the wrapper then looks under `linux-arm64`, so a good 15-minute build ends on
+    docker's bare "no such file or directory". `build-linux.sh` now writes the RID it resolved to
+    `native/build-tmp/rid` — where the wrapper's chown trap already covers it — and the wrapper reads that
+    back, so the container is the single source of truth and the host-side `case` is gone. CI is unaffected:
+    it passes `${{ matrix.rid }}` to its own verify steps and only reaches this branch on a cache miss.
+15. **The `.pin` stamp covers `build-linux.sh` as well as the fetcher.** Deviation 12 closed the CVE-bump door
+    and left the other one open: a prefix has two owners, and the configure flags that shape it live in
+    `build-linux.sh`, not in the fetcher. Editing `./config no-shared no-tests no-docs --libdir=lib` (or the
+    expat line) and rebuilding without clearing `native/build-tmp` still matched the old stamp, skipped the
+    block, and linked a prefix built with the previous flags — deviation 12's own
+    silent-wrong-library-with-no-tell, reached by the other door. `stamp_of` now hashes the fetcher's contents
+    concatenated with this script's; contents rather than names, because the paths are absolute and hashing
+    them would restamp every prefix when the checkout moves, and via an absolute `SELF` captured up front
+    because step 3 `cd`s into the source tree. The script goes in whole rather than only its configure lines:
+    that needs no discipline from whoever edits those flags next, at the cost of a comment-only edit also
+    rebuilding both prefixes. That cost is the safe direction, and CI never pays it — its engine cache key
+    already hashes every `native/build/*.sh`, so any edit here rebuilds there regardless.
+16. **The TLS check is shared with the macOS gate, and no longer misreports an engine that cannot run.**
+    Deviation 7 left `verify-macos.sh` without the check "in principle" and deferred it; the gap shipped in the
+    meantime, on the platform whose artifact CI actually publishes. `build-macos.sh` runs the same configure
+    against staged static archives with no `LIBS=` at all, so the same probe failure yields the same
+    `TLS provider: None` binary, and the otool check likes it *better* than the real engine for the same reason
+    the Linux checks did. The check is now `shared-verify-tls.sh`, called by both gates: the failure is x3270's,
+    not either platform's, so one copy is the right number. It also separates the two faults the Linux check 3
+    used to conflate — `VERSION=$("$BIN" --version 2>&1 || true)` swallowed the exit status, so a binary that
+    could not execute at all (wrong architecture, truncated copy, missing loader) was reported as "reports no
+    OpenSSL TLS provider" with advice to edit a configure line that was not the problem. The status is now kept
+    and an exec failure says so. This also settles deviation 13's deferred pair: `verify-macos.sh`'s inert
+    `| head -3` is gone, since the shared script captures rather than pipes.
+17. **`build-macos.sh` got deviation 10's substitution too.** It still ended `find obj … | head -1`, the exact
+    SIGPIPE-under-pipefail trap that deviation replaced everywhere it shipped — `head` closes the pipe, `find`
+    takes SIGPIPE, `pipefail` promotes 141, and a good build aborts with no message — and it lacked the `sort`
+    that makes the pick deterministic when the tree holds more than one match. Both applied.
+18. **The toolchain is a layer, not a step.** `dnf install` ran inside a fresh container on every invocation of
+    `build-linux-docker.sh`, cached nowhere: deviation 8 named it as the x64 variance that produced 1067s and
+    the reason `timeout-minutes` stays at 40, and deviation 11 could only remove one of the three invocations.
+    The packages now go into an image derived from the pinned base, tagged with the base digest and the package
+    list so bumping either builds a new one, and built once per machine (once per job on a CI runner). Deviation
+    8's closing note — "`dnf`, which is still on the critical path twice" — is superseded. `timeout-minutes`
+    stays at 40 until a cold run has been measured without `dnf` on that path, rather than being tightened on
+    reasoning alone, which is the mistake section 5 made in the other direction.
+19. **The engine cache keys are per-platform.** Both jobs keyed on `hashFiles('native/build/*.sh')`, so the six
+    scripts this plan added to that directory made every Linux-only edit invalidate the macOS engine cache and
+    every macOS-only edit invalidate both Linux ones — cold rebuilds that cannot change the binary being
+    rebuilt. Each key now hashes its own platform's scripts (`*macos*.sh` or `*linux*.sh`), the fetchers it
+    uses, and `shared-*.sh`. The glob for the shared machinery is deliberate: a new shared helper lands in both
+    keys without anyone remembering to add it, which is the failure the narrower keys would otherwise invite.
+20. **The x64 leg no longer re-runs `ci.yml`'s job.** `engine-linux`'s two legs ran the same
+    `dotnet build … -warnaserror` and whole-solution `dotnet test` as `ci.yml`'s `test`, and on x64 that is the
+    same OS, the same architecture and the same tree — a second full build and suite per PR for one extra claim,
+    the engine smoke test. That leg now runs `tests/LizTerm.Integration.Tests` alone. arm64 keeps the whole
+    solution: nothing else builds or tests that platform, which is what the path filter's coverage of all of
+    `src/` and `tests/` is for. It is an expression on the `dotnet test` line rather than a third
+    `matrix.include` property, because of deviation 9 — a new property would rewrite both check names.
+21. **The duplicated machinery under `native/build` is shared.** Three copies of the
+    `command -v sha256sum … else shasum -a 256` helper had already needed one synchronised edit in this plan,
+    and a fourth appeared with the `.pin` stamp; they are now `shared-sha256.sh`. `fetch-openssl.sh` and
+    `fetch-expat.sh` were near-verbatim copies of `fetch-source.sh` differing in four values, so the
+    download/verify/extract body is `shared-fetch-tarball.sh` and each fetcher is its pin plus one delegating
+    line — the pin is still visible in the file that owns it, which was the reason they were siblings. The cache
+    filename is still the URL's basename, so existing `native/cache` entries stay valid. `build-linux.sh`'s two
+    static-prefix blocks, copy-pasted down to the `.pin` write, are one `build_static` helper; only the
+    configure line and the comment explaining it differ now, which is what those comments were always about.
+    The two csproj copy-rule comments, which still said the engine appears "when native/build/build-macos.sh has
+    run", name the Linux script too.
+22. **`timeout-minutes` is 15, measured rather than reasoned.** Deviations 8 and 18 both left it at 40 on
+    purpose: the x64 variance that produced 1067s came from `dnf`, and the rule adopted after section 5 got the
+    slow leg backwards was not to tighten the number on expectation. Deviation 18 took `dnf` off the critical
+    path and said explicitly to leave 40 until a cold run had been measured without it. That run is
+    34159848465 (PR #10, 2026-09-07, all four jobs green, every cache missed and all seven source tarballs
+    downloaded -- the worst case, not a partially warm one):
+
+        x64    arm64   after
+        1067s   275s   as first shipped -- three container invocations per leg, each re-running dnf install
+         678s   238s   deviation 11: the two fixture steps folded into one (gate 219s and 31s, from 560s/58s)
+         271s   210s   deviations 18 and 20: dnf as an image layer, x64 scoped to the integration project
+
+    The build step is now 201s and 137s -- about 36s of that the one-time image build -- and the gate step is
+    4s on both legs, from 219s and 31s. The two legs have converged, which is what a build cost looks like
+    where the old spread was a network cost, so the headroom 40 existed to hold no longer has anything to
+    hold. 15 is roughly 3.3x the slowest leg yet observed, and unlike 40 it does not let a genuinely wedged
+    build burn most of an hour first. Warm runs have never exceeded 2m31s.
+    That run also closed out the plan's remaining unverified claims in one go: the derived image builds
+    (`lizterm-linux-build:628fdac…`, the same tag the local derivation produces) and `dnf install` appears
+    twice per run rather than four times; `verify-macos.sh`'s new TLS arm gated a freshly built engine
+    (`TLS provider: OpenSSL 3.6.3`) rather than being skipped on a cache hit; all three gate arms fired on
+    both legs; the x64 leg ran 21 tests where arm64 ran 609; and both engine jobs show 16 passed / 5 skipped
+    against `test-windows`'s 13 / 8, so `EngineSmokeTests` ran rather than skipping under
+    `LIZTERM_REQUIRE_ENGINE=1`.
+
+The claim section 7 said this plan's first CI run would either prove or refute held: **no .NET source change was
+needed.** `$(NETCoreSdkRuntimeIdentifier)` in the App and integration test csproj files and
+`RuntimeInformation.RuntimeIdentifier` in `B3270Locator` both resolve to `linux-x64` and `linux-arm64` on these
+runners, so the existing copy rules placed the freshly built engine in the test output and `EngineSmokeTests`
+found it there and started it with `LIZTERM_REQUIRE_ENGINE=1` set, on both legs, with the copy rule and the
+locator untouched.
