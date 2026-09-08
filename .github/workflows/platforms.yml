@@ -268,11 +268,133 @@ jobs:
             TestResults/**/*Sequence*.xml
           if-no-files-found: ignore
 
-  test-windows:
-    runs-on: windows-latest
-    timeout-minutes: 20
+  engine-windows:
+    runs-on: ubuntu-24.04
+    # 8, from two runs on PR #11 (2026-09-08): 152s cold (34220119068/34220119073, every cache missed, the
+    # source tarball downloaded, the derived image built) and 48s warm (34226268415, engine restored from
+    # cache). These are the only two runs in hand -- engine-linux's comment above has three cold-cache
+    # measurements taken across successive changes to the build, and this job has had no such iteration to
+    # measure, so there is no trend to report, only the two numbers. 8 is ~3.2x the slowest of them (152s),
+    # matching engine-linux's ~3.3x ratio of timeout to worst cold run -- room for a bad day on the runner
+    # without the old provisional 20, which could let a genuinely wedged build run more than twice as long as
+    # the worst run actually observed.
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v7
+
+      # Its own key, shaped like engine-macos's, not engine-linux's shared `sources-` entry: engine-linux fetches
+      # three tarballs (x3270, OpenSSL, expat) and hashes all of fetch-*.sh to key them together, but this job
+      # fetches only x3270, and that expression hashes the same three scripts regardless of which job evaluates
+      # it -- so reusing it would give this job the identical key engine-linux uses. On a cold key, whichever of
+      # this job and engine-macos finishes first (both are far cheaper than engine-linux) would save a
+      # one-tarball native/cache under a key engine-linux's own hash also resolves to; engine-linux would then
+      # get an exact hit on a cache holding a third of what it needs, restore that subset, and re-download
+      # OpenSSL and expat on every run until a fetch-*.sh edit next rotates the key. A subset saved under a
+      # shared key cannot be repaired by the jobs that need the rest, so the fix is a key of its own.
+      - name: Cache the pinned x3270 source tarball
+        uses: actions/cache@v6
+        with:
+          path: native/cache
+          key: x3270-src-${{ hashFiles('native/build/fetch-source.sh') }}
+
+      # Keyed on the Windows scripts (windows-image.sh included, so changing the base image forces a real
+      # build), the x3270 fetcher, and the shared machinery -- but not on the Linux or macOS scripts, which
+      # cannot change this binary.
+      - name: Cache the built engine
+        id: engine
+        uses: actions/cache@v6
+        with:
+          path: native/out/win-x64
+          key: b3270-win-x64-${{ hashFiles('native/build/*windows*.sh', 'native/build/fetch-source.sh', 'native/build/shared-*.sh') }}
+
+      - name: Build b3270.exe (verify-windows.sh is the gate)
+        if: steps.engine.outputs.cache-hit != 'true'
+        run: native/build/build-windows-docker.sh
+
+      # build-windows.sh redirects configure and make into native/build-tmp/, which is gitignored and never
+      # uploaded, so without this a build failure leaves nothing in the job log but the exit code. cancelled()
+      # as well as failure(): timeout-minutes and cancel-in-progress both cancel rather than fail, and a build
+      # wedged past the job timeout is exactly the run whose logs are worth having.
+      - name: Show the build logs
+        if: ${{ failure() || cancelled() }}
+        run: |
+          for log in native/build-tmp/win-x64/configure.log native/build-tmp/win-x64/make.log; do
+            [ -f "$log" ] || continue
+            echo "::group::$log"
+            tail -n 200 "$log"
+            echo "::endgroup::"
+          done
+
+      # Runs whether or not the engine came from the cache: on a cache hit the build step never executes, so
+      # this and the Windows-side start check below are all that stand between a stale cached binary and a
+      # published artifact -- which is why it runs the gate against the built binary and not only the fixture.
+      # Each arm is asserted on the message it prints, never on a bare non-zero exit: the wrapper also exits
+      # non-zero for a Docker Hub rate limit or a failed apt-get install, and asserting only "it failed" would
+      # report every one of those as a successful rejection.
+      - name: The gate accepts the engine and rejects a non-system import
+        run: |
+          mkdir -p native/build-tmp/fixtures
+          cat > native/build-tmp/fixtures/dll.c <<'EOF'
+          __declspec(dllexport) int fixture(void) { return 0; }
+          EOF
+          cat > native/build-tmp/fixtures/uses-dll.c <<'EOF'
+          __declspec(dllimport) int fixture(void);
+          int main(void) { return fixture(); }
+          EOF
+          native/build/build-windows-docker.sh bash -c '
+            set -u
+            native/build/verify-windows.sh native/out/win-x64/b3270.exe || { echo "the gate rejected the engine"; exit 1; }
+            cd native/build-tmp/fixtures
+            x86_64-w64-mingw32-gcc -shared -o libfixture.dll dll.c -Wl,--out-implib,libfixture.dll.a
+            x86_64-w64-mingw32-gcc -o dirty.exe uses-dll.c -L. -lfixture
+            cd /src
+            if OUT=$(native/build/verify-windows.sh native/build-tmp/fixtures/dirty.exe 2>&1); then
+              echo "the gate ACCEPTED a binary importing libfixture.dll"; exit 1
+            fi
+            case "$OUT" in
+              *"imports DLLs outside the Windows system set"*) echo "OK: the import arm rejected its fixture" ;;
+              *) echo "the fixture was rejected, but not by the import arm:"; printf "%s\n" "$OUT"; exit 1 ;;
+            esac
+          '
+
+      # Deliberately named -unverified. Nothing has yet started this binary: a PE file cannot run on this
+      # runner, and plan 3c's rule is that a binary which links but cannot be spawned is never published.
+      # test-windows re-uploads it under its real name once it has run it.
+      - name: Upload b3270.exe (not yet started anywhere)
+        uses: actions/upload-artifact@v7
+        with:
+          name: b3270-win-x64-unverified
+          path: native/out/win-x64/b3270.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  test-windows:
+    runs-on: windows-latest
+    # The engine is built on Linux because x3270 cross-compiles for Windows and this runner has no toolchain.
+    # The consequence is accepted deliberately: an engine-windows failure costs the Windows behavioural signal
+    # too. ci.yml's `test` still runs the whole suite on every pull request, so what is lost is Windows-specific
+    # behaviour only, and the coupling is what buys a start check on a real Windows machine.
+    needs: engine-windows
+    timeout-minutes: 20
+    env:
+      LIZTERM_REQUIRE_ENGINE: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      # Into native/out/win-x64, which is exactly where the App csproj's Exists() condition looks, so the
+      # existing copy rule puts it at runtimes/win-x64/native/b3270.exe with no project change. No chmod on the
+      # way in, unlike the macOS and Linux engines: Windows has no executable bit for an artifact to lose.
+      - name: Download the engine engine-windows built
+        uses: actions/download-artifact@v7
+        with:
+          name: b3270-win-x64-unverified
+          path: native/out/win-x64
+
+      # The half of the gate that cannot run on the builder. shared-verify-tls.sh takes the expected provider
+      # as its second argument; without it the script defaults to OpenSSL and would reject a correct engine.
+      - name: The engine starts and reports Schannel
+        shell: bash
+        run: native/build/shared-verify-tls.sh native/out/win-x64/b3270.exe "Windows Schannel"
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -281,8 +403,18 @@ jobs:
       - name: Build (warnings are errors)
         run: dotnet build LizTerm.slnx --configuration Release -warnaserror
 
-      - name: Test
+      - name: Test (the engine smoke test must run, not skip)
         run: dotnet test LizTerm.slnx --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
+
+      # Only now, after a Windows machine has started it and the suite has spawned it through B3270Session,
+      # does the binary get published under the name anything downstream would consume.
+      - name: Upload b3270.exe
+        uses: actions/upload-artifact@v7
+        with:
+          name: b3270-win-x64
+          path: native/out/win-x64/b3270.exe
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload test results
         if: ${{ failure() || cancelled() }}

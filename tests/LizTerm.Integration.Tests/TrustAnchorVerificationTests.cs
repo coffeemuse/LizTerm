@@ -43,6 +43,12 @@ public class TrustAnchorVerificationTests
             {
                 TrustAnchors = new Anchors((SystemTrustAnchors.Default.ExportPem() ?? "") + root.ExportCertificatePem() + "\n"),
             };
+            // Gated on the engine's own tls-hello, not on OperatingSystem.IsWindows(): a caFile-backed anchors
+            // file is exactly what a Schannel engine has no toggle to accept (plan 3d task 8), so this whole
+            // assertion — that supplying anchors through caFile changes what the engine verifies — does not apply
+            // there. Starting the process (rather than connecting first) is enough for tls-hello to have arrived.
+            await session.StartProcessAsync(ct);
+            Assert.SkipWhen(!session.CanPinCertificates, "this engine's TLS provider has no caFile option");
 
             // ConnectAsync does not return here: the handshake succeeds and the engine then waits out a telnet
             // negotiation this server never answers. The tls indication is what we came for, and it arrives
@@ -91,6 +97,10 @@ public class TrustAnchorVerificationTests
             {
                 TrustAnchors = new Anchors(decoy.ExportCertificatePem() + "\n"),
             };
+            // Same gate as above: an engine with no caFile toggle never gets a chance to verify against this decoy
+            // in the first place, so the assertion below does not apply to it (plan 3d task 8).
+            await session.StartProcessAsync(ct);
+            Assert.SkipWhen(!session.CanPinCertificates, "this engine's TLS provider has no caFile option");
 
             var failure = await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: ct));
 

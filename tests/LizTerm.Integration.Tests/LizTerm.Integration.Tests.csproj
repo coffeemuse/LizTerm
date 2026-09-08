@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <!-- Bundle the locally built b3270 for the host runtime, when native/build/build-macos.sh (or, on Linux,
-       native/build/build-linux-docker.sh) has run. -->
+       native/build/build-linux-docker.sh, or on Windows, native/build/build-windows-docker.sh) has run. -->
   <ItemGroup Condition="Exists('../../native/out/$(NETCoreSdkRuntimeIdentifier)')">
     <None Include="../../native/out/$(NETCoreSdkRuntimeIdentifier)/b3270*"
           Link="runtimes/$(NETCoreSdkRuntimeIdentifier)/native/%(Filename)%(Extension)"

@@ -202,6 +202,28 @@ public class SessionViewModelConnectTests
         Assert.Empty(saved);
     }
 
+    /// <summary>Spec item 6 (plan 3d task 8): a session whose engine cannot honour a pin at all (Windows/Schannel)
+    /// must never offer one, even for an otherwise-perfectly-pinnable certificate on a saved TLS profile — offering
+    /// it would let a user check "Trust this certificate" believing it protects them, when the engine has no
+    /// caFile toggle to enforce it with. CanPin must read false and the reason must say why, reusing the same
+    /// session-level rule B3270Session enforces before ever connecting rather than recomputing it here.</summary>
+    [Fact]
+    public async Task An_engine_that_cannot_pin_never_offers_to()
+    {
+        var (vm, session, prompt, _, saved) = CreateWithPrompt(saveable: true);
+        session.CanPinCertificates = false;
+        prompt.Decision = new CertificateDecision(ConnectAnyway: true, Remember: true);
+        prompt.OnAsk = () => session.ConnectException = null;
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        var request = prompt.LastRequest!;
+        Assert.False(request.CanPin);
+        Assert.Equal("This engine cannot verify a pinned certificate; connecting anyway applies to this attempt only.", request.CannotPinReason);
+        // Remember cannot mean pin against an engine that cannot honour one, so the retry is the one-time allow.
+        Assert.Equal(["connect", "connect:noverify"], session.Calls);
+        Assert.Empty(saved);
+    }
+
     /// <summary>The reader's verdict and OpenSSL's can differ (a weak key, a SHA-1 signature, an unsuitable
     /// purpose), so the pin is written only once the engine has accepted it: a refused retry saves nothing, is
     /// reported as the engine rejecting the pin, and does not hold the pin for the window, so the next prompt can

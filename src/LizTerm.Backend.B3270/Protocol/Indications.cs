@@ -16,6 +16,12 @@ public sealed record ScreenIndication(CursorIndication? Cursor, IReadOnlyList<Ro
 public sealed record OiaIndication(string Field, string? Value) : Indication;
 public sealed record ConnectionIndication(string State, string? Host, string? Cause) : Indication;
 public sealed record TlsIndication(bool Secure, bool? Verified, string? Session, string? HostCert) : Indication;
+/// <summary>The engine's own statement of its TLS capability, sent once inside the startup <c>initialize</c>
+/// block (spec: plan 3d task 8). Options is the list of Set() toggle names this engine actually accepts for
+/// TLS, exactly as it reported them — a Schannel engine's list is far smaller than an OpenSSL one's and does
+/// not include "caFile". Empty (never null) when TLS is not supported at all, or when "options" is missing or
+/// malformed.</summary>
+public sealed record TlsHelloIndication(bool Supported, string? Provider, IReadOnlyList<string> Options) : Indication;
 public sealed record RunResultIndication(string? Tag, bool Success, IReadOnlyList<string> Text, IReadOnlyList<bool> TextErr, bool Abort) : Indication;
 public sealed record PopupIndication(string Type, string Text, bool Retrying, bool Error) : Indication;
 public sealed record UiErrorIndication(bool Fatal, string Text, string? Operation, string? Member) : Indication;

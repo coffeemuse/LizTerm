@@ -317,13 +317,20 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
 
         var savedTlsProfile = _saveProfile is not null && Profile.UseTls;
-        var canPin = savedTlsProfile && presented is { Pinnable: true } && !CertificateReader.SameFingerprint(presented.Sha256, previous?.Sha256);
+        // Spec item 6 (plan 3d task 8): reuse the session's own rule rather than recompute it — the same
+        // CanPinCertificates a Windows/Schannel session already used to refuse a pinned connect loudly (spec 4) is
+        // what must stop this prompt offering to pin one, or a user could check "Trust this certificate" believing
+        // it protects them when the engine has no way to enforce it.
+        var canPin = savedTlsProfile && _session.CanPinCertificates && presented is { Pinnable: true } &&
+            !CertificateReader.SameFingerprint(presented.Sha256, previous?.Sha256);
         string? cannotPinReason = null;
         if (savedTlsProfile && !canPin && presented is not null)
         {
-            cannotPinReason = presented.Pinnable
-                ? "The engine rejected the pinned certificate; connecting anyway applies to this attempt only."
-                : $"This certificate cannot be pinned: {presented.NotPinnableReason}. Connect Anyway applies to this attempt only.";
+            cannotPinReason = !_session.CanPinCertificates
+                ? "This engine cannot verify a pinned certificate; connecting anyway applies to this attempt only."
+                : presented.Pinnable
+                    ? "The engine rejected the pinned certificate; connecting anyway applies to this attempt only."
+                    : $"This certificate cannot be pinned: {presented.NotPinnableReason}. Connect Anyway applies to this attempt only.";
         }
         var request = new CertificatePromptRequest(Profile.Host, reason, presented, fetchError, previous, canPin, cannotPinReason);
 

@@ -45,6 +45,7 @@ public static class IndicationParser
         "oia" => new OiaIndication(Str(body, "field") ?? "", Scalar(body, "value")),
         "connection" => new ConnectionIndication(Str(body, "state") ?? "", Str(body, "host"), Str(body, "cause")),
         "tls" => new TlsIndication(Bool(body, "secure") ?? false, Bool(body, "verified"), Str(body, "session"), Str(body, "host-cert")),
+        "tls-hello" => new TlsHelloIndication(Bool(body, "supported") ?? false, Str(body, "provider"), StringList(body, "options")),
         "run-result" => new RunResultIndication(Str(body, "r-tag"), Bool(body, "success") ?? false,
             StringList(body, "text"), BoolList(body, "text-err"), Bool(body, "abort") ?? false),
         "popup" => new PopupIndication(Str(body, "type") ?? "", Str(body, "text") ?? "", Bool(body, "retrying") ?? false, Bool(body, "error") ?? false),

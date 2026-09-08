@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Fails if the binary does not report an OpenSSL TLS provider, and prints the first three banner lines when it
-# does. Shared by verify-linux.sh and verify-macos.sh: the failure it catches is x3270's, not either platform's.
+# Fails if the binary does not report the expected TLS provider (OpenSSL unless a second argument says
+# otherwise), and prints the first three banner lines when it does. Shared by verify-linux.sh,
+# verify-macos.sh and the test-windows CI job: the failure it catches is x3270's, not any one platform's,
+# which is why Windows joins it by naming its provider rather than by getting a gate of its own.
 #
 # Nothing about what a binary *links* notices this, and a link-only gate gets *happier* without TLS: x3270's
 # configure probes OpenSSL by linking a test program, and when that probe fails it prints one warning, builds a
@@ -10,7 +12,10 @@
 # at all, and plan 3b's whole trust story would have nothing to verify with, so a binary that links beautifully
 # and cannot do TLS is a worse outcome than one that fails to link.
 set -euo pipefail
-BIN=${1:?usage: shared-verify-tls.sh <binary>}
+BIN=${1:?usage: shared-verify-tls.sh <binary> [expected-provider]}
+# Defaults to OpenSSL so verify-linux.sh and verify-macos.sh, which pass one argument, are unchanged.
+# Windows is why this is a parameter at all: its provider is Schannel, and the binary is correct.
+EXPECTED=${2:-OpenSSL}
 
 # 2>&1 because b3270 writes its whole banner to stderr. Captured rather than piped so that the exit status is
 # available on its own: an engine that cannot start at all — wrong architecture, a truncated copy, a missing
@@ -24,13 +29,19 @@ if [ "$STATUS" -ne 0 ]; then
 fi
 
 case "$VERSION" in
-  *"TLS provider: OpenSSL"*) ;;
+  *"TLS provider: $EXPECTED"*) ;;
   *)
-    echo "ERROR: $BIN reports no OpenSSL TLS provider:" >&2
+    echo "ERROR: $BIN does not report the expected TLS provider ($EXPECTED):" >&2
     printf '%s\n' "$VERSION" | sed -n '1,3p' >&2
-    echo "x3270's configure disables TLS when its -lcrypto link probe fails. On Linux that probe needs the" >&2
-    echo "LIBS on build-linux.sh's configure line (see step 3 there); on macOS it needs usable static archives" >&2
-    echo "in the prefix build-macos.sh stages from Homebrew's openssl@3." >&2
+    if [ "$EXPECTED" = "OpenSSL" ]; then
+      echo "x3270's configure disables TLS when its -lcrypto link probe fails. On Linux that probe needs the" >&2
+      echo "LIBS on build-linux.sh's configure line (see step 3 there); on macOS it needs usable static archives" >&2
+      echo "in the prefix build-macos.sh stages from Homebrew's openssl@3." >&2
+    else
+      echo "The Windows build reaches Schannel through -lcrypt32 -lsecur32 on wb3270's LIBS line, with no" >&2
+      echo "configure probe to fail. A provider of None here means the source tree changed shape; a provider of" >&2
+      echo "OpenSSL means the build found a cryptographic library it should not have." >&2
+    fi
     exit 1 ;;
 esac
 

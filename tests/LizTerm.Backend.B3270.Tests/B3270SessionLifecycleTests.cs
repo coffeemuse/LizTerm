@@ -44,6 +44,28 @@ public class B3270SessionLifecycleTests
         await Assert.ThrowsAsync<BackendUnavailableException>(() => session.StartProcessAsync(CancellationToken.None));
     }
 
+    /// <summary>Review finding 2 on plan 3d task 8's race fix: completing <c>_hello</c> was correctly moved past
+    /// the whole initialize block's foreach (so a later item like tls-hello has already updated session state
+    /// before StartProcessAsync's awaiter can resume -- see the InitializeIndication case in Handle), but without
+    /// a finally, a later item throwing -- a malformed indication, or an external ScreenUpdated/StatusChanged
+    /// subscriber throwing, which the App's dispatch delegate can do during shutdown -- skipped the
+    /// TrySetResult entirely. The reader thread survives (ReadLoop's inner try/catch swallows the exception into
+    /// a HostMessage), but _hello never completes, so a healthy engine that answered hello fine gets blamed for
+    /// a spurious "did not answer within N seconds" timeout caused entirely by our own handler. StartupTimeout is
+    /// short so this test fails fast, not after a real 10 s wait, when the finally is missing.</summary>
+    [Fact]
+    public async Task A_later_initialize_item_that_makes_a_subscriber_throw_still_completes_startup()
+    {
+        var fake = new FakeB3270Process { AutoInitialize = false };
+        var session = new B3270Session(Profile, () => fake) { StartupTimeout = TimeSpan.FromMilliseconds(500) };
+        session.ScreenUpdated += (_, _) => throw new InvalidOperationException("subscriber boom");
+        fake.Emit("""{"initialize":[{"hello":{"version":"4.5.6","build":"fake b3270"}},{"screen-mode":{"model":2,"rows":24,"columns":80,"color":true,"oversize":false,"extended":true}}]}""");
+
+        await session.StartProcessAsync(CancellationToken.None);
+
+        Assert.Equal("4.5.6 (fake b3270)", session.Engine.Version);
+    }
+
     [Fact]
     public async Task Run_correlates_results_by_tag_even_out_of_order()
     {
@@ -206,6 +228,48 @@ public class B3270SessionLifecycleTests
 
         Assert.Equal(2, calls);
         Assert.True(fake2!.Started);
+    }
+
+    /// <summary>Review finding 4 on plan 3d task 8: the _tlsOptions doc comment claims "on this process", but
+    /// nothing enforced that until TearDown/OnProcessEnded started clearing it alongside _process/_hello. A first
+    /// engine reports a Schannel-shaped tls-hello (no caFile, so CanPinCertificates reads false); once it dies and
+    /// a fresh process takes over -- one that has not sent its own tls-hello yet -- the stale option set must not
+    /// keep gating the replacement. Without the clear, CanPinCertificates would wrongly stay false forever, on a
+    /// process that never said so.</summary>
+    [Fact]
+    public async Task A_dead_processs_tls_options_do_not_survive_into_its_replacement()
+    {
+        var calls = 0;
+        FakeB3270Process? fake1 = null;
+        var session = new B3270Session(Profile, () =>
+        {
+            calls++;
+            if (calls != 1) return new FakeB3270Process();
+            var fake = new FakeB3270Process { AutoInitialize = false };
+            fake.Emit("""{"initialize":[{"hello":{"version":"4.5.6","build":"win"}},{"tls-hello":{"supported":true,"provider":"Schannel","options":["clientCert","tlsMinProtocol","tlsMaxProtocol"]}}]}""");
+            fake1 = fake;
+            return fake;
+        });
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(session.CanPinCertificates);
+
+        var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, f) => faulted.TrySetResult(f);
+        fake1!.Exit(137);
+        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        // OnProcessEnded raises Faulted before it clears _process (reader thread order), and the TCS above
+        // completes its awaiter on a thread-pool continuation rather than blocking that thread, so without this
+        // wait the assertion below can race a StartProcessAsync that still sees the dead process's slot filled
+        // and short-circuits on it -- the same HasProcess wait B3270SessionLifecycleTests already uses elsewhere
+        // for this exact ordering.
+        await Wait.UntilAsync(() => !session.HasProcess, "the dead process's slot to clear");
+
+        // The replacement's own FakeB3270Process default AutoInitialize sends MinimalInitialize, which carries no
+        // tls-hello at all -- exactly like a real engine's build before this indication existed.
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(session.CanPinCertificates);
     }
 
     [Fact]
