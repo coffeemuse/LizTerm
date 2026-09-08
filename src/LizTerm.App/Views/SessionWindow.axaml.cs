@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using LizTerm.App.Files;
@@ -70,7 +71,11 @@ public partial class SessionWindow : Window
 
     private void OnSelectAllClickNative(object? sender, EventArgs e) => ViewModel?.SelectAll();
 
-    /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.</summary>
+    /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
+    /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
+    /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these
+    /// three, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
+    /// carries one.</summary>
     private void ShowPlatformGestures()
     {
         var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
@@ -78,6 +83,17 @@ public partial class SessionWindow : Window
         CopyMenuItem.InputGesture = hotkeys.Copy.FirstOrDefault();
         PasteMenuItem.InputGesture = hotkeys.Paste.FirstOrDefault();
         SelectAllMenuItem.InputGesture = hotkeys.SelectAll.FirstOrDefault();
+
+        var menu = NativeMenu.GetMenu(this);
+        Gesture(menu, "_Copy", hotkeys.Copy.FirstOrDefault());
+        Gesture(menu, "_Paste", hotkeys.Paste.FirstOrDefault());
+        Gesture(menu, "Select _All", hotkeys.SelectAll.FirstOrDefault());
+
+        static void Gesture(NativeMenu? menu, string child, KeyGesture? gesture)
+        {
+            var item = MenuLookup.Item(menu, "_Edit", child);
+            if (item is not null) item.Gesture = gesture;
+        }
     }
 
     private SessionViewModel? ViewModel => DataContext as SessionViewModel;
