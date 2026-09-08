@@ -3,6 +3,10 @@
     "avalonia_devtools": {
       "command": "avdt",
       "args": ["mcp"]
+    },
+    "avalonia-docs": {
+      "type": "http",
+      "url": "https://docs-mcp.avaloniaui.net/mcp"
     }
   }
 }
