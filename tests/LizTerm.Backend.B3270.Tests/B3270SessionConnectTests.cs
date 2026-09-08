@@ -29,9 +29,12 @@ public class B3270SessionConnectTests
 
     /// <summary>THE most important behaviour this task adds (plan 3d task 8): a pin the engine cannot honour must
     /// fail loudly, before a single action reaches the wire, rather than silently connecting with verification
-    /// against the platform's own trust store while the user believes their pin is still in force. A Schannel
-    /// engine's tls-hello lists no "caFile" at all (real behaviour, verified against x3270 4.5ga6's own
-    /// Common/Win32/sio_schannel.c: sio_options_supported() there is client-cert/min-protocol/max-protocol only).</summary>
+    /// against the platform's own trust store while the user believes their pin is still in force. This uses a
+    /// deliberately harder, hypothetical option list -- a provider missing all three gateable toggles, not just
+    /// caFile -- to prove the refusal does not depend on which of the other two happen to still be present; see
+    /// <see cref="A_pin_against_the_real_schannel_option_set_is_also_refused"/> below for the shape that actually
+    /// broke CI, where verifyHostCert and acceptHostname ARE present and only caFile is missing (real behaviour,
+    /// verified against x3270 4.5ga6's own Common/Win32/sio_schannel.c and Common/sioc.c).</summary>
     [Fact]
     public async Task A_pin_the_engine_cannot_honour_throws_before_any_action_is_sent()
     {
@@ -69,7 +72,13 @@ public class B3270SessionConnectTests
     }
 
     /// <summary>An engine that cannot pin still connects perfectly well with no pin in force: this is not a
-    /// blanket "Windows never verifies" regression, only the pin path is refused.</summary>
+    /// blanket "Windows never verifies" regression, only the pin path is refused. Review finding 1 (plan 3d task 8):
+    /// this list is the degenerate case -- an engine that supports NONE of the three gateable toggles, so TlsSettings
+    /// sends no Set at all -- and it is legitimate to keep testing on its own, but it must not be the only shape
+    /// tested: <see cref="An_engine_with_the_real_schannel_option_set_still_sends_verifyHostCert_and_acceptHostname"/>
+    /// below is the real Schannel shape (verifyHostCert and acceptHostname present, only caFile missing), where a
+    /// Set very much IS sent. A gate "simplified" to all-or-nothing would still pass every assertion here while
+    /// silently breaking that one.</summary>
     [Fact]
     public async Task An_engine_without_caFile_still_connects_when_no_pin_is_in_force()
     {
@@ -118,6 +127,48 @@ public class B3270SessionConnectTests
         Assert.Contains("\"verifyHostCert\",\"true\"", set);
         Assert.Contains("\"caFile\",\"\"", set);
         Assert.Contains("\"acceptHostname\",\"\"", set);
+    }
+
+    /// <summary>Review finding 1 (plan 3d task 8): THE shape that actually broke CI. A real Schannel engine's
+    /// tls-hello lists acceptHostname, verifyHostCert and startTls unconditionally -- x3270 4.5ga6's
+    /// TLS_REQUIRED_OPTS (include/tls_config.h) unions into sio_all_options_supported() (Common/sioc.c) whenever
+    /// TLS is compiled in at all -- and Schannel's own sio_options_supported() (Common/Win32/sio_schannel.c) adds
+    /// only clientCert/tlsMinProtocol/tlsMaxProtocol on top. Only caFile is missing, not all three. Every test
+    /// above this one uses the all-three-missing degenerate list; a gate "simplified" to
+    /// `if (!Supports("caFile")) return null;` would still pass every one of them while silently dropping
+    /// verifyHostCert and acceptHostname on this, the real Windows connect.</summary>
+    [Fact]
+    public async Task An_engine_with_the_real_schannel_option_set_still_sends_verifyHostCert_and_acceptHostname()
+    {
+        var fake = new FakeB3270Process { AutoInitialize = false };
+        fake.Emit("""{"initialize":[{"hello":{"version":"4.5.6","build":"win"}},{"tls-hello":{"supported":true,"provider":"Schannel","options":["acceptHostname","verifyHostCert","startTls","clientCert","tlsMinProtocol","tlsMaxProtocol"]}}]}""");
+        await using var session = new B3270Session(Verifying, () => fake);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(session.CanPinCertificates);
+        var set = LastSetLine(fake);
+        Assert.Contains("\"verifyHostCert\",\"true\"", set);
+        Assert.Contains("\"acceptHostname\",\"\"", set);
+        Assert.DoesNotContain("caFile", set);
+    }
+
+    /// <summary>Review finding 1's other half: the pin refusal must hold against the real Schannel shape too, not
+    /// only against the degenerate all-three-missing list <see cref="A_pin_the_engine_cannot_honour_throws_before_any_action_is_sent"/>
+    /// uses. caFile is the one toggle a pin actually needs, and it is the one this real shape lacks.</summary>
+    [Fact]
+    public async Task A_pin_against_the_real_schannel_option_set_is_also_refused()
+    {
+        var fake = new FakeB3270Process { AutoInitialize = false };
+        fake.Emit("""{"initialize":[{"hello":{"version":"4.5.6","build":"win"}},{"tls-hello":{"supported":true,"provider":"Schannel","options":["acceptHostname","verifyHostCert","startTls","clientCert","tlsMinProtocol","tlsMaxProtocol"]}}]}""");
+        await using var session = new B3270Session(Pinned, () => fake);
+
+        await Assert.ThrowsAsync<ConnectionFailedException>(
+            () => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.False(session.CanPinCertificates);
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"Set\""));
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"Connect\""));
     }
 
     [Fact]
