@@ -88,14 +88,18 @@ public class NativeMenuTests
         Assert.False(item.IsEnabled);
     }
 
-    /// <summary>The delicate one. A wire log value corrected from inside its own change notification is
-    /// invisible to a two-way binding mid-write, which is why SessionViewModel marshals its correction through
-    /// dispatch; that behaviour has to survive the move to a menu the visual tree cannot see.</summary>
+    /// <summary>The delicate one, driven through RaiseClicked because that is the single entry point both real
+    /// renderers use — Avalonia's macOS exporter calls it from the NSMenuItem's action, and the in-window
+    /// NativeMenuBar fallback calls it from its presenter's Click. Assigning IsChecked from the test instead
+    /// would prove only that a binding round-trips: nothing in the app ever writes that property, and
+    /// RaiseClicked itself never touches it, which is why this item needs a Click handler and a OneWay binding
+    /// where the classic one needs neither.</summary>
     [AvaloniaFact]
-    public void The_wire_log_item_is_a_checkbox_bound_two_way()
+    public void Clicking_the_wire_log_item_toggles_the_log_and_the_check_mark()
     {
         var (window, vm, _, _) = Show();
         var item = Item(window, "_Help", "_Wire Log");
+        var click = (INativeMenuItemExporterEventsImplBridge)item;
 
         Assert.Equal(MenuItemToggleType.CheckBox, item.ToggleType);
         Assert.False(item.IsChecked);
@@ -104,15 +108,98 @@ public class NativeMenuTests
         vm.WireLogDirectory = directory;
         try
         {
-            vm.IsWireLogging = true;
+            click.RaiseClicked();
+            Assert.True(vm.IsWireLogging);
             Assert.True(item.IsChecked);
 
-            item.IsChecked = false;
+            click.RaiseClicked();
             Assert.False(vm.IsWireLogging);
+            Assert.False(item.IsChecked);
         }
         finally
         {
             if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>The check mark still has to follow the view model, because that is how the correction to false
+    /// reaches the menu when a log will not open — SessionViewModel marshals it through dispatch, and a value
+    /// corrected from inside its own change notification is invisible to a two-way binding mid-write.</summary>
+    [AvaloniaFact]
+    public void The_wire_log_check_mark_follows_the_view_model()
+    {
+        var (window, vm, _, _) = Show();
+        var item = Item(window, "_Help", "_Wire Log");
+
+        var directory = Path.Combine(Path.GetTempPath(), "lizterm-native-" + Guid.NewGuid().ToString("N"));
+        vm.WireLogDirectory = directory;
+        try
+        {
+            vm.IsWireLogging = true;
+            Assert.True(item.IsChecked);
+
+            vm.IsWireLogging = false;
+            Assert.False(item.IsChecked);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>The in-window NativeMenuBar fallback reaches the same item by a different route, and the two
+    /// must not both act. DefaultMenuInteractionHandler.Click toggles its MenuItem's IsChecked and only then
+    /// raises Click, and the presenter binds that MenuItem's IsChecked two-way to this NativeMenuItem's — so the
+    /// fallback writes IsChecked first and calls RaiseClicked second. This replays that order: with a TwoWay
+    /// binding to the view model the write would start the log and the click would stop it again, leaving the
+    /// user's click with nothing to show for it. OneWay is what makes the handler the only thing that acts.</summary>
+    [AvaloniaFact]
+    public void The_in_window_fallback_order_toggles_the_log_exactly_once()
+    {
+        var (window, vm, _, _) = Show();
+        var item = Item(window, "_Help", "_Wire Log");
+
+        var directory = Path.Combine(Path.GetTempPath(), "lizterm-native-" + Guid.NewGuid().ToString("N"));
+        vm.WireLogDirectory = directory;
+        try
+        {
+            item.IsChecked = true;
+            ((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked();
+
+            Assert.True(vm.IsWireLogging);
+            Assert.True(item.IsChecked);
+
+            // And the write-back has not cost the item its binding: a local value set at the same priority is
+            // overridden again by the binding's next production, so the check mark still follows the view model.
+            vm.IsWireLogging = false;
+            Assert.False(item.IsChecked);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>What the parity guard cannot see, and what shipped the wire log item dead on macOS: Avalonia's
+    /// exporter validates every NSMenuItem with <c>(Command != null || HasClickHandlers) &amp;&amp; IsEnabled</c>
+    /// (__MicroComIAvnMenuItemProxy.UpdateAction), and the in-window fallback gates RaiseClicked on
+    /// HasClickHandlers alone. An item carrying only a binding satisfies neither, so it is greyed out on macOS
+    /// and inert everywhere — while a classic MenuItem with the same null Command works fine, which is why
+    /// comparing the two menus' Commands passes straight over it.</summary>
+    [AvaloniaFact]
+    public void Every_native_item_can_actually_be_activated()
+    {
+        var (window, _, _, _) = Show();
+
+        // NativeMenuItemSeparator derives from NativeMenuItem, so OfType alone would demand a Click handler
+        // on the dividers too.
+        foreach (var top in NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>())
+        {
+            foreach (var item in top.Menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator))
+            {
+                Assert.True(item.Command is not null || item.HasClickHandlers,
+                    $"{top.Header} > {item.Header}: no Command and no Click handler, so macOS greys it out");
+            }
         }
     }
 

@@ -449,6 +449,19 @@ the backend tests.
 - `App.OpenSession` builds a `SessionViewModel` around `SessionFactory.Create(profile)`, shows a
   `SessionWindow`, and kicks off `ConnectCommand`. `ShutdownMode` is `OnExplicitShutdown`: closing the
   last session window reopens the profile picker; closing the picker with no sessions open quits.
+  Both of those are gated on `ShutdownPolicy` (`Startup/`), because neither may happen while the app is on its
+  way out. `ClassicDesktopStyleApplicationLifetime.DoShutdown` closes every owner-less window and then gives up
+  with `if (!force && Windows.Count > 0) { e.Cancel = true; return false; }`, so a picker opened from inside
+  that close *cancels the shutdown that caused it* — the session goes, the picker comes back, and the app
+  refuses to quit. `App.Quit()` answers this for its own path by setting `_quitting`, but every path Avalonia
+  drives goes around that flag: the macOS application menu's Quit calls `TryShutdown(0)` (which is why the app
+  menu declares no Quit of its own), and an OS shutdown does the same. So each window's `Closing` records
+  `ShutdownPolicy.IsShutdown(e.CloseReason)` — `ApplicationShutdown` or `OSShutdown`, never just the one — and
+  `Closed` asks `UserClosedLastWindow` before acting. It is read in `Closing` because `Closed` carries no
+  reason; a close the owned File Transfer dialog refuses never reaches `Closing` at all (`ShouldCancelClose`
+  asks the children first), and the next attempt overwrites it, so the flag always describes the close that is
+  actually finishing. The picker gets the same test for the mirror-image failure: a shutdown that closed it
+  would otherwise be answered with `Quit()` → `Shutdown()`, a second `DoShutdown` re-entered inside the first.
 - `SessionViewModel` takes an `Action<Action> dispatch` argument to marshal backend events onto the UI
   thread; the app passes `Dispatcher.UIThread.Post`, tests pass `a => a()`. Rejected actions
   (`EmulatorActionException`) are deliberately swallowed because b3270 already explains them through the
@@ -515,7 +528,24 @@ the backend tests.
   never the `[RelayCommand]`s, which disable while running. `MenuItem.Click` and `NativeMenuItem.Click` have
   different delegate shapes, so each shared action is two one-line handlers over one method. `MenuLookup`
   (`Menus/`) is how both the code-behind and the tests find a `NativeMenuItem`, which `FindControl` cannot
-  reach.
+  reach (note `NativeMenuItemSeparator` derives from `NativeMenuItem`, so an `OfType` walk sees the dividers
+  too).
+  **Every native item needs a `Command` or a `Click` handler, whatever else it carries**: Avalonia's macOS
+  exporter validates each `NSMenuItem` with `(Command != null || HasClickHandlers) && IsEnabled`
+  (`__MicroComIAvnMenuItemProxy.UpdateAction`), and the in-window fallback gates its own `RaiseClicked` on
+  `HasClickHandlers` alone, so an item carrying only a binding is greyed out on macOS and inert everywhere.
+  `NativeMenuTests.Every_native_item_can_actually_be_activated` is that guard; the parity test cannot be, since
+  a classic `MenuItem` with the same null `Command` works fine. Wire Log is the one item whose two menus differ
+  on purpose: a `NativeMenuItem` never toggles itself (`RaiseClicked` raises Click and executes Command and
+  never touches `IsChecked`), so the native one is `Mode=OneWay` plus `OnWireLogClickNative`, which flips
+  `IsWireLogging` and lets the binding carry the new state back to the check mark — including the correction to
+  false. The classic one stays `TwoWay` and carries no handler, because `DefaultMenuInteractionHandler.Click`
+  toggles a `MenuItem`'s `IsChecked` *before* raising Click. That ordering is also why OneWay is required rather
+  than tidy: the in-window fallback runs that same handler over a `MenuItem` bound two-way to the
+  `NativeMenuItem`, so it writes `IsChecked` and *then* calls `RaiseClicked` — with a TwoWay binding to the view
+  model those are two toggles and the click does nothing. Drive these items from
+  `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()` in tests: it is the one entry point both real
+  renderers use, and assigning `IsChecked` instead only proves a binding round-trips.
 - Mouse selection is a `ScreenRegion` (Core; inclusive, zero-based, always normalized). `SelectionGesture`
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the

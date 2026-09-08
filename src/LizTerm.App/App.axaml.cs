@@ -110,12 +110,18 @@ public partial class App : Application
             new SslStreamCertificateFetcher());
         window.DataContext = viewModel;
         _sessions.Add(window);
+        // Read in Closing, because Closed carries no reason and by then the shutdown that is closing this window
+        // is already counting the windows that are left. A close the owned File Transfer dialog refuses never
+        // reaches Closing at all (Window.ShouldCancelClose asks the children first), and the next close attempt
+        // overwrites this, so it always describes the close that is actually finishing.
+        var shutdownClose = false;
+        window.Closing += (_, e) => shutdownClose = ShutdownPolicy.IsShutdown(e.CloseReason);
         window.Closed += async (_, _) =>
         {
             _sessions.Remove(window);
             try { await viewModel.DisposeAsync(); }
             catch { /* the window is gone; nothing more to do with a failed disposal */ }
-            if (!_quitting && _sessions.Count == 0) ShowPicker();
+            if (ShutdownPolicy.UserClosedLastWindow(_quitting, shutdownClose, _sessions.Count)) ShowPicker();
         };
         _picker?.Close();
         window.Show();
@@ -135,7 +141,12 @@ public partial class App : Application
             return;
         }
         _picker = new ProfilePickerWindow(_store ?? new ProfileStore(AppPaths.ProfilesDirectory()), profile => OpenSession(profile, fromStore: true), Quit);
-        _picker.Closed += (_, _) => { if (_sessions.Count == 0 && !_quitting) { /* picker closed with the X: treat as quit */ Quit(); } };
+        // The same reason test the session windows get, for the mirror-image failure: a shutdown that closes the
+        // picker would otherwise be answered with Quit() -> Shutdown(), a second DoShutdown re-entered inside the
+        // first, which fires Exit twice.
+        var shutdownClose = false;
+        _picker.Closing += (_, e) => shutdownClose = ShutdownPolicy.IsShutdown(e.CloseReason);
+        _picker.Closed += (_, _) => { if (ShutdownPolicy.UserClosedLastWindow(_quitting, shutdownClose, _sessions.Count)) { /* picker closed with the X: treat as quit */ Quit(); } };
         _picker.Show();
     }
 
