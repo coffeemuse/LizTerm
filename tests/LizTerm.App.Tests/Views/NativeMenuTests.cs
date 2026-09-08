@@ -224,14 +224,25 @@ public class NativeMenuTests
         }
     }
 
-    /// <summary>The double-dispatch guard. On macOS the OS takes the keystroke before TerminalScreen exists, so
-    /// nothing can fire twice; on Windows and Linux the gesture reaches NativeMenuBar instead, and whether that
-    /// dispatches as well as displays cannot be checked from a Mac. A second paste is a real bug, not a cosmetic
-    /// one, so it is asserted on every CI push under both strategies rather than reasoned about.</summary>
+    /// <summary>What this guards: with the native menu installed and its Edit gestures assigned (Task 6),
+    /// Ctrl+V still reaches the host exactly once under both strategies, via
+    /// <c>TerminalScreen.TryHandleClipboardKey</c> alone. That is real coverage against two regressions — a
+    /// future change that starts wiring a menu gesture to actual dispatch (switching <c>Gesture</c> to
+    /// <c>MenuItem.HotKey</c>, which Avalonia's <c>HotKeyManager</c> does dispatch), and a break in
+    /// <c>TerminalScreen</c>'s own clipboard routing.
+    ///
+    /// What it does NOT guard: decompiling the pinned Avalonia 12.1.2 <c>Avalonia.Controls.dll</c> shows that
+    /// <c>NativeMenuBarPresenter.CreateContainerForNativeItem</c> — the in-window fallback bar used wherever a
+    /// real AppKit <c>NSMenu</c> isn't exported, which includes headless — binds <c>NativeMenuItem.Gesture</c>
+    /// only to <c>MenuItem.InputGestureProperty</c>, display text that <c>MenuItem.OnKeyDown</c> and
+    /// <c>MenuBase.OnKeyDown</c> (both empty method bodies) never act on. So under headless, for both
+    /// <c>InlineData</c> cases, there is no second dispatch path to catch even if one existed; a real AppKit
+    /// key-equivalent interception (design section 2.1) needs a live macOS GUI session, and this test is not
+    /// evidence about that path.</summary>
     [AvaloniaTheory]
     [InlineData(true)]
     [InlineData(false)]
-    public void The_paste_hotkey_reaches_the_host_exactly_once(bool useNativeMenu)
+    public void The_paste_hotkey_reaches_the_host_exactly_once_via_TerminalScreen_under_headless(bool useNativeMenu)
     {
         var (window, _, session, clipboard) = Show(useNativeMenu);
         clipboard.Text = "claude";

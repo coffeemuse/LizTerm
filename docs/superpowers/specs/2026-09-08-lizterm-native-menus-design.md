@@ -306,6 +306,45 @@ A third question is macOS-only and answerable here, on the day the application m
 supplying an application-level `NativeMenu` costs the AppKit-supplied items a Mac user expects beside Quit
 (Hide, Hide Others, Services). If it does, they are added explicitly.
 
+A fourth question does not belong on this list any more. Section 6 flagged whether `NativeMenuBar` dispatches
+a gesture as well as displaying it as "the one behaviour this machine cannot check," implying it too would
+need a real Windows or Linux machine to close. It did not: see section 9, deviation 1. Decompiling Avalonia
+itself settled it without any hardware section 6 couldn't reach, and in the safe direction. It is answered,
+closed, and is not part of what the follow-up below still needs to verify.
+
 When this plan lands, a follow-up issue records the flip: verify the two questions above, change
 `MenuStrategy`'s default, delete `ClassicMenu` and its tests, and retire `LIZTERM_MENU`. Filed at landing
 rather than later, so a staging device does not quietly become a permanent duplicate.
+
+## 9. Deviations from this spec (as-built)
+
+Rulings made during code review and execution, recorded here rather than edited into the sections above:
+
+1. **The double-dispatch question section 6 and section 8 both treated as needing a real Windows or Linux
+   machine is answered, in the safe direction, without one.** Code review of Task 6 (commit `f227fe3`) flagged
+   `The_paste_hotkey_reaches_the_host_exactly_once` as theatre: it asserted a real thing (one `paste:claude`
+   call under both `InlineData` strategies) but its docstring claimed to guard something it could not —
+   whether `NativeMenuBar` dispatches a gesture as well as displaying it, which section 6 called "the one
+   behaviour this machine cannot check." Decompiling the pinned Avalonia 12.1.2 `Avalonia.Controls.dll`
+   settled that question directly: `NativeMenuBarPresenter.CreateContainerForNativeItem` — the in-window
+   fallback bar Avalonia builds anywhere a real AppKit `NSMenu` isn't exported, which covers headless and also
+   a real windowed Windows or Linux GUI alike — binds `NativeMenuItem.Gesture` only to
+   `MenuItem.InputGestureProperty`. Avalonia's own XML doc on that property says so outright: "Setting this
+   property does not cause the input gesture to be handled by the menu item, it simply displays the gesture
+   text." `MenuItem.OnKeyDown` and `MenuBase.OnKeyDown` are both empty method bodies, so no key reaches a menu
+   item through them either. The only property that wires a gesture to real dispatch is `MenuItem.HotKey`
+   (backed by `HotKeyManager`), which this plan never assigns — Task 6 assigns `Gesture` only. So for both
+   `InlineData(true)` and `InlineData(false)`, the only path that can ever produce `paste:claude` is
+   `TerminalScreen.TryHandleClipboardKey`; there was never a second dispatch path for the test to catch, on any
+   CI configuration this repo runs. This is why section 8 no longer lists dispatch behaviour among what the
+   real-hardware follow-up still needs to check.
+2. **The once-only test was re-aimed, not deleted, once its claim outran what it could prove.** Its assertion
+   was already correct and worth keeping — one `paste:claude` call under a native menu with gestures assigned
+   is real coverage against a future change that switches `Gesture` to `MenuItem.HotKey` (which does dispatch)
+   and against a regression in `TerminalScreen`'s own clipboard routing. What was false was the docstring's
+   framing of it as a guard against AppKit intercepting the keystroke, which deviation 1 shows it never could
+   be and never needed to be. It was renamed to
+   `The_paste_hotkey_reaches_the_host_exactly_once_via_TerminalScreen_under_headless` and its docstring rewritten
+   to state what it guards (regressions in dispatch wiring and in `TerminalScreen`'s routing) and what it does
+   not (AppKit's real key-equivalent interception, which needs a live macOS GUI session and is not exercised by
+   any test in this repo).
