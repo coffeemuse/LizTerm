@@ -489,14 +489,16 @@ the backend tests.
   double-dispatch worry by construction on Windows and Linux — what is still open there is mnemonics and
   appearance, not dispatch. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
   an argument, as `EngineRequirement.Decide` does, so every combination is testable anywhere. **No menu item
-  outside Edit ever carries a `Gesture`**: measured on macOS, a `NativeMenuItem` gesture is an AppKit key
-  equivalent that `NSApplication.sendEvent:` dispatches before the key window's responder chain, so
-  `Gesture="F1"` would silently swallow PF1 — `TerminalScreen` never sees the key. Edit's Cmd/Ctrl+C, V and A
-  come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`/`PasteAsync`/`SelectAll`
-  directly, never the `[RelayCommand]`s, which disable while running. `MenuItem.Click` and
-  `NativeMenuItem.Click` have different delegate shapes, so each shared action is two one-line handlers over
-  one method. `MenuLookup` (`Menus/`) is how both the code-behind and the tests find a `NativeMenuItem`, which
-  `FindControl` cannot reach.
+  outside Edit ever carries a `Gesture`, except `Cmd+Q` on the macOS application menu**: the application menu
+  is macOS-only by construction and `Keymap` claims no Meta chord, so `Cmd+Q` cannot collide with any 3270
+  command. Measured on macOS, a `NativeMenuItem` gesture is an AppKit key equivalent that
+  `NSApplication.sendEvent:` dispatches before the key window's responder chain, so `Gesture="F1"` would
+  silently swallow PF1 — `TerminalScreen` never sees the key. Edit's Cmd/Ctrl+C, V and A come from
+  `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`/`PasteAsync`/`SelectAll` directly,
+  never the `[RelayCommand]`s, which disable while running. `MenuItem.Click` and `NativeMenuItem.Click` have
+  different delegate shapes, so each shared action is two one-line handlers over one method. `MenuLookup`
+  (`Menus/`) is how both the code-behind and the tests find a `NativeMenuItem`, which `FindControl` cannot
+  reach.
 - Mouse selection is a `ScreenRegion` (Core; inclusive, zero-based, always normalized). `SelectionGesture`
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the
