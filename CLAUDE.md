@@ -198,7 +198,8 @@ no aarch64 one, so Windows 11's x64 emulation is the only route until upstream's
 Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG` (append every protocol
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
 be started from Help > Wire Log in a session window; files go to `<config>/logs/wire-<profile>-<timestamp>.log`,
-and Show Wire Logs opens that folder. `LIZTERM_TEST_HOST`
+and Show Wire Logs opens that folder. `LIZTERM_MENU` (`native` or `classic`, overriding `MenuStrategy`'s
+platform default; anything else falls back to the default). `LIZTERM_TEST_HOST`
 (`host[:port]`, enables `tests/LizTerm.Integration.Tests`, whose five live tests otherwise skip; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
 `LIZTERM_TEST_USER` and `LIZTERM_TEST_PASSWORD` additionally enable the IND$FILE round trip in the same project,
@@ -477,6 +478,25 @@ the backend tests.
   carries its own guard, and a keystroke is never dropped for arriving while the previous one's round trip is
   still open. The `[RelayCommand]`s on the same methods serve the menus, which keep CommunityToolkit's default of
   disabling an async command while it runs.
+- Menus: one `NativeMenu` definition per window plus an application-level one in `App.axaml` (About, Quit —
+  the only thing that gives the picker a menu bar on macOS), rendered by either `NativeMenuBar` or the classic
+  in-window `<Menu>`, which is still present. `MenuStrategy` (`Menus/`) picks: `LIZTERM_MENU=native|classic`,
+  else native on macOS and classic elsewhere, because `NativeMenuBar`'s in-window rendering has never been
+  looked at on Windows or Linux. In the pinned Avalonia 12.1.2, that in-window rendering binds
+  `NativeMenuItem.Gesture` only to `MenuItem.InputGestureProperty` — display only, Avalonia's own doc says so
+  — and `MenuItem.OnKeyDown`/`MenuBase.OnKeyDown` are both empty bodies; only `MenuItem.HotKey` (via
+  `HotKeyManager`) dispatches, so the fallback bar shows a shortcut but never fires it, which closes the
+  double-dispatch worry by construction on Windows and Linux — what is still open there is mnemonics and
+  appearance, not dispatch. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
+  an argument, as `EngineRequirement.Decide` does, so every combination is testable anywhere. **No menu item
+  outside Edit ever carries a `Gesture`**: measured on macOS, a `NativeMenuItem` gesture is an AppKit key
+  equivalent that `NSApplication.sendEvent:` dispatches before the key window's responder chain, so
+  `Gesture="F1"` would silently swallow PF1 — `TerminalScreen` never sees the key. Edit's Cmd/Ctrl+C, V and A
+  come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`/`PasteAsync`/`SelectAll`
+  directly, never the `[RelayCommand]`s, which disable while running. `MenuItem.Click` and
+  `NativeMenuItem.Click` have different delegate shapes, so each shared action is two one-line handlers over
+  one method. `MenuLookup` (`Menus/`) is how both the code-behind and the tests find a `NativeMenuItem`, which
+  `FindControl` cannot reach.
 - Mouse selection is a `ScreenRegion` (Core; inclusive, zero-based, always normalized). `SelectionGesture`
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the
