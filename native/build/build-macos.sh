@@ -24,7 +24,11 @@ cd "$SRC"
   --disable-pr3287 --disable-x3270if --disable-mitm --disable-playback \
   --with-openssl="$STAGE" > "$BUILD/configure.log" 2>&1
 make -j"$(sysctl -n hw.ncpu)" > "$BUILD/make.log" 2>&1
-BIN=$(find obj -type f -name b3270 -perm +111 | head -1)
+# BSD -perm +111 here, GNU -perm -u+x in build-linux.sh. sort, so the pick is deterministic when the tree
+# holds more than one match; sed rather than head, because head closes the pipe after its line, find takes
+# SIGPIPE for it, and under pipefail that 141 becomes this script's exit status -- a good build aborted
+# with no message. Same reasoning as build-linux.sh.
+BIN=$(find obj -type f -name b3270 -perm +111 | sort | sed -n 1p)
 OUT="$ROOT/native/out/$RID"
 mkdir -p "$OUT"
 cp "$BIN" "$OUT/b3270"

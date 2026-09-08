@@ -26,7 +26,8 @@
     <ProjectReference Include="../LizTerm.Backend.B3270/LizTerm.Backend.B3270.csproj" />
   </ItemGroup>
 
-  <!-- Bundle the locally built b3270 for the host runtime, when native/build/build-macos.sh has run. -->
+  <!-- Bundle the locally built b3270 for the host runtime, when native/build/build-macos.sh (or, on Linux,
+       native/build/build-linux-docker.sh) has run. -->
   <ItemGroup Condition="Exists('../../native/out/$(NETCoreSdkRuntimeIdentifier)')">
     <None Include="../../native/out/$(NETCoreSdkRuntimeIdentifier)/b3270*"
           Link="runtimes/$(NETCoreSdkRuntimeIdentifier)/native/%(Filename)%(Extension)"
