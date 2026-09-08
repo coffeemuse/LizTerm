@@ -25,6 +25,31 @@ public static class SessionFactory
         return new EngineInfo("b3270", null, location.Path, location.Source);
     }
 
+    /// <summary>CheckBackend's non-throwing sibling, for About, which must render something whatever the
+    /// outcome. A binary that was never located becomes EngineSource.Unknown, which StatusFormatter renders
+    /// as "b3270, not found" — the same value SessionFactory.Create already hands a session that has nothing
+    /// to run, so the two paths cannot disagree about what a missing engine looks like.</summary>
+    public static EngineInfo CheckBackendOrUnknown()
+    {
+        var (overridePath, baseDirectory) = DefaultLocation;
+        return CheckBackendOrUnknown(overridePath, baseDirectory);
+    }
+
+    /// <summary>Test seam, matching Create's: resolves from an explicit override and base directory instead of
+    /// the process environment and the app's own directory.</summary>
+    internal static EngineInfo CheckBackendOrUnknown(string? overridePath, string baseDirectory)
+    {
+        try
+        {
+            var location = B3270Locator.Find(overridePath, baseDirectory);
+            return new EngineInfo("b3270", null, location.Path, location.Source);
+        }
+        catch (BackendUnavailableException)
+        {
+            return new EngineInfo("b3270", null, B3270Location.Unknown.Path, B3270Location.Unknown.Source);
+        }
+    }
+
     public static IEmulatorSession Create(SessionProfile profile)
     {
         var (overridePath, baseDirectory) = DefaultLocation;
