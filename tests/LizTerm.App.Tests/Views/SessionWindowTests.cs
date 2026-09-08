@@ -257,4 +257,48 @@ public class SessionWindowTests
         dialog.Close();
         Assert.Empty(window.OwnedWindows);
     }
+
+    /// <summary>A second About must not stack on the first. The session's own Help item cannot be reached while
+    /// About is modal over that window, but the macOS menu bar stays live over a modal dialog, so the
+    /// application menu could ask again — and the second dialog would be owned by the first and, since an
+    /// AboutWindow is not a session, would report no engine.</summary>
+    [AvaloniaFact]
+    public void A_second_about_activates_the_one_already_open()
+    {
+        var (window, _, _, _, _) = Show();
+        var app = (LizTerm.App.App)Application.Current!;
+
+        _ = app.ShowAboutAsync(window);
+        _ = app.ShowAboutAsync(window);
+
+        var dialog = Assert.Single(window.OwnedWindows);
+        dialog.Close();
+
+        // And the guard lifts once it has closed, rather than locking About out for the session's life.
+        _ = app.ShowAboutAsync(window);
+        var reopened = Assert.Single(window.OwnedWindows);
+        reopened.Close();
+        Assert.Empty(window.OwnedWindows);
+    }
+
+    /// <summary>The engine About names. The owner is only the window in front, so resolving the engine from it
+    /// would answer "no session" for the File Transfer dialog, the picker or the splash — and send About back to
+    /// the located binary, reporting no version for an engine that has been running and has told us one.</summary>
+    [Fact]
+    public void About_falls_back_to_the_last_session_before_the_located_binary()
+    {
+        var running = new EngineInfo("b3270", "4.5.6", "/bundled/b3270", EngineSource.Bundled);
+        var located = new EngineInfo("b3270", null, "", EngineSource.Unknown);
+        var session = new SessionViewModel(new FakeEmulatorSession { Engine = running }, a => a(), new FakeTextClipboard());
+        var notASession = new object();
+
+        // The owner wins when it is a session: a window's own Help item describes that window.
+        Assert.Equal(running, LizTerm.App.App.AboutEngine(session, null, () => located));
+        // Otherwise the session last in front, whatever is on top now.
+        Assert.Equal(running, LizTerm.App.App.AboutEngine(notASession, session, () => located));
+        Assert.Equal(running, LizTerm.App.App.AboutEngine(null, session, () => located));
+        // Only with no session anywhere does it fall back to the binary on disk.
+        Assert.Equal(located, LizTerm.App.App.AboutEngine(notASession, notASession, () => located));
+        Assert.Equal(located, LizTerm.App.App.AboutEngine(null, null, () => located));
+    }
 }

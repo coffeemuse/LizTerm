@@ -96,4 +96,56 @@ public class SessionFactoryTests
             Directory.Delete(empty, recursive: true);
         }
     }
+
+    /// <summary>The other arm of the same exception, which About used to render as "b3270, not found" over a
+    /// blank path. A binary that is *there* and only needs chmod is not a missing one: B3270Locator.Find throws
+    /// the same type for both, which is what Candidates exists to tell apart, and About is the screen a user
+    /// opens to find out which of the two they have. It must name the file, so there is a path to chmod.</summary>
+    [Fact]
+    public void CheckBackendOrUnknown_names_an_engine_that_is_present_but_not_executable()
+    {
+        if (OperatingSystem.IsWindows()) return; // The locator has no executable-bit arm on Windows.
+        var directory = Directory.CreateTempSubdirectory("lizterm-factory-").FullName;
+        var present = Path.Combine(directory, "b3270");
+        try
+        {
+            File.WriteAllText(present, "not really an engine");
+            File.SetUnixFileMode(present, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+            var engine = SessionFactory.CheckBackendOrUnknown(present, directory);
+
+            Assert.Equal(EngineSource.Override, engine.Source);
+            Assert.Equal(present, engine.Path);
+            Assert.Null(engine.Version);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>And a session gets the same answer, so the status bar and About cannot disagree about the same
+    /// binary. The connect still fails: only what the engine is *called* changes here.</summary>
+    [Fact]
+    public async Task A_session_names_the_same_present_but_unusable_engine()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var directory = Directory.CreateTempSubdirectory("lizterm-factory-").FullName;
+        var present = Path.Combine(directory, "b3270");
+        try
+        {
+            File.WriteAllText(present, "not really an engine");
+            File.SetUnixFileMode(present, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+            await using var session = SessionFactory.Create(new SessionProfile { Name = "t", Host = "h" }, present, directory);
+
+            Assert.Equal(present, session.Engine.Path);
+            Assert.Equal(EngineSource.Override, session.Engine.Source);
+            Assert.Equal(SessionFactory.CheckBackendOrUnknown(present, directory), session.Engine);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }
