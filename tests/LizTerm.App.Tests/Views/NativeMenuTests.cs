@@ -132,4 +132,69 @@ public class NativeMenuTests
         Assert.True(classic.FindControl<Menu>("ClassicMenu")!.IsVisible);
         Assert.False(classic.FindControl<NativeMenuBar>("NativeBar")!.IsVisible);
     }
+
+    /// <summary>The mechanical parity guard the other tests above do not provide: none of them walk the full
+    /// Keys or Edit submenu, so a dropped separator, a reordered item, or — the case that matters most on a
+    /// 3270 client — a CommandParameter copied from the wrong line (a "PA1"-headed item silently wired to
+    /// TerminalKey.PA2) would pass every test above while still sending the wrong key to the mainframe. This
+    /// test walks all four top-level menus item for item, normalising across the two menu kinds' different
+    /// item types (MenuItem/NativeMenuItem) and separator types (Separator/NativeMenuItemSeparator).</summary>
+    [AvaloniaFact]
+    public void The_native_menu_matches_the_classic_menu_item_for_item()
+    {
+        var (window, _, _, _) = Show();
+
+        var classicTop = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>().ToArray();
+        var nativeTop = NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().ToArray();
+        Assert.Equal(classicTop.Length, nativeTop.Length);
+
+        for (var i = 0; i < classicTop.Length; i++)
+        {
+            var topHeader = (string)classicTop[i].Header!;
+            Assert.Equal(topHeader, nativeTop[i].Header);
+
+            var classicChildren = classicTop[i].Items.Cast<object>().ToArray();
+            var nativeChildren = nativeTop[i].Menu!.Items.ToArray();
+            Assert.True(classicChildren.Length == nativeChildren.Length,
+                $"{topHeader}: {classicChildren.Length} classic items vs {nativeChildren.Length} native items");
+
+            for (var j = 0; j < classicChildren.Length; j++)
+            {
+                var classicIsSeparator = classicChildren[j] is Separator;
+                var nativeIsSeparator = nativeChildren[j] is NativeMenuItemSeparator;
+                Assert.True(classicIsSeparator == nativeIsSeparator,
+                    $"{topHeader}[{j}]: separator position differs (classic {classicIsSeparator}, native {nativeIsSeparator})");
+                if (classicIsSeparator) continue;
+
+                var classicHeader = ((MenuItem)classicChildren[j]).Header as string;
+                var nativeHeader = ((NativeMenuItem)nativeChildren[j]).Header;
+                Assert.Equal(classicHeader, nativeHeader);
+            }
+
+            if (topHeader == "_Edit")
+            {
+                // Deliberate exception, not an oversight: the classic Edit items bind Command (so the
+                // [RelayCommand]s disable while running, which is correct for a mouse click on a menu item),
+                // while the native Edit items use Click handlers instead, wired straight to the view model's
+                // methods (a native menu gesture is a keystroke, and it must never be swallowed by a command
+                // that is disabled mid-round-trip — see OnCopyClickNative and its neighbours in
+                // SessionWindow.axaml.cs). Command/CommandParameter is therefore never compared for Edit; only
+                // header text and separator positions are, in the loop above.
+            }
+            else if (topHeader == "_Keys")
+            {
+                // The highest-value assertion in this test. Every Keys item binds SendKeyCommand, so header
+                // text alone cannot tell "PA1" wired to TerminalKey.PA1 apart from "PA1" wired to
+                // TerminalKey.PA2 — only the CommandParameter can, and getting it wrong sends the wrong key to
+                // the mainframe.
+                for (var j = 0; j < classicChildren.Length; j++)
+                {
+                    if (classicChildren[j] is Separator) continue;
+                    var classicParam = ((MenuItem)classicChildren[j]).CommandParameter;
+                    var nativeParam = ((NativeMenuItem)nativeChildren[j]).CommandParameter;
+                    Assert.Equal(classicParam, nativeParam);
+                }
+            }
+        }
+    }
 }
