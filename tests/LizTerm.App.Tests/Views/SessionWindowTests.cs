@@ -241,4 +241,20 @@ public class SessionWindowTests
         await Wait.UntilAsync(() => vm.ErrorMessage is not null, "the error banner");
         Assert.StartsWith("Could not open the File Transfer dialog:", vm.ErrorMessage);
     }
+
+    /// <summary>About from a session window describes that session's engine and is modal to it. One method
+    /// serves this and the macOS application menu, so this is also the test that the shared spelling works.</summary>
+    [AvaloniaFact]
+    public void About_opens_over_the_session_window_that_asked_for_it()
+    {
+        var (window, _, _, _, _) = Show();
+        var app = (LizTerm.App.App)Application.Current!;
+
+        _ = app.ShowAboutAsync(window);
+
+        var dialog = Assert.Single(window.OwnedWindows);
+        Assert.IsType<AboutWindow>(dialog);
+        dialog.Close();
+        Assert.Empty(window.OwnedWindows);
+    }
 }

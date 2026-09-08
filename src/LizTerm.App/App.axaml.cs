@@ -146,4 +146,26 @@ public partial class App : Application
         _quitting = true;
         (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
     }
+
+    /// <summary>The one spelling of About, shared by a session window's Help item and the macOS application
+    /// menu. The application menu may fire with no session at all, which is why the engine has a session-less
+    /// fallback and the owner has a null one.</summary>
+    public async Task ShowAboutAsync(Window? preferredOwner)
+    {
+        // A session's own Help item stays modal to that session even if another window is active; the
+        // application menu passes null and takes whatever the user is looking at.
+        var owner = preferredOwner ?? ActiveWindow();
+        // About describes the session being looked at, version and all, when there is one; otherwise the
+        // located binary, which has never been started and so reports no version.
+        var engine = (owner?.DataContext as SessionViewModel)?.Engine ?? SessionFactory.CheckBackendOrUnknown();
+        var about = new AboutWindow(AppVersion.Current, engine, SessionFactory.OverrideOrigin);
+        if (owner is null) about.Show();
+        else await about.ShowDialog(owner);
+    }
+
+    private Window? ActiveWindow()
+    {
+        var windows = (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Windows;
+        return windows?.FirstOrDefault(w => w.IsActive) ?? windows?.FirstOrDefault();
+    }
 }
