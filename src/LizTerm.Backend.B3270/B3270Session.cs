@@ -23,6 +23,14 @@ public sealed class B3270Session : IEmulatorSession
     private IB3270Process? _process;
     private Thread? _readerThread;
     private TaskCompletionSource<HelloIndication>? _hello;
+    /// <summary>The Set() toggle names the engine's own tls-hello reported (plan 3d task 8), or null when
+    /// tls-hello has never been observed on this process. Set once, synchronously, before <see cref="_hello"/>
+    /// completes (see the InitializeIndication case in <see cref="Handle"/>), so anything that awaited
+    /// <see cref="StartProcessAsync"/> sees it. Null is read as "supports everything this session ever gates",
+    /// not "supports nothing": every b3270 build before this indication existed behaved that way, and treating
+    /// unknown as unsupported would silently take caFile-backed trust away from macOS/Linux engines that always
+    /// had it, purely because a test double or an old override never sent the indication.</summary>
+    private IReadOnlyList<string>? _tlsOptions;
     private int _tagCounter;
     private volatile bool _shuttingDown;
     /// <summary>Completed while the connection is down and replaced by a fresh source when it comes up: owned by
@@ -67,6 +75,23 @@ public sealed class B3270Session : IEmulatorSession
     public TlsInfo? Tls { get; private set; }
     public KeyboardStatus KeyboardStatus { get; private set; } = KeyboardStatus.Initial;
     public EngineInfo Engine { get; private set; }
+
+    /// <summary>Whether this session's engine can honour a certificate pin at all (spec: plan 3d task 8). A
+    /// Schannel engine's tls-hello lists no "caFile", so a pin can never be handed to it; before the process has
+    /// even started, or before tls-hello has arrived on it, this reads true (see <see cref="_tlsOptions"/>).
+    /// Expressed here in Core's own vocabulary — "can this session pin", not "does the engine list caFile" —
+    /// because IEmulatorSession must not know b3270's toggle names exist.</summary>
+    public bool CanPinCertificates => SupportsTlsOption("caFile");
+
+    /// <summary>All three toggles this session ever sends in one Set (spec item 3), used when tls-hello has not
+    /// arrived: see <see cref="_tlsOptions"/> for why "not yet known" defaults to "assume supported".</summary>
+    private static readonly string[] AllGateableTlsOptions = ["verifyHostCert", "caFile", "acceptHostname"];
+
+    /// <summary>What <see cref="TlsSettings"/> gates each toggle on: the engine's own reported list, or every
+    /// toggle this session knows about when tls-hello has not arrived yet (see <see cref="_tlsOptions"/>).</summary>
+    private IReadOnlyList<string> EffectiveTlsOptions => _tlsOptions ?? AllGateableTlsOptions;
+
+    private bool SupportsTlsOption(string name) => EffectiveTlsOptions.Contains(name, StringComparer.Ordinal);
 
     public string? WireLogPath => Volatile.Read(ref _wireLog)?.Path;
 
@@ -379,10 +404,36 @@ public sealed class B3270Session : IEmulatorSession
         switch (indication)
         {
             case InitializeIndication init:
-                foreach (var item in init.Items) Handle(item);
+                // b3270 builds this whole block with one uij_open_array/uij_close_array pair (Common/b3270/b3270.c)
+                // and prints it as a single line, so every item here — tls-hello included — is already sitting in
+                // init.Items by the time this case runs; there is no second line to race against. The race that
+                // *does* exist is on our side: _hello.TrySetResult (RunContinuationsAsynchronously) only queues
+                // StartProcessAsync's continuation, it does not block this reader thread, so completing it from the
+                // nested HelloIndication case below — while this foreach still has later items (tls-hello among
+                // them) left to dispatch — would let that continuation run on a thread pool thread concurrently
+                // with the rest of this loop. ConnectAsync (awaited after StartProcessAsync returns) would then be
+                // reading _tlsOptions on a race it could lose, wrongly concluding the engine supports nothing and
+                // silently dropping caFile even from an engine that does support it — the same silent downgrade
+                // this task exists to close, by a second door. Deferring the TrySetResult to the end of this loop
+                // closes it deliberately: every item this initialize block carries, including tls-hello, has already
+                // updated session state (synchronously, on this thread) before anything waiting on hello can resume.
+                HelloIndication? hello = null;
+                foreach (var item in init.Items)
+                {
+                    if (item is HelloIndication h) hello = h;
+                    else Handle(item);
+                }
+                if (hello is not null) _hello?.TrySetResult(hello);
                 break;
-            case HelloIndication hello:
-                _hello?.TrySetResult(hello);
+            case HelloIndication bareHello:
+                // Reached only if a hello ever arrives outside an initialize block — not how the real engine
+                // behaves (b3270 sends it nowhere else), but nothing else in a lone line can race against it.
+                _hello?.TrySetResult(bareHello);
+                break;
+            case TlsHelloIndication tlsHello:
+                // Supported:false carries no "options" key at all, and the parser already degrades a missing or
+                // malformed one to an empty list, so this assignment needs no extra branch for that case.
+                _tlsOptions = tlsHello.Options;
                 break;
             case RunResultIndication result when result.Tag is not null && _pending.TryRemove(result.Tag, out var tcs):
                 tcs.TrySetResult(result);
@@ -588,9 +639,11 @@ public sealed class B3270Session : IEmulatorSession
         try
         {
             // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
-            // open before the Connect has even gone out. All three values are sent every time so an attempt never
-            // inherits the previous one's trust settings (spec 2).
-            await RunAsync([TlsSettings(verify, caFile, anyName)], throwOnFailure: true, cancellationToken: cancellationToken);
+            // open before the Connect has even gone out. Every toggle this engine's tls-hello listed is sent every
+            // time so an attempt never inherits the previous one's trust settings (spec 2); TlsSettings returns null
+            // when tls-hello listed none of the three, in which case there is nothing to run at all.
+            if (TlsSettings(verify, caFile, anyName, EffectiveTlsOptions) is { } set)
+                await RunAsync([set], throwOnFailure: true, cancellationToken: cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             await ConnectCoreAsync(cancellationToken);
         }
@@ -617,6 +670,18 @@ public sealed class B3270Session : IEmulatorSession
         // than falling through to the wider trust of the anchors below.
         if (pin is not null)
         {
+            // Spec item 4, the most important rule in this task: an engine that cannot accept caFile can never
+            // honour a pin, and proceeding anyway would not fail — it would silently verify against whatever trust
+            // the engine falls back to (a Schannel engine's own Windows certificate store) while the profile (or
+            // the one-shot Connect Anyway pin) still says a pin is in force. That is a silent security downgrade,
+            // and strictly worse than refusing to connect: the user would believe a specific certificate was
+            // required when in fact anything the platform trusts would do. Throwing here, before a single Set or
+            // Connect action is built, is what "loudly" means — DecideCaFile runs before either is ever sent.
+            if (!CanPinCertificates)
+                throw new ConnectionFailedException([
+                    "This engine's TLS provider cannot verify a pinned certificate (it has no caFile option). " +
+                    "Connecting would silently trust the platform certificate store instead of the pin.",
+                ]);
             var pinPem = pin.Pem ?? "";
             // A pin that is one self-signed certificate names the host by itself, so the name check adds nothing.
             // A pin that also carries CA certificates makes each of them a trust anchor (OpenSSL trusts every
@@ -625,6 +690,17 @@ public sealed class B3270Session : IEmulatorSession
             // The engine loads caFile when it builds the TLS context for this connection, inside the Connect run,
             // so the file has to outlive that run and nothing more.
             return (WriteCaFile(pinPem, "pin"), CertificateReader.CountCertificates(pinPem) == 1, Ephemeral: true);
+        }
+        if (!CanPinCertificates)
+        {
+            // Spec item 5: no pin is in force, and this engine has nowhere to put anchors even if we read them.
+            // A Schannel engine verifies against the Windows certificate store natively, once verifyHostCert is on
+            // — exactly the outcome plan 3b engineered for macOS and Linux by handing them the *same* store through
+            // caFile, so this is not a downgrade to "fix" by wiring the anchors back in; it is the platform doing
+            // on its own what caFile exists to do on the platforms that need it spelled out. Reading TrustAnchors
+            // (a measured 210 ms) and writing its PEM to a file the engine has no toggle to ever be pointed at
+            // would just be work spent restoring an anchor this platform never lost.
+            return (null, false, Ephemeral: false);
         }
         // NOT gated on Profile.UseTls, however tempting: b3270 implements the TELNET START-TLS option, so a plain
         // profile can still upgrade to TLS mid-session, and an attempt that reached that point with an empty
@@ -667,12 +743,40 @@ public sealed class B3270Session : IEmulatorSession
         if (path is not null) TryDeleteCaFile(path);
     }
 
-    /// <summary>The Set action carrying one attempt's trust settings (spec 4.1). <paramref name="acceptAnyName"/>
-    /// turns the engine's host-name check off, which is right only for a pin that is a single self-signed
-    /// certificate; an empty acceptHostname is the engine's normal check against the connect host. An empty
-    /// caFile leaves the engine on its own default trust.</summary>
-    internal static B3270Action TlsSettings(bool verify, string? caFile, bool acceptAnyName) =>
-        new("Set", "verifyHostCert", verify ? "true" : "false", "caFile", caFile ?? "", "acceptHostname", caFile is not null && acceptAnyName ? "any" : "");
+    /// <summary>The Set action carrying one attempt's trust settings (spec 4.1), or null when
+    /// <paramref name="supportedOptions"/> names none of the three: b3270 reads a bare Set() (zero pairs) as
+    /// "show all toggles" rather than an error, but there is nothing useful in sending it, so the caller skips the
+    /// run entirely rather than spending a round trip on a no-op. Each toggle is gated independently on whether its
+    /// name is in <paramref name="supportedOptions"/> — exactly the list the engine itself reported in tls-hello.
+    /// This is deliberately not <c>OperatingSystem.IsWindows()</c> and not a check on the provider string: the
+    /// option list is the engine's own statement of what it accepts, already on the wire, and it stays correct for
+    /// a provider nobody has special-cased yet (a real Schannel engine, for what it is worth, still lists
+    /// verifyHostCert and acceptHostname — b3270 treats those as TLS-required regardless of provider — so on the
+    /// real Windows build only caFile ever drops out; a provider that also lacks the other two is exercised here
+    /// only as the stricter, hypothetical case). <paramref name="acceptAnyName"/> turns the engine's host-name
+    /// check off, which is right only for a pin that is a single self-signed certificate; an empty acceptHostname
+    /// is the engine's normal check against the connect host. An empty caFile leaves the engine on its own default
+    /// trust.</summary>
+    internal static B3270Action? TlsSettings(bool verify, string? caFile, bool acceptAnyName, IReadOnlyList<string> supportedOptions)
+    {
+        var pairs = new List<string>();
+        if (supportedOptions.Contains("verifyHostCert", StringComparer.Ordinal))
+        {
+            pairs.Add("verifyHostCert");
+            pairs.Add(verify ? "true" : "false");
+        }
+        if (supportedOptions.Contains("caFile", StringComparer.Ordinal))
+        {
+            pairs.Add("caFile");
+            pairs.Add(caFile ?? "");
+        }
+        if (supportedOptions.Contains("acceptHostname", StringComparer.Ordinal))
+        {
+            pairs.Add("acceptHostname");
+            pairs.Add(caFile is not null && acceptAnyName ? "any" : "");
+        }
+        return pairs.Count == 0 ? null : new B3270Action("Set", [.. pairs]);
+    }
 
     /// <summary>The path of the last CA file written — a pin or the trust anchors — deleted or not. Test seam.</summary>
     internal string? LastCaFile { get; private set; }
