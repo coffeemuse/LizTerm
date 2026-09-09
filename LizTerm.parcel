@@ -2,7 +2,8 @@
   "GeneralSettings": {
     "NetProjectPath": "src/LizTerm.App/LizTerm.App.csproj",
     "ApplicationName": "LizTerm",
-    "Company": "CoffeeMuse"
+    "Company": "CoffeeMuse",
+    "Version": "0.3.0"
   },
   "PublishSettings": {
     "PublishSingleFile": true

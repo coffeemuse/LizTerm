@@ -85,10 +85,58 @@ jobs:
             -p:Version=${{ needs.version.outputs.version }} \
             -o publish/${{ matrix.rid }}
 
+      - name: Install Parcel
+        run: dotnet tool install --global AvaloniaUI.Parcel
+
+      # --no-build: Parcel packages the tree the step above already published. It does not own the build, so
+      # the coupling to a proprietary tool is at the artifact boundary and nowhere else.
+      - name: Package
+        env:
+          AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
+        run: |
+          parcel pack ./LizTerm.parcel --no-build \
+            -r ${{ matrix.rid }} -p zip -p dmg -o packages/${{ matrix.rid }}
+
+      # One step, three claims: the archive round trip preserved the executable bit, the binary still starts,
+      # and the .app and ZIP round trip did not invalidate the ad hoc signature the SDK and the linker applied.
+      # osx-x64 is skipped because this runner is arm64 and cannot start an x86_64 binary without Rosetta,
+      # whose presence on these images is not guaranteed -- the spec records that RID as proven by the
+      # machine-type assertion alone.
+      # The gate, against the tree that actually ships (R6). Parcel writes into a macOS/ subdirectory of -o,
+      # so the ZIP is found rather than globbed at the top level.
+      - name: The shipped archive carries the right engine
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip && mkdir -p /tmp/roundtrip
+          zip=$(find packages/${{ matrix.rid }} -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip
+          native/build/verify-bundled-engine.sh /tmp/roundtrip ${{ matrix.rid }}
+
+      # osx-x64 is skipped: this runner is arm64 and cannot start an x86_64 binary without Rosetta, whose
+      # presence on these images is not guaranteed. The spec records that RID as proven by the machine-type
+      # assertion above alone.
+      - name: The engine inside the archive still starts
+        if: matrix.rid == 'osx-arm64'
+        run: |
+          set -euo pipefail
+          bin=$(find /tmp/roundtrip -type f -path '*/runtimes/${{ matrix.rid }}/native/b3270' | head -1)
+          native/build/shared-verify-tls.sh "$bin"
+
+      # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
+      - name: Rename for the release namespace
+        run: |
+          set -euo pipefail
+          find packages/${{ matrix.rid }} -type f | while read -r f; do
+            mv "$f" "packages/${{ matrix.rid }}/LizTerm-${{ matrix.rid }}-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/${{ matrix.rid }} -type d -empty -delete
+          ls -l packages/${{ matrix.rid }}
+
       - uses: actions/upload-artifact@v7
         with:
-          name: publish-${{ matrix.rid }}
-          path: publish/${{ matrix.rid }}
+          name: packages-${{ matrix.rid }}
+          path: packages/${{ matrix.rid }}
           if-no-files-found: error
           retention-days: 7
 
@@ -123,10 +171,47 @@ jobs:
             -p:Version=${{ needs.version.outputs.version }} \
             -o publish/${{ matrix.rid }}
 
+      - name: Install Parcel
+        run: dotnet tool install --global AvaloniaUI.Parcel
+
+      - name: Package
+        env:
+          AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
+        run: |
+          parcel pack ./LizTerm.parcel --no-build \
+            -r ${{ matrix.rid }} -p zip -p deb -p rpm -o packages/${{ matrix.rid }}
+
+      # The gate, against the tree that actually ships (R6). Both Linux legs run on their own architecture, so
+      # unlike macOS there is no combination here that cannot start its own binary.
+      - name: The shipped archive carries the right engine
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip && mkdir -p /tmp/roundtrip
+          zip=$(find packages/${{ matrix.rid }} -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip
+          native/build/verify-bundled-engine.sh /tmp/roundtrip ${{ matrix.rid }}
+
+      - name: The engine inside the archive still starts
+        run: |
+          set -euo pipefail
+          bin=$(find /tmp/roundtrip -type f -path '*/runtimes/${{ matrix.rid }}/native/b3270' | head -1)
+          native/build/shared-verify-tls.sh "$bin"
+
+      # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
+      - name: Rename for the release namespace
+        run: |
+          set -euo pipefail
+          find packages/${{ matrix.rid }} -type f | while read -r f; do
+            mv "$f" "packages/${{ matrix.rid }}/LizTerm-${{ matrix.rid }}-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/${{ matrix.rid }} -type d -empty -delete
+          ls -l packages/${{ matrix.rid }}
+
       - uses: actions/upload-artifact@v7
         with:
-          name: publish-${{ matrix.rid }}
-          path: publish/${{ matrix.rid }}
+          name: packages-${{ matrix.rid }}
+          path: packages/${{ matrix.rid }}
           if-no-files-found: error
           retention-days: 7
 
@@ -159,9 +244,50 @@ jobs:
             -p:Version=${{ needs.version.outputs.version }} `
             -o publish/${{ matrix.rid }}
 
+      - name: Install Parcel
+        run: dotnet tool install --global AvaloniaUI.Parcel
+
+      - name: Package
+        env:
+          AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
+        run: |
+          parcel pack ./LizTerm.parcel --no-build `
+            -r ${{ matrix.rid }} -p zip -p nsis -o packages/${{ matrix.rid }}
+
+      - name: The shipped archive carries the right engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip && mkdir -p /tmp/roundtrip
+          zip=$(find packages/${{ matrix.rid }} -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip
+          native/build/verify-bundled-engine.sh /tmp/roundtrip ${{ matrix.rid }}
+
+      # win-arm64 is skipped: this runner is x64 and the app in that archive is arm64. shared-verify-tls.sh
+      # takes the expected provider as its second argument; without it the script defaults to OpenSSL and
+      # would reject a correct Schannel engine.
+      - name: The engine inside the archive still starts
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin=$(find /tmp/roundtrip -type f -path '*/runtimes/win-x64/native/b3270.exe' | head -1)
+          native/build/shared-verify-tls.sh "$bin" "Windows Schannel"
+
+      - name: Rename for the release namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          find packages/${{ matrix.rid }} -type f | while read -r f; do
+            mv "$f" "packages/${{ matrix.rid }}/LizTerm-${{ matrix.rid }}-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/${{ matrix.rid }} -type d -empty -delete
+          ls -l packages/${{ matrix.rid }}
+
       - uses: actions/upload-artifact@v7
         with:
-          name: publish-${{ matrix.rid }}
-          path: publish/${{ matrix.rid }}
+          name: packages-${{ matrix.rid }}
+          path: packages/${{ matrix.rid }}
           if-no-files-found: error
           retention-days: 7
