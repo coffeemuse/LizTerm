@@ -143,81 +143,135 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # R16: Parcel's Linux CLI ships an x64-only native binary, so it cannot run at all on an arm64 Linux
+  # runner -- "Exec format error" starting the tool itself, not a packaging failure. So this is a single
+  # ubuntu-24.04 job with no matrix: linux-x64 publishes and packs first, then linux-arm64 publishes and
+  # packs, cross-targeted from the same x64 runner. Cross-targeting itself is well proven -- the Task 1
+  # spike packed linux-arm64's DEB, RPM and ZIP from an arm64 Mac -- it is only running Parcel *on* arm64
+  # Linux that is impossible. Each publish is immediately followed by its own pack (R9): LizTerm.App.csproj
+  # declares no <RuntimeIdentifiers>, so a single-RID restore replaces obj/project.assets.json's target, and
+  # packing both RIDs after publishing both would fail the first with NETSDK1047.
   publish-linux:
     needs: [engines, version]
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { runner: ubuntu-24.04,     rid: linux-x64 }
-          - { runner: ubuntu-24.04-arm, rid: linux-arm64 }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
-      - name: Download the engine
+      - name: Download the engines
         uses: actions/download-artifact@v7
         with:
-          name: b3270-${{ matrix.rid }}
-          path: native/out/${{ matrix.rid }}
+          name: b3270-linux-x64
+          path: native/out/linux-x64
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: b3270-linux-arm64
+          path: native/out/linux-arm64
 
       - name: Restore the executable bit
-        run: chmod +x native/out/${{ matrix.rid }}/b3270
-
-      - name: Publish
         run: |
-          dotnet publish src/LizTerm.App -c Release -r ${{ matrix.rid }} --self-contained \
-            -p:Version=${{ needs.version.outputs.version }} \
-            -o publish/${{ matrix.rid }}
+          chmod +x native/out/linux-x64/b3270
+          chmod +x native/out/linux-arm64/b3270
 
       - name: Install Parcel
         run: dotnet tool install --global AvaloniaUI.Parcel
 
+      - name: Publish linux-x64
+        run: |
+          dotnet publish src/LizTerm.App -c Release -r linux-x64 --self-contained \
+            -p:Version=${{ needs.version.outputs.version }} \
+            -o publish/linux-x64
+
       # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
       # System.ArgumentException: Provided output directory doesn't exist if the path is missing.
-      - name: Package
+      - name: Package linux-x64
         env:
           AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
         run: |
-          mkdir -p packages/${{ matrix.rid }}
+          mkdir -p packages/linux-x64
           parcel pack ./LizTerm.parcel --no-build \
-            -r ${{ matrix.rid }} -p zip -p deb -p rpm -o packages/${{ matrix.rid }}
+            -r linux-x64 -p zip -p deb -p rpm -o packages/linux-x64
 
-      # The gate, against the tree that actually ships (R6). Both Linux legs run on their own architecture, so
-      # unlike macOS there is no combination here that cannot start its own binary.
-      - name: The shipped archive carries the right engine
+      # The gate, against the tree that actually ships (R6). This runner is linux-x64, so unlike
+      # linux-arm64 below there is no reason it cannot start its own binary.
+      - name: The shipped linux-x64 archive carries the right engine
         run: |
           set -euo pipefail
-          rm -rf /tmp/roundtrip && mkdir -p /tmp/roundtrip
-          zip=$(find packages/${{ matrix.rid }} -name '*.zip' | head -1)
+          rm -rf /tmp/roundtrip-x64 && mkdir -p /tmp/roundtrip-x64
+          zip=$(find packages/linux-x64 -name '*.zip' | head -1)
           [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
-          unzip -q "$zip" -d /tmp/roundtrip
-          native/build/verify-bundled-engine.sh /tmp/roundtrip ${{ matrix.rid }}
+          unzip -q "$zip" -d /tmp/roundtrip-x64
+          native/build/verify-bundled-engine.sh /tmp/roundtrip-x64 linux-x64
 
-      - name: The engine inside the archive still starts
+      - name: The engine inside the linux-x64 archive still starts
         run: |
           set -euo pipefail
-          bin=$(find /tmp/roundtrip -type f -path '*/runtimes/${{ matrix.rid }}/native/b3270' | head -1)
+          bin=$(find /tmp/roundtrip-x64 -type f -path '*/runtimes/linux-x64/native/b3270' | head -1)
           native/build/shared-verify-tls.sh "$bin"
 
       # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
-      - name: Rename for the release namespace
+      - name: Rename linux-x64 for the release namespace
         run: |
           set -euo pipefail
-          find packages/${{ matrix.rid }} -type f | while read -r f; do
-            mv "$f" "packages/${{ matrix.rid }}/LizTerm-${{ matrix.rid }}-${{ needs.version.outputs.version }}.${f##*.}"
+          find packages/linux-x64 -type f | while read -r f; do
+            mv "$f" "packages/linux-x64/LizTerm-linux-x64-${{ needs.version.outputs.version }}.${f##*.}"
           done
-          find packages/${{ matrix.rid }} -type d -empty -delete
-          ls -l packages/${{ matrix.rid }}
+          find packages/linux-x64 -type d -empty -delete
+          ls -l packages/linux-x64
 
       - uses: actions/upload-artifact@v7
         with:
-          name: packages-${{ matrix.rid }}
-          path: packages/${{ matrix.rid }}
+          name: packages-linux-x64
+          path: packages/linux-x64
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish linux-arm64
+        run: |
+          dotnet publish src/LizTerm.App -c Release -r linux-arm64 --self-contained \
+            -p:Version=${{ needs.version.outputs.version }} \
+            -o publish/linux-arm64
+
+      - name: Package linux-arm64
+        env:
+          AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
+        run: |
+          mkdir -p packages/linux-arm64
+          parcel pack ./LizTerm.parcel --no-build \
+            -r linux-arm64 -p zip -p deb -p rpm -o packages/linux-arm64
+
+      # The gate, against the tree that actually ships (R6). Still runs -- it only reads the binary's file
+      # header, never executes it.
+      - name: The shipped linux-arm64 archive carries the right engine
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip-arm64 && mkdir -p /tmp/roundtrip-arm64
+          zip=$(find packages/linux-arm64 -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip-arm64
+          native/build/verify-bundled-engine.sh /tmp/roundtrip-arm64 linux-arm64
+
+      # R16: no start-check here. This runner is linux-x64 and cannot execute an arm64 binary. The
+      # machine-type assertion above is what proves this RID; engines.yml already starts this same engine on
+      # a real arm64 runner, so what stays unproven is the archive round trip, not the engine itself.
+
+      - name: Rename linux-arm64 for the release namespace
+        run: |
+          set -euo pipefail
+          find packages/linux-arm64 -type f | while read -r f; do
+            mv "$f" "packages/linux-arm64/LizTerm-linux-arm64-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/linux-arm64 -type d -empty -delete
+          ls -l packages/linux-arm64
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-linux-arm64
+          path: packages/linux-arm64
           if-no-files-found: error
           retention-days: 7
 
