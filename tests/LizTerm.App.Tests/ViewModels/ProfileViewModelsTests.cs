@@ -234,4 +234,49 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Null(vm.PinnedCertificateText);
         Assert.Null(vm.TryBuild()?.PinnedCertificate);
     }
+
+    [Fact]
+    public void Editor_offers_models_with_their_geometry()
+    {
+        var vm = new ProfileEditorViewModel(null);
+        Assert.Equal(4, vm.TerminalModels.Count);
+        Assert.Equal("3 — 32x80", vm.TerminalModels.Single(m => m.Number == 3).ToString());
+        Assert.Equal(2, vm.SelectedModel.Number);
+
+        vm.Name = "n";
+        vm.Host = "h";
+        vm.SelectedModel = vm.TerminalModels.Single(m => m.Number == 5);
+        Assert.Equal(5, vm.Model);
+        Assert.Equal(5, vm.TryBuild()!.Model);
+    }
+
+    [Fact]
+    public void Editor_offers_code_pages_with_labels()
+    {
+        var vm = new ProfileEditorViewModel(null);
+        Assert.Equal("bracket", vm.CodePages[0].Name);
+        Assert.Equal("cp037", vm.SelectedCodePage.Name);
+
+        vm.SelectedCodePage = vm.CodePages.Single(p => p.Name == "cp285");
+        Assert.Equal("cp285", vm.CodePage);
+    }
+
+    /// <summary>#44 and #45's shared trap: a ComboBox bound SelectedItem has nothing to select when the saved
+    /// value is outside ItemsSource. Opening the editor on a hand-edited profile must not silently drop its
+    /// setting, so the list is seeded with whatever the profile actually holds.</summary>
+    [Fact]
+    public void A_value_outside_the_catalogue_survives_a_round_trip()
+    {
+        var odd = new SessionProfile { Name = "odd", Host = "h", Model = 9, CodePage = "cp9999" };
+        var vm = new ProfileEditorViewModel(odd);
+
+        Assert.Equal(9, vm.SelectedModel.Number);
+        Assert.Equal("cp9999", vm.SelectedCodePage.Name);
+        Assert.Contains(vm.TerminalModels, m => m.Number == 9);
+        Assert.Contains(vm.CodePages, p => p.Name == "cp9999");
+
+        var built = vm.TryBuild()!;
+        Assert.Equal(9, built.Model);
+        Assert.Equal("cp9999", built.CodePage);
+    }
 }

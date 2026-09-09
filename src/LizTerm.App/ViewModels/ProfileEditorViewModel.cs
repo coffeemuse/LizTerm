@@ -36,12 +36,48 @@ public partial class ProfileEditorViewModel : ObservableObject
     public string? PinnedCertificateText =>
         PinnedCertificate is { } pin ? $"Pinned certificate: SHA-256 {pin.Sha256} ({pin.Subject})" : null;
 
-    public int[] Models { get; } = [2, 3, 4, 5];
+    /// <summary>The catalogue, seeded with this profile's own value when it falls outside it — a hand-edited
+    /// file, or a model a newer engine adds. A ComboBox bound SelectedItem has nothing to select otherwise, and
+    /// merely opening the editor would drop a working profile's setting. Model gets no validation in TryBuild,
+    /// so nothing else would catch it either.</summary>
+    public IReadOnlyList<TerminalModel> TerminalModels { get; }
+
+    /// <summary>Same seeding rule as <see cref="TerminalModels"/>.</summary>
+    public IReadOnlyList<CodePage> CodePages { get; }
+
+    /// <summary>A view over <see cref="Model"/>, which stays the property TryBuild reads.</summary>
+    public TerminalModel SelectedModel
+    {
+        get => TerminalModels.FirstOrDefault(m => m.Number == Model) ?? TerminalModels[0];
+        set { if (value is not null) Model = value.Number; OnPropertyChanged(); }
+    }
+
+    /// <summary>A view over <see cref="CodePage"/>, which stays the property TryBuild reads.</summary>
+    public CodePage SelectedCodePage
+    {
+        get => CodePages.FirstOrDefault(p => string.Equals(p.Name, CodePage, StringComparison.OrdinalIgnoreCase)) ?? CodePages[0];
+        set { if (value is not null) CodePage = value.Name; OnPropertyChanged(); }
+    }
+
     public bool IsNew { get; }
 
     public ProfileEditorViewModel(SessionProfile? existing)
     {
         IsNew = existing is null;
+
+        var models = TerminalModel.All.ToList();
+        if (existing is not null && TerminalModel.Find(existing.Model) is null)
+            models.Add(new TerminalModel(existing.Model, 0, 0));
+        TerminalModels = models;
+
+        // Qualified with the namespace: the CodePage *property* below (a string) shares its name with the
+        // CodePage *type*, and unqualified "CodePage.All"/"CodePage.Find" bind to the property (per C#'s
+        // simple-name rules, an instance member always wins over a type of the same name) rather than the type.
+        var pages = LizTerm.Core.Session.CodePage.All.ToList();
+        if (existing is not null && LizTerm.Core.Session.CodePage.Find(existing.CodePage) is null)
+            pages.Add(new CodePage(existing.CodePage, "not in this engine's list"));
+        CodePages = pages;
+
         if (existing is null) return;
         _name = existing.Name;
         _host = existing.Host;
