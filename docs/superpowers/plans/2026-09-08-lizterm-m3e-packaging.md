@@ -1089,6 +1089,12 @@ name: Release
 on:
   push:
     tags: ['v*']
+    # TEMPORARY, REMOVED BY TASK 10 (ruling R14). GitHub resolves a workflow id from the DEFAULT branch, so a
+    # workflow that exists only here cannot be reached by workflow_dispatch or by a pull_request trigger it
+    # does not declare -- which would leave this file completely unverifiable until after it merged. This
+    # branch-scoped push trigger is the only way to exercise it before then. Task 10's last step deletes these
+    # two lines and Task 11's verification asserts they are gone.
+    branches: [claude/avalonia-parcel-packaging-7a1a15]
   # Rehearsal: produces every artifact and no release, so the pipeline can be exercised without a tag.
   workflow_dispatch:
 
@@ -1272,10 +1278,13 @@ exercisable on its own through workflow_dispatch.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 git push
-gh workflow run release.yml --ref "$(git branch --show-current)"
 ```
 
-- [ ] **Step 4: Read the run and confirm all six trees are gated green**
+The push itself starts the run — that is what the temporary branch trigger (R14) is for. Do **not** try
+`gh workflow run release.yml`: this workflow does not exist on the default branch yet, so GitHub cannot
+resolve its id and the dispatch fails with `could not find any workflows named release.yml`.
+
+- [ ] **Step 4: Read the run and confirm all six publish jobs are green**
 
 ```bash
 gh run list --workflow release.yml --limit 1
@@ -1693,7 +1702,20 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 git push
 ```
 
-- [ ] **Step 4: Cut a pre-release and check it end to end**
+- [ ] **Step 4: Remove the temporary branch trigger (R14)**
+
+Delete the two lines Task 8 added under `push:` — the comment block and
+`branches: [claude/avalonia-parcel-packaging-7a1a15]` — leaving `tags: ['v*']` and `workflow_dispatch:`.
+Once this branch merges, `workflow_dispatch` works normally because the file is then on the default branch.
+
+```bash
+grep -n "claude/avalonia-parcel-packaging" .github/workflows/release.yml || echo "OK: the temporary trigger is gone"
+python3 -c "import yaml; yaml.safe_load(open('.github/workflows/release.yml')); print('parses')"
+```
+
+Expected: the `OK:` line and `parses`. Commit this with the release job.
+
+- [ ] **Step 5: Cut a pre-release and check it end to end**
 
 ```bash
 gh workflow run release.yml --ref "$(git branch --show-current)"
@@ -1776,6 +1798,7 @@ dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "
 dotnet test LizTerm.slnx
 grep -n "to be decided" README.md || echo "OK: the licence line is gone"
 grep -n "openssl@3" README.md CLAUDE.md || echo "OK: Homebrew is gone from the docs"
+grep -rn "claude/avalonia-parcel-packaging" .github/workflows/ || echo "OK: no branch name left in a workflow"
 ```
 
 Expected: `0` warnings, a passing suite, and both `OK:` lines.
