@@ -403,4 +403,30 @@ public class SessionViewModelConnectTests
 
         await vm.DisposeAsync();
     }
+
+    /// <summary>Review finding on #39: the test above never sets ConnectPending, so its whole
+    /// false-to-true-to-false sequence is explained by HasSocket alone and gives the "|| ConnectPending" half of
+    /// CanDisconnect no regression net. This one holds a connect in flight without ever letting the state reach
+    /// HasSocket (it stays Disconnected throughout), so a true CanExecute here can only come from ConnectPending,
+    /// and the assertion once the connect finishes pins ConnectWithAsync's finally clearing it back to false.</summary>
+    [Fact]
+    public async Task Disconnect_stays_live_for_a_pending_connect_that_never_reaches_a_socket()
+    {
+        var (vm, session) = Create();
+        session.ConnectCompletion = Pending();
+        Assert.False(vm.DisconnectCommand.CanExecute(null));
+
+        var attempt = vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.False(vm.HasSocket);
+        Assert.True(vm.DisconnectCommand.CanExecute(null));
+
+        session.ConnectCompletion.SetResult();
+        await attempt;
+
+        Assert.False(vm.HasSocket);
+        Assert.False(vm.DisconnectCommand.CanExecute(null));
+
+        await vm.DisposeAsync();
+    }
 }
