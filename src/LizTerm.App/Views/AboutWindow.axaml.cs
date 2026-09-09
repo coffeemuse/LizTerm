@@ -21,7 +21,7 @@ public partial class AboutWindow : Window
         VersionText.Text = "Version " + version;
         EngineText.Text = StatusFormatter.Engine(engine, overrideOrigin);
         EnginePathText.Text = engine.Path;
-        CopyrightText.Text = AppLicense.Notice;
+        CopyrightText.Text = AppLicense.Copyright;
         LicensesText.Text = AppLicense.All;
     }
 
