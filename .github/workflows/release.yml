@@ -90,10 +90,13 @@ jobs:
 
       # --no-build: Parcel packages the tree the step above already published. It does not own the build, so
       # the coupling to a proprietary tool is at the artifact boundary and nowhere else.
+      # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
+      # System.ArgumentException: Provided output directory doesn't exist if the path is missing.
       - name: Package
         env:
           AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
         run: |
+          mkdir -p packages/${{ matrix.rid }}
           parcel pack ./LizTerm.parcel --no-build \
             -r ${{ matrix.rid }} -p zip -p dmg -o packages/${{ matrix.rid }}
 
@@ -174,10 +177,13 @@ jobs:
       - name: Install Parcel
         run: dotnet tool install --global AvaloniaUI.Parcel
 
+      # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
+      # System.ArgumentException: Provided output directory doesn't exist if the path is missing.
       - name: Package
         env:
           AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
         run: |
+          mkdir -p packages/${{ matrix.rid }}
           parcel pack ./LizTerm.parcel --no-build \
             -r ${{ matrix.rid }} -p zip -p deb -p rpm -o packages/${{ matrix.rid }}
 
@@ -247,11 +253,18 @@ jobs:
       - name: Install Parcel
         run: dotnet tool install --global AvaloniaUI.Parcel
 
+      # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
+      # System.ArgumentException: Provided output directory doesn't exist if the path is missing. `shell: bash`
+      # here (rather than a PowerShell-native New-Item) matches the three verification/rename steps below,
+      # which already run under Git Bash on this runner, so `mkdir -p` is one thing to reason about across all
+      # three platform jobs instead of a fourth, PowerShell-specific spelling.
       - name: Package
+        shell: bash
         env:
           AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
         run: |
-          parcel pack ./LizTerm.parcel --no-build `
+          mkdir -p packages/${{ matrix.rid }}
+          parcel pack ./LizTerm.parcel --no-build \
             -r ${{ matrix.rid }} -p zip -p nsis -o packages/${{ matrix.rid }}
 
       - name: The shipped archive carries the right engine
