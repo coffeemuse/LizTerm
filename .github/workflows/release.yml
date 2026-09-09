@@ -3,12 +3,6 @@ name: Release
 on:
   push:
     tags: ['v*']
-    # TEMPORARY, REMOVED BY TASK 10 (ruling R14). GitHub resolves a workflow id from the DEFAULT branch, so a
-    # workflow that exists only here cannot be reached by workflow_dispatch or by a pull_request trigger it
-    # does not declare -- which would leave this file completely unverifiable until after it merged. This
-    # branch-scoped push trigger is the only way to exercise it before then. Task 10's last step deletes these
-    # two lines and Task 11's verification asserts they are gone.
-    branches: [claude/avalonia-parcel-packaging-7a1a15]
   # Rehearsal: produces every artifact and no release, so the pipeline can be exercised without a tag.
   workflow_dispatch:
 
