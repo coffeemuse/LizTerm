@@ -114,9 +114,9 @@ only one definition anywhere of "an engine proven to start":
   engine, since x3270 has no aarch64 Windows host) — with Avalonia's Parcel into a ZIP plus a native installer
   per platform, gates each package by looking for the right engine at the right path and, on the platforms that
   can run it, starting it, and, only when the trigger was a tag, publishes a GitHub Release from the resulting
-  archives and installers, archives first. Packaging needs a licensed copy of Parcel, so its two `parcel pack`
-  steps alone carry the `AVALONIA_TOOLS_LICENSE_KEY` repository secret; `ci.yml` and `platforms.yml` need no
-  such secret, so a fork's pull request still runs both in full.
+  archives and installers, archives first. Packaging needs a licensed copy of Parcel, and the
+  `AVALONIA_TOOLS_LICENSE_KEY` repository secret is scoped to `release.yml`'s `parcel pack` steps alone;
+  `ci.yml` and `platforms.yml` carry no such secret, so a fork's pull request still runs both in full.
 
 To run the platform jobs by hand: Actions, Platforms, "Run workflow", or `gh workflow run platforms.yml`. A run that
 fails or is cancelled uploads `test-results-<os>` with its `.trx` files and any hang dump. The `b3270-osx-arm64`,
