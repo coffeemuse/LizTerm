@@ -52,6 +52,26 @@ jobs:
           echo "version=$tree" >> "$GITHUB_OUTPUT"
           echo "building $tree"
 
+      # Parcel treats a missing or misnamed icon as a warning, not an error, so a typo in one of these three
+      # paths would ship an icon-less installer behind an otherwise green build. This reads the same paths
+      # Parcel itself would read and fails the run before anything is published, without parsing Parcel's own
+      # output.
+      - name: LizTerm.parcel's icons exist on disk
+        run: |
+          set -euo pipefail
+          python3 -c "
+          import json, os, sys
+          parcel = json.load(open('LizTerm.parcel'))
+          icons = {
+              'Win32Settings.InstallerIcon': parcel.get('Win32Settings', {}).get('InstallerIcon'),
+              'MacOsSettings.AppIcon': parcel.get('MacOsSettings', {}).get('AppIcon'),
+              'LinuxSettings.AppIcon': parcel.get('LinuxSettings', {}).get('AppIcon'),
+          }
+          missing = [f'{key} -> {value}' for key, value in icons.items() if not value or not os.path.isfile(value)]
+          if missing:
+              sys.exit('LizTerm.parcel names an icon that does not exist on disk:\n  ' + '\n  '.join(missing))
+          "
+
   publish-macos:
     needs: [engines, version]
     runs-on: macos-15
@@ -85,8 +105,12 @@ jobs:
             -p:Version=${{ needs.version.outputs.version }} \
             -o publish/${{ matrix.rid }}
 
+      # Pinned like every other external input in this repository (container digests, tarball checksums, the
+      # SDK band, package versions): this workflow fires rarely and long after its last green run, which makes
+      # it the path most exposed to an upstream Parcel bump. 1.1.1 is the version the design spec's section 11
+      # spike proved against.
       - name: Install Parcel
-        run: dotnet tool install --global AvaloniaUI.Parcel
+        run: dotnet tool install --global AvaloniaUI.Parcel --version 1.1.1
 
       # --no-build: Parcel packages the tree the step above already published. It does not own the build, so
       # the coupling to a proprietary tool is at the artifact boundary and nowhere else.
@@ -167,7 +191,8 @@ jobs:
           name: b3270-linux-x64
           path: native/out/linux-x64
 
-      - uses: actions/download-artifact@v7
+      - name: Download the arm64 engine
+        uses: actions/download-artifact@v7
         with:
           name: b3270-linux-arm64
           path: native/out/linux-arm64
@@ -178,7 +203,7 @@ jobs:
           chmod +x native/out/linux-arm64/b3270
 
       - name: Install Parcel
-        run: dotnet tool install --global AvaloniaUI.Parcel
+        run: dotnet tool install --global AvaloniaUI.Parcel --version 1.1.1
 
       - name: Publish linux-x64
         run: |
@@ -305,7 +330,7 @@ jobs:
             -o publish/${{ matrix.rid }}
 
       - name: Install Parcel
-        run: dotnet tool install --global AvaloniaUI.Parcel
+        run: dotnet tool install --global AvaloniaUI.Parcel --version 1.1.1
 
       # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
       # System.ArgumentException: Provided output directory doesn't exist if the path is missing. `shell: bash`
@@ -361,9 +386,10 @@ jobs:
 
   release:
     needs: [version, publish-macos, publish-linux, publish-windows]
-    # Only a tag makes a release. A workflow_dispatch rehearsal stops after the artifacts, which is what makes
-    # the whole pipeline exercisable without publishing anything.
-    if: github.ref_type == 'tag'
+    # Only a *pushed tag* makes a release. github.ref_type alone is not enough: a workflow_dispatch rehearsal
+    # run against an existing tag ref would satisfy `ref_type == 'tag'` too and cut a real release, which is
+    # exactly what the rehearsal exists to avoid -- it must stop after the artifacts.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -416,8 +442,17 @@ jobs:
           native ARM64.
           NOTES
 
-      # Archives first, installers second -- the order files are passed is the order the release lists them,
-      # and the ZIP is what a first-time visitor should reach for.
+      # Archives are passed first and the ZIP is what a first-time visitor should reach for, but
+      # `gh release create` uploads assets concurrently, so passing archives first is not a guarantee the
+      # release lists them first -- only likely.
+      #
+      # --draft: `gh release create` is not idempotent. A mid-run asset upload failure would otherwise leave a
+      # *published* release behind, and re-running this job would then die with "release already exists" on
+      # the retry. A draft can be deleted and recreated freely. The spec's section 8 already requires a manual
+      # pass -- downloading each headline archive and connecting it to a real host -- before the first tag, so
+      # publishing by hand after that pass matches the existing intent rather than adding a new step. Revisit
+      # once a release has actually been cut successfully and the failure mode above has been seen (or not) in
+      # practice.
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -427,7 +462,9 @@ jobs:
           archives=(packages/*.zip)
           installers=(packages/*.dmg packages/*.deb packages/*.rpm packages/*.exe)
           [ ${#archives[@]} -gt 0 ] || { echo "no archives to release" >&2; exit 1; }
+          [ ${#installers[@]} -gt 0 ] || { echo "no installers to release" >&2; exit 1; }
           gh release create "${GITHUB_REF_NAME}" \
+            --draft \
             --title "LizTerm ${{ needs.version.outputs.version }}" \
             --notes-file notes.md \
             "${archives[@]}" "${installers[@]}"

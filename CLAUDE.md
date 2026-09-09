@@ -158,11 +158,16 @@ platforms would otherwise each produce an identically-named ZIP. Parcel does not
 version, either: `LizTerm.parcel` carries its own `GeneralSettings.Version`, and the `version` job fails the run
 if that, `Directory.Build.props`, and — on an actual tag — the tag itself disagree, rather than silently
 building three different version numbers into one release. Parcel treats a missing or misnamed icon as a
-warning, not an error, so a typo in `LizTerm.parcel`'s icon paths would ship an icon-less installer with an
-otherwise green build; nothing in this pipeline currently turns a Parcel warning into a failure. The `release`
-job itself runs only when the trigger was a tag (`github.ref_type == 'tag'`), downloads every `packages-*`
-artifact into one flat directory, and passes archives before installers to `gh release create` — the ZIP is
-what a first-time visitor should reach for, and a release lists its assets in the order they were passed.
+warning, not an error, so a typo in `LizTerm.parcel`'s icon paths would otherwise ship an icon-less installer
+with a green build; the same `version` job also asserts that every icon path `LizTerm.parcel` names
+(`Win32Settings.InstallerIcon`, `MacOsSettings.AppIcon`, `LinuxSettings.AppIcon`) exists on disk, which turns
+that whole class into a pre-build failure without parsing Parcel's own output. The `release`
+job itself runs only when the trigger was a pushed tag (`github.event_name == 'push' && github.ref_type ==
+'tag'` — `ref_type` alone would also fire on a `workflow_dispatch` rehearsal run against an existing tag ref),
+downloads every `packages-*` artifact into one flat directory, and passes archives before installers to
+`gh release create`, publishing as a draft rather than a live release — the ZIP is what a first-time visitor
+should reach for, but `gh release create` uploads assets concurrently, so passing archives first makes them
+likely, not guaranteed, to be listed first.
 
 `global.json` pins the SDK to the 10.0.4xx band; supported builds stay on the current LTS. It rolls forward only
 within that band: when an SDK update replaces it, bump `version`, never widen `rollForward` (the runner and the Mac
@@ -171,11 +176,17 @@ one means a fresh `.NET 10 SDK` install cannot run `dotnet` in this repo at all.
 
 ### The b3270 binary
 
-The app and the integration test project copy `native/out/<host-rid>/b3270*` into their output as
-`runtimes/<rid>/native/<filename>` — `b3270` on macOS and Linux, `b3270.exe` on `win-x64`, since the copy item
-links by `%(Filename)%(Extension)` rather than a hardcoded name — but only if that directory exists **at build
-time**. The App test project inherits that
-copy through its project reference to the App, so a built engine lands in its output too. Build it once with
+The app copies `native/out/<engine-rid>/b3270*` into its output as `runtimes/<target-rid>/native/<filename>` —
+`b3270` on macOS and Linux, `b3270.exe` on `win-x64`, since the copy item links by
+`%(Filename)%(Extension)` rather than a hardcoded name — but only if that directory exists **at build time**.
+`LizTerm.App.csproj`'s `LizTermTargetRid` (`$(RuntimeIdentifier)` when publishing for one, else the SDK's own
+`$(NETCoreSdkRuntimeIdentifier)` for `dotnet run`, the test projects, and other RID-less development builds)
+picks where the copy lands; `LizTermEngineRid` (the same, except `win-arm64` maps to `win-x64`) picks which
+`native/out/` directory it reads from, so a `win-arm64` publish ships the `win-x64` engine under Windows 11's
+emulation. The integration test project genuinely still keys both ends on the host RID alone
+(`$(NETCoreSdkRuntimeIdentifier)`), correctly, because it is never published for a target RID. The App test
+project inherits the App's copy through its project reference to the App, so a built engine lands in its
+output too. Build it once with
 `native/build/build-macos.sh [osx-arm64|osx-x64]` (defaults to the host's architecture; needs Xcode CLT and no
 Homebrew — OpenSSL is built from the pinned tarball `fetch-openssl.sh` names into a per-architecture static
 prefix under `native/build-tmp/<rid>`, reused only when both the archive and a `.pin` stamp match, the identical

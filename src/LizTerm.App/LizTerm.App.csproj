@@ -8,6 +8,14 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <!-- lizterm.icns and lizterm.ico are inputs Parcel reads from disk (MacOsSettings.AppIcon,
+         Win32Settings.InstallerIcon in LizTerm.parcel), never loaded by the app itself. Embedding them cost
+         1.71 MB + 0.13 MB of a 3.41 MB assembly for no benefit; excluding them leaves them on disk for Parcel
+         while dropping them from the build. lizterm.png stays embedded and full-size: Parcel's
+         LinuxSettings.AppIcon reads it from disk too, and it is also the 1254x1254 master lizterm-256.png (what
+         every Window.Icon actually points at) and every other packaged size derives from, so do not resize it. -->
+    <AvaloniaResource Remove="Assets\Icons\lizterm.icns" />
+    <AvaloniaResource Remove="Assets\Icons\lizterm.ico" />
     <AvaloniaResource Include="../../THIRD-PARTY-NOTICES.txt" Link="Assets/THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
 

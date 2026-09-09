@@ -5,7 +5,7 @@
         x:Class="LizTerm.App.Views.ProfilePickerWindow"
         x:DataType="vm:ProfilePickerViewModel"
         Title="LizTerm" Width="520" Height="400" MinWidth="400" MinHeight="300"
-        Icon="avares://LizTerm.App/Assets/Icons/lizterm.png"
+        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         WindowStartupLocation="CenterScreen">
   <DockPanel Margin="16">
     <TextBlock DockPanel.Dock="Top" Text="Sessions" FontSize="20" Margin="0,0,0,10" />
