@@ -170,13 +170,17 @@ should reach for, but `gh release create` uploads assets concurrently, so passin
 likely, not guaranteed, to be listed first.
 
 The repository root also carries `Entitlements.plist`, which Parcel discovers by convention next to
-`LizTerm.parcel` and merges with the default entitlements it always synthesizes (network client/server,
-user-selected file read-write, JIT) rather than replacing them. Its one entry,
+`LizTerm.parcel` and merges with the default entitlements it always synthesizes (`network.client`, `network.server`,
+`files.user-selected.read-write`, `files.bookmarks.document-scope`, `cs.allow-jit`) rather than replacing
+them — measured by dumping `codesign -d --entitlements -` from a packed bundle, which shows all five beside
+ours. Its one entry,
 `com.apple.security.cs.disable-library-validation`, exists because a packaged macOS build launched clean in
 every rehearsal until someone actually ran it: Parcel ad-hoc signs the packaged executable with the hardened
 runtime (`codesign -dvvv` reports `flags=0x10002(adhoc,runtime)`) but signs the bundled
-`libSkiaSharp.dylib`, `libHarfBuzzSharp.dylib`, `libAvaloniaNative.dylib`, and the bundled b3270 plain
-ad-hoc, `flags=0x2(adhoc)`. An ad-hoc signature carries no Team ID, and the hardened runtime's library
+`libSkiaSharp.dylib`, `libHarfBuzzSharp.dylib` and `libAvaloniaNative.dylib` plain ad-hoc, `flags=0x2(adhoc)`.
+The bundled b3270 is signed `(adhoc,runtime)` like the executable rather than like the dylibs, which is worth
+knowing only so nobody concludes the engine escapes this by being signed differently — it escapes it by being
+a child process rather than something the app loads. An ad-hoc signature carries no Team ID, and the hardened runtime's library
 validation refuses a `dlopen` of any sibling library whose Team ID does not match the process's; with none
 on either side, every load of a bundled dylib fails and Avalonia dies before it can open a window
 (`DllNotFoundException: libSkiaSharp`, "different Team IDs"). Dropping the hardened runtime instead of
