@@ -3,6 +3,10 @@ name: Release
 on:
   push:
     tags: ['v*']
+    # TEMPORARY, to be removed as soon as the run is read. GitHub resolves a workflow id from the DEFAULT
+    # branch, so a workflow that exists only here cannot be reached by workflow_dispatch -- this is the only
+    # way to exercise the packaged-app launch gate on the Linux and Windows runners before merge.
+    branches: [claude/avalonia-parcel-packaging-7a1a15]
   # Rehearsal: produces every artifact and no release, so the pipeline can be exercised without a tag.
   workflow_dispatch:
 
