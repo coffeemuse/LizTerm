@@ -164,4 +164,20 @@ public class ProfileStoreTests : IDisposable
             Assert.Equal("readable", readableProfile.Name);
         }
     }
+
+    /// <summary>#50. Read swallows a JsonException and LoadAll skips the file, so a half-written profile is
+    /// indistinguishable from a deleted one. A temp-file-and-rename never leaves a reader a partial file.</summary>
+    [Fact]
+    public void Save_never_leaves_a_partial_file_behind()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "MVS", Host = "first.host" });
+        store.Save(new SessionProfile { Name = "MVS", Host = "second.host" });
+
+        var loaded = Assert.Single(store.LoadAll());
+        Assert.Equal("second.host", loaded.Host);
+
+        // The rename is within one directory, so nothing else may be left lying around for LoadAll to trip on.
+        Assert.Equal(["MVS.json"], Directory.GetFiles(_dir).Select(Path.GetFileName).Order());
+    }
 }
