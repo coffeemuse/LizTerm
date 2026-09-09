@@ -1,0 +1,502 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  # Rehearsal: produces every artifact and no release, so the pipeline can be exercised without a tag.
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The same five engines platforms.yml builds, from the same definition, each proven to start before it is
+  # published. On a tag cut from a green main these are cache hits: actions/cache is repository-scoped, not
+  # workflow-scoped, so this workflow restores what platforms.yml populated.
+  engines:
+    uses: ./.github/workflows/engines.yml
+
+  version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # A release built from a tag that disagrees with the tree is a release nobody can reproduce. On a
+      # workflow_dispatch rehearsal there is no tag, so the tree's own version is used and nothing is compared.
+      - name: The tag and Directory.Build.props must agree
+        id: v
+        run: |
+          set -euo pipefail
+          tree=$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Directory.Build.props)
+          [ -n "$tree" ] || { echo "no <Version> in Directory.Build.props" >&2; exit 1; }
+          parcel=$(python3 -c "import json;print(json.load(open('LizTerm.parcel')).get('GeneralSettings',{}).get('Version',''))")
+          [ -n "$parcel" ] || { echo "no GeneralSettings.Version in LizTerm.parcel" >&2; exit 1; }
+          if [ "$parcel" != "$tree" ]; then
+            echo "LizTerm.parcel says $parcel; Directory.Build.props says $tree" >&2
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            tag=${GITHUB_REF_NAME#v}
+            if [ "$tag" != "$tree" ]; then
+              echo "tag $GITHUB_REF_NAME says $tag; Directory.Build.props says $tree" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$tree" >> "$GITHUB_OUTPUT"
+          echo "building $tree"
+
+      # Parcel treats a missing or misnamed icon as a warning, not an error, so a typo in one of these three
+      # paths would ship an icon-less installer behind an otherwise green build. This reads the same paths
+      # Parcel itself would read and fails the run before anything is published, without parsing Parcel's own
+      # output.
+      - name: LizTerm.parcel's icons exist on disk
+        run: |
+          set -euo pipefail
+          python3 -c "
+          import json, os, sys
+          parcel = json.load(open('LizTerm.parcel'))
+          icons = {
+              'Win32Settings.InstallerIcon': parcel.get('Win32Settings', {}).get('InstallerIcon'),
+              'MacOsSettings.AppIcon': parcel.get('MacOsSettings', {}).get('AppIcon'),
+              'LinuxSettings.AppIcon': parcel.get('LinuxSettings', {}).get('AppIcon'),
+          }
+          missing = [f'{key} -> {value}' for key, value in icons.items() if not value or not os.path.isfile(value)]
+          if missing:
+              sys.exit('LizTerm.parcel names an icon that does not exist on disk:\n  ' + '\n  '.join(missing))
+          "
+
+  publish-macos:
+    needs: [engines, version]
+    runs-on: macos-15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Download the engine
+        uses: actions/download-artifact@v7
+        with:
+          name: b3270-${{ matrix.rid }}
+          path: native/out/${{ matrix.rid }}
+
+      # actions/download-artifact does not preserve the executable bit. Inside engines.yml this never mattered:
+      # each job builds and uses its binary without an artifact round trip. Here the engine crosses that
+      # boundary, and without this the release ships an engine B3270Locator.Find rejects with "is not
+      # executable" -- at connect time, on a user's machine, and nowhere in this pipeline.
+      - name: Restore the executable bit
+        run: chmod +x native/out/${{ matrix.rid }}/b3270
+
+      - name: Publish
+        run: |
+          dotnet publish src/LizTerm.App -c Release -r ${{ matrix.rid }} --self-contained \
+            -p:Version=${{ needs.version.outputs.version }} \
+            -o publish/${{ matrix.rid }}
+
+      # Pinned like every other external input in this repository (container digests, tarball checksums, the
+      # SDK band, package versions): this workflow fires rarely and long after its last green run, which makes
+      # it the path most exposed to an upstream Parcel bump. 1.1.1 is the version the design spec's section 11
+      # spike proved against.
+      - name: Install Parcel
+        run: dotnet tool install --global AvaloniaUI.Parcel --version 1.1.1
+
+      # --no-build: Parcel packages the tree the step above already published. It does not own the build, so
+      # the coupling to a proprietary tool is at the artifact boundary and nowhere else.
+      # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
+      # System.ArgumentException: Provided output directory doesn't exist if the path is missing.
+      - name: Package
+        env:
+          AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
+        run: |
+          mkdir -p packages/${{ matrix.rid }}
+          parcel pack ./LizTerm.parcel --no-build \
+            -r ${{ matrix.rid }} -p zip -p dmg -o packages/${{ matrix.rid }}
+
+      # One step, three claims: the archive round trip preserved the executable bit, the binary still starts,
+      # and the .app and ZIP round trip did not invalidate the ad hoc signature the SDK and the linker applied.
+      # osx-x64 is skipped because this runner is arm64 and cannot start an x86_64 binary without Rosetta,
+      # whose presence on these images is not guaranteed -- the spec records that RID as proven by the
+      # machine-type assertion alone.
+      # The gate, against the tree that actually ships (R6). Parcel writes into a macOS/ subdirectory of -o,
+      # so the ZIP is found rather than globbed at the top level.
+      - name: The shipped archive carries the right engine
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip && mkdir -p /tmp/roundtrip
+          zip=$(find packages/${{ matrix.rid }} -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip
+          native/build/verify-bundled-engine.sh /tmp/roundtrip ${{ matrix.rid }}
+
+      # osx-x64 is skipped: this runner is arm64 and cannot start an x86_64 binary without Rosetta, whose
+      # presence on these images is not guaranteed. The spec records that RID as proven by the machine-type
+      # assertion above alone.
+      - name: The engine inside the archive still starts
+        if: matrix.rid == 'osx-arm64'
+        run: |
+          set -euo pipefail
+          bin=$(find /tmp/roundtrip -type f -path '*/runtimes/${{ matrix.rid }}/native/b3270' | head -1)
+          native/build/shared-verify-tls.sh "$bin"
+
+      # The check the engine-start step above cannot cover, and the reason this step exists at all: the
+      # packaged *app* actually launching. A packaged macOS build once passed every gate in this pipeline,
+      # including codesign --verify --deep --strict, and then failed to launch for every user, because
+      # Parcel's ad-hoc signing left the hardened runtime's library validation refusing to dlopen the bundled
+      # dylibs -- see CLAUDE.md's release paragraph and its Entitlements.plist passage. Same osx-x64 skip and
+      # the same reason as the engine-start step above: this runner cannot execute an x86_64 binary without
+      # Rosetta.
+      - name: The packaged app launches
+        if: matrix.rid == 'osx-arm64'
+        run: native/build/verify-app-launches.sh /tmp/roundtrip ${{ matrix.rid }}
+
+      # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
+      - name: Rename for the release namespace
+        run: |
+          set -euo pipefail
+          find packages/${{ matrix.rid }} -type f | while read -r f; do
+            mv "$f" "packages/${{ matrix.rid }}/LizTerm-${{ matrix.rid }}-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/${{ matrix.rid }} -type d -empty -delete
+          ls -l packages/${{ matrix.rid }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-${{ matrix.rid }}
+          path: packages/${{ matrix.rid }}
+          if-no-files-found: error
+          retention-days: 7
+
+  # R16: Parcel's Linux CLI ships an x64-only native binary, so it cannot run at all on an arm64 Linux
+  # runner -- "Exec format error" starting the tool itself, not a packaging failure. So this is a single
+  # ubuntu-24.04 job with no matrix: linux-x64 publishes and packs first, then linux-arm64 publishes and
+  # packs, cross-targeted from the same x64 runner. Cross-targeting itself is well proven -- the Task 1
+  # spike packed linux-arm64's DEB, RPM and ZIP from an arm64 Mac -- it is only running Parcel *on* arm64
+  # Linux that is impossible. Each publish is immediately followed by its own pack (R9): LizTerm.App.csproj
+  # declares no <RuntimeIdentifiers>, so a single-RID restore replaces obj/project.assets.json's target, and
+  # packing both RIDs after publishing both would fail the first with NETSDK1047.
+  publish-linux:
+    needs: [engines, version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Download the engines
+        uses: actions/download-artifact@v7
+        with:
+          name: b3270-linux-x64
+          path: native/out/linux-x64
+
+      - name: Download the arm64 engine
+        uses: actions/download-artifact@v7
+        with:
+          name: b3270-linux-arm64
+          path: native/out/linux-arm64
+
+      - name: Restore the executable bit
+        run: |
+          chmod +x native/out/linux-x64/b3270
+          chmod +x native/out/linux-arm64/b3270
+
+      - name: Install Parcel
+        run: dotnet tool install --global AvaloniaUI.Parcel --version 1.1.1
+
+      - name: Publish linux-x64
+        run: |
+          dotnet publish src/LizTerm.App -c Release -r linux-x64 --self-contained \
+            -p:Version=${{ needs.version.outputs.version }} \
+            -o publish/linux-x64
+
+      # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
+      # System.ArgumentException: Provided output directory doesn't exist if the path is missing.
+      - name: Package linux-x64
+        env:
+          AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
+        run: |
+          mkdir -p packages/linux-x64
+          parcel pack ./LizTerm.parcel --no-build \
+            -r linux-x64 -p zip -p deb -p rpm -o packages/linux-x64
+
+      # The gate, against the tree that actually ships (R6). This runner is linux-x64, so unlike
+      # linux-arm64 below there is no reason it cannot start its own binary.
+      - name: The shipped linux-x64 archive carries the right engine
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip-x64 && mkdir -p /tmp/roundtrip-x64
+          zip=$(find packages/linux-x64 -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip-x64
+          native/build/verify-bundled-engine.sh /tmp/roundtrip-x64 linux-x64
+
+      - name: The engine inside the linux-x64 archive still starts
+        run: |
+          set -euo pipefail
+          bin=$(find /tmp/roundtrip-x64 -type f -path '*/runtimes/linux-x64/native/b3270' | head -1)
+          native/build/shared-verify-tls.sh "$bin"
+
+      # The check the engine-start step above cannot cover: the packaged *app* actually launching, an Avalonia
+      # window and all -- see CLAUDE.md's release paragraph and its Entitlements.plist passage for the macOS
+      # incident this class of gate exists to catch. Avalonia needs a real X11 display to get through Skia
+      # initialisation even to fail cleanly, so xvfb-run gives it a virtual one; this runner is linux-x64, so
+      # unlike linux-arm64 below there is no reason it cannot start its own binary.
+      - name: The packaged app launches
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          xvfb-run --auto-servernum native/build/verify-app-launches.sh /tmp/roundtrip-x64 linux-x64
+
+      # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
+      - name: Rename linux-x64 for the release namespace
+        run: |
+          set -euo pipefail
+          find packages/linux-x64 -type f | while read -r f; do
+            mv "$f" "packages/linux-x64/LizTerm-linux-x64-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/linux-x64 -type d -empty -delete
+          ls -l packages/linux-x64
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-linux-x64
+          path: packages/linux-x64
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish linux-arm64
+        run: |
+          dotnet publish src/LizTerm.App -c Release -r linux-arm64 --self-contained \
+            -p:Version=${{ needs.version.outputs.version }} \
+            -o publish/linux-arm64
+
+      - name: Package linux-arm64
+        env:
+          AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
+        run: |
+          mkdir -p packages/linux-arm64
+          parcel pack ./LizTerm.parcel --no-build \
+            -r linux-arm64 -p zip -p deb -p rpm -o packages/linux-arm64
+
+      # The gate, against the tree that actually ships (R6). Still runs -- it only reads the binary's file
+      # header, never executes it.
+      - name: The shipped linux-arm64 archive carries the right engine
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip-arm64 && mkdir -p /tmp/roundtrip-arm64
+          zip=$(find packages/linux-arm64 -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip-arm64
+          native/build/verify-bundled-engine.sh /tmp/roundtrip-arm64 linux-arm64
+
+      # R16: no start-check here. This runner is linux-x64 and cannot execute an arm64 binary. The
+      # machine-type assertion above is what proves this RID; engines.yml already starts this same engine on
+      # a real arm64 runner, so what stays unproven is the archive round trip, not the engine itself.
+
+      - name: Rename linux-arm64 for the release namespace
+        run: |
+          set -euo pipefail
+          find packages/linux-arm64 -type f | while read -r f; do
+            mv "$f" "packages/linux-arm64/LizTerm-linux-arm64-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/linux-arm64 -type d -empty -delete
+          ls -l packages/linux-arm64
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-linux-arm64
+          path: packages/linux-arm64
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-windows:
+    needs: [engines, version]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # b3270-win-x64 only, for both RIDs: plan 3d settled that x3270 4.5ga6 defines no aarch64 Windows host,
+      # so win-arm64 ships this same binary under Windows 11's emulation, and the csproj's LizTermEngineRid
+      # maps it. No chmod on the way in -- a PE has no executable bit to lose.
+      - name: Download the engine
+        uses: actions/download-artifact@v7
+        with:
+          name: b3270-win-x64
+          path: native/out/win-x64
+
+      - name: Publish
+        run: |
+          dotnet publish src/LizTerm.App -c Release -r ${{ matrix.rid }} --self-contained `
+            -p:Version=${{ needs.version.outputs.version }} `
+            -o publish/${{ matrix.rid }}
+
+      - name: Install Parcel
+        run: dotnet tool install --global AvaloniaUI.Parcel --version 1.1.1
+
+      # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
+      # System.ArgumentException: Provided output directory doesn't exist if the path is missing. `shell: bash`
+      # here (rather than a PowerShell-native New-Item) matches the three verification/rename steps below,
+      # which already run under Git Bash on this runner, so `mkdir -p` is one thing to reason about across all
+      # three platform jobs instead of a fourth, PowerShell-specific spelling.
+      - name: Package
+        shell: bash
+        env:
+          AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
+        run: |
+          mkdir -p packages/${{ matrix.rid }}
+          parcel pack ./LizTerm.parcel --no-build \
+            -r ${{ matrix.rid }} -p zip -p nsis -o packages/${{ matrix.rid }}
+
+      - name: The shipped archive carries the right engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip && mkdir -p /tmp/roundtrip
+          zip=$(find packages/${{ matrix.rid }} -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip
+          native/build/verify-bundled-engine.sh /tmp/roundtrip ${{ matrix.rid }}
+
+      # win-arm64 is skipped: this runner is x64 and the app in that archive is arm64. shared-verify-tls.sh
+      # takes the expected provider as its second argument; without it the script defaults to OpenSSL and
+      # would reject a correct Schannel engine.
+      - name: The engine inside the archive still starts
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin=$(find /tmp/roundtrip -type f -path '*/runtimes/win-x64/native/b3270.exe' | head -1)
+          native/build/shared-verify-tls.sh "$bin" "Windows Schannel"
+
+      # The check the engine-start step above cannot cover: the packaged *app* actually launching -- see
+      # CLAUDE.md's release paragraph and its Entitlements.plist passage for the macOS incident this class of
+      # gate exists to catch, a failure mode this script is generic over rather than specific to. win-arm64 is
+      # skipped for the same reason the engine-start step above skips it: this runner is x64 and the app in
+      # that archive is arm64.
+      - name: The packaged app launches
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        run: native/build/verify-app-launches.sh /tmp/roundtrip win-x64
+
+      - name: Rename for the release namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          find packages/${{ matrix.rid }} -type f | while read -r f; do
+            mv "$f" "packages/${{ matrix.rid }}/LizTerm-${{ matrix.rid }}-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/${{ matrix.rid }} -type d -empty -delete
+          ls -l packages/${{ matrix.rid }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-${{ matrix.rid }}
+          path: packages/${{ matrix.rid }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: [version, publish-macos, publish-linux, publish-windows]
+    # Only a *pushed tag* makes a release. github.ref_type alone is not enough: a workflow_dispatch rehearsal
+    # run against an existing tag ref would satisfy `ref_type == 'tag'` too and cut a real release, which is
+    # exactly what the rehearsal exists to avoid -- it must stop after the artifacts.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download every package
+        uses: actions/download-artifact@v7
+        with:
+          pattern: packages-*
+          path: packages
+          merge-multiple: true
+
+      - name: Write the release notes
+        run: |
+          cat > notes.md <<'NOTES'
+          LizTerm is a cross-platform TN3270 client for retro mainframe hobbyists. Download the archive for
+          your platform, unpack it, and run it -- there is nothing to install and no runtime to add.
+
+          ## Downloads
+
+          Pick the **ZIP** for your platform. The installers below it are the same application, for people who
+          prefer one.
+
+          ## First run
+
+          **macOS** -- this build is not signed or notarized yet. macOS will refuse it on first launch. Open
+          System Settings, go to Privacy & Security, scroll to the Security section, and click **Open Anyway**
+          next to LizTerm, then confirm. That button only appears for about an hour after a refused launch; if
+          it is not there, try launching LizTerm again and go straight back to Settings.
+
+          **Windows** -- SmartScreen will warn that the publisher is unknown. Choose **More info**, then
+          **Run anyway**.
+
+          Signing and notarization are the next thing on the list.
+
+          ## Which file do I want?
+
+          | Platform | Archive | Installer |
+          | --- | --- | --- |
+          | macOS, Apple Silicon | `LizTerm-osx-arm64-<v>.zip` | `LizTerm-osx-arm64-<v>.dmg` |
+          | macOS, Intel | `LizTerm-osx-x64-<v>.zip` | `LizTerm-osx-x64-<v>.dmg` |
+          | Linux x86-64 | `LizTerm-linux-x64-<v>.zip` | `LizTerm-linux-x64-<v>.deb`, `.rpm` |
+          | Linux ARM64 | `LizTerm-linux-arm64-<v>.zip` | `LizTerm-linux-arm64-<v>.deb`, `.rpm` |
+          | Windows x64 | `LizTerm-win-x64-<v>.zip` | `LizTerm-win-x64-<v>.exe` |
+          | Windows ARM64 | `LizTerm-win-arm64-<v>.zip` | `LizTerm-win-arm64-<v>.exe` |
+
+          Windows ARM64 runs the x64 emulator engine under Windows 11's emulation; the application itself is
+          native ARM64.
+          NOTES
+
+      # Archives are passed first and the ZIP is what a first-time visitor should reach for, but
+      # `gh release create` uploads assets concurrently, so passing archives first is not a guarantee the
+      # release lists them first -- only likely.
+      #
+      # --draft: `gh release create` is not idempotent. A mid-run asset upload failure would otherwise leave a
+      # *published* release behind, and re-running this job would then die with "release already exists" on
+      # the retry. A draft can be deleted and recreated freely. The spec's section 8 already requires a manual
+      # pass -- downloading each headline archive and connecting it to a real host -- before the first tag, so
+      # publishing by hand after that pass matches the existing intent rather than adding a new step. Revisit
+      # once a release has actually been cut successfully and the failure mode above has been seen (or not) in
+      # practice.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(packages/*.zip)
+          installers=(packages/*.dmg packages/*.deb packages/*.rpm packages/*.exe)
+          [ ${#archives[@]} -gt 0 ] || { echo "no archives to release" >&2; exit 1; }
+          [ ${#installers[@]} -gt 0 ] || { echo "no installers to release" >&2; exit 1; }
+          gh release create "${GITHUB_REF_NAME}" \
+            --draft \
+            --title "LizTerm ${{ needs.version.outputs.version }}" \
+            --notes-file notes.md \
+            "${archives[@]}" "${installers[@]}"

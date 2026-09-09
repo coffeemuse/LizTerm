@@ -1,0 +1,23 @@
+{
+  "GeneralSettings": {
+    "NetProjectPath": "src/LizTerm.App/LizTerm.App.csproj",
+    "ApplicationName": "LizTerm",
+    "Company": "CoffeeMuse",
+    "Version": "0.3.0",
+    "PackageName": "LizTerm"
+  },
+  "PublishSettings": {
+    "PublishSingleFile": true
+  },
+  "Win32Settings": {
+    "InstallerIcon": "src/LizTerm.App/Assets/Icons/lizterm.ico"
+  },
+  "MacOsSettings": {
+    "CreateBundle": true,
+    "BundleIdentifier": "dev.coffeemuse.lizterm",
+    "AppIcon": "src/LizTerm.App/Assets/Icons/lizterm.icns"
+  },
+  "LinuxSettings": {
+    "AppIcon": "src/LizTerm.App/Assets/Icons/lizterm.png"
+  }
+}

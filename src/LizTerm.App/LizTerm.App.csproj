@@ -8,6 +8,14 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <!-- lizterm.icns and lizterm.ico are inputs Parcel reads from disk (MacOsSettings.AppIcon,
+         Win32Settings.InstallerIcon in LizTerm.parcel), never loaded by the app itself. Embedding them cost
+         1.71 MB + 0.13 MB of a 3.41 MB assembly for no benefit; excluding them leaves them on disk for Parcel
+         while dropping them from the build. lizterm.png stays embedded and full-size: Parcel's
+         LinuxSettings.AppIcon reads it from disk too, and it is also the 1254x1254 master lizterm-256.png (what
+         every Window.Icon actually points at) and every other packaged size derives from, so do not resize it. -->
+    <AvaloniaResource Remove="Assets\Icons\lizterm.icns" />
+    <AvaloniaResource Remove="Assets\Icons\lizterm.ico" />
     <AvaloniaResource Include="../../THIRD-PARTY-NOTICES.txt" Link="Assets/THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
 
@@ -26,11 +34,27 @@
     <ProjectReference Include="../LizTerm.Backend.B3270/LizTerm.Backend.B3270.csproj" />
   </ItemGroup>
 
-  <!-- Bundle the locally built b3270 for the host runtime, when native/build/build-macos.sh (or, on Linux,
-       native/build/build-linux-docker.sh, or on Windows, native/build/build-windows-docker.sh) has run. -->
-  <ItemGroup Condition="Exists('../../native/out/$(NETCoreSdkRuntimeIdentifier)')">
-    <None Include="../../native/out/$(NETCoreSdkRuntimeIdentifier)/b3270*"
-          Link="runtimes/$(NETCoreSdkRuntimeIdentifier)/native/%(Filename)%(Extension)"
+  <!-- The engine's RID and the app's RID are two different values, so the copy needs both.
+       Target RID: where the copy lands, and what RuntimeInformation.RuntimeIdentifier will report at run
+       time, which is what B3270Locator.Candidates resolves. $(RuntimeIdentifier) when publishing for one,
+       the SDK's own when building without one (dotnet run, the test projects, development builds).
+       Engine RID: which native/out/ directory the copy reads. The same, except win-arm64: plan 3d settled
+       that x3270 4.5ga6 defines no aarch64 Windows host, so win-arm64 ships the win-x64 engine under
+       Windows 11's emulation. native/build/verify-bundled-engine.sh spells this mapping too, and its
+       negative cases are what prove the two agree. -->
+  <PropertyGroup>
+    <LizTermTargetRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</LizTermTargetRid>
+    <LizTermTargetRid Condition="'$(LizTermTargetRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</LizTermTargetRid>
+    <LizTermEngineRid Condition="'$(LizTermTargetRid)' == 'win-arm64'">win-x64</LizTermEngineRid>
+    <LizTermEngineRid Condition="'$(LizTermEngineRid)' == ''">$(LizTermTargetRid)</LizTermEngineRid>
+  </PropertyGroup>
+
+  <!-- Bundle the built b3270, when native/build/build-macos.sh (or, on Linux, build-linux-docker.sh, or on
+       Windows, build-windows-docker.sh) has produced one for this target. Absent, connecting throws
+       BackendUnavailableException and LIZTERM_B3270_PATH is the documented development override. -->
+  <ItemGroup Condition="Exists('../../native/out/$(LizTermEngineRid)')">
+    <None Include="../../native/out/$(LizTermEngineRid)/b3270*"
+          Link="runtimes/$(LizTermTargetRid)/native/%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
