@@ -134,8 +134,17 @@ no executable bit to lose.
 `tools/wirelog-to-fixture.sh <wire.log> <out.jsonl>` trims a `LIZTERM_WIRE_LOG` file from a real session to the same format;
 see `tests/LizTerm.Backend.B3270.Tests/Fixtures/README.md`.
 
-## Licenses of bundled components
+## Licenses
 
+- LizTerm's own code: BSD-3-Clause, Copyright 2026 by CoffeeMuse. See `LICENSE`.
 - x3270 / b3270: BSD-3-Clause, Copyright Paul Mattes and others.
 - IBM 3270 font by Ricardo Banffy: SIL Open Font License 1.1 (`src/LizTerm.App/Assets/Fonts/LICENSE-3270font.txt`).
-- LizTerm's own code: BSD-3-Clause, Copyright 2026 by CoffeeMuse. See `LICENSE`.
+- Avalonia (MIT) and CommunityToolkit.Mvvm (MIT).
+
+Every hand-written `.cs`, `.axaml` and `.sh` file carries a three-line SPDX header naming the project, the copyright
+and `BSD-3-Clause`; `RepositoryHeadersTests` fails the suite if one is missing, so a new file is caught before it is
+pushed. Build and configuration files are deliberately out of that scope.
+
+Both `LICENSE` and `THIRD-PARTY-NOTICES.txt` are embedded in the app and shown in full under Help > About, LizTerm's
+own terms first. That dialog is the only place they reach a user: no archive or installer this project produces
+carries a licence file beside the binary, so it is what satisfies BSD-3-Clause clause 2 for a binary distribution.

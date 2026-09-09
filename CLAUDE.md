@@ -736,6 +736,18 @@ the backend tests.
   `Assets/Icons/` holds the app icon in the three shapes packaging needs (`lizterm.icns`, `lizterm.ico`,
   `lizterm.png`, referenced from `LizTerm.parcel`); it needs no csproj change to add or replace one, since the
   csproj's `<AvaloniaResource Include="Assets\**" />` is already a glob over the whole `Assets/` tree.
+- `AppLicense` (`src/LizTerm.App/`) is the one spelling of LizTerm's own licence. `Notice` is the one-line credit
+  the splash and About both show, deliberately ASCII (`Copyright 2026 by CoffeeMuse - BSD-3-Clause`) because the
+  splash renders it in the 3270 font, whose coverage is not general -- the padlock above is the precedent. `All` is
+  `LICENSE` followed by `THIRD-PARTY-NOTICES.txt`, LizTerm's own terms first, and it is what About's box holds; the
+  heading is **Licenses**, not "Third-party notices", since it is no longer only theirs. Both files are
+  `AvaloniaResource` entries in `LizTerm.App.csproj` pointing up at the repository root. Embedding `LICENSE` is not
+  decoration: no archive or installer `release.yml` produces carries a licence file beside the binary, so About is
+  the only place LizTerm's terms reach a user, and it is what satisfies BSD-3-Clause clause 2 for a binary
+  distribution. `All` is read on first use rather than in a static initializer, so touching the `Notice` constant
+  during startup can never pull the asset loader in with it. The polish spec's §6.3 said "LizTerm's own license is
+  still undecided; About shows version and third-party notices only", and `AboutWindowTests` guarded that with a
+  `DoesNotContain`; that assertion was a placeholder for an undecided fact and has been deliberately flipped.
 - `App` shows `SplashWindow` first (1 s minimum, 2.5 s maximum, click or key dismisses; timed on a `Stopwatch`
   started at `Opened`, so a slow cold start or a clock step cannot skip it), checks the engine through
   `SessionFactory.CheckBackend`, and runs a `StartupPlan` through `StartupGate`: `StartupErrorWindow` when the
@@ -808,6 +820,21 @@ the backend tests.
   (Enter), the `===>` logon screen, the password prompt, then READY; the navigator waits 500 ms of screen quiet
   before keystrokes and before trusting READY, because IND$FILE typed into a half-repainted field fails with
   `INVALID COMMAND NAME SYNTAX`.
+- Every hand-written `.cs`, `.axaml` and `.sh` file under `src/`, `tests/`, `native/build/` and `tools/` carries a
+  three-line header: `This file is part of LizTerm.`, the copyright worded exactly as `LICENSE`'s own first line,
+  and `SPDX-License-Identifier: BSD-3-Clause`, in that file's comment syntax (after the shebang in a script, before
+  the root element in an `.axaml`). Build and configuration files -- csproj, the props files, `LizTerm.slnx`,
+  `LizTerm.parcel`, the workflow YAML -- are deliberately out of scope. `RepositoryHeadersTests`
+  (`tests/LizTerm.Core.Tests/Repository/`) walks the tree and fails the suite for a file that is missing one; it
+  lives in Core.Tests because that project builds on every run, so a new file is caught locally rather than in CI.
+  The rule it applies is the pure `LicenseHeader.IsPresent`, unit tested to *reject* an absent header, the wrong
+  licence, someone else's copyright, the lines out of order, and a header pushed past the first eight lines -- a
+  guard that cannot fail is not a guard. The walk also asserts each scanned root contributed at least one file,
+  because a root that matches nothing would let the whole test pass without reading anything. `LicenseHeader.Root`
+  finds the repository from its own `[CallerFilePath]`, a compile-time path, so it resolves from `bin/` and on a
+  runner alike; it throws rather than skipping when it cannot. Note that `LicenseHeaderTests` needs its real header
+  for a second reason: its fixtures put an SPDX line inside the eight-line window, and without one the file would
+  pass on its own test data.
 - Assertions on user-visible status strings (for example `"✕ Not connected"`) are exact; change
   `StatusFormatter` and its tests together.
 - New fakes: `FakeCertificatePrompt` (`Decision`, `OnAsk`, `Calls`), `FakeFolderOpener`, and
