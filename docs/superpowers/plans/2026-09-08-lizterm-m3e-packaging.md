@@ -1320,9 +1320,14 @@ host into a macOS bundle — whose failures appear to a user opening a download 
 - **R8:** Parcel stamped `1.0.0` while `Directory.Build.props` says `0.3.0` — it does not read the project
   version. The rename fixes the user-visible names; step 5 also sets the version inside `LizTerm.parcel` so
   the DEB, RPM and NSIS internal metadata agree.
-- **R9:** publish and pack must happen per RID in the same job, because `LizTerm.App.csproj` declares no
-  `<RuntimeIdentifiers>` and each single-RID restore replaces `project.assets.json`'s target. The matrix
-  already gives each job exactly one RID — do not collapse it into a loop.
+- **R9:** publish and pack must happen per RID, each publish followed immediately by its own pack, because
+  `LizTerm.App.csproj` declares no `<RuntimeIdentifiers>` and each single-RID restore replaces
+  `project.assets.json`'s target.
+- **R16 (from the first packaging run):** Parcel's Linux CLI ships an **x64-only** native binary, so it cannot
+  start at all on an arm64 Linux runner — `Exec format error`. `publish-linux` therefore becomes a **single
+  `ubuntu-24.04` job with no matrix**, publishing and packing `linux-x64`, then publishing and packing
+  `linux-arm64`, in that order. Do not restore the arm64 runner leg. `linux-arm64` loses its archive
+  start-check (an x64 runner cannot execute an arm64 binary) and keeps the machine-type gate.
 
 **Files:**
 - Modify: `.github/workflows/release.yml` (add steps to the three publish jobs)

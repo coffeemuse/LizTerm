@@ -242,6 +242,15 @@ and `windows-latest`. Cross-packaging would buy nothing and would add variables 
 signing, Unix modes written by a Linux host into a macOS bundle — whose failures appear to a user opening a
 download rather than to CI. The capability stays available for a future in which the runner set shrinks.
 
+**Amended after the first packaging run: `linux-arm64` is the one forced exception.** Parcel's Linux CLI
+ships an x64-only native binary (`tool-linux-x64/parcel`), so on an arm64 Linux runner it does not fail to
+package — it fails to *start*, with `Exec format error`. Nothing about the configuration can change that. So
+`linux-arm64` is packaged from the `ubuntu-24.04` runner, in the same job that handles `linux-x64` and
+sequentially after it, because each single-RID restore replaces `project.assets.json`'s target and a publish
+must be followed immediately by its own pack. Targeting the RID cross-architecture is well supported — the
+spike packed `linux-arm64` DEB, RPM and ZIP from an arm64 Mac — it is only running Parcel *on* arm64 Linux
+that is impossible.
+
 ### 5.3 Formats
 
 | Platform | Headline | Second row |
@@ -315,9 +324,15 @@ inside it. Together they prove three things: the archive round trip preserved th
 starts, and — on macOS — the `.app` and ZIP round trip did not invalidate the ad hoc signature the SDK and the
 linker applied.
 
-Two combinations cannot run this check where they are built: `osx-x64`, because the runner is arm64 and
-Rosetta's presence on `macos-15` images is unconfirmed, and `win-arm64`, because the runner is x64. Those get
-section 6.1's architecture assertion only. This is the same split plan 3d made between `engine-windows` and
+Three combinations cannot run this check where they are built: `osx-x64`, because the runner is arm64;
+`win-arm64`, because the runner is x64; and `linux-arm64`, because section 5.2's amendment moves its
+packaging to an x64 runner that cannot execute an arm64 binary. Those get section 6.1's architecture
+assertion only.
+
+For `linux-arm64` the loss is smaller than it looks: `engines.yml` already starts that engine on a real arm64
+runner, through `verify-linux-start.sh` and through the whole suite run with `LIZTERM_REQUIRE_ENGINE=1`. What
+goes unproven is not that the engine runs, but that the archive round trip preserved it — and the executable
+bit, which is the mode that would break it, is still checked by section 6.1. This is the same split plan 3d made between `engine-windows` and
 `test-windows` — each machine proves the half it can — and the spec states it rather than implying six proofs
 where there are four.
 
