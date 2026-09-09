@@ -83,7 +83,7 @@ public class NativeMenuTests
     public void File_transfer_follows_the_connection_state()
     {
         var (window, _, session, _) = Show();
-        var item = Item(window, "_File", "File _Transfer...");
+        var item = Item(window, "_File", "IND$FILE _Transfer...");
 
         Assert.False(item.IsEnabled);
         session.RaiseConnection(ConnectionState.Connected3270);

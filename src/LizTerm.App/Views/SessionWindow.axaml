@@ -24,7 +24,7 @@
             <NativeMenuItem Header="_Connect" Command="{Binding ConnectCommand}" />
             <NativeMenuItem Header="_Disconnect" Command="{Binding DisconnectCommand}" />
             <NativeMenuItemSeparator />
-            <NativeMenuItem Header="File _Transfer..." Click="OnFileTransferClickNative" IsEnabled="{Binding IsConnected}" />
+            <NativeMenuItem Header="IND$FILE _Transfer..." Click="OnFileTransferClickNative" IsEnabled="{Binding IsConnected}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="C_lose" Click="OnCloseClickNative" />
           </NativeMenu>
@@ -96,7 +96,7 @@
         <MenuItem Header="_Connect" Command="{Binding ConnectCommand}" />
         <MenuItem Header="_Disconnect" Command="{Binding DisconnectCommand}" />
         <Separator />
-        <MenuItem x:Name="FileTransferMenuItem" Header="File _Transfer..." Click="OnFileTransferClick" IsEnabled="{Binding IsConnected}" />
+        <MenuItem x:Name="FileTransferMenuItem" Header="IND$FILE _Transfer..." Click="OnFileTransferClick" IsEnabled="{Binding IsConnected}" />
         <Separator />
         <MenuItem Header="C_lose" Click="OnCloseClick" />
       </MenuItem>
