@@ -22,7 +22,8 @@ public partial class ProfileEditorWindow : Window
 
     private void OnSaveClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is ProfileEditorViewModel vm && vm.TryBuild() is { } profile) Close(profile);
+        if (DataContext is ProfileEditorViewModel vm && vm.TryBuild() is { } profile)
+            Close(new ProfileEdit(profile, vm.PinCleared));
     }
 
     private void OnCancelClick(object? sender, RoutedEventArgs e) => Close(null);

@@ -70,13 +70,18 @@ public partial class ProfileEditorViewModel : ObservableObject
     partial void OnPortTextChanged(string value) => RefreshPin();
 
     private void RefreshPin() =>
-        PinnedCertificate = Host.Trim() == _pinnedHost && PortText.Trim() == _pinnedPortText ? _pinnedFor : null;
+        PinnedCertificate = string.Equals(Host.Trim(), _pinnedHost, StringComparison.OrdinalIgnoreCase) && PortText.Trim() == _pinnedPortText ? _pinnedFor : null;
+
+    /// <summary>The user pressed Forget. The picker needs this because a null PinnedCertificate here can also
+    /// mean the editor's copy of the profile simply predates a pin written from a session window.</summary>
+    public bool PinCleared { get; private set; }
 
     [RelayCommand]
     private void ForgetPin()
     {
         _pinnedFor = null;
         PinnedCertificate = null;
+        PinCleared = true;
     }
 
     public SessionProfile? TryBuild()

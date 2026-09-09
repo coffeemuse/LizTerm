@@ -16,7 +16,8 @@ public static class PinMerge
     /// <param name="edited">What the editor produced. It never invents a pin, so a non-null one here is the copy
     /// it loaded — possibly older than the file's.</param>
     /// <param name="onDisk">The profile as it is on disk now, read under its *original* name (a rename deletes
-    /// the old file only after the save), or null when there is no file: a new profile, or a renamed one.</param>
+    /// the old file only after the save, so a rename still finds it), or null when there is no file at all: a
+    /// profile that has never been saved.</param>
     /// <param name="pinCleared">The user pressed Forget. Distinguishes a deliberate clear from an editor copy
     /// that simply predates the pin.</param>
     public static CertificatePin? Resolve(SessionProfile edited, SessionProfile? onDisk, bool pinCleared)

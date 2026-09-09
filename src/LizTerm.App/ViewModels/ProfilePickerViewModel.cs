@@ -14,7 +14,7 @@ public partial class ProfilePickerViewModel : ObservableObject
 {
     private readonly ProfileStore _store;
     private readonly Action<SessionProfile> _openSession;
-    private readonly Func<SessionProfile?, Task<SessionProfile?>> _editProfile;
+    private readonly Func<SessionProfile?, Task<ProfileEdit?>> _editProfile;
     private readonly Action _quit;
 
     [ObservableProperty]
@@ -24,7 +24,7 @@ public partial class ProfilePickerViewModel : ObservableObject
     public ObservableCollection<SessionProfile> Profiles { get; } = [];
 
     /// <param name="editProfile">Shows the editor for an existing profile (or null for a new one); returns null when cancelled.</param>
-    public ProfilePickerViewModel(ProfileStore store, Action<SessionProfile> openSession, Func<SessionProfile?, Task<SessionProfile?>> editProfile, Action quit)
+    public ProfilePickerViewModel(ProfileStore store, Action<SessionProfile> openSession, Func<SessionProfile?, Task<ProfileEdit?>> editProfile, Action quit)
     {
         _store = store;
         _openSession = openSession;
@@ -49,23 +49,32 @@ public partial class ProfilePickerViewModel : ObservableObject
     [RelayCommand]
     private async Task NewAsync()
     {
-        var created = await _editProfile(null);
-        if (created is null) return;
-        _store.Save(created);
+        var edit = await _editProfile(null);
+        if (edit is null) return;
+        _store.Save(edit.Profile);
         Reload();
-        SelectedProfile = Profiles.FirstOrDefault(p => p.Name == created.Name);
+        SelectedProfile = Profiles.FirstOrDefault(p => p.Name == edit.Profile.Name);
     }
 
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private async Task EditAsync()
     {
         var original = SelectedProfile!;
-        var edited = await _editProfile(original);
-        if (edited is null) return;
-        if (!edited.Name.Equals(original.Name, StringComparison.OrdinalIgnoreCase)) _store.Delete(original.Name);
-        _store.Save(edited);
+        // Read the file, not the copy this picker has been holding: a session window may have written a pin into
+        // it since Reload last ran, and the editor was handed the older copy.
         Reload();
-        SelectedProfile = Profiles.FirstOrDefault(p => p.Name == edited.Name);
+        var edit = await _editProfile(_store.Load(original.Name) ?? original);
+        if (edit is null) return;
+
+        // Under the ORIGINAL name. A rename deletes that file below, so looking the pin up under the new one
+        // finds nothing and loses it exactly as the bug did.
+        var onDisk = _store.Load(original.Name);
+        var merged = edit.Profile with { PinnedCertificate = PinMerge.Resolve(edit.Profile, onDisk, edit.PinCleared) };
+
+        if (!merged.Name.Equals(original.Name, StringComparison.OrdinalIgnoreCase)) _store.Delete(original.Name);
+        _store.Save(merged);
+        Reload();
+        SelectedProfile = Profiles.FirstOrDefault(p => p.Name == merged.Name);
     }
 
     [RelayCommand(CanExecute = nameof(HasSelection))]

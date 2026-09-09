@@ -71,7 +71,7 @@ public class ProfileViewModelsTests : IDisposable
         SessionProfile? opened = null;
         var quit = false;
         SessionProfile? toReturn = new SessionProfile { Name = "c", Host = "c.host" };
-        var vm = new ProfilePickerViewModel(_store, p => opened = p, _ => Task.FromResult<SessionProfile?>(toReturn), () => quit = true);
+        var vm = new ProfilePickerViewModel(_store, p => opened = p, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
 
         Assert.Equal(["a", "b"], vm.Profiles.Select(p => p.Name));
         Assert.False(vm.ConnectCommand.CanExecute(null));
@@ -101,9 +101,67 @@ public class ProfileViewModelsTests : IDisposable
     [Fact]
     public async Task Cancelled_editor_changes_nothing()
     {
-        var vm = new ProfilePickerViewModel(_store, _ => { }, _ => Task.FromResult<SessionProfile?>(null), () => { });
+        var vm = new ProfilePickerViewModel(_store, _ => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { });
         await vm.NewCommand.ExecuteAsync(null);
         Assert.Empty(vm.Profiles);
+    }
+
+    /// <summary>#50. A picker opened via File > New Session sits alongside running sessions and reloads only from
+    /// its own commands, so its copy can predate a pin a session window wrote. Editing that stale copy used to
+    /// write the whole record back and take the pin with it.</summary>
+    [Fact]
+    public async Task Editing_a_stale_profile_does_not_drop_a_pin_written_since()
+    {
+        _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270 });
+        var pin = new CertificatePin("AA:BB", "CN=mvs", "pem");
+
+        var picker = new ProfilePickerViewModel(_store, _ => { },
+            existing =>
+            {
+                // Stands in for the session window pinning a certificate while the editor is open.
+                _store.Update(existing!, p => p with { PinnedCertificate = pin });
+                return Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { Host = "mvs" }, PinCleared: false));
+            },
+            () => { });
+
+        picker.SelectedProfile = picker.Profiles.Single();
+        await picker.EditCommand.ExecuteAsync(null);
+
+        Assert.Equal(pin, _store.Load("MVS")!.PinnedCertificate);
+    }
+
+    [Fact]
+    public async Task Forget_still_clears_a_pin_the_file_has()
+    {
+        _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = new CertificatePin("AA:BB", "CN=mvs", "pem") });
+
+        var picker = new ProfilePickerViewModel(_store, _ => { },
+            existing => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { PinnedCertificate = null }, PinCleared: true)),
+            () => { });
+
+        picker.SelectedProfile = picker.Profiles.Single();
+        await picker.EditCommand.ExecuteAsync(null);
+
+        Assert.Null(_store.Load("MVS")!.PinnedCertificate);
+    }
+
+    /// <summary>A rename deletes the old file, so the merge has to read the pin under the ORIGINAL name. Reading
+    /// it under the new one finds nothing and loses the pin exactly as the bug does.</summary>
+    [Fact]
+    public async Task A_rename_carries_the_pin_across()
+    {
+        var pin = new CertificatePin("AA:BB", "CN=mvs", "pem");
+        _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = pin });
+
+        var picker = new ProfilePickerViewModel(_store, _ => { },
+            existing => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { Name = "MVS-CE" }, PinCleared: false)),
+            () => { });
+
+        picker.SelectedProfile = picker.Profiles.Single();
+        await picker.EditCommand.ExecuteAsync(null);
+
+        Assert.Null(_store.Load("MVS"));
+        Assert.Equal(pin, _store.Load("MVS-CE")!.PinnedCertificate);
     }
 
     [Fact]
@@ -149,6 +207,20 @@ public class ProfileViewModelsTests : IDisposable
         vm.Host = "x";
         vm.Host = "gw";
         Assert.Null(vm.PinnedCertificate);
+    }
+
+    /// <summary>Hostnames are case-insensitive, and PinMerge.Resolve compares them that way. RefreshPin has to
+    /// agree, or a case-only edit blanks the pin panel while Save silently restores the pin from disk.</summary>
+    [Fact]
+    public void A_case_only_host_edit_keeps_the_pin_visible()
+    {
+        var pin = new CertificatePin("8C:13:6A:01", "CN=gw", "pem");
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "gw", Host = "mvs.example", Port = 3270, UseTls = true, PinnedCertificate = pin });
+
+        vm.Host = "MVS.example";
+
+        Assert.True(vm.HasPinnedCertificate);
+        Assert.Same(pin, vm.PinnedCertificate);
     }
 
     [Fact]
