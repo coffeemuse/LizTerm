@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.Core.Security;
 
 /// <summary>Reads what a TLS host presents without trusting it (spec 5.1). The app passes

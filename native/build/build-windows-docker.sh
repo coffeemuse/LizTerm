@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Cross-builds b3270.exe for win-x64 inside the pinned container. This is the only script CI or a developer
 # calls; it needs Docker on the host and nothing else.
 #

@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.Backend.B3270.Process;
 
 /// <summary>A b3270 process with line-oriented stdin/stdout. Real implementation spawns a child; tests use a fake.</summary>

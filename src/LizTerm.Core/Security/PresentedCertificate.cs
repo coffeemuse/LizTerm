@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.Core.Security;
 
 /// <summary>What a host presented in a TLS handshake (spec 5.1). <paramref name="Pem"/> is every certificate in the

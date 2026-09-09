@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Replays an x3270 .trc host trace through b3270 and saves b3270's JSON output as a replay fixture.
 # usage: tools/record-fixture.sh <trace.trc> <out.jsonl> [model, default 3279-2-E] [playback step, default e]
 #

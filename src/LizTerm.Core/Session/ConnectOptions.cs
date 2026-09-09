@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.Core.Session;
 
 /// <summary>One-shot choices for a single connect attempt. A null field means "as the profile says". A non-null

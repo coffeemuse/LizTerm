@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.Tests.Shared;
 
 /// <summary>Polls a condition until it holds or the timeout passes. The one copy: every test project compiles this

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Builds b3270 for one macOS architecture against a statically built OpenSSL.
 # Requires: Xcode command line tools. Homebrew is NOT required -- OpenSSL comes from the tarball
 # fetch-openssl.sh pins, the same one build-linux.sh uses.

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Downloads and verifies the pinned x3270 source tarball, extracts it into $1.
 # The pin is this file; shared-fetch-tarball.sh is the machinery.
 set -euo pipefail

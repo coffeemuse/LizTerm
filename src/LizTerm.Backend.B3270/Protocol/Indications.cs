@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.Backend.B3270.Protocol;
 
 /// <summary>A message from b3270 to the UI. Names and fields follow include/b3270proto.h in x3270 4.5.</summary>

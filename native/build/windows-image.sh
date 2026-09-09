@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # The pinned Windows cross-build base, sourced (not executed) by build-windows-docker.sh.
 #
 # Unlike linux-image.sh, this image is a *build host* and nothing more. AlmaLinux 8 was chosen because its

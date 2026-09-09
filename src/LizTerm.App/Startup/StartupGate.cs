@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.App.Startup;
 
 /// <summary>Runs the startup plan exactly once, when both the plan is known and the splash has closed, in

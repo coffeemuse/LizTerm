@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Builds x3270's playback tool (replays .trc host traces over a socket) into native/build-tmp/playback/.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)

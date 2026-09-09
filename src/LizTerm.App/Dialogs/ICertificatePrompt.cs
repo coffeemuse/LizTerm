@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.App.Dialogs;
 
 /// <summary>Asks whether to connect to a host whose certificate did not verify. Injected like the clipboard so

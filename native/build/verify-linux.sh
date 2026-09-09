@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Fails if the binary links anything outside the glibc runtime, if it imports a glibc symbol newer than the
 # floor, or if it was built without TLS. Runs INSIDE the build container (it needs that container's ldd and
 # readelf).

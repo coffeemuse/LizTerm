@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Starts the built binary in a bare container from the pinned floor image: no toolchain, no build leftovers,
 # nothing the build put there. Starting on the floor OS with nothing else present is the portability claim
 # itself, and it is the one check verify-linux.sh cannot make — that script runs inside a container already
