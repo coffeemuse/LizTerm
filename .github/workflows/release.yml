@@ -436,7 +436,12 @@ jobs:
           path: packages
           merge-multiple: true
 
+      # The <v> tokens in the table below are substituted after the heredoc rather than interpolated inside
+      # it: the heredoc is quoted so that nothing in the prose is treated as a shell expansion, and a table of
+      # filenames that match no asset is its own small papercut for a first-time visitor.
       - name: Write the release notes
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           cat > notes.md <<'NOTES'
           LizTerm is a cross-platform TN3270 client for retro mainframe hobbyists. Download the archive for
@@ -449,10 +454,22 @@ jobs:
 
           ## First run
 
-          **macOS** -- this build is not signed or notarized yet. macOS will refuse it on first launch. Open
-          System Settings, go to Privacy & Security, scroll to the Security section, and click **Open Anyway**
-          next to LizTerm, then confirm. That button only appears for about an hour after a refused launch; if
-          it is not there, try launching LizTerm again and go straight back to Settings.
+          This build is not signed or notarized yet, so macOS and Windows both refuse it the first time.
+
+          **macOS** -- the file is blocked, and the dialog offers only **Move to Trash** or **Done**. Done is
+          the safe one. To allow it:
+
+          1. Open **System Settings**, go to **Privacy & Security**, and scroll to the **Security** section.
+          2. Beside *"... was blocked to protect your Mac"*, click **Open Anyway**.
+          3. Click **Open Anyway** again to confirm, then authenticate with Touch ID or an administrator
+             password.
+
+          That button only appears for a while after a blocked attempt; if it is not there, open the file
+          again and go straight back to Settings.
+
+          macOS blocks **the file you just opened**, by name -- which is why the ZIP is the easier download.
+          Unpack the ZIP and you do the above once, for LizTerm itself. With the DMG you do it twice: once to
+          mount the disk image, and again for LizTerm after you drag it to Applications.
 
           **Windows** -- SmartScreen will warn that the publisher is unknown. Choose **More info**, then
           **Run anyway**.
@@ -473,6 +490,7 @@ jobs:
           Windows ARM64 runs the x64 emulator engine under Windows 11's emulation; the application itself is
           native ARM64.
           NOTES
+          sed -i "s/<v>/$VERSION/g" notes.md
 
       # Archives are passed first and the ZIP is what a first-time visitor should reach for, but
       # `gh release create` uploads assets concurrently, so passing archives first is not a guarantee the
