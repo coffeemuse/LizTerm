@@ -52,6 +52,8 @@
             <NativeMenuItem Header="Reset" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Reset}" />
             <NativeMenuItem Header="Attn" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Attn}" />
             <NativeMenuItem Header="SysReq" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.SysReq}" />
+            <NativeMenuItem Header="Dup" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Dup}" />
+            <NativeMenuItem Header="Field Mark" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.FieldMark}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="PA1" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA1}" />
             <NativeMenuItem Header="PA2" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA2}" />
@@ -111,6 +113,8 @@
         <MenuItem Header="Reset" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Reset}" />
         <MenuItem Header="Attn" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Attn}" />
         <MenuItem Header="SysReq" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.SysReq}" />
+        <MenuItem Header="Dup" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Dup}" />
+        <MenuItem Header="Field Mark" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.FieldMark}" />
         <Separator />
         <MenuItem Header="PA1" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA1}" />
         <MenuItem Header="PA2" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA2}" />

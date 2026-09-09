@@ -465,4 +465,17 @@ public class NativeMenuTests
 
         Assert.Equal(["paste:claude"], session.Calls);
     }
+
+    /// <summary>#16: both are mapped in ActionMap and were reachable only from C#. The menu is the whole fix —
+    /// keymap chords are a separate decision, since any chord has to clear the copy/paste/select-all gestures
+    /// TerminalScreen checks before the keymap.</summary>
+    [AvaloniaFact]
+    public void Keys_menu_offers_Dup_and_FieldMark()
+    {
+        var (window, _, _, _) = Show();
+        foreach (var header in new[] { "Dup", "Field Mark" })
+        {
+            Assert.NotNull(Item(window, "_Keys", header).Command);
+        }
+    }
 }
