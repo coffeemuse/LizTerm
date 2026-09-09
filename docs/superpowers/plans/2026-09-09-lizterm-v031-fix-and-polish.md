@@ -1673,8 +1673,7 @@ Expected: PASS, including `Editor_round_trips_an_existing_profile`, whose sample
 
 ```bash
 git add src/LizTerm.App/ViewModels/ProfileEditorViewModel.cs src/LizTerm.App/Views/ProfileEditorWindow.axaml \
-        src/LizTerm.Core/Session/TerminalModel.cs \
-        tests/LizTerm.App.Tests/ViewModels/ProfileViewModelsTests.cs tests/LizTerm.App.Tests/Views/ProfileEditorWindowTests.cs
+        tests/LizTerm.App.Tests/ViewModels/ProfileViewModelsTests.cs
 git commit -m "Make Model and Code page annotated drop-downs
 
 Closes #44 and #45. Code page was a free-text box validated only as
