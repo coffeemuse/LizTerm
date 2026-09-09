@@ -115,16 +115,27 @@ at save time and carried forward. Two subtleties make this more than a call to `
 
 - **Forget must survive the merge.** The editor's Forget button is the only route back to default trust, and it
   is expressed today by nulling the editor's copy of the pin — which is indistinguishable from "the editor
-  never had one". It becomes an explicit flag on the editor view model (`PinCleared`), and the merge carries
-  the disk pin forward unless that flag is set. Nulling a field cannot mean two things.
+  never had one", the very state the stale copy produces. It becomes an explicit flag on the editor view model
+  (`PinCleared`), and the merge carries the disk pin forward unless that flag is set. Nulling a field cannot
+  mean two things.
+- **The editor already drops a pin on purpose, and the merge must not undo that.** `_pinnedFor` plus
+  `RefreshPin()` null the pin when Host or Port is edited away from the values it was taken from, and restore it
+  when they come back — the record's own comment says a pin belongs to the host and port it was taken from. So
+  "carry the disk pin forward" is wrong on its own: it would resurrect a pin the user deliberately invalidated
+  by repointing the profile. The rule is to carry it forward **only when the edited host and port still match
+  the ones on disk**.
+
+Three conditions interacting (stale copy, Forget, host/port moved) is more than belongs inline in a command
+handler, so it goes in one pure function — `PinMerge.Resolve` in `LizTerm.Core.Profiles` — with its own table of
+unit tests. The picker calls it and stays a three-line command.
 - **Renames break a naive `Update`.** `EditAsync` handles a rename by deleting the old file
   (`ProfilePickerViewModel.cs:65`) before saving. `Update(edited, …)` loads by `edited.Name`, so after a rename
   it looks up a file that does not exist, falls back to `edited`, and loses the pin exactly as today. The merge
   source must be the **original** name. Shape:
 
   ```csharp
-  var onDisk = _store.Load(original.Name) ?? original;
-  var merged = edited with { PinnedCertificate = pinCleared ? null : onDisk.PinnedCertificate };
+  var onDisk = _store.Load(original.Name);
+  var merged = edited with { PinnedCertificate = PinMerge.Resolve(edited, onDisk, pinCleared) };
   if (renamed) _store.Delete(original.Name);
   _store.Save(merged);
   ```
@@ -267,10 +278,16 @@ Code pages render `name — label`: the engine name leads, because that is what 
 appears in a wire log, and the label is curated rather than raw aliases — `cp1047` has no alias at all and
 would render blank, and several others are terse (`uk`, `us-intl`, `oldibm`).
 
-**`bracket` needs no special-casing.** The issue worries it "sorts to the bottom under a name no newcomer can
-interpret", which matters because it is what this project's own TK5 sample profile uses. But that is the
-*engine's* ordering. Sorted alphabetically by name, `b` precedes every `cp*` — `bracket` lands **first**. Plain
-alphabetical order solves it for free.
+**`bracket` is moved to the front, and alphabetical order is not the way to do it.** The issue worries it
+"sorts to the bottom under a name no newcomer can interpret", which matters because it is what this project's
+own TK5 sample profile uses. Sorting alphabetically does put `b` ahead of every `cp*` — but it also sorts
+`cp1026` ahead of `cp273`, because these are strings and `1` precedes `2`, scattering the numeric families
+across the list. Measured against the live engine on 2026-09-09: the 41 entries arrive in ascending numeric
+order with `bracket` last.
+
+So the table keeps **the engine's own order and moves `bracket` to the front** — one explicit rule, a natural
+reading order for the rest, and the concern answered. The falsifying test asserts set equality rather than
+order, so the ordering is ours to choose.
 
 `src/LizTerm.App/Views/TransferLabels.cs` is the in-repo precedent for the converter-based alternative if the
 record shape proves awkward for code pages, which have no second field to carry.
