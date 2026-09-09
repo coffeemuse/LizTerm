@@ -7,8 +7,15 @@
   "PublishSettings": {
     "PublishSingleFile": true
   },
+  "Win32Settings": {
+    "InstallerIcon": "src/LizTerm.App/Assets/Icons/lizterm.ico"
+  },
   "MacOsSettings": {
     "CreateBundle": true,
-    "BundleIdentifier": "dev.coffeemuse.lizterm"
+    "BundleIdentifier": "dev.coffeemuse.lizterm",
+    "AppIcon": "src/LizTerm.App/Assets/Icons/lizterm.icns"
+  },
+  "LinuxSettings": {
+    "AppIcon": "src/LizTerm.App/Assets/Icons/lizterm.png"
   }
 }
