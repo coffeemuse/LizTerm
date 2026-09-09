@@ -823,7 +823,23 @@ Replace the two cache steps with:
           key: b3270-${{ matrix.rid }}-${{ hashFiles('native/build/*macos*.sh', 'native/build/fetch-source.sh', 'native/build/fetch-openssl.sh', 'native/build/shared-*.sh') }}
 ```
 
-Delete the `Ensure OpenSSL 3 is installed` step entirely — Task 5 removed the Homebrew dependency.
+Delete the `Ensure OpenSSL 3 is installed` step entirely — Task 5 removed the Homebrew dependency. Replace it
+with the Rosetta step below.
+
+**Ruling R11 — this step is required, not defensive.** `build-macos.sh` ends by running `verify-macos.sh`,
+whose TLS arm **executes the binary** to read its banner. On the `osx-x64` leg that is an x86_64 binary on an
+arm64 runner, so without Rosetta 2 the gate cannot run and the build fails. It worked locally only because the
+developer's Mac has Rosetta installed. Whether GitHub's `macos-15` arm64 image ships it is not documented
+either way, and `softwareupdate --install-rosetta` is idempotent and cheap, so install it rather than depend
+on the answer.
+
+```yaml
+      # verify-macos.sh's TLS arm runs the binary to read its banner, and on this leg that binary is x86_64
+      # on an arm64 runner. Idempotent: a no-op if the image already ships Rosetta.
+      - name: Rosetta, so the x86_64 gate can run its binary
+        if: matrix.rid == 'osx-x64'
+        run: softwareupdate --install-rosetta --agree-to-license
+```
 
 Change the build step to pass the RID:
 
@@ -1725,7 +1741,22 @@ publishing binaries to GitHub Releases without one is the wrong order. Write the
 - Replace the last line, "LizTerm's own license: to be decided", with the chosen licence and a pointer to
   `LICENSE`.
 
-- [ ] **Step 3: Update CLAUDE.md**
+- [ ] **Step 3: Correct three stale or wrong comments**
+
+Task 5's review found these; none is in a file Task 5 was allowed to touch.
+
+1. `native/build/verify-macos.sh` and `native/build/shared-verify-tls.sh` both still describe the static
+   OpenSSL archives as coming from **Homebrew's `openssl@3`**. Since Task 5 they come from the pinned tarball
+   `fetch-openssl.sh` names. Update both comments.
+2. `native/build/build-macos.sh`'s `--host` paragraph claims a cross build "does not depend on the host being
+   able to RUN an x86_64 test binary — autoconf uses cross defaults instead of Rosetta." That is wrong about
+   the mechanism: only `--host` is passed, not `--build`, so `cross_compiling` starts as `maybe` and
+   configure's sanity check **does** try to execute a compiled x86_64 test binary, falling back to cross
+   defaults only when that execution fails. The conclusion (a missing Rosetta does not hard-fail configure) is
+   right; the reasoning is not. Rewrite it to say what actually happens, and note that `verify-macos.sh`'s TLS
+   arm is the part that genuinely requires Rosetta — which is why `engines.yml` installs it (ruling R11).
+
+- [ ] **Step 4: Update CLAUDE.md**
 
 - The b3270 binary section: `build-macos.sh` takes a RID, builds OpenSSL from the pinned tarball with the
   `.pin` stamp rule, and needs no Homebrew; `verify-macos.sh` has an architecture arm.
@@ -1738,7 +1769,7 @@ publishing binaries to GitHub Releases without one is the wrong order. Write the
 - Note that `Assets/Icons/` exists and that `Assets/**` is already an `AvaloniaResource`, so adding an asset
   needs no csproj change.
 
-- [ ] **Step 4: Verify nothing drifted**
+- [ ] **Step 5: Verify nothing drifted**
 
 ```bash
 dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "
@@ -1749,7 +1780,7 @@ grep -n "openssl@3" README.md CLAUDE.md || echo "OK: Homebrew is gone from the d
 
 Expected: `0` warnings, a passing suite, and both `OK:` lines.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add LICENSE README.md CLAUDE.md
