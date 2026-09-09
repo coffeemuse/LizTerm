@@ -1710,7 +1710,28 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 git push
 ```
 
-- [ ] **Step 4: Remove the temporary branch trigger (R14)**
+- [ ] **Step 4: Close the version drift between the two files that carry it**
+
+Task 9's re-review found that `LizTerm.parcel` now hardcodes `"Version": "0.3.0"` beside
+`Directory.Build.props`'s `<Version>0.3.0</Version>`. Parcel does not read the project's version, so the
+duplication is forced — but nothing checks that the two agree, and they name the same thing. A bump to one
+alone would ship a release whose assets are all named for the other, with every job green.
+
+The `version` job already refuses a tag that disagrees with `Directory.Build.props`. Extend it to refuse a
+`LizTerm.parcel` that disagrees too, so all three must line up:
+
+```yaml
+          parcel=$(python3 -c "import json;print(json.load(open('LizTerm.parcel'))['GeneralSettings']['Version'])")
+          if [ "$parcel" != "$tree" ]; then
+            echo "LizTerm.parcel says $parcel; Directory.Build.props says $tree" >&2
+            exit 1
+          fi
+```
+
+Place it after the `tree=` extraction and before the tag comparison, so it runs on rehearsal pushes too —
+where there is no tag, this is the only version check that fires at all.
+
+- [ ] **Step 5: Remove the temporary branch trigger (R14)**
 
 Delete the two lines Task 8 added under `push:` — the comment block and
 `branches: [claude/avalonia-parcel-packaging-7a1a15]` — leaving `tags: ['v*']` and `workflow_dispatch:`.
@@ -1723,7 +1744,7 @@ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/release.yml')); 
 
 Expected: the `OK:` line and `parses`. Commit this with the release job.
 
-- [ ] **Step 5: Cut a pre-release and check it end to end**
+- [ ] **Step 6: Cut a pre-release and check it end to end**
 
 ```bash
 gh workflow run release.yml --ref "$(git branch --show-current)"
