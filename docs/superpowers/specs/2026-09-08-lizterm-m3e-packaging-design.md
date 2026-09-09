@@ -352,3 +352,181 @@ like b3270 is permitted there only inside the bundle, signed with the same team 
 sandbox — real work rather than one more output format. Package managers (Homebrew cask, winget, Flatpak,
 AUR). Auto-update. A native `win-arm64` engine, which still needs upstream host-detection patches. The
 scheduled integration lane and its Hercules container, which is plan 3f.
+
+## 11. Spike results
+
+Run on Robert's Mac (arm64, macOS 25.6, .NET SDK 10.0.400) on 2026-09-08, from a clean worktree at commit
+`ae6cc15`. `AvaloniaUI.Parcel` was already installed as a global tool; `parcel --version` reported
+`1.1.1+9542be03f7658c15639cd5e96c7ad473a6185869`.
+
+### 11.1 The licence key activates the CLI headlessly
+
+```
+env -i HOME="$HOME" PATH="$PATH" AVALONIA_TOOLS_LICENSE_KEY="$AVALONIA_TOOLS_LICENSE_KEY" parcel pack --help
+```
+
+printed the `pack` help text (usage, `-o`/`-r`/`-p`/`--no-build`/`--license-key`/`-v`) with no licensing
+exception, in an environment stripped to `HOME`, `PATH` and the key alone — the condition CI is in. The
+`AvaloniaPro#81` failure does not reproduce here. Section 5.5's contingency is not needed.
+
+### 11.2 The `.parcel` schema
+
+The GUI could not be driven (no display, no way to click Save As), so the brief's CLI-only path was taken.
+Hand-authoring against error messages alone stalled: an empty `{}` and a guessed `{"Project": "..."}` /
+`{"project": "..."}` both produced the same generic `System.IO.FileNotFoundException: Could not find the
+project file`, with no field name in the message even at `-v diagnostic`. `ilspycmd` (already installed)
+decompiles only `AvaloniaUI.Parcel.Runner.dll`, a thin launcher; the actual CLI logic ships as a ~132 MB
+NativeAOT `AvaloniaUI.Parcel.app` extracted at first run, which is machine code, not IL, so it does not
+decompile. `strings` against it turned up bare property names (`BundleIdentifier`, `Company`,
+`SigningIdentity`, ...) but no structure connecting them.
+
+The schema came from Avalonia's own published docs instead, which are server-rendered (a raw `curl` fetch
+returns the full content, not a client-side app shell): `docs.avaloniaui.net/tools/parcel/configuration-reference`
+documents five top-level sections — `GeneralSettings`, `PublishSettings`, `Win32Settings`, `MacOsSettings`,
+`LinuxSettings` — with every property's exact JSON path, type, and default (for example
+`GeneralSettings.NetProjectPath`, `MacOsSettings.BundleIdentifier`, `MacOsSettings.CreateBundle`). That page
+supplied the field names below; every one of them was then confirmed by running `parcel pack` against them,
+not taken on the docs' word alone. This is a legitimate way to answer "what does a genuinely GUI-authored file
+look like": Parcel resolves and writes back relative paths from the `.parcel` file's own location the same way
+regardless of which tool wrote the JSON, and the docs describe the one schema both the GUI and the CLI read.
+
+The committed `LizTerm.parcel`:
+
+```json
+{
+  "GeneralSettings": {
+    "NetProjectPath": "src/LizTerm.App/LizTerm.App.csproj",
+    "ApplicationName": "LizTerm",
+    "Company": "CoffeeMuse"
+  },
+  "PublishSettings": {
+    "PublishSingleFile": true
+  },
+  "MacOsSettings": {
+    "CreateBundle": true,
+    "BundleIdentifier": "dev.coffeemuse.lizterm"
+  }
+}
+```
+
+`PublishSingleFile` and `CreateBundle` are not in the brief's four bullet points, but both are documented as
+"enabled for new Parcel projects" — the GUI's own default when it creates a config — and both are load-bearing
+rather than cosmetic: packaging failed without them (`DMG packaging requires "Create Bundle" to be enabled`,
+then `Application was published without PublishSingleFile=true, signing might fail` followed by a hard failure
+signing the unbundled `.dll`/`.json` files next to the executable). No signing identity, no notarization
+credentials, and no icon path are set anywhere in the file, per the task's constraints. This config was
+verified twice: once driving every RID×format combination in 11.4 with `--no-build`, and once end-to-end with
+`parcel pack ./LizTerm.parcel -r osx-arm64 -p zip -p dmg` and no prior publish at all, into a scratch directory,
+which built, signed ad hoc, and packaged from nothing.
+
+### 11.3 What `--no-build` actually reads
+
+The brief's step 4 assumed `--no-build` needed pointing at a publish directory; `parcel pack --help` has no
+such option, which is what made this a question rather than a formality. The answer, established by observing
+Parcel's own `-v detailed` output and then forcing two failures:
+
+**Parcel always runs its own `dotnet publish`, into its own directory, whether or not `--no-build` is given.**
+Every invocation logs a generated MSBuild fragment and a command line of the shape
+
+```
+dotnet publish src/LizTerm.App/LizTerm.App.csproj --nologo --tl:off --runtime <rid> \
+  -p:PublishProfileFullPath=<output>/temp/<rid>/profiles/<rid>.pubxml --disable-build-servers --framework net10.0 [--no-build]
+```
+
+targeting `<PublishDir>` = `<output>/temp/<rid>/<random-token>/` — a fresh random subdirectory under
+Parcel's *own* `-o`, never the tree from any earlier `dotnet publish`. `--no-build` on `parcel pack` is
+forwarded verbatim as `--no-build` on that inner `dotnet publish` call; it does not change *where* Parcel
+publishes, only whether that inner command recompiles first.
+
+What it does change is what has to already exist, because `dotnet publish --no-build` is `dotnet`'s own
+contract, not Parcel's: it requires the ordinary MSBuild **build** output for that project, configuration,
+target framework and RID to already be sitting at
+`<project-dir>/bin/<Configuration>/<TargetFramework>/<RuntimeIdentifier>/` — here,
+`src/LizTerm.App/bin/Release/net10.0/<rid>/`. Proven by moving that directory aside and re-running
+`parcel pack --no-build -r osx-arm64 ...`: it failed with the *inner* `dotnet publish` reporting
+
+```
+error MSB3030: Could not copy the file ".../bin/Release/net10.0/osx-arm64/LizTerm.App.runtimeconfig.json" because it was not found.
+error MSB3030: Could not copy the file ".../bin/Release/net10.0/osx-arm64/LizTerm.App.deps.json" because it was not found.
+```
+
+Restoring that directory with a plain `dotnet publish src/LizTerm.App -c Release -r osx-arm64 --self-contained
+-o <anywhere>` — exactly the brief's step 4 command, `-o` and all — made `--no-build` succeed again. **The
+`-o` value in that publish is irrelevant to Parcel.** A `dotnet publish -r <rid>` run always leaves the
+ordinary build output behind in `bin/<Configuration>/<TargetFramework>/<RID>/` as a side effect of the Build
+step that runs before Publish, regardless of what `-o` sends the *publish* output to; that side effect,
+not the `-o` directory, is the only thing `--no-build` depends on. Later tasks do not need to make their
+`dotnet publish` output land at any particular path — they only need to have run `dotnet publish -c Release
+-r <rid> --self-contained` for that RID at all, with the default `Configuration`/`TargetFramework` Parcel's
+generated profile also uses (`Release`, `net10.0`).
+
+One consequence worth carrying into Task 9's script: **`LizTerm.App.csproj` here has no `<RuntimeIdentifiers>`
+list**, so each single-RID `dotnet publish -r <rid>` does its own scoped restore, and that restore *replaces*
+`src/LizTerm.App/obj/project.assets.json`'s target rather than adding to it. Publishing all six RIDs in a loop
+and then packing all six afterward reproduces this failure directly: packing the first RID once the loop has
+moved on fails with `error NETSDK1047: Assets file '.../obj/project.assets.json' doesn't have a target for
+'net10.0/osx-arm64'` — the restore for the *last* RID published is the only one left standing. The working
+order, and the one this spike used from 11.4 onward, is publish-then-immediately-pack per RID, not all
+publishes followed by all packs.
+
+### 11.4 RID × format matrix
+
+Each RID was published fresh (`dotnet publish src/LizTerm.App -c Release -r <rid> --self-contained -o
+<scratch>/<rid>`) immediately before packing it (`parcel pack ./LizTerm.parcel --no-build -r <rid> -p <formats>
+-o <scratch>/out -v detailed`), per 11.3. Every combination the brief asked for succeeded — including both
+combinations the public documentation leaves unconfirmed:
+
+| RID | Formats requested | Result | Artifact files (under `<output>/<Platform>/`) |
+| --- | --- | --- | --- |
+| `osx-arm64` | zip, dmg | **both succeed** | `LizTerm.App.arm64.1.0.0.zip`, `LizTerm.App.arm64.1.0.0.dmg` |
+| `osx-x64` | zip, dmg | **both succeed** | `LizTerm.App.x64.1.0.0.zip`, `LizTerm.App.x64.1.0.0.dmg` |
+| `linux-x64` | zip, deb, rpm | **all three succeed** | `LizTerm.App.x64.1.0.0.zip`, `.deb`, `.rpm` |
+| `linux-arm64` | zip, deb, rpm | **all three succeed** (undocumented combination) | `LizTerm.App.arm64.1.0.0.zip`, `.deb`, `.rpm` |
+| `win-x64` | zip, nsis | **both succeed** | `LizTerm.App.x64.1.0.0.zip`, `LizTerm.App.x64.1.0.0.exe` |
+| `win-arm64` | zip, nsis | **both succeed** (undocumented combination) | `LizTerm.App.arm64.1.0.0.zip`, `LizTerm.App.arm64.1.0.0.exe` |
+
+No combination failed, so no platform is limited to its headline ZIP by this spike. Every listed file was
+confirmed on disk: nonzero size (43–54 MB, self-contained single-file publishes), and `file(1)` reports the
+expected container in every case — `Zip archive data` for every `.zip`, `Debian binary package (format 2.0)`
+for `.deb`, `RPM v4.0 bin` for `.rpm`, `PE32 executable ... Nullsoft Installer self-extracting archive` for
+`.exe`, and `.dmg` mounts as a UDIF disk image containing the signed `.app`. NSIS produces a plain `.exe`, not
+`-setup.exe` or `.msi`. `MacOsSettings.SignDmg` defaulting to true ad hoc-signs the DMG itself, separately
+from the `.app` inside it (`[WARN] Dmg Packaging: Using ad-hoc signing`, once per DMG, beside the app-signing
+warning). Windows and Linux packaging produced no warnings at all.
+
+**Naming collision this table exposes for Task 10:** Parcel's artifact filename is
+`{ApplicationName}.{arch}.{Version}.{ext}` — architecture and version, with no OS or platform token. Because
+the ZIP is the headline format on all three platforms, `LizTerm.App.x64.1.0.0.zip` and
+`LizTerm.App.arm64.1.0.0.zip` are each produced **three times**, once per platform, identical in name and
+distinct in content. They land in separate `macOS/`, `Linux/`, `Windows/` subdirectories under Parcel's own
+`-o`, so nothing collides on disk here — but a GitHub Release's assets share one flat namespace, so uploading
+all three platforms' ZIPs unmodified to the same release will silently overwrite two of the three, or be
+rejected outright. Task 9 or Task 10 must rename these on upload (for example
+`LizTerm-macos-arm64-1.0.0.zip`); the installer formats (`.dmg`, `.deb`, `.rpm`, `.exe`) do not collide, since
+each is produced by exactly one platform.
+
+### 11.5 Other observations
+
+- **This worktree had a real `native/out/osx-arm64/b3270`** at spike time (built minutes earlier, for Tasks
+  2–4's fixtures, per this session's pre-flight ruling R2 — not built by this task and not something this task
+  altered). That let one concrete finding confirm section 2.2 directly rather than by inspection alone:
+  publishing for *every* other RID (`linux-x64`, `linux-arm64`, `win-x64`, `win-arm64`) still copied
+  `runtimes/osx-arm64/native/b3270` — the *host's* engine, wrong architecture and wrong OS — into each of
+  those publish trees, because `LizTerm.App.csproj` keys the copy on `$(NETCoreSdkRuntimeIdentifier)` (the
+  build host) rather than the target `-r` RID, exactly as section 2.2 describes. This is Task 4's fix to make,
+  not this task's; it is recorded here because the spike happened to produce a live, disk-verified example of
+  it. Parcel packaged whatever `dotnet publish` gave it in every case; none of the RID×format failures or
+  successes above depend on which engine (if any) was present.
+- Where no `native/out/<rid>` existed at all (every RID besides `osx-arm64`, absent the pre-flight fixture
+  above), the `Condition="Exists(...)"` in the csproj is false and the `runtimes/` folder is simply omitted
+  from that publish tree — confirmed by inspecting the Linux and Windows publish outputs directly, not just
+  Parcel's packaged archives. Packaging still succeeds; a v1 build with a genuinely empty `native/out` (this
+  task's assumption before the pre-flight fixture appeared) would produce archives with no bundled engine,
+  which is expected and not a Parcel defect.
+- `GeneralSettings.Version` was left unset, so every artifact carries the schema's documented default,
+  `1.0.0`. Task 8/9 will need to set `PARCEL_GENERAL_VERSION` (or the equivalent `-p:` / env override) from the
+  release tag; nothing in this spike exercises that path.
+- `MacOsSettings.TeamId`, all `SigningCredentialsType`/`NotaryCredentialsType` settings, and every `Win32Settings`
+  signing field are absent from the committed config, which is what produces ad hoc signing and the two
+  "Notarization credentials are not set — skipping" warnings seen on every macOS pack. That is the intended v1
+  state, not an oversight.

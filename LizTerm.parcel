@@ -1,0 +1,14 @@
+{
+  "GeneralSettings": {
+    "NetProjectPath": "src/LizTerm.App/LizTerm.App.csproj",
+    "ApplicationName": "LizTerm",
+    "Company": "CoffeeMuse"
+  },
+  "PublishSettings": {
+    "PublishSingleFile": true
+  },
+  "MacOsSettings": {
+    "CreateBundle": true,
+    "BundleIdentifier": "dev.coffeemuse.lizterm"
+  }
+}
