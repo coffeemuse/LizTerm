@@ -1266,15 +1266,18 @@ Expected: `parses`.
 
 ```bash
 git add .github/workflows/release.yml
-git commit -m "Add release.yml: six gated publishes
+git commit -m "Add release.yml: six publishes gated on engines and version
 
 Calls engines.yml for the same five engines platforms.yml builds, restores the
 executable bit actions/download-artifact drops, publishes all six runtime
-identifiers, and gates every publish tree on verify-bundled-engine.sh. The
-Windows job downloads b3270-win-x64 alone and feeds both Windows RIDs from it.
+identifiers. Per ruling R6 no verify-bundled-engine.sh gate runs here: parcel
+pack always runs its own dotnet publish into a temporary directory, so this
+publish/<rid> tree is never what ships, and the gate belongs in Task 9 against
+the extracted package. The Windows job downloads b3270-win-x64 alone and feeds
+both Windows RIDs from it.
 
 Packaging and the release itself are the next two tasks; this one is
-exercisable on its own through workflow_dispatch.
+exercisable on its own: the temporary branch trigger starts a run on each push.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 git push
