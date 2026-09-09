@@ -149,7 +149,8 @@ POSIX and is on every runner, Git Bash included.
 - Produces: `native/build/verify-bundled-engine.sh <publish-dir> <rid>` — exits 0 when
   `<publish-dir>/runtimes/<rid>/native/b3270[.exe]` exists, is executable (Unix only), and has the machine
   type that RID's engine must have. Exits 1 with one of these exact messages on the first failure:
-  `ERROR: no bundled engine at <path>`, `ERROR: <path> is not executable`,
+  `ERROR: no bundled engine at <root>/**/runtimes/<rid>/native/<name>`,
+  `ERROR: <n> bundled engines under <root>, expected 1`, `ERROR: <path> is not executable`,
   `ERROR: <path> is <actual> but <rid> needs <expected>`.
 
 - [ ] **Step 1: Write the script**
@@ -188,8 +189,18 @@ case "$ENGINE_RID" in
   *) echo "ERROR: unknown rid $RID" >&2; exit 1 ;;
 esac
 
-BIN="$DIR/runtimes/$RID/native/$NAME"
-[ -f "$BIN" ] || { echo "ERROR: no bundled engine at $BIN" >&2; exit 1; }
+# Searched at any depth, not just directly under $DIR. This gate runs against two shapes: a plain publish
+# tree, where the path is $DIR/runtimes/<rid>/native/, and an EXTRACTED PACKAGE, where the macOS layout nests
+# it under LizTerm.app/Contents/MacOS/. Exactly one match is required -- zero means nothing shipped, and
+# several means the package holds engines it should not.
+FOUND=$(find "$DIR" -type f -path "*/runtimes/$RID/native/$NAME" 2>/dev/null | sort)
+COUNT=$(printf '%s' "$FOUND" | grep -c . || true)
+if [ "$COUNT" -eq 0 ]; then
+  echo "ERROR: no bundled engine at $DIR/**/runtimes/$RID/native/$NAME" >&2; exit 1
+elif [ "$COUNT" -gt 1 ]; then
+  echo "ERROR: $COUNT bundled engines under $DIR, expected 1:" >&2; printf '%s\n' "$FOUND" >&2; exit 1
+fi
+BIN=$FOUND
 
 # Windows has no executable bit; everywhere else, a missing one is what an artifact round trip costs, and the
 # app would report it only when the user first tries to connect.
@@ -275,6 +286,12 @@ expect_reject() {
 # 1. missing
 rm -rf /tmp/vbe-missing && mkdir -p /tmp/vbe-missing
 expect_reject "missing engine" /tmp/vbe-missing osx-arm64 "no bundled engine at"
+
+# 1b. two engines under one root — catches a package carrying an engine it should not
+rm -rf /tmp/vbe-two && mkdir -p /tmp/vbe-two/a/runtimes/osx-arm64/native /tmp/vbe-two/b/runtimes/osx-arm64/native
+cp native/out/osx-arm64/b3270 /tmp/vbe-two/a/runtimes/osx-arm64/native/b3270
+cp native/out/osx-arm64/b3270 /tmp/vbe-two/b/runtimes/osx-arm64/native/b3270
+expect_reject "duplicate engines" /tmp/vbe-two osx-arm64 "bundled engines under"
 
 # 2. not executable — what actions/download-artifact leaves behind
 rm -rf /tmp/vbe-noexec && mkdir -p /tmp/vbe-noexec/runtimes/osx-arm64/native
@@ -1026,9 +1043,17 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ### Task 8: `release.yml` — publish, gated
 
 The publish half of the release workflow: call `engines.yml`, download the engines, restore the executable bit
-that `actions/download-artifact` drops, publish six runtime identifiers, and gate every publish tree on
-`verify-bundled-engine.sh`. Packaging is Task 9; the release itself is Task 10. This task ends with six
-verified publish trees uploaded as artifacts, which is independently testable via `workflow_dispatch`.
+that `actions/download-artifact` drops, and publish six runtime identifiers. Packaging is Task 9; the release itself is Task 10. This task ends with
+six publish trees uploaded as artifacts, which is independently testable via `workflow_dispatch`.
+
+**Ruling R6 — read this before you start.** An earlier version of this task gated each publish tree here with
+`verify-bundled-engine.sh`. It does not, and must not. Task 1 established that `parcel pack` always runs its
+*own* `dotnet publish` into a randomized temporary directory, with or without `--no-build`; what `--no-build`
+actually consumes is the ordinary MSBuild build output at `src/LizTerm.App/bin/Release/net10.0/<rid>/`, which
+a `dotnet publish -r <rid>` leaves behind as a side effect whatever its `-o` says. The `-o publish/<rid>` tree
+below is therefore **never shipped**, and gating it would verify something that is not the artifact. The gate
+lives in Task 9 now, against the extracted package. Keep the `dotnet publish` — its build side effect is
+exactly what Parcel needs — and add no gate step here.
 
 **Files:**
 - Create: `.github/workflows/release.yml`
@@ -1124,9 +1149,6 @@ jobs:
             -p:Version=${{ needs.version.outputs.version }} \
             -o publish/${{ matrix.rid }}
 
-      - name: The bundled engine is present, executable and the right machine type
-        run: native/build/verify-bundled-engine.sh publish/${{ matrix.rid }} ${{ matrix.rid }}
-
       - uses: actions/upload-artifact@v7
         with:
           name: publish-${{ matrix.rid }}
@@ -1165,9 +1187,6 @@ jobs:
             -p:Version=${{ needs.version.outputs.version }} \
             -o publish/${{ matrix.rid }}
 
-      - name: The bundled engine is present, executable and the right machine type
-        run: native/build/verify-bundled-engine.sh publish/${{ matrix.rid }} ${{ matrix.rid }}
-
       - uses: actions/upload-artifact@v7
         with:
           name: publish-${{ matrix.rid }}
@@ -1203,10 +1222,6 @@ jobs:
           dotnet publish src/LizTerm.App -c Release -r ${{ matrix.rid }} --self-contained `
             -p:Version=${{ needs.version.outputs.version }} `
             -o publish/${{ matrix.rid }}
-
-      - name: The bundled engine is present and the right machine type
-        shell: bash
-        run: native/build/verify-bundled-engine.sh publish/${{ matrix.rid }} ${{ matrix.rid }}
 
       - uses: actions/upload-artifact@v7
         with:
@@ -1251,9 +1266,8 @@ gh run list --workflow release.yml --limit 1
 gh run watch "$(gh run list --workflow release.yml --limit 1 --json databaseId -q '.[0].databaseId')"
 ```
 
-Expected: six `publish-<rid>` artifacts, and in each job's log the line
-`OK: publish/<rid>/runtimes/<rid>/native/b3270... is <arch>, correct for <rid>` — specifically
-`is x86_64, correct for win-arm64`, which is the mapping this pipeline would otherwise get wrong silently.
+Expected: six `publish-<rid>` artifacts and six green jobs. There is no gate output to look for here — per
+ruling R6 the gate runs in Task 9, against the package that actually ships.
 
 ---
 
@@ -1264,8 +1278,27 @@ for: Parcel Plus can build a DMG from Linux, but `engines.yml` already puts this
 and cross-packaging would add variables — cross-platform Mach-O ad hoc signing, Unix modes written by a Linux
 host into a macOS bundle — whose failures appear to a user opening a download rather than to CI.
 
+**Rulings from Task 1's spike — these change what this task must do:**
+
+- **R6:** the gate moved here. `parcel pack` publishes into its own randomized temp directory, so the tree
+  Task 8 produced is never shipped. `verify-bundled-engine.sh` runs against the **extracted package**, which
+  is the only tree that ships. This matters especially because `PublishSingleFile` is `true` in
+  `LizTerm.parcel` and the spike ran with no engine present at all — whether b3270 survives as a loose file
+  under `runtimes/<rid>/native/` is genuinely unproven, and this gate is what answers it.
+- **R7:** Parcel names artifacts `{ApplicationName}.{arch}.{Version}.{ext}` with **no OS token**, and writes
+  them into `macOS/`, `Linux/`, `Windows/` subdirectories of its `-o`. So the headline ZIP is produced three
+  times under one name. A GitHub Release has a single flat asset namespace, so every artifact is renamed to
+  `LizTerm-<rid>-<version>.<ext>` before upload.
+- **R8:** Parcel stamped `1.0.0` while `Directory.Build.props` says `0.3.0` — it does not read the project
+  version. The rename fixes the user-visible names; step 5 also sets the version inside `LizTerm.parcel` so
+  the DEB, RPM and NSIS internal metadata agree.
+- **R9:** publish and pack must happen per RID in the same job, because `LizTerm.App.csproj` declares no
+  `<RuntimeIdentifiers>` and each single-RID restore replaces `project.assets.json`'s target. The matrix
+  already gives each job exactly one RID — do not collapse it into a loop.
+
 **Files:**
 - Modify: `.github/workflows/release.yml` (add steps to the three publish jobs)
+- Modify: `LizTerm.parcel` (add the version, step 5)
 
 **Interfaces:**
 - Consumes: `LizTerm.parcel` and the recorded working combinations from Task 1; the `publish/<rid>` trees from
@@ -1294,15 +1327,36 @@ Insert after the `verify-bundled-engine.sh` step, before the upload:
       # osx-x64 is skipped because this runner is arm64 and cannot start an x86_64 binary without Rosetta,
       # whose presence on these images is not guaranteed -- the spec records that RID as proven by the
       # machine-type assertion alone.
+      # The gate, against the tree that actually ships (R6). Parcel writes into a macOS/ subdirectory of -o,
+      # so the ZIP is found rather than globbed at the top level.
+      - name: The shipped archive carries the right engine
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip && mkdir -p /tmp/roundtrip
+          zip=$(find packages/${{ matrix.rid }} -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip
+          native/build/verify-bundled-engine.sh /tmp/roundtrip ${{ matrix.rid }}
+
+      # osx-x64 is skipped: this runner is arm64 and cannot start an x86_64 binary without Rosetta, whose
+      # presence on these images is not guaranteed. The spec records that RID as proven by the machine-type
+      # assertion above alone.
       - name: The engine inside the archive still starts
         if: matrix.rid == 'osx-arm64'
         run: |
           set -euo pipefail
-          mkdir -p /tmp/roundtrip
-          unzip -q "$(ls packages/${{ matrix.rid }}/*.zip | head -1)" -d /tmp/roundtrip
-          bin=$(find /tmp/roundtrip -type f -name b3270 | head -1)
-          [ -n "$bin" ] || { echo "no b3270 inside the archive" >&2; exit 1; }
+          bin=$(find /tmp/roundtrip -type f -path '*/runtimes/${{ matrix.rid }}/native/b3270' | head -1)
           native/build/shared-verify-tls.sh "$bin"
+
+      # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
+      - name: Rename for the release namespace
+        run: |
+          set -euo pipefail
+          find packages/${{ matrix.rid }} -type f | while read -r f; do
+            mv "$f" "packages/${{ matrix.rid }}/LizTerm-${{ matrix.rid }}-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/${{ matrix.rid }} -type d -empty -delete
+          ls -l packages/${{ matrix.rid }}
 
       - uses: actions/upload-artifact@v7
         with:
@@ -1328,14 +1382,29 @@ architecture:
           parcel pack ./LizTerm.parcel --no-build \
             -r ${{ matrix.rid }} -p zip -p deb -p rpm -o packages/${{ matrix.rid }}
 
+      - name: The shipped archive carries the right engine
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip && mkdir -p /tmp/roundtrip
+          zip=$(find packages/${{ matrix.rid }} -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip
+          native/build/verify-bundled-engine.sh /tmp/roundtrip ${{ matrix.rid }}
+
       - name: The engine inside the archive still starts
         run: |
           set -euo pipefail
-          mkdir -p /tmp/roundtrip
-          unzip -q "$(ls packages/${{ matrix.rid }}/*.zip | head -1)" -d /tmp/roundtrip
-          bin=$(find /tmp/roundtrip -type f -name b3270 | head -1)
-          [ -n "$bin" ] || { echo "no b3270 inside the archive" >&2; exit 1; }
+          bin=$(find /tmp/roundtrip -type f -path '*/runtimes/${{ matrix.rid }}/native/b3270' | head -1)
           native/build/shared-verify-tls.sh "$bin"
+
+      - name: Rename for the release namespace
+        run: |
+          set -euo pipefail
+          find packages/${{ matrix.rid }} -type f | while read -r f; do
+            mv "$f" "packages/${{ matrix.rid }}/LizTerm-${{ matrix.rid }}-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/${{ matrix.rid }} -type d -empty -delete
+          ls -l packages/${{ matrix.rid }}
 
       - uses: actions/upload-artifact@v7
         with:
@@ -1362,16 +1431,36 @@ would test is arm64.
           parcel pack ./LizTerm.parcel --no-build `
             -r ${{ matrix.rid }} -p zip -p nsis -o packages/${{ matrix.rid }}
 
+      - name: The shipped archive carries the right engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/roundtrip && mkdir -p /tmp/roundtrip
+          zip=$(find packages/${{ matrix.rid }} -name '*.zip' | head -1)
+          [ -n "$zip" ] || { echo "no zip produced" >&2; exit 1; }
+          unzip -q "$zip" -d /tmp/roundtrip
+          native/build/verify-bundled-engine.sh /tmp/roundtrip ${{ matrix.rid }}
+
+      # win-arm64 is skipped: this runner is x64 and the app in that archive is arm64. shared-verify-tls.sh
+      # takes the expected provider as its second argument; without it the script defaults to OpenSSL and
+      # would reject a correct Schannel engine.
       - name: The engine inside the archive still starts
         if: matrix.rid == 'win-x64'
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/roundtrip
-          unzip -q "$(ls packages/win-x64/*.zip | head -1)" -d /tmp/roundtrip
-          bin=$(find /tmp/roundtrip -type f -name b3270.exe | head -1)
-          [ -n "$bin" ] || { echo "no b3270.exe inside the archive" >&2; exit 1; }
+          bin=$(find /tmp/roundtrip -type f -path '*/runtimes/win-x64/native/b3270.exe' | head -1)
           native/build/shared-verify-tls.sh "$bin" "Windows Schannel"
+
+      - name: Rename for the release namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          find packages/${{ matrix.rid }} -type f | while read -r f; do
+            mv "$f" "packages/${{ matrix.rid }}/LizTerm-${{ matrix.rid }}-${{ needs.version.outputs.version }}.${f##*.}"
+          done
+          find packages/${{ matrix.rid }} -type d -empty -delete
+          ls -l packages/${{ matrix.rid }}
 
       - uses: actions/upload-artifact@v7
         with:
@@ -1394,13 +1483,39 @@ grep -c "name: publish-" .github/workflows/release.yml
 
 Expected: `0`.
 
-- [ ] **Step 5: Adjust the formats to match Task 1's recorded results**
+- [ ] **Step 5: Give Parcel the real version (R8)**
+
+Parcel stamped `1.0.0` on every artifact in the spike while `Directory.Build.props` says `0.3.0`, so it is
+not reading the project's version. The rename in step 1-3 fixes the user-visible file names, but the DEB, RPM
+and NSIS packages each carry a version in their own internal metadata, and those would still say `1.0.0`.
+
+Add a version to `LizTerm.parcel`'s `GeneralSettings` and prove Parcel honours it:
+
+```bash
+python3 -c "
+import json,pathlib
+p=pathlib.Path('LizTerm.parcel'); c=json.loads(p.read_text())
+c['GeneralSettings']['Version']='0.3.0'
+p.write_text(json.dumps(c, indent=2) + chr(10))"
+dotnet publish src/LizTerm.App -c Release -r osx-arm64 --self-contained -o /tmp/vpub
+parcel pack ./LizTerm.parcel --no-build -r osx-arm64 -p zip -o /tmp/vpack
+find /tmp/vpack -name '*.zip'
+```
+
+Expected: the file name contains `0.3.0`, not `1.0.0`. If `GeneralSettings.Version` is not the field Parcel
+reads, find the one that is — run `parcel pack` at `-v detailed` and read the generated `.pubxml`, or search
+the tool's own assemblies under `~/.dotnet/tools/.store/avaloniaui.parcel/` for the setting name. If no such
+field exists at all, record that in the spec's section 11 and leave the internal metadata at `1.0.0`: the
+rename still makes every user-visible name correct, and this is a cosmetic gap in package metadata rather
+than a broken release.
+
+- [ ] **Step 6: Adjust the formats to match Task 1's recorded results**
 
 Task 1 step 5 recorded which RID × format combinations actually work. Remove any `-p` flag for a combination
 that failed there. If, for example, `win-arm64` NSIS did not work, that job's `-p nsis` is dropped for that
 RID and the spec's section 11 already says why.
 
-- [ ] **Step 6: Add the repository secret**
+- [ ] **Step 7: Add the repository secret**
 
 The repository owner adds `AVALONIA_TOOLS_LICENSE_KEY` under Settings → Secrets and variables → Actions. It is
 referenced only by `release.yml`; `ci.yml` and `platforms.yml` stay key-free, so contributors and fork pull
@@ -1410,7 +1525,7 @@ requests need no licence at all.
 gh secret set AVALONIA_TOOLS_LICENSE_KEY
 ```
 
-- [ ] **Step 7: Commit, push, rehearse**
+- [ ] **Step 8: Commit, push, rehearse**
 
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/release.yml')); print('parses')"
@@ -1525,11 +1640,25 @@ Append to `.github/workflows/release.yml`:
             "${archives[@]}" "${installers[@]}"
 ```
 
-- [ ] **Step 2: Reconcile the notes table with what Parcel actually produced**
+- [ ] **Step 2: Confirm the notes table against Task 1's results**
 
-Task 1 step 5 recorded the real output file names and which combinations worked. Edit the table and the
-`installers=(...)` glob so every row names a file that exists and no row promises one that does not. A
-combination that failed loses its installer cell, which reads `—`.
+Task 1 established that **all fourteen** RID × format combinations succeed, including the two the public
+documentation never confirmed (`linux-arm64` DEB/RPM and `win-arm64` NSIS). So no row loses its installer
+cell, and the table as written above is correct. Read the spec's section 11 and confirm this before moving
+on — if it disagrees with the table, section 11 wins.
+
+Task 9's rename step means every asset arrives as `LizTerm-<rid>-<version>.<ext>`, so `merge-multiple: true`
+is safe (nothing collides) and the `archives=`/`installers=` globs above match. Add the file-name column to
+the table so a reader can match a row to an asset:
+
+| Platform | Archive | Installer |
+| --- | --- | --- |
+| macOS, Apple Silicon | `LizTerm-osx-arm64-<v>.zip` | `LizTerm-osx-arm64-<v>.dmg` |
+| macOS, Intel | `LizTerm-osx-x64-<v>.zip` | `LizTerm-osx-x64-<v>.dmg` |
+| Linux x86-64 | `LizTerm-linux-x64-<v>.zip` | `LizTerm-linux-x64-<v>.deb`, `.rpm` |
+| Linux ARM64 | `LizTerm-linux-arm64-<v>.zip` | `LizTerm-linux-arm64-<v>.deb`, `.rpm` |
+| Windows x64 | `LizTerm-win-x64-<v>.zip` | `LizTerm-win-x64-<v>.exe` |
+| Windows ARM64 | `LizTerm-win-arm64-<v>.zip` | `LizTerm-win-arm64-<v>.exe` |
 
 - [ ] **Step 3: Validate and commit**
 
