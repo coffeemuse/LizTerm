@@ -63,6 +63,22 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [NotifyCanExecuteChangedFor(nameof(PasteCommand))]
     private bool _isConnected;
 
+    /// <summary>b3270 has a socket to the host. Connect's boundary, and not IsConnected: b3270 refuses
+    /// `Set verifyHostCert` whenever it has a host session, which begins before the 3270 session comes up.
+    /// A second bool rather than the raw state, because IsConnected is bound in XAML and an [ObservableProperty]
+    /// named ConnectionState would collide with the enum type.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ConnectCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
+    private bool _hasSocket;
+
+    /// <summary>A connect attempt is in flight. Kept beside _connectCts, which is a plain field and raises
+    /// nothing when assigned. Not ConnectCommand.IsRunning: that stays true through the certificate prompt and
+    /// the profile save, which deliberately run after the connect's catch clauses.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
+    private bool _connectPending;
+
     /// <summary>The mouse selection, bound two-way to the screen control. Cleared here whenever input goes to the host.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CopyCommand))]
@@ -233,12 +249,17 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     {
         if (_disposed) return;
         IsConnected = state.IsConnected();
+        HasSocket = state.HasSocket();
         ConnectionText = StatusFormatter.Connection(state, Profile.Host);
         TlsText = StatusFormatter.Tls(_session.Tls);
         if (state.HasSocket()) _socketOpened = true;
     }
 
-    [RelayCommand]
+    /// <summary>Disabled once the engine holds a socket. x3270's own File menu disables it too; turning it into
+    /// a reconnect is a larger behaviour that overlaps #28 and is not smuggled in here.</summary>
+    public bool CanConnect => !HasSocket;
+
+    [RelayCommand(CanExecute = nameof(CanConnect))]
     private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions(Pin: _pinOverride));
 
     /// <returns>True when this attempt itself connected; false after any failure, including one the certificate
@@ -253,6 +274,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         using (var cts = new CancellationTokenSource(ConnectTimeout))
         {
             _connectCts = cts;
+            ConnectPending = true;
             try
             {
                 await _session.ConnectAsync(options, cts.Token);
@@ -285,6 +307,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             finally
             {
                 if (ReferenceEquals(_connectCts, cts)) _connectCts = null;
+                ConnectPending = false;
             }
         }
         if (certificateFailure is not null && !_disposed) await OfferConnectAnywayAsync(certificateFailure);
@@ -396,8 +419,12 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    /// <summary>Not the inverse of CanConnect: this also cancels a pending connect, and HasSocket is false
+    /// through Resolving and TcpPending, which is exactly when a user wants to give up on one.</summary>
+    public bool CanDisconnect => HasSocket || ConnectPending;
+
     /// <summary>While a connect is pending this cancels it (the backend sends the Disconnect); otherwise it disconnects.</summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanDisconnect))]
     private Task DisconnectAsync()
     {
         if (_connectCts is { } pending)
