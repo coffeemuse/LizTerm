@@ -35,8 +35,8 @@ case "$VERSION" in
     printf '%s\n' "$VERSION" | sed -n '1,3p' >&2
     if [ "$EXPECTED" = "OpenSSL" ]; then
       echo "x3270's configure disables TLS when its -lcrypto link probe fails. On Linux that probe needs the" >&2
-      echo "LIBS on build-linux.sh's configure line (see step 3 there); on macOS it needs usable static archives" >&2
-      echo "in the prefix build-macos.sh stages from Homebrew's openssl@3." >&2
+      echo "LIBS on build-linux.sh's configure line (see step 3 there); on macOS it needs a usable static OpenSSL" >&2
+      echo "build in the prefix build-macos.sh stages from the pinned tarball fetch-openssl.sh names." >&2
     else
       echo "The Windows build reaches Schannel through -lcrypt32 -lsecur32 on wb3270's LIBS line, with no" >&2
       echo "configure probe to fail. A provider of None here means the source tree changed shape; a provider of" >&2

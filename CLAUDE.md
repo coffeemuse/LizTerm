@@ -30,12 +30,27 @@ package management: `PackageReference` entries in csproj files carry no `Version
 `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "` is the zero-warning check to run before
 calling anything done; an incremental build hides warnings from projects it does not recompile.
 
-CI is two workflows under `.github/workflows`: `ci.yml` (job `test`, `ubuntu-latest`, pushes to `main`, every PR, and
-dispatch: Release build with `-warnaserror`, then the suite with a 5 minute blame hang timeout) and `platforms.yml`
-(pushes to `main`, dispatch, and PRs touching the workflow, `native/**`, `src/**`, `tests/**`, `global.json`, or the
-`Directory.*.props` files: `engine-macos` on `macos-15` runs `build-macos.sh`, runs the suite with
-`LIZTERM_REQUIRE_ENGINE=1`, and only then uploads `b3270-osx-arm64`, so a binary that links but cannot be spawned is
-never published; `engine-linux` does the same on a two-leg matrix, `ubuntu-24.04` and `ubuntu-24.04-arm` — pinned
+CI is under `.github/workflows`: `ci.yml` (job `test`, `ubuntu-latest`, pushes to `main`, every PR, and
+dispatch: Release build with `-warnaserror`, then the suite with a 5 minute blame hang timeout); `engines.yml`,
+triggered only by `workflow_call` and never on its own, whose jobs both `platforms.yml` and `release.yml` pull in
+as their one job, always named `engines` — so there is exactly one definition anywhere of "an engine proven to
+start", and a job inside a called reusable workflow renders as a GitHub check named `<calling job>/<called job>
+(<matrix values>)`, `engines /` first, for every job below (the branch-protection paragraph past the end of this
+one records the exact strings); and `platforms.yml` itself (pushes to `main`, dispatch, and PRs touching the
+workflow, `engines.yml`, `native/**`, `src/**`, `tests/**`, `global.json`, or the `Directory.*.props` files).
+Inside `engines.yml`: `engine-macos` is a two-leg matrix, `osx-arm64` and `osx-x64`, both on the same arm64
+`macos-15` runner — `osx-x64` cross-builds, because `macos-13` is retired and `macos-15-intel` is the last
+x86_64 image GitHub will offer, ending August 2027, and a native leg would inherit that expiry as its own. Only
+the `osx-x64` leg installs Rosetta first (idempotent, a no-op if the image already has it): `verify-macos.sh`'s
+TLS arm executes the finished x86_64 binary to read its banner, so without Rosetta on this arm64 runner the
+*build itself* cannot finish gating, not only the suite (ruling R11). Each leg runs `build-macos.sh <rid>`,
+gates it with `verify-macos.sh` — which now also asserts machine type, the arm that catches a `--host`-only
+cross build whose `configure` sanity check can silently fall back to cross defaults instead of running the
+binary it cannot execute — and only then uploads it as `b3270-osx-arm64` or `b3270-osx-x64`, so a binary that
+links but cannot be spawned is never published; only `osx-arm64` runs the suite with `LIZTERM_REQUIRE_ENGINE=1`,
+since this runner cannot start the `osx-x64` binary itself — the architecture assertion is what proves that one
+instead, the same trade the release pipeline makes for `osx-x64`, `win-arm64` and `linux-arm64` (see the release
+paragraph below). `engine-linux` does the same on a two-leg matrix, `ubuntu-24.04` and `ubuntu-24.04-arm` — pinned
 rather than `ubuntu-latest` so the legs differ only in architecture — uploading `b3270-linux-x64` and
 `b3270-linux-arm64`, with `fail-fast: false`, because one
 architecture failing is information about that architecture and cancelling the other leg throws it away; `engine-windows`
@@ -46,24 +61,28 @@ imports — the one half of the gate a Linux runner can check about a binary it 
 `Windows Schannel` (the half of the gate that needed a real Windows machine), runs the suite with
 `LIZTERM_REQUIRE_ENGINE=1`, and republishes the same bytes as `b3270-win-x64` — two names for one binary, so an
 `-unverified` download can never be mistaken for one a Windows machine has actually started, matching by a second hop
-the same publish-only-after-a-spawn rule `engine-macos` and `engine-linux` each satisfy in one job). `engine-macos`,
-`test-windows` and `engine-linux`'s arm64 leg run the whole solution, which is why the
-path filter covers all of `src/` and `tests/` rather than the native build alone. `engine-linux`'s **x64** leg is the
+the same publish-only-after-a-spawn rule `engine-macos` and `engine-linux` each satisfy in one job. `engine-macos`'s
+`osx-arm64` leg, `test-windows` and `engine-linux`'s arm64 leg run the whole solution, which is why
+`platforms.yml`'s path filter covers all of `src/` and `tests/` rather than the native build alone. `engine-linux`'s **x64** leg is the
 exception: `ci.yml`'s `test` already runs that same solution, in the same configuration, on the same OS and
 architecture, so this leg runs only `tests/LizTerm.Integration.Tests` — the engine smoke test is the one claim it adds.
 That is an expression on the `dotnet test` line, not a third `matrix.include` property, because GitHub renders every
-one of those in the check name and a new one would rewrite the two names below. Runs that fail *or are cancelled* upload
+one of those in the check name and a new one would rewrite the two `engine-linux` names recorded below. Runs that fail *or are cancelled* upload
 `test-results-<os>`: `.trx`, plus `*.dmp` (a blame-hang kill writes a hang dump, not a sequence file) and any
 `*Sequence*.xml`. `timeout-minutes` and `cancel-in-progress` both *cancel*, so those uploads are
 `if: ${{ failure() || cancelled() }}` — plain `failure()` would drop the evidence on exactly those runs. `engine-macos`
-caches the built engine (`native/out/osx-arm64`) as well as the source tarball, and dumps
-`native/build-tmp/*/{configure,make}.log`, because `build-macos.sh` redirects them out of the job log.
+caches the built engine per leg (`native/out/<rid>`, keyed on the RID rather than `runner.os`/`runner.arch` since
+both legs now share one arm64 runner and would otherwise collide on one entry, each able to restore the other's
+engine) as well as one source-tarball entry shared by both legs, and dumps
+`native/build-tmp/*/{openssl,configure,make}.log` — `openssl.log` joins the dump because macOS now builds its
+own OpenSSL too, the same as Linux, rather than staging it from Homebrew.
 `engine-linux` caches the same two things per leg (`native/out/<rid>`; one shared `native/cache` entry
 for both legs, since source tarballs are architecture-independent) and dumps `{openssl,expat,configure,make}.log`.
 Both log dumps are `failure() || cancelled()` for the reason the test-results uploads are: a build wedged past
 `timeout-minutes` is *cancelled*, and those logs never leave `native/build-tmp`, so plain `failure()` would lose them
 on exactly the run that needs them. Each engine cache key hashes only the scripts that feed **that** platform —
-`*macos*.sh` plus `fetch-source.sh`, against `*linux*.sh` plus `fetch-*.sh` — with `shared-*.sh` in both, so a
+`*macos*.sh` plus `fetch-source.sh` and `fetch-openssl.sh`, against `*linux*.sh` plus `fetch-*.sh` — with
+`shared-*.sh` in both, so a
 Linux-only edit no longer forces a cold macOS rebuild that cannot change its binary, and new shared machinery cannot
 be added to one key and forgotten in the other. Its
 `timeout-minutes` is 15, set from three cold-cache runs, each after a change that took work off the critical path:
@@ -90,12 +109,60 @@ than being tightened on reasoning alone.
 check runs named `test` — one over the branch tip, one over the merge with `main` — and a required check cannot tell
 them apart, so a PR could go green for a tree that does not build when merged. Branch protection on `main` requires
 `test` only; the platform jobs are path-filtered on PRs and would never report on a docs-only PR, so a rule requiring
-them directly would leave those waiting forever (the fix, when it matters, is a `platforms-gate` job with
-`needs: [engine-macos, engine-linux, engine-windows, test-windows]` and `if: always()` that passes when they are
-skipped). A rule
-naming the Linux checks directly would have to spell them `engine-linux (ubuntu-24.04, linux-x64)` and
-`engine-linux (ubuntu-24.04-arm, linux-arm64)`: GitHub renders every `matrix.include` property in a check name, not
-just the one that varies meaningfully, and a rule requiring the short form matches nothing and waits forever.
+them directly would leave those waiting forever (the fix, when it matters, is a `platforms-gate` job in
+`platforms.yml` itself, with `needs: engines` and `if: always()` that passes whether `engines.yml` ran or was
+skipped by the path filter — one dependency, not four, because a job cannot `needs:` an individual job inside a
+reusable workflow it calls, only the call itself). A rule naming one of `engines.yml`'s own jobs directly has to
+spell the check exactly as GitHub renders it — the calling job's name, then the called job's, then every
+`matrix.include` property, not just the one that varies meaningfully — or the short form matches nothing and
+waits forever. Observed verbatim on run 34299183015:
+
+```
+engines / engine-macos (osx-arm64, arm64)
+engines / engine-macos (osx-x64, x86_64)
+engines / engine-linux (ubuntu-24.04, linux-x64)
+engines / engine-linux (ubuntu-24.04-arm, linux-arm64)
+engines / engine-windows
+engines / test-windows
+```
+
+`release.yml` runs on a pushed `v*` tag, and as a no-release rehearsal on manual dispatch; it calls the same
+`engines.yml` (a tag cut from a green `main` restores every engine from `actions/cache`, since the cache is
+repository-scoped rather than workflow-scoped) and then publishes and packages all six RIDs — `osx-arm64`,
+`osx-x64`, `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, the last shipping the `win-x64` engine under
+Windows 11's emulation, the same mapping `LizTerm.App.csproj`'s `LizTermEngineRid` and
+`native/build/verify-bundled-engine.sh` both encode and must agree on. `parcel pack` always runs its own
+`dotnet publish` into a randomised temp directory, `--no-build` or not; what `--no-build` actually consumes is
+the ordinary build output already sitting at `src/LizTerm.App/bin/Release/net10.0/<rid>/` from the job's own
+`dotnet publish` step, not that step's `-o publish/<rid>` tree. Because of that, the publish gate —
+`verify-bundled-engine.sh`, which fails on a missing, duplicate, or wrong-machine-type engine — always runs
+against the **extracted package**, never against a publish tree Parcel never reads from. The engine survives
+`PublishSingleFile`: it lands at `runtimes/<rid>/native/b3270[.exe]`, nested inside `LizTerm.app/Contents/MacOS/`
+on macOS, which is why that script searches at any depth and requires exactly one match rather than a fixed
+path. `verify-bundled-engine.sh` alone — with no start check behind it — is what proves three of the six
+RIDs: Parcel's Linux CLI ships an x64-only native binary and cannot even start on an arm64 Linux runner (`Exec
+format error`, not a packaging failure), so `linux-arm64` is packaged sequentially after `linux-x64` on the
+same `ubuntu-24.04` runner in one job — sequential because `LizTerm.App.csproj` declares no
+`<RuntimeIdentifiers>`, so each single-RID restore overwrites `project.assets.json`'s target and packing both
+after publishing both would fail the first with NETSDK1047; and `osx-x64` and `win-arm64` are cross-packaged the
+same way `engine-macos`'s `osx-x64` leg is cross-built, on a runner that cannot execute the binary it just
+produced. Packaging itself always runs on a native runner for its target OS — macOS on `macos-15`, Linux on
+`ubuntu-24.04`, Windows on `windows-latest` — even for those three RIDs, since Parcel's installer formats
+(`.dmg`, `.deb`/`.rpm`, `.nsis`) are that OS's own native tooling regardless of which CPU architecture the
+produced binary targets. `AVALONIA_TOOLS_LICENSE_KEY`, the repository secret Parcel needs to run at all, is
+scoped to `release.yml`'s `parcel pack` steps alone, by `env:` on each of those steps rather than job- or
+workflow-wide; `ci.yml` and `platforms.yml` carry no such secret, so a fork's pull request still runs both in
+full. Parcel names its own output `{App}.{arch}.{Version}.{ext}` with no OS token, so every package is renamed
+to `LizTerm-<rid>-<version>.<ext>` before upload — a GitHub Release has one flat asset namespace, and three
+platforms would otherwise each produce an identically-named ZIP. Parcel does not read the project's own
+version, either: `LizTerm.parcel` carries its own `GeneralSettings.Version`, and the `version` job fails the run
+if that, `Directory.Build.props`, and — on an actual tag — the tag itself disagree, rather than silently
+building three different version numbers into one release. Parcel treats a missing or misnamed icon as a
+warning, not an error, so a typo in `LizTerm.parcel`'s icon paths would ship an icon-less installer with an
+otherwise green build; nothing in this pipeline currently turns a Parcel warning into a failure. The `release`
+job itself runs only when the trigger was a tag (`github.ref_type == 'tag'`), downloads every `packages-*`
+artifact into one flat directory, and passes archives before installers to `gh release create` — the ZIP is
+what a first-time visitor should reach for, and a release lists its assets in the order they were passed.
 
 `global.json` pins the SDK to the 10.0.4xx band; supported builds stay on the current LTS. It rolls forward only
 within that band: when an SDK update replaces it, bump `version`, never widen `rollForward` (the runner and the Mac
@@ -109,10 +176,15 @@ The app and the integration test project copy `native/out/<host-rid>/b3270*` int
 links by `%(Filename)%(Extension)` rather than a hardcoded name — but only if that directory exists **at build
 time**. The App test project inherits that
 copy through its project reference to the App, so a built engine lands in its output too. Build it once with
-`native/build/build-macos.sh` (needs Xcode CLT and Homebrew `openssl@3`; downloads and checksums x3270
-4.5ga6, links OpenSSL statically, and `verify-macos.sh` fails the build if `otool -L` shows anything
-outside `/usr/lib` or `/System/Library`, or if the banner reports no OpenSSL TLS provider), then rebuild the
-.NET projects. Without it, connecting throws
+`native/build/build-macos.sh [osx-arm64|osx-x64]` (defaults to the host's architecture; needs Xcode CLT and no
+Homebrew — OpenSSL is built from the pinned tarball `fetch-openssl.sh` names into a per-architecture static
+prefix under `native/build-tmp/<rid>`, reused only when both the archive and a `.pin` stamp match, the identical
+rule this file documents in full for Linux below; downloads and checksums x3270 4.5ga6, links OpenSSL statically,
+and `verify-macos.sh` fails the build if the binary's own machine type disagrees with the RID it was built for
+— the arm that catches a `--host`-only cross build whose `configure` sanity check silently fell back to cross
+defaults instead of running the x86_64 binary it could not execute — if `otool -L` shows anything outside
+`/usr/lib` or `/System/Library`, or if the banner reports no OpenSSL TLS provider), then rebuild the .NET
+projects. Without it, connecting throws
 `BackendUnavailableException`; set `LIZTERM_B3270_PATH` to any b3270 4.2+ (a Homebrew x3270 install
 works) as a development override. `native/cache`, `native/build-tmp`, and `native/out` are gitignored.
 
@@ -602,6 +674,9 @@ the backend tests.
 - The IBM 3270 font is embedded as an Avalonia resource (`avares://LizTerm.App/Assets/Fonts#IBM 3270`)
   and also used for the status bar so it reads as one instrument. Status text comes from
   `StatusFormatter`; the padlock glyph is U+E0A2 because the font's true OIA glyphs are unencoded.
+  `Assets/Icons/` holds the app icon in the three shapes packaging needs (`lizterm.icns`, `lizterm.ico`,
+  `lizterm.png`, referenced from `LizTerm.parcel`); it needs no csproj change to add or replace one, since the
+  csproj's `<AvaloniaResource Include="Assets\**" />` is already a glob over the whole `Assets/` tree.
 - `App` shows `SplashWindow` first (1 s minimum, 2.5 s maximum, click or key dismisses; timed on a `Stopwatch`
   started at `Opened`, so a slow cold start or a clock step cannot skip it), checks the engine through
   `SessionFactory.CheckBackend`, and runs a `StartupPlan` through `StartupGate`: `StartupErrorWindow` when the

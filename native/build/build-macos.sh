@@ -49,9 +49,13 @@ fi
 # of the OS. That is the difference from build-linux.sh, where no distribution-independent libexpat exists
 # and a dynamic one would land in the gate's rejection list.
 #
-# --host is passed even for a native build so both architectures take the same configure path, and so a cross
-# build does not depend on the host being able to RUN an x86_64 test binary -- autoconf uses cross defaults
-# instead of Rosetta, which may not be installed on a runner.
+# --host is passed even for a native build so both architectures take the same configure path. Only --host is
+# passed, never --build, so autoconf's cross_compiling starts as "maybe": configure's sanity check still tries
+# to RUN a compiled x86_64 test binary on this arm64 host, and falls back to cross defaults only once that
+# execution fails -- so a missing Rosetta does not hard-fail this step, but because the attempt failed, not
+# because nothing was attempted. Rosetta is not optional for the osx-x64 leg overall: verify-macos.sh's TLS arm
+# genuinely does execute the finished x86_64 binary to read its banner, which is why engines.yml installs
+# Rosetta before calling this script (ruling R11).
 SRC=$("$ROOT/native/build/fetch-source.sh" "$BUILD/src")
 cd "$SRC"
 ./configure --enable-b3270 \

@@ -11,9 +11,11 @@ Design: `docs/superpowers/specs/2026-09-03-lizterm-v1-design.md`.
 ## Developer setup (macOS)
 
 1. .NET 10 SDK, 10.0.4xx band (`global.json` pins it, and rolls forward only within that band), Xcode command
-   line tools, Homebrew `openssl@3`.
-2. Build the emulator engine once: `native/build/build-macos.sh` (produces `native/out/osx-<arch>/b3270`,
-   statically linked against OpenSSL; the app project copies it into its output).
+   line tools.
+2. Build the emulator engine once: `native/build/build-macos.sh [osx-arm64|osx-x64]` (defaults to the host's
+   architecture; produces `native/out/<rid>/b3270`, statically linked against OpenSSL, which the script builds
+   from the pinned tarball `native/build/fetch-openssl.sh` names rather than taking from Homebrew; the app
+   project copies it into its output).
 3. `dotnet test LizTerm.slnx`
 4. `dotnet run --project src/LizTerm.App` (or `-- profile-name`, or `-- host:port`).
 
@@ -81,32 +83,46 @@ knows no aarch64 Windows host, so Windows 11's x64 emulation is the only route u
 
 ## Continuous integration
 
-Two GitHub Actions workflows under `.github/workflows`:
+Three GitHub Actions workflows under `.github/workflows`, plus `engines.yml`, a reusable workflow with no
+trigger of its own — `platforms.yml` and `release.yml` each call it for the same five built engines, so there is
+only one definition anywhere of "an engine proven to start":
 
 - `ci.yml` runs on pushes to `main`, on every pull request, and on manual dispatch: one Linux job, `test`, that
   builds the solution in Release with warnings as errors and runs the full suite. No engine is needed; the live
   host tests and the engine smoke test skip themselves.
 - `platforms.yml` runs on pushes to `main`, on manual dispatch, and on pull requests touching the workflow,
-  `native/`, `src/`, `tests/`, `global.json`, or the `Directory.*.props` files: `engine-macos` builds b3270 with
-  `native/build/build-macos.sh` (whose `verify-macos.sh` fails the job on any non-system dynamic dependency, or on a
-  binary built without TLS), runs the suite with `LIZTERM_REQUIRE_ENGINE=1` so the engine smoke test must start the
-  freshly built binary, and only then uploads it as the `b3270-osx-arm64` artifact; `engine-linux` does the same on
-  two legs, `ubuntu-24.04` and `ubuntu-24.04-arm`, uploading `b3270-linux-x64` and `b3270-linux-arm64`, and also runs
+  `engines.yml`, `native/`, `src/`, `tests/`, `global.json`, or the `Directory.*.props` files, and calls
+  `engines.yml` for its one job. Inside it: `engine-macos` is a two-leg matrix on the same `macos-15` (arm64)
+  runner — `osx-arm64` built natively and `osx-x64` cross-compiled — each run through `native/build/build-macos.sh
+  <rid>` (whose `verify-macos.sh` fails the job on a wrong architecture, any non-system dynamic dependency, or a
+  binary built without TLS) and uploaded, after its own gate, as `b3270-osx-arm64` or `b3270-osx-x64`; only the
+  `osx-arm64` leg runs the suite with `LIZTERM_REQUIRE_ENGINE=1`, since this runner cannot start the x64 binary —
+  `verify-macos.sh`'s architecture check is what proves that one instead. `engine-linux` does the same on two
+  legs, `ubuntu-24.04` and `ubuntu-24.04-arm`, uploading `b3270-linux-x64` and `b3270-linux-arm64`, and also runs
   the gate against the binary it just built plus two binaries it must reject — each rejection checked against the
   message that arm of the gate prints — so a gate that has stopped rejecting anything fails the job instead of
   passing everything. The arm64 Linux leg runs the whole solution; the x64 one runs only
   `tests/LizTerm.Integration.Tests`, since `ci.yml`'s `test` already covers that solution on the same OS and
   architecture. `engine-windows` cross-builds `win-x64` inside a pinned Debian container and proves only the half
   of the gate a Linux runner can check about a binary it cannot start — machine type and DLL imports; `test-windows`
-  now depends on it (`needs: engine-windows`), downloads that unverified engine, proves on a real Windows machine
+  depends on it (`needs: engine-windows`), downloads that unverified engine, proves on a real Windows machine
   that it starts and reports `Windows Schannel`, runs the suite with `LIZTERM_REQUIRE_ENGINE=1`, and republishes it
   as the verified `b3270-win-x64` artifact.
+- `release.yml` runs on a pushed `v*` tag, and on manual dispatch as a rehearsal that produces every artifact
+  and no release. It calls the same `engines.yml`, then publishes and packages six self-contained builds —
+  `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64` (which ships the `win-x64`
+  engine, since x3270 has no aarch64 Windows host) — with Avalonia's Parcel into a ZIP plus a native installer
+  per platform, gates each package by looking for the right engine at the right path and, on the platforms that
+  can run it, starting it, and, only when the trigger was a tag, publishes a GitHub Release from the resulting
+  archives and installers, archives first. Packaging needs a licensed copy of Parcel, so its two `parcel pack`
+  steps alone carry the `AVALONIA_TOOLS_LICENSE_KEY` repository secret; `ci.yml` and `platforms.yml` need no
+  such secret, so a fork's pull request still runs both in full.
 
 To run the platform jobs by hand: Actions, Platforms, "Run workflow", or `gh workflow run platforms.yml`. A run that
 fails or is cancelled uploads `test-results-<os>` with its `.trx` files and any hang dump. The `b3270-osx-arm64`,
-`b3270-linux-x64`, `b3270-linux-arm64` and `b3270-win-x64` artifacts are CI-built engines that have been started by
-the smoke test before being published (the last one twice over: `engine-windows` uploads it first as
-`b3270-win-x64-unverified`, before anything has run it, and `test-windows` republishes the same bytes as
+`b3270-osx-x64`, `b3270-linux-x64`, `b3270-linux-arm64` and `b3270-win-x64` artifacts are CI-built engines that
+have been started by the smoke test before being published (the last one twice over: `engine-windows` uploads it
+first as `b3270-win-x64-unverified`, before anything has run it, and `test-windows` republishes the same bytes as
 `b3270-win-x64` only once a Windows machine has); you can download one and drop it into the matching
 `native/out/<rid>/`, but a downloaded macOS or Linux artifact loses its executable bit, so run
 `chmod +x native/out/<rid>/b3270` and rebuild — `native/out/win-x64/b3270.exe` needs no such fix, since Windows has
@@ -122,4 +138,4 @@ see `tests/LizTerm.Backend.B3270.Tests/Fixtures/README.md`.
 
 - x3270 / b3270: BSD-3-Clause, Copyright Paul Mattes and others.
 - IBM 3270 font by Ricardo Banffy: SIL Open Font License 1.1 (`src/LizTerm.App/Assets/Fonts/LICENSE-3270font.txt`).
-- LizTerm's own license: to be decided.
+- LizTerm's own code: BSD-3-Clause, Copyright 2026 by CoffeeMuse. See `LICENSE`.
