@@ -14,20 +14,20 @@ namespace LizTerm.Integration.Tests;
 public class EngineCatalogueTests
 {
     [Fact(Timeout = 60_000)]
-    public void Our_model_table_is_the_engines()
+    public async Task Our_model_table_is_the_engines()
     {
-        var initialize = ReadInitialize();
+        var initialize = await ReadInitializeAsync();
         var models = Block(initialize, "models").EnumerateArray()
             .Select(m => new TerminalModel(m.GetProperty("model").GetInt32(), m.GetProperty("rows").GetInt32(), m.GetProperty("columns").GetInt32()))
             .ToList();
 
-        Assert.Equal(models.OrderBy(m => m.Number), TerminalModel.All.OrderBy(m => m.Number));
+        Assert.Equal(TerminalModel.All.OrderBy(m => m.Number), models.OrderBy(m => m.Number));
     }
 
     [Fact(Timeout = 60_000)]
-    public void Our_code_page_names_are_the_engines()
+    public async Task Our_code_page_names_are_the_engines()
     {
-        var initialize = ReadInitialize();
+        var initialize = await ReadInitializeAsync();
         var names = Block(initialize, "code-pages").EnumerateArray()
             .Select(p => p.GetProperty("name").GetString()!)
             .OrderBy(n => n, StringComparer.Ordinal)
@@ -35,30 +35,53 @@ public class EngineCatalogueTests
 
         // Names only. The labels are ours -- curated from the engine's aliases, which are terse or absent -- so
         // they are deliberately not asserted here.
-        Assert.Equal(names, CodePage.All.Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal));
+        Assert.Equal(CodePage.All.Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal), names);
     }
 
     /// <summary>b3270's initialize block is its first stdout line. Read directly rather than through
-    /// B3270Session, which parses out hello and tls-hello and keeps neither of these.</summary>
-    private static JsonElement ReadInitialize()
+    /// B3270Session, which parses out hello and tls-hello and keeps neither of these.
+    ///
+    /// The read is bounded so a hung or corrupt engine can never orphan the child process: xunit's
+    /// <c>Timeout</c> on a test method does not abort a blocked read, so the wait has to be bounded here and
+    /// the kill tied to it with a <c>finally</c> that runs whether the read completed, failed, or timed out.
+    /// Standard error is left unredirected rather than drained: nothing here reads it, and a redirected but
+    /// undrained pipe is the exact same hang by another door if the engine ever fills its buffer before
+    /// writing the first stdout line.</summary>
+    private static async Task<JsonElement> ReadInitializeAsync()
     {
         var location = BundledEngine.Require();
         using var process = Process.Start(new ProcessStartInfo(location.Path, "-json")
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
         })!;
         try
         {
-            var line = process.StandardOutput.ReadLine();
+            string? line;
+            try
+            {
+                line = await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            }
+            catch (TimeoutException)
+            {
+                Assert.Fail("the engine produced no initialize line within 10s");
+                return default;
+            }
+
             Assert.False(string.IsNullOrWhiteSpace(line), "the engine produced no initialize line");
             return JsonDocument.Parse(line!).RootElement.Clone();
         }
         finally
         {
-            try { process.StandardInput.WriteLine("""{"run":{"r-tag":"q","actions":[{"action":"Quit"}]}}"""); } catch { /* already gone */ }
-            if (!process.WaitForExit(5_000)) process.Kill(entireProcessTree: true);
+            try { await process.StandardInput.WriteLineAsync("""{"run":{"r-tag":"q","actions":[{"action":"Quit"}]}}"""); } catch { /* already gone */ }
+            try
+            {
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (TimeoutException)
+            {
+                process.Kill(entireProcessTree: true);
+            }
         }
     }
 
