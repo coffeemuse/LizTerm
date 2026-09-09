@@ -169,6 +169,33 @@ downloads every `packages-*` artifact into one flat directory, and passes archiv
 should reach for, but `gh release create` uploads assets concurrently, so passing archives first makes them
 likely, not guaranteed, to be listed first.
 
+The repository root also carries `Entitlements.plist`, which Parcel discovers by convention next to
+`LizTerm.parcel` and merges with the default entitlements it always synthesizes (network client/server,
+user-selected file read-write, JIT) rather than replacing them. Its one entry,
+`com.apple.security.cs.disable-library-validation`, exists because a packaged macOS build launched clean in
+every rehearsal until someone actually ran it: Parcel ad-hoc signs the packaged executable with the hardened
+runtime (`codesign -dvvv` reports `flags=0x10002(adhoc,runtime)`) but signs the bundled
+`libSkiaSharp.dylib`, `libHarfBuzzSharp.dylib`, `libAvaloniaNative.dylib`, and the bundled b3270 plain
+ad-hoc, `flags=0x2(adhoc)`. An ad-hoc signature carries no Team ID, and the hardened runtime's library
+validation refuses a `dlopen` of any sibling library whose Team ID does not match the process's; with none
+on either side, every load of a bundled dylib fails and Avalonia dies before it can open a window
+(`DllNotFoundException: libSkiaSharp`, "different Team IDs"). Dropping the hardened runtime instead of
+adding the entitlement would also fix it and looks like the smaller change, but is the wrong one: notarization
+is named as the first post-v1 item, and notarization requires the hardened runtime, so that path would only
+have to be undone later. The entitlement disables just the one check that was rejecting ad-hoc siblings and
+leaves the rest of hardened-runtime validation in place. Nothing else in this pipeline would have caught the
+regression: `codesign --verify --deep --strict` passes on the broken bundle, because the failure is a runtime
+library-validation refusal rather than a signature-integrity one, and every other gate here checks b3270,
+which is spawned as a child process rather than `dlopen`'d and so is structurally immune to this class of
+failure. The only check that catches it is launching the packaged app, which is section 8's manual pass
+rather than anything in CI; treat `Entitlements.plist` as load-bearing rather than unexplained cruft.
+`LizTerm.parcel`'s `GeneralSettings.PackageName` is the same kind of easy-to-miss knob: it is what makes the
+bundle, the Dock icon, and the DMG read `LizTerm.app` rather than `LizTerm.App.app`, which is otherwise what
+Parcel derives from the compiled `AssemblyName`. Do not "fix" that by renaming the assembly instead — Avalonia's
+resource URIs are keyed on it (`avares://LizTerm.App/...`, for the terminal font, the window icons, and the
+third-party notices text), and a renamed assembly breaks every one of them at runtime rather than at build
+time.
+
 `global.json` pins the SDK to the 10.0.4xx band; supported builds stay on the current LTS. It rolls forward only
 within that band: when an SDK update replaces it, bump `version`, never widen `rollForward` (the runner and the Mac
 must share one analyzer set for `-warnaserror` to mean the same thing). Keep the pin on the *current* band — a stale

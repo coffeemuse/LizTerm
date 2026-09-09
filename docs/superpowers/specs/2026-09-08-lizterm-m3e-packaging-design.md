@@ -320,9 +320,14 @@ right one, because a wrong engine of the right shape passes every other check in
 ### 6.2 After packaging
 
 Section 6.1's gate runs on that extracted tree, and then `shared-verify-tls.sh` is run against the engine
-inside it. Together they prove three things: the archive round trip preserved the executable bit, the binary still
-starts, and — on macOS — the `.app` and ZIP round trip did not invalidate the ad hoc signature the SDK and the
-linker applied.
+inside it. Together they prove two things: the archive round trip preserved the executable bit, and the
+binary still starts. Both checks run against b3270, never against the packaged app's own executable, so
+neither says anything about whether the app itself launches — b3270 is spawned as a child process rather
+than `dlopen`'d, and on macOS its ad hoc signature is a different one, checked not at all, from the
+executable's. That gap is not covered anywhere else in this plan either: it is what section 8's manual pass
+exists for, and the first such pass, before the first tag, found that the packaged macOS build would not
+launch at all — the hardened-runtime executable could not `dlopen` its own ad hoc-signed bundled dylibs.
+`CLAUDE.md`'s release paragraph records the fix and why no automated check in this plan caught it.
 
 Three combinations cannot run this check where they are built: `osx-x64`, because the runner is arm64;
 `win-arm64`, because the runner is x64; and `linux-arm64`, because section 5.2's amendment moves its
