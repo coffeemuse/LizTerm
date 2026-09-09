@@ -30,7 +30,7 @@ public partial class ProfileEditorViewModel : ObservableObject
     private CertificatePin? _pinnedCertificate;
     private CertificatePin? _pinnedFor;
     private readonly string _pinnedHost = "";
-    private readonly string _pinnedPortText = "";
+    private readonly int _pinnedPort;
 
     public bool HasPinnedCertificate => PinnedCertificate is not null;
     public string? PinnedCertificateText =>
@@ -92,7 +92,7 @@ public partial class ProfileEditorViewModel : ObservableObject
         _pinnedCertificate = existing.PinnedCertificate;
         _pinnedFor = existing.PinnedCertificate;
         _pinnedHost = existing.Host;
-        _pinnedPortText = existing.Port.ToString();
+        _pinnedPort = existing.Port;
     }
 
     partial void OnUseTlsChanged(bool value)
@@ -106,7 +106,9 @@ public partial class ProfileEditorViewModel : ObservableObject
     partial void OnPortTextChanged(string value) => RefreshPin();
 
     private void RefreshPin() =>
-        PinnedCertificate = string.Equals(Host.Trim(), _pinnedHost, StringComparison.OrdinalIgnoreCase) && PortText.Trim() == _pinnedPortText ? _pinnedFor : null;
+        PinnedCertificate = string.Equals(Host.Trim(), _pinnedHost, StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(PortText.Trim(), out var port) && port == _pinnedPort
+            ? _pinnedFor : null;
 
     /// <summary>The user pressed Forget. The picker needs this because a null PinnedCertificate here can also
     /// mean the editor's copy of the profile simply predates a pin written from a session window.</summary>
@@ -125,7 +127,6 @@ public partial class ProfileEditorViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(Name)) { ValidationMessage = "Give the profile a name."; return null; }
         if (string.IsNullOrWhiteSpace(Host)) { ValidationMessage = "Enter the host name or address."; return null; }
         if (!int.TryParse(PortText.Trim(), out var port) || port < 1 || port > 65535) { ValidationMessage = "Port must be a number from 1 to 65535."; return null; }
-        if (string.IsNullOrWhiteSpace(CodePage)) { ValidationMessage = "Enter a code page, for example cp037."; return null; }
         ValidationMessage = null;
         return new SessionProfile
         {

@@ -226,6 +226,21 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Same(pin, vm.PinnedCertificate);
     }
 
+    /// <summary>PinMerge.Resolve compares Port as an int; RefreshPin has to agree there too, or a leading-zero
+    /// port edit (a number that reads the same but is not the same string as the saved one) blanks the pin panel
+    /// while Save silently restores the pin from disk.</summary>
+    [Fact]
+    public void A_leading_zero_port_edit_keeps_the_pin_visible()
+    {
+        var pin = new CertificatePin("8C:13:6A:01", "CN=gw", "pem");
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "gw", Host = "mvs.example", Port = 992, UseTls = true, PinnedCertificate = pin });
+
+        vm.PortText = "0992";
+
+        Assert.True(vm.HasPinnedCertificate);
+        Assert.Same(pin, vm.PinnedCertificate);
+    }
+
     [Fact]
     public void A_new_profile_has_no_pin()
     {

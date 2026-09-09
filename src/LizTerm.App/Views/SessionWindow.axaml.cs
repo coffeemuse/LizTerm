@@ -193,7 +193,7 @@ public partial class SessionWindow : Window
         }
         catch (Exception ex)
         {
-            vm.ErrorMessage = "Could not open the File Transfer dialog: " + ex.Message;
+            vm.ErrorMessage = "Could not open the IND$FILE Transfer dialog: " + ex.Message;
         }
         Screen.Focus();
     }

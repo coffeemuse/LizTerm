@@ -44,6 +44,10 @@ public class CatalogueTests
         Assert.Equal("bracket", CodePage.All[0].Name);
         Assert.Equal("cp037", CodePage.All[1].Name);
         Assert.Equal("cp1399", CodePage.All[^1].Name);
+
+        var numbers = CodePage.All.Skip(1).Select(p => int.Parse(p.Name[2..])).ToList();
+        for (var i = 1; i < numbers.Count; i++)
+            Assert.True(numbers[i] > numbers[i - 1], $"cp{numbers[i - 1]} should sort before cp{numbers[i]}");
     }
 
     [Fact]

@@ -21,7 +21,7 @@ public sealed record CodePage(string Name, string Label)
 {
     public static IReadOnlyList<CodePage> All { get; } =
     [
-        new("bracket", "US English (3270 brackets) — TK4-/TK5"),
+        new("bracket", "US English, 3270 brackets (TK4-/TK5)"),
         new("cp037", "US / Canada"),
         new("cp273", "German"),
         new("cp275", "Brazilian"),
