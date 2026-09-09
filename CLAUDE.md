@@ -191,8 +191,25 @@ leaves the rest of hardened-runtime validation in place. Nothing else in this pi
 regression: `codesign --verify --deep --strict` passes on the broken bundle, because the failure is a runtime
 library-validation refusal rather than a signature-integrity one, and every other gate here checks b3270,
 which is spawned as a child process rather than `dlopen`'d and so is structurally immune to this class of
-failure. The only check that catches it is launching the packaged app, which is section 8's manual pass
-rather than anything in CI; treat `Entitlements.plist` as load-bearing rather than unexplained cruft.
+failure. `native/build/verify-app-launches.sh` is what closes that gap: it launches the real, extracted,
+shipped executable exactly the way a user launches it — no headless Avalonia platform, no self-test flag,
+since either one would step around Skia initialisation, the exact place the bug was — sleeps five real
+seconds (the crash took about one, and a tight polling loop would just as happily catch a process still
+mid-death) before checking the process is still alive, then kills it so the job does not hang on a GUI event
+loop nothing is watching, printing the captured stderr — the `DllNotFoundException` and its "different Team
+IDs" line — when the check fails. `release.yml` runs it immediately after `verify-bundled-engine.sh` in each
+of the three publish jobs, against the same extracted archive that step already unpacked, but only for
+`osx-arm64`, `linux-x64` and `win-x64` — the same three RIDs and the same `if:` guards the engine's own start
+check already uses, for the same reason: `osx-x64` needs Rosetta this runner does not have, `win-arm64`'s
+binary cannot run on this x64 runner, and `linux-arm64` is cross-packaged on an x64 runner that cannot execute
+what it produced either. Widening this by adding Rosetta to a publish job is deliberately not done; the limit
+is structural, not a gap to engineer around. Linux is the one platform where launching means more than a
+process merely existing — Avalonia needs a real display to get through Skia initialisation at all, whether or
+not the failure it is checking for is a Linux-specific one — so that job installs `xvfb` and runs the script
+under `xvfb-run` rather than bare. Three of the six packages are launch-proven in CI; the other three —
+`osx-x64`, `linux-arm64`, `win-arm64` — still rely on section 8's manual pass, the same one that originally
+found this bug by hand, until a runner exists that can execute them. Treat `Entitlements.plist` as load-bearing
+rather than unexplained cruft.
 `LizTerm.parcel`'s `GeneralSettings.PackageName` is the same kind of easy-to-miss knob: it is what makes the
 bundle, the Dock icon, and the DMG read `LizTerm.app` rather than `LizTerm.App.app`, which is otherwise what
 Parcel derives from the compiled `AssemblyName`. Do not "fix" that by renaming the assembly instead — Avalonia's

@@ -150,6 +150,17 @@ jobs:
           bin=$(find /tmp/roundtrip -type f -path '*/runtimes/${{ matrix.rid }}/native/b3270' | head -1)
           native/build/shared-verify-tls.sh "$bin"
 
+      # The check the engine-start step above cannot cover, and the reason this step exists at all: the
+      # packaged *app* actually launching. A packaged macOS build once passed every gate in this pipeline,
+      # including codesign --verify --deep --strict, and then failed to launch for every user, because
+      # Parcel's ad-hoc signing left the hardened runtime's library validation refusing to dlopen the bundled
+      # dylibs -- see CLAUDE.md's release paragraph and its Entitlements.plist passage. Same osx-x64 skip and
+      # the same reason as the engine-start step above: this runner cannot execute an x86_64 binary without
+      # Rosetta.
+      - name: The packaged app launches
+        if: matrix.rid == 'osx-arm64'
+        run: native/build/verify-app-launches.sh /tmp/roundtrip ${{ matrix.rid }}
+
       # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
       - name: Rename for the release namespace
         run: |
@@ -237,6 +248,17 @@ jobs:
           set -euo pipefail
           bin=$(find /tmp/roundtrip-x64 -type f -path '*/runtimes/linux-x64/native/b3270' | head -1)
           native/build/shared-verify-tls.sh "$bin"
+
+      # The check the engine-start step above cannot cover: the packaged *app* actually launching, an Avalonia
+      # window and all -- see CLAUDE.md's release paragraph and its Entitlements.plist passage for the macOS
+      # incident this class of gate exists to catch. Avalonia needs a real X11 display to get through Skia
+      # initialisation even to fail cleanly, so xvfb-run gives it a virtual one; this runner is linux-x64, so
+      # unlike linux-arm64 below there is no reason it cannot start its own binary.
+      - name: The packaged app launches
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          xvfb-run --auto-servernum native/build/verify-app-launches.sh /tmp/roundtrip-x64 linux-x64
 
       # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
       - name: Rename linux-x64 for the release namespace
@@ -366,6 +388,16 @@ jobs:
           set -euo pipefail
           bin=$(find /tmp/roundtrip -type f -path '*/runtimes/win-x64/native/b3270.exe' | head -1)
           native/build/shared-verify-tls.sh "$bin" "Windows Schannel"
+
+      # The check the engine-start step above cannot cover: the packaged *app* actually launching -- see
+      # CLAUDE.md's release paragraph and its Entitlements.plist passage for the macOS incident this class of
+      # gate exists to catch, a failure mode this script is generic over rather than specific to. win-arm64 is
+      # skipped for the same reason the engine-start step above skips it: this runner is x64 and the app in
+      # that archive is arm64.
+      - name: The packaged app launches
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        run: native/build/verify-app-launches.sh /tmp/roundtrip win-x64
 
       - name: Rename for the release namespace
         shell: bash
