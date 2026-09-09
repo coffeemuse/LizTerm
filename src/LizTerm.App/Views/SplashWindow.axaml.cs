@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -22,6 +26,7 @@ public partial class SplashWindow : Window
         InitializeComponent();
         _timing = timing;
         VersionText.Text = "Version " + version;
+        CopyrightText.Text = AppLicense.Notice;
         _timer.Tick += (_, _) => { _timer.Stop(); Close(); };
         Opened += (_, _) => { _shownFor.Restart(); Arm(null); };
         PointerPressed += (_, _) => Dismiss();

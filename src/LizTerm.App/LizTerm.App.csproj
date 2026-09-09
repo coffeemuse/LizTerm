@@ -17,6 +17,10 @@
     <AvaloniaResource Remove="Assets\Icons\lizterm.icns" />
     <AvaloniaResource Remove="Assets\Icons\lizterm.ico" />
     <AvaloniaResource Include="../../THIRD-PARTY-NOTICES.txt" Link="Assets/THIRD-PARTY-NOTICES.txt" />
+    <!-- LizTerm's own terms. About is the only place they reach a user: no archive or installer this
+         pipeline produces carries a LICENSE file beside the app, so embedding it is what satisfies
+         BSD-3-Clause clause 2 for a binary distribution. -->
+    <AvaloniaResource Include="../../LICENSE" Link="Assets/LICENSE.txt" />
   </ItemGroup>
 
   <ItemGroup>

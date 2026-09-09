@@ -1,3 +1,8 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -20,6 +25,42 @@ public class SplashWindowTests
         Assert.Equal(300d, window.Height);
         Assert.Equal("Version 0.3.0", window.FindControl<TextBlock>("VersionText")!.Text);
         Assert.NotNull(window.FindControl<ContentControl>("SplashMark"));
+        window.Close();
+    }
+
+    /// <summary>The splash is the first thing a user sees and the only window many will see before the picker,
+    /// so it is where the attribution belongs. Deliberately ASCII: this line renders in the 3270 font, whose
+    /// coverage is not general (the status bar's padlock already needs a private-use codepoint).</summary>
+    [AvaloniaFact]
+    public void Shows_the_copyright_and_license()
+    {
+        var window = new SplashWindow("0.3.0", new SplashTiming(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(2)));
+        window.Show();
+        var text = window.FindControl<TextBlock>("CopyrightText")!.Text!;
+        Assert.Equal("Copyright 2026 by CoffeeMuse - BSD-3-Clause", text);
+        Assert.All(text, c => Assert.InRange(c, ' ', '~'));
+        window.Close();
+    }
+
+    /// <summary>The splash is the one window in the app with a fixed size and no scrolling, so a line added to it
+    /// can silently push another off the bottom. Layout runs headlessly even though drawing does not, which makes
+    /// this checkable here rather than by eye.</summary>
+    [AvaloniaFact]
+    public void The_copyright_line_fits_inside_the_fixed_size_window()
+    {
+        var window = new SplashWindow("0.3.0", new SplashTiming(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(2)));
+        window.Show();
+        var copyright = window.FindControl<TextBlock>("CopyrightText")!;
+        Assert.True(copyright.Bounds.Height > 0, "the copyright line was never given a size");
+
+        var bottom = copyright.TranslatePoint(new Point(0, copyright.Bounds.Height), window)!.Value.Y;
+        Assert.InRange(bottom, 0, window.Height);
+
+        // And it has not been fitted in by growing over the mark: the two still occupy their own rows.
+        var mark = window.FindControl<ContentControl>("SplashMark")!;
+        var markBottom = mark.TranslatePoint(new Point(0, mark.Bounds.Height), window)!.Value.Y;
+        Assert.True(markBottom < bottom - copyright.Bounds.Height,
+            $"the mark (ending at {markBottom}) overlaps the copyright line (ending at {bottom})");
         window.Close();
     }
 
