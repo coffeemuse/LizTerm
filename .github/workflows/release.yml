@@ -358,3 +358,76 @@ jobs:
           path: packages/${{ matrix.rid }}
           if-no-files-found: error
           retention-days: 7
+
+  release:
+    needs: [version, publish-macos, publish-linux, publish-windows]
+    # Only a tag makes a release. A workflow_dispatch rehearsal stops after the artifacts, which is what makes
+    # the whole pipeline exercisable without publishing anything.
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download every package
+        uses: actions/download-artifact@v7
+        with:
+          pattern: packages-*
+          path: packages
+          merge-multiple: true
+
+      - name: Write the release notes
+        run: |
+          cat > notes.md <<'NOTES'
+          LizTerm is a cross-platform TN3270 client for retro mainframe hobbyists. Download the archive for
+          your platform, unpack it, and run it -- there is nothing to install and no runtime to add.
+
+          ## Downloads
+
+          Pick the **ZIP** for your platform. The installers below it are the same application, for people who
+          prefer one.
+
+          ## First run
+
+          **macOS** -- this build is not signed or notarized yet. macOS will refuse it on first launch. Open
+          System Settings, go to Privacy & Security, scroll to the Security section, and click **Open Anyway**
+          next to LizTerm, then confirm. That button only appears for about an hour after a refused launch; if
+          it is not there, try launching LizTerm again and go straight back to Settings.
+
+          **Windows** -- SmartScreen will warn that the publisher is unknown. Choose **More info**, then
+          **Run anyway**.
+
+          Signing and notarization are the next thing on the list.
+
+          ## Which file do I want?
+
+          | Platform | Archive | Installer |
+          | --- | --- | --- |
+          | macOS, Apple Silicon | `osx-arm64` ZIP | `.dmg` |
+          | macOS, Intel | `osx-x64` ZIP | `.dmg` |
+          | Linux x86-64 | `linux-x64` ZIP | `.deb`, `.rpm` |
+          | Linux ARM64 | `linux-arm64` ZIP | `.deb`, `.rpm` |
+          | Windows x64 | `win-x64` ZIP | `.exe` installer |
+          | Windows ARM64 | `win-arm64` ZIP | `.exe` installer |
+
+          Windows ARM64 runs the x64 emulator engine under Windows 11's emulation; the application itself is
+          native ARM64.
+          NOTES
+
+      # Archives first, installers second -- the order files are passed is the order the release lists them,
+      # and the ZIP is what a first-time visitor should reach for.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(packages/*.zip)
+          installers=(packages/*.dmg packages/*.deb packages/*.rpm packages/*.exe)
+          [ ${#archives[@]} -gt 0 ] || { echo "no archives to release" >&2; exit 1; }
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "LizTerm ${{ needs.version.outputs.version }}" \
+            --notes-file notes.md \
+            "${archives[@]}" "${installers[@]}"
