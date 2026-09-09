@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+    # TEMPORARY, REMOVED BY TASK 10 (ruling R14). GitHub resolves a workflow id from the DEFAULT branch, so a
+    # workflow that exists only here cannot be reached by workflow_dispatch or by a pull_request trigger it
+    # does not declare -- which would leave this file completely unverifiable until after it merged. This
+    # branch-scoped push trigger is the only way to exercise it before then. Task 10's last step deletes these
+    # two lines and Task 11's verification asserts they are gone.
+    branches: [claude/avalonia-parcel-packaging-7a1a15]
+  # Rehearsal: produces every artifact and no release, so the pipeline can be exercised without a tag.
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The same five engines platforms.yml builds, from the same definition, each proven to start before it is
+  # published. On a tag cut from a green main these are cache hits: actions/cache is repository-scoped, not
+  # workflow-scoped, so this workflow restores what platforms.yml populated.
+  engines:
+    uses: ./.github/workflows/engines.yml
+
+  version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # A release built from a tag that disagrees with the tree is a release nobody can reproduce. On a
+      # workflow_dispatch rehearsal there is no tag, so the tree's own version is used and nothing is compared.
+      - name: The tag and Directory.Build.props must agree
+        id: v
+        run: |
+          set -euo pipefail
+          tree=$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Directory.Build.props)
+          [ -n "$tree" ] || { echo "no <Version> in Directory.Build.props" >&2; exit 1; }
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            tag=${GITHUB_REF_NAME#v}
+            if [ "$tag" != "$tree" ]; then
+              echo "tag $GITHUB_REF_NAME says $tag; Directory.Build.props says $tree" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$tree" >> "$GITHUB_OUTPUT"
+          echo "building $tree"
+
+  publish-macos:
+    needs: [engines, version]
+    runs-on: macos-15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Download the engine
+        uses: actions/download-artifact@v7
+        with:
+          name: b3270-${{ matrix.rid }}
+          path: native/out/${{ matrix.rid }}
+
+      # actions/download-artifact does not preserve the executable bit. Inside engines.yml this never mattered:
+      # each job builds and uses its binary without an artifact round trip. Here the engine crosses that
+      # boundary, and without this the release ships an engine B3270Locator.Find rejects with "is not
+      # executable" -- at connect time, on a user's machine, and nowhere in this pipeline.
+      - name: Restore the executable bit
+        run: chmod +x native/out/${{ matrix.rid }}/b3270
+
+      - name: Publish
+        run: |
+          dotnet publish src/LizTerm.App -c Release -r ${{ matrix.rid }} --self-contained \
+            -p:Version=${{ needs.version.outputs.version }} \
+            -o publish/${{ matrix.rid }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: publish-${{ matrix.rid }}
+          path: publish/${{ matrix.rid }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-linux:
+    needs: [engines, version]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04,     rid: linux-x64 }
+          - { runner: ubuntu-24.04-arm, rid: linux-arm64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Download the engine
+        uses: actions/download-artifact@v7
+        with:
+          name: b3270-${{ matrix.rid }}
+          path: native/out/${{ matrix.rid }}
+
+      - name: Restore the executable bit
+        run: chmod +x native/out/${{ matrix.rid }}/b3270
+
+      - name: Publish
+        run: |
+          dotnet publish src/LizTerm.App -c Release -r ${{ matrix.rid }} --self-contained \
+            -p:Version=${{ needs.version.outputs.version }} \
+            -o publish/${{ matrix.rid }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: publish-${{ matrix.rid }}
+          path: publish/${{ matrix.rid }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-windows:
+    needs: [engines, version]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # b3270-win-x64 only, for both RIDs: plan 3d settled that x3270 4.5ga6 defines no aarch64 Windows host,
+      # so win-arm64 ships this same binary under Windows 11's emulation, and the csproj's LizTermEngineRid
+      # maps it. No chmod on the way in -- a PE has no executable bit to lose.
+      - name: Download the engine
+        uses: actions/download-artifact@v7
+        with:
+          name: b3270-win-x64
+          path: native/out/win-x64
+
+      - name: Publish
+        run: |
+          dotnet publish src/LizTerm.App -c Release -r ${{ matrix.rid }} --self-contained `
+            -p:Version=${{ needs.version.outputs.version }} `
+            -o publish/${{ matrix.rid }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: publish-${{ matrix.rid }}
+          path: publish/${{ matrix.rid }}
+          if-no-files-found: error
+          retention-days: 7
