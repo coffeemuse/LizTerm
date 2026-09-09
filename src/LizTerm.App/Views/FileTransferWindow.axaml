@@ -9,6 +9,7 @@
         xmlns:views="using:LizTerm.App.Views"
         x:Class="LizTerm.App.Views.FileTransferWindow"
         x:DataType="vm:FileTransferViewModel"
+        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         Title="File Transfer" Width="560" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <Panel Margin="16">

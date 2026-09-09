@@ -63,6 +63,14 @@ public class AboutWindowTests
         Assert.Contains("CommunityToolkit", licenses);
     }
 
+    [AvaloniaFact]
+    public void About_shows_the_app_icon_beside_the_name()
+    {
+        var image = Shown().FindControl<Image>("AboutMark");
+        Assert.NotNull(image);
+        Assert.NotNull(image!.Source);
+    }
+
     private static AboutWindow Shown()
     {
         var window = new AboutWindow("0.3.0", new EngineInfo("b3270", "4.5.6", "/path/to/b3270", EngineSource.Bundled), "");

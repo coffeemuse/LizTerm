@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.Threading;
 using LizTerm.App.Startup;
 using LizTerm.App.Views;
@@ -90,5 +91,19 @@ public class SplashWindowTests
             Dispatcher.UIThread.RunJobs();
         }
         Assert.True(closed.Task.IsCompleted, "the splash must close at the maximum without input");
+    }
+
+    /// <summary>#40: the two windows whose whole job is identity showed a text wordmark and no image, while the
+    /// mark itself already reached the Dock, the taskbar and the installers.</summary>
+    [AvaloniaFact]
+    public void Splash_shows_the_app_icon_above_the_wordmark()
+    {
+        var window = new SplashWindow("0.3.0", new SplashTiming(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(2)));
+        window.Show();
+        var mark = window.FindControl<ContentControl>("SplashMark")!;
+        var image = Assert.IsType<Image>(((StackPanel)mark.Content!).Children[0]);
+        Assert.NotNull(image.Source);
+        Assert.Equal(Stretch.Uniform, image.Stretch);
+        window.Close();
     }
 }
