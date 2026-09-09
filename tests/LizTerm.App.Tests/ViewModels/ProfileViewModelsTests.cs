@@ -154,7 +154,8 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = pin });
 
         var picker = new ProfilePickerViewModel(_store, _ => { },
-            existing => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { Name = "MVS-CE" }, PinCleared: false)),
+            existing => Task.FromResult<ProfileEdit?>(
+                new ProfileEdit(existing! with { Name = "MVS-CE", PinnedCertificate = null }, PinCleared: false)),
             () => { });
 
         picker.SelectedProfile = picker.Profiles.Single();
@@ -175,7 +176,9 @@ public class ProfileViewModelsTests : IDisposable
 
         var changes = new List<string?>();
         vm.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        Assert.False(vm.PinCleared);
         vm.ForgetPinCommand.Execute(null);
+        Assert.True(vm.PinCleared);
         Assert.False(vm.HasPinnedCertificate);
         Assert.Null(vm.PinnedCertificateText);
         Assert.Null(vm.TryBuild()!.PinnedCertificate);

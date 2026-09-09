@@ -60,9 +60,9 @@ public partial class ProfilePickerViewModel : ObservableObject
     private async Task EditAsync()
     {
         var original = SelectedProfile!;
+        Reload();
         // Read the file, not the copy this picker has been holding: a session window may have written a pin into
         // it since Reload last ran, and the editor was handed the older copy.
-        Reload();
         var edit = await _editProfile(_store.Load(original.Name) ?? original);
         if (edit is null) return;
 
