@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Downloads and verifies the pinned expat source tarball, extracts it into $1.
 #
 # b3270 requires libexpat and there is no --disable option for it (b3270/configure.in: AC_SEARCH_LIBS on

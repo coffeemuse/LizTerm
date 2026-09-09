@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Fails if the binary is not a 64-bit PE executable, or if it imports a DLL outside the Windows system set.
 # Runs INSIDE the build container (it needs that container's mingw objdump).
 set -euo pipefail

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # The one place that knows how to take a SHA-256 in this directory. Sourced, not executed, like linux-image.sh.
 #
 # The Linux build container has coreutils' sha256sum and may not have shasum (a perl script); macOS has shasum

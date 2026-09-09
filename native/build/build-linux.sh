@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Builds b3270 for the container's architecture against a statically built OpenSSL and expat.
 # Runs INSIDE the pinned build container (build-linux-docker.sh); assumes that container's toolchain, the way
 # build-macos.sh assumes Xcode command line tools and Homebrew.

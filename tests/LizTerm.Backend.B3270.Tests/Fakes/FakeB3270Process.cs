@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;

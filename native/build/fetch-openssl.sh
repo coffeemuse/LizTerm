@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Downloads and verifies the pinned OpenSSL source tarball, extracts it into $1.
 # Deliberately a sibling of fetch-source.sh rather than folded into it: the pin is the point, and it should be
 # visible in the file that owns it. Bumping the version here is a one-line edit that invalidates the CI caches

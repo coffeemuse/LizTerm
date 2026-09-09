@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.App.Files;
 
 /// <summary>Local file selection for transfers, injected into the dialog view model so tests can fake it, like

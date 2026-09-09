@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.Core.Session;
 
 /// <summary>Host session states as b3270 reports them. The declaration order is NOT b3270's progression order:

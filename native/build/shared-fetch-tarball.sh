@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Downloads a pinned source tarball into native/cache (once), verifies its SHA-256, extracts it into <dest>,
 # and prints the extracted directory.
 #

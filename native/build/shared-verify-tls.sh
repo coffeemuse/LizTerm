@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Fails if the binary does not report the expected TLS provider (OpenSSL unless a second argument says
 # otherwise), and prints the first three banner lines when it does. Shared by verify-linux.sh,
 # verify-macos.sh and the test-windows CI job: the failure it catches is x3270's, not any one platform's,

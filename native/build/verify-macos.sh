@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Fails if the binary links anything outside macOS system libraries, or if it was built without TLS.
 set -euo pipefail
 BIN=${1:?usage: verify-macos.sh <binary>}

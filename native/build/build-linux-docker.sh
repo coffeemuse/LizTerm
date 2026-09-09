@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Builds b3270 for Linux inside the pinned container. This is the only script CI or a developer calls; it needs
 # Docker on the host and nothing else.
 #

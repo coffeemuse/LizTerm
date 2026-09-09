@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # The pinned Linux build base, sourced (not executed) by build-linux-docker.sh and verify-linux-start.sh.
 #
 # AlmaLinux 8 is glibc 2.28, which is also .NET 10's own floor, so on every glibc distribution .NET supports

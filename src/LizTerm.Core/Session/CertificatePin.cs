@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 namespace LizTerm.Core.Session;
 
 /// <summary>A host certificate the user chose to trust for a profile (spec 3.1). <paramref name="Pem"/> holds

@@ -1,3 +1,7 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using LizTerm.App.Dialogs;

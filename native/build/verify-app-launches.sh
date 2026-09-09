@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Fails if the packaged app does not survive a few real seconds after being launched the way a user launches
 # it. Nothing else in this pipeline performs this check, and the gap is structural, not an oversight:
 # verify-bundled-engine.sh and shared-verify-tls.sh both prove the *engine* is right and starts, but b3270 is

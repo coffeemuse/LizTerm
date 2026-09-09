@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# This file is part of LizTerm.
+# Copyright 2026 by CoffeeMuse
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Fails if a publish tree's bundled engine is missing, not executable, or the wrong machine type.
 #
 # The wrong-machine-type arm is the load-bearing one. release.yml downloads five engines and fans them into
