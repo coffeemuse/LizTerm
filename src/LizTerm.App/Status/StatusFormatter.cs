@@ -59,9 +59,11 @@ public static class StatusFormatter
 
     public static string Cursor(CursorPosition cursor) => $"{cursor.Row + 1:D2}/{cursor.Column + 1:D3}";
 
+    /// <summary>The full terminal type, the way a 3270 user writes one. "Model 2" dropped the family, so it did
+    /// not say 3278 or 3279 — the colour distinction — in the one place a user can read what terminal they are.</summary>
     public static string Model(SessionProfile profile, string? luName)
     {
-        var model = $"Model {profile.Model}{(profile.Extended ? "-E" : "")}";
+        var model = TerminalType.For(profile);
         return luName is null ? model : $"{model}  LU {luName}";
     }
 

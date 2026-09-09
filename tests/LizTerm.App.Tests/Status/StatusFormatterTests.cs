@@ -59,8 +59,8 @@ public class StatusFormatterTests
         Assert.Equal("INS", StatusFormatter.Insert(true));
         Assert.Equal("", StatusFormatter.Insert(false));
         var profile = new SessionProfile { Name = "a", Host = "h", Model = 4 };
-        Assert.Equal("Model 4-E", StatusFormatter.Model(profile, null));
-        Assert.Equal("Model 4-E  LU IBM0TEQO", StatusFormatter.Model(profile, "IBM0TEQO"));
+        Assert.Equal("3279-4-E", StatusFormatter.Model(profile, null));
+        Assert.Equal("3279-4-E  LU IBM0TEQO", StatusFormatter.Model(profile, "IBM0TEQO"));
     }
 
     [Fact]
