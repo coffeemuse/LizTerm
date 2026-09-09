@@ -36,7 +36,8 @@ jobs:
           set -euo pipefail
           tree=$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Directory.Build.props)
           [ -n "$tree" ] || { echo "no <Version> in Directory.Build.props" >&2; exit 1; }
-          parcel=$(python3 -c "import json;print(json.load(open('LizTerm.parcel'))['GeneralSettings']['Version'])")
+          parcel=$(python3 -c "import json;print(json.load(open('LizTerm.parcel')).get('GeneralSettings',{}).get('Version',''))")
+          [ -n "$parcel" ] || { echo "no GeneralSettings.Version in LizTerm.parcel" >&2; exit 1; }
           if [ "$parcel" != "$tree" ]; then
             echo "LizTerm.parcel says $parcel; Directory.Build.props says $tree" >&2
             exit 1
@@ -404,12 +405,12 @@ jobs:
 
           | Platform | Archive | Installer |
           | --- | --- | --- |
-          | macOS, Apple Silicon | `osx-arm64` ZIP | `.dmg` |
-          | macOS, Intel | `osx-x64` ZIP | `.dmg` |
-          | Linux x86-64 | `linux-x64` ZIP | `.deb`, `.rpm` |
-          | Linux ARM64 | `linux-arm64` ZIP | `.deb`, `.rpm` |
-          | Windows x64 | `win-x64` ZIP | `.exe` installer |
-          | Windows ARM64 | `win-arm64` ZIP | `.exe` installer |
+          | macOS, Apple Silicon | `LizTerm-osx-arm64-<v>.zip` | `LizTerm-osx-arm64-<v>.dmg` |
+          | macOS, Intel | `LizTerm-osx-x64-<v>.zip` | `LizTerm-osx-x64-<v>.dmg` |
+          | Linux x86-64 | `LizTerm-linux-x64-<v>.zip` | `LizTerm-linux-x64-<v>.deb`, `.rpm` |
+          | Linux ARM64 | `LizTerm-linux-arm64-<v>.zip` | `LizTerm-linux-arm64-<v>.deb`, `.rpm` |
+          | Windows x64 | `LizTerm-win-x64-<v>.zip` | `LizTerm-win-x64-<v>.exe` |
+          | Windows ARM64 | `LizTerm-win-arm64-<v>.zip` | `LizTerm-win-arm64-<v>.exe` |
 
           Windows ARM64 runs the x64 emulator engine under Windows 11's emulation; the application itself is
           native ARM64.
