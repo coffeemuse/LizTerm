@@ -69,9 +69,10 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "b", Host = "b.host" });
         _store.Save(new SessionProfile { Name = "a", Host = "a.host" });
         SessionProfile? opened = null;
+        bool? openedFromStore = null;
         var quit = false;
         SessionProfile? toReturn = new SessionProfile { Name = "c", Host = "c.host" };
-        var vm = new ProfilePickerViewModel(_store, (p, _) => opened = p, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
+        var vm = new ProfilePickerViewModel(_store, (p, s) => { opened = p; openedFromStore = s; }, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
 
         Assert.Equal(["a", "b"], vm.Profiles.Select(p => p.Name));
         Assert.False(vm.ConnectCommand.CanExecute(null));
@@ -80,6 +81,9 @@ public class ProfileViewModelsTests : IDisposable
         Assert.True(vm.ConnectCommand.CanExecute(null));
         vm.ConnectCommand.Execute(null);
         Assert.Equal("b", opened!.Name);
+        // The list's Connect button always opens a saved profile: a pin the user accepts there is safe to write
+        // back. Flipping this to false would let a Connect-button pin silently vanish instead of saving.
+        Assert.True(openedFromStore);
 
         await vm.NewCommand.ExecuteAsync(null);
         Assert.Equal(["a", "b", "c"], vm.Profiles.Select(p => p.Name));
@@ -432,6 +436,27 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal("elsewhere", opened!.Host);
         Assert.True(fromStore);
         Assert.Null(vm.QuickConnectError);
+    }
+
+    /// <summary>The ad hoc branch defaults a missing port (23 here), so its generated name can collide with an
+    /// unrelated saved profile's name -- "mvs.example" typed with no port becomes "mvs.example:23", and a saved
+    /// profile happens to be named exactly that while pointing somewhere else entirely. fromStore has to say false
+    /// here: it is derived from which branch Resolve took (reference identity), not from a name lookup that would
+    /// re-collide with the very name Resolve just generated. Getting this wrong lets a certificate pin accepted
+    /// on this ad hoc connection get written into the unrelated saved profile's file (see App.WritePinBack).</summary>
+    [Fact]
+    public void Quick_connect_does_not_mistake_an_ad_hoc_host_for_a_saved_profile_of_the_same_generated_name()
+    {
+        _store.Save(new SessionProfile { Name = "mvs.example:23", Host = "totally-different-host" });
+        SessionProfile? opened = null;
+        var fromStore = true;
+        var vm = NewPicker((p, s) => { opened = p; fromStore = s; });
+
+        vm.QuickConnectText = "mvs.example";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.Equal("mvs.example", opened!.Host);
+        Assert.False(fromStore);
     }
 
     [Fact]

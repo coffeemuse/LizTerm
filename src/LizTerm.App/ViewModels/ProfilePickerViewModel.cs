@@ -112,9 +112,15 @@ public partial class ProfilePickerViewModel : ObservableObject
         if (parsed.Resolve([.. Profiles]) is { } profile)
         {
             QuickConnectError = null;
-            // fromStore is whether Resolve matched a saved name. It cannot mis-fire: an exact name match always
-            // wins there, so the ad hoc branch can never produce a name that a saved profile also has.
-            _openSession(profile, Profiles.Any(p => p.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase)));
+            // fromStore observes which branch Resolve took rather than re-deriving its rule: Resolve returns the
+            // list's own instance for the saved branch and a freshly constructed record for the ad hoc branch, so
+            // reference identity is exact. A name comparison here would be wrong: the ad hoc branch defaults a
+            // missing port (23 or 992), so its generated name ("mvs.example:23") can collide with an unrelated
+            // saved profile's name, which would report fromStore = true for a connection nothing ever saved and
+            // let a pin get written into that unrelated profile's file. If Resolve ever returned a copy instead of
+            // the list's own instance, this would fail safe -- no pin write-back -- rather than write into the
+            // wrong file.
+            _openSession(profile, Profiles.Any(p => ReferenceEquals(p, profile)));
             return;
         }
 
