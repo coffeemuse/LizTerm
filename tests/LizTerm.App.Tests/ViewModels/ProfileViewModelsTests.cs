@@ -294,4 +294,21 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(9, built.Model);
         Assert.Equal("cp9999", built.CodePage);
     }
+
+    /// <summary>The other half of the seeding rule: a hand-edited file whose codePage is blank -- or null, which
+    /// System.Text.Json writes straight into the record whatever its annotation says -- is seeded and selected
+    /// like any other outside value, so TryBuild is the last thing standing between it and a NullReferenceException
+    /// thrown out of OnSaveClick, which has no catch. A saved "" is no better: b3270 warns on stderr, starts on a
+    /// fallback, and the session connects normally with quietly wrong characters.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void A_blank_code_page_is_refused_rather_than_saved_or_thrown_on(string? codePage)
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "p", Host = "h", CodePage = codePage! });
+
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Choose a code page.", vm.ValidationMessage);
+    }
 }

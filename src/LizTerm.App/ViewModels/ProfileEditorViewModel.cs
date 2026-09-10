@@ -127,6 +127,12 @@ public partial class ProfileEditorViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(Name)) { ValidationMessage = "Give the profile a name."; return null; }
         if (string.IsNullOrWhiteSpace(Host)) { ValidationMessage = "Enter the host name or address."; return null; }
         if (!int.TryParse(PortText.Trim(), out var port) || port < 1 || port > 65535) { ValidationMessage = "Port must be a number from 1 to 65535."; return null; }
+        // The drop-down cannot produce this, but the seeding above can: a hand-edited file whose codePage is
+        // null or blank is seeded into the list verbatim and selected, and CodePage.Trim() below would then
+        // throw straight out of OnSaveClick, which has no catch. Blank is refused rather than passed through
+        // for the same reason #45 replaced the text box: b3270 warns on stderr and starts on a fallback, so a
+        // saved "" is a session that connects normally with quietly wrong characters.
+        if (string.IsNullOrWhiteSpace(CodePage)) { ValidationMessage = "Choose a code page."; return null; }
         ValidationMessage = null;
         return new SessionProfile
         {
