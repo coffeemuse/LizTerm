@@ -99,7 +99,18 @@ public sealed partial class FindViewModel : ObservableObject
         IReadOnlyList<ScreenRegion> matches = _snapshot is null ? [] : ScreenSearch.Find(_snapshot, Term);
         Matches = matches;
         CurrentIndex = Reanchor(matches, previous);
+
+        // Reanchor kept your place only when the new current match is the same position as the old one. Any
+        // other outcome — a fallback to index 0, or no match at all — lands on a match the cursor has never
+        // been moved to, so a repaint that does not keep your place must clear _visited the same way OnTermChanged
+        // and Open do; otherwise the next Enter would skip past the newly-highlighted match instead of visiting
+        // it (the same bug _visited exists to prevent, reached through a repaint instead of through typing).
+        if (!SamePosition(previous, CurrentMatch))
+            _visited = false;
     }
+
+    private static bool SamePosition(ScreenRegion? a, ScreenRegion? b) =>
+        a is { } x && b is { } y && x.Top == y.Top && x.Left == y.Left;
 
     /// <summary>Which match to be on after a recompute: the one starting where the last one did, else the
     /// first, else none. Pure, so the rule is tested without a screen.</summary>

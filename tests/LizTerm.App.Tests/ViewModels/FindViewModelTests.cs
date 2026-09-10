@@ -209,6 +209,53 @@ public class FindViewModelTests
         Assert.Empty(find.Matches);
     }
 
+    /// <summary>The bug this guards: after a repaint whose re-anchor falls back (the current match's position
+    /// is gone), the cursor was never moved to the match now highlighted at index 0 — so the next Enter must
+    /// visit it, not skip past it to the next match, the same rule a fresh search already gets right.</summary>
+    [Fact]
+    public async Task A_repaint_that_falls_back_makes_the_next_next_visit_the_new_first_match()
+    {
+        var (find, moves) = Build();
+        find.Open();
+        find.Term = "ab";
+        await find.NextAsync();
+        await find.NextAsync();
+        Assert.Equal(1, find.CurrentIndex);
+        Assert.Equal([(0, 0), (1, 0)], moves);
+
+        // The match the cursor is on (row 1) is gone; only rows 0 and 2 remain. Reanchor cannot find (1, 0)
+        // and falls back to index 0.
+        find.OnScreen(Screen("ab", "xx", "ab"));
+        Assert.Equal(0, find.CurrentIndex);
+        Assert.Equal(2, find.Matches.Count);
+
+        await find.NextAsync();
+
+        Assert.Equal((0, 0), moves[^1]);
+    }
+
+    /// <summary>The guard against over-fixing the above: a repaint that genuinely keeps the current match in
+    /// place must not clear `_visited`, or an ordinary Next after a routine repaint would stall on the same
+    /// match instead of advancing.</summary>
+    [Fact]
+    public async Task A_repaint_that_keeps_the_current_match_still_advances_on_the_next_next()
+    {
+        var (find, moves) = Build();
+        find.Open();
+        find.Term = "ab";
+        await find.NextAsync();
+        await find.NextAsync();
+        Assert.Equal(1, find.CurrentIndex);
+        Assert.Equal([(0, 0), (1, 0)], moves);
+
+        find.OnScreen(Screen("ab", "ab", "ab", "ab"));
+        Assert.Equal(1, find.CurrentIndex);
+
+        await find.NextAsync();
+
+        Assert.Equal((2, 0), moves[^1]);
+    }
+
     [Fact]
     public void Reanchor_prefers_the_previous_position_then_falls_back_to_the_first()
     {
