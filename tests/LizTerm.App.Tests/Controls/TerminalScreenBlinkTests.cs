@@ -4,8 +4,6 @@
 
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Headless;
-using Avalonia.Threading;
 using Avalonia.Headless.XUnit;
 using LizTerm.App.Controls;
 using LizTerm.Core.Screen;
@@ -59,14 +57,6 @@ public class TerminalScreenBlinkTests
         Assert.True(screen.BlinkTimerRunning);
     }
 
-    /// <summary>Forces a frame. The headless render loop draws on demand, so a "did it repaint" assertion
-    /// passes vacuously without this — nothing renders after the first frame.</summary>
-    private static void Repaint(Window window)
-    {
-        Dispatcher.UIThread.RunJobs();
-        window.CaptureRenderedFrame();
-    }
-
     /// <summary>The blink timer's only action is a full repaint, so the per-run text of an unchanged screen has
     /// to survive one: re-segmenting and re-shaping all 1920 cells twice a second, for as long as anything on
     /// screen blinks, was the cost.</summary>
@@ -76,17 +66,17 @@ public class TerminalScreenBlinkTests
         var screen = new TerminalScreen { Snapshot = WithBlink() };
         var window = new Window { Width = 800, Height = 600, Content = screen };
         window.Show();
-        Repaint(window);
+        TestRender.Repaint(window);
         Assert.Equal(1, screen.RunPlanBuilds);
 
         // Exactly what a blink phase flip does: repaint, same snapshot.
         screen.InvalidateVisual();
-        Repaint(window);
+        TestRender.Repaint(window);
         Assert.Equal(1, screen.RunPlanBuilds);
 
         // A new screen is new text, so it must be prepared again.
         screen.Snapshot = WithBlink();
-        Repaint(window);
+        TestRender.Repaint(window);
         Assert.Equal(2, screen.RunPlanBuilds);
     }
 
@@ -98,12 +88,12 @@ public class TerminalScreenBlinkTests
         var screen = new TerminalScreen { Snapshot = WithBlink() };
         var window = new Window { Width = 800, Height = 600, Content = screen };
         window.Show();
-        Repaint(window);
+        TestRender.Repaint(window);
         Assert.Equal(1, screen.RunPlanBuilds);
 
         screen.Measure(new Size(400, 600));
         screen.Arrange(new Rect(0, 0, 400, 600));
-        Repaint(window);
+        TestRender.Repaint(window);
 
         Assert.Equal(2, screen.RunPlanBuilds);
     }

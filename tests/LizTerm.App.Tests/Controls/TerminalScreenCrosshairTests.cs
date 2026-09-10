@@ -4,9 +4,7 @@
 
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
-using Avalonia.Threading;
 using LizTerm.App.Controls;
 using LizTerm.App.Rendering;
 using LizTerm.Core.Screen;
@@ -21,14 +19,6 @@ public class TerminalScreenCrosshairTests
         var window = new Window { Width = 800, Height = 600, Content = screen };
         window.Show();
         return (window, screen);
-    }
-
-    /// <summary>Forces a frame. The headless render loop draws on demand (see TerminalScreenBlinkTests.Repaint),
-    /// so asserting on RunPlanBuilds needs one after every change that should, or should not, cause a repaint.</summary>
-    private static void Repaint(Window window)
-    {
-        Dispatcher.UIThread.RunJobs();
-        window.CaptureRenderedFrame();
     }
 
     [AvaloniaFact]
@@ -47,7 +37,7 @@ public class TerminalScreenCrosshairTests
         var (window, screen) = Show();
         screen.Measure(new Size(800, 600));
         screen.Arrange(new Rect(0, 0, 800, 600));
-        Repaint(window);
+        TestRender.Repaint(window);
         var before = screen.RunPlanBuilds;
         Assert.True(before > 0, "the first render should have built a run plan");
 
@@ -56,7 +46,7 @@ public class TerminalScreenCrosshairTests
             screen.Crosshair = mode;
             screen.Measure(new Size(800, 600));
             screen.Arrange(new Rect(0, 0, 800, 600));
-            Repaint(window);
+            TestRender.Repaint(window);
         }
 
         Assert.Equal(before, screen.RunPlanBuilds);

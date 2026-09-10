@@ -40,6 +40,15 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<CrosshairMode> CrosshairProperty =
         AvaloniaProperty.Register<TerminalScreen, CrosshairMode>(nameof(Crosshair));
 
+    /// <summary>Every find match on the current screen, or null. Recomputed by FindViewModel against each new
+    /// snapshot and pushed in; the control only paints them.</summary>
+    public static readonly StyledProperty<IReadOnlyList<ScreenRegion>?> FindMatchesProperty =
+        AvaloniaProperty.Register<TerminalScreen, IReadOnlyList<ScreenRegion>?>(nameof(FindMatches));
+
+    /// <summary>The match the user is on, painted distinctly from the others.</summary>
+    public static readonly StyledProperty<ScreenRegion?> CurrentMatchProperty =
+        AvaloniaProperty.Register<TerminalScreen, ScreenRegion?>(nameof(CurrentMatch));
+
     public static readonly FontFamily TerminalFont = FontFamily.Parse("avares://LizTerm.App/Assets/Fonts#IBM 3270");
 
     private readonly Typeface _typeface = new(TerminalFont);
@@ -52,7 +61,8 @@ public sealed class TerminalScreen : Control
 
     static TerminalScreen()
     {
-        AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty, CrosshairProperty);
+        AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty, CrosshairProperty,
+            FindMatchesProperty, CurrentMatchProperty);
         AffectsArrange<TerminalScreen>(SnapshotProperty);
         FocusableProperty.OverrideDefaultValue<TerminalScreen>(true);
     }
@@ -135,6 +145,18 @@ public sealed class TerminalScreen : Control
     {
         get => GetValue(CrosshairProperty);
         set => SetValue(CrosshairProperty, value);
+    }
+
+    public IReadOnlyList<ScreenRegion>? FindMatches
+    {
+        get => GetValue(FindMatchesProperty);
+        set => SetValue(FindMatchesProperty, value);
+    }
+
+    public ScreenRegion? CurrentMatch
+    {
+        get => GetValue(CurrentMatchProperty);
+        set => SetValue(CurrentMatchProperty, value);
     }
 
     internal CellGeometry LastGeometry { get; private set; }
@@ -342,6 +364,7 @@ public sealed class TerminalScreen : Control
         }
         DrawCrosshair(context, snapshot, g);
         DrawSelection(context, snapshot, g);
+        DrawFindMatches(context, snapshot, g);
         DrawCursor(context, snapshot, g);
     }
 
@@ -431,6 +454,24 @@ public sealed class TerminalScreen : Control
         var topLeft = g.CellRect(region.Top, region.Left);
         var bottomRight = g.CellRect(region.Bottom, region.Right);
         context.FillRectangle(Palette.Selection, new Rect(topLeft.TopLeft, bottomRight.BottomRight));
+    }
+
+    /// <summary>An overlay, exactly as the selection is — never folded into the run plan. Matches arrive
+    /// already recomputed for this snapshot, so a stale region here means only that the host has just resized
+    /// the screen; Clamp answers that rather than throwing.</summary>
+    private void DrawFindMatches(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
+    {
+        if (FindMatches is not { Count: > 0 } matches) return;
+        var current = CurrentMatch;
+
+        foreach (var match in matches)
+        {
+            if (match.Clamp(snapshot.Rows, snapshot.Columns) is not { } region) continue;
+            var topLeft = g.CellRect(region.Top, region.Left);
+            var bottomRight = g.CellRect(region.Bottom, region.Right);
+            var brush = match == current ? Palette.FindCurrent : Palette.FindMatch;
+            context.FillRectangle(brush, new Rect(topLeft.TopLeft, bottomRight.BottomRight));
+        }
     }
 
     private void DrawCursor(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)

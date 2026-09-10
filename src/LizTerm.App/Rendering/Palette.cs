@@ -20,6 +20,11 @@ public static class Palette
     /// for as long as a drag lasts, and host text has to stay readable straight through it.</summary>
     public static readonly IBrush Crosshair = new ImmutableSolidColorBrush(Color.FromArgb(0x30, 0xE0, 0xE0, 0x60));
 
+    /// <summary>A find match, and the one the user is on. Amber rather than Selection's blue so a search over a
+    /// selected region stays readable, and the current match is opaque enough to pick out of a screenful.</summary>
+    public static readonly IBrush FindMatch = new ImmutableSolidColorBrush(Color.FromArgb(0x66, 0xE0, 0xA0, 0x20));
+    public static readonly IBrush FindCurrent = new ImmutableSolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xD0, 0x40));
+
     private static readonly Dictionary<HostColor, Color> Colors = new()
     {
         [HostColor.Default] = Color.FromRgb(0xF0, 0xF0, 0xF0),
