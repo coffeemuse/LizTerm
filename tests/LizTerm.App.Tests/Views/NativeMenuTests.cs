@@ -8,6 +8,7 @@ using Avalonia.Controls.Platform;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.VisualTree;
 using LizTerm.App.Controls;
 using LizTerm.App.Menus;
@@ -582,7 +583,10 @@ public class NativeMenuTests
         Assert.True(window.FindControl<TerminalScreen>("Screen")!.IsFocused);
     }
 
-    /// <summary>Matches reach the control, so the overlay has something to paint.</summary>
+    /// <summary>Matches reach the control, so the overlay has something to paint. Show()'s fixture seeds "hello"
+    /// at row 2 column 3, so asserting a single match first is what stops this passing vacuously if
+    /// ScreenSearch.Find regressed to returning nothing — both sides would still be empty/null and the two
+    /// Equal calls below would not notice.</summary>
     [AvaloniaFact]
     public void Find_matches_reach_the_terminal_screen()
     {
@@ -591,8 +595,90 @@ public class NativeMenuTests
 
         vm.Find.Term = "hello";
 
+        Assert.Single(vm.Find.Matches);
         var screen = window.FindControl<TerminalScreen>("Screen")!;
         Assert.Equal(vm.Find.Matches, screen.FindMatches);
         Assert.Equal(vm.Find.CurrentMatch, screen.CurrentMatch);
+    }
+
+    /// <summary>What none of the tests above cover: every one of them reaches the find bar through
+    /// <c>RaiseClicked</c> or by poking the view model directly, never through the control. That matters because
+    /// under the classic menu strategy — the default on Windows and Linux — the native menu is detached and
+    /// <c>MenuItem.InputGesture</c> is display only (see the decompilation note on
+    /// <see cref="The_paste_hotkey_reaches_the_host_exactly_once_via_TerminalScreen_under_headless"/>), so
+    /// <c>TerminalScreen.TryHandlePlatformGesture</c> → <c>FindRequested</c> → <c>ShowFind</c> is the *only*
+    /// dispatch path that exists there. Modelled on that same paste test, over both menu strategies for the same
+    /// reason: this path does not go through either menu at all, so both must reach the bar identically.</summary>
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_find_gesture_opens_the_bar_via_TerminalScreen(bool useNativeMenu)
+    {
+        var (window, vm, _, _) = Show(useNativeMenu);
+        window.FindControl<TerminalScreen>("Screen")!.Focus();
+
+        window.KeyPressQwerty(PhysicalKey.F, RawInputModifiers.Control);
+
+        Assert.True(vm.Find.IsOpen);
+        Assert.True(window.FindControl<TextBox>("FindBox")!.IsFocused);
+    }
+
+    /// <summary>Item 2: on macOS these three native Edit items are AppKit key equivalents that
+    /// <c>NSApplication.sendEvent:</c> dispatches ahead of the key window's responder chain (see
+    /// <c>OnPasteClickNative</c> and its neighbours in SessionWindow.axaml.cs). Task 8 gave this window its
+    /// first focusable text field, which makes the find box reachable by them, so each handler must route to
+    /// the box instead of the session while it is focused. Driven through <c>RaiseClicked</c>, the entry point
+    /// both real renderers use.
+    ///
+    /// The clipboard used here is Avalonia's own (<c>window.Clipboard</c>, what <c>TextBox.Paste</c>/<c>Copy</c>
+    /// read and write), which is a different store from the <c>FakeTextClipboard</c> the session's
+    /// Copy/PasteAsync go through — the two must not be confused for this test to mean anything.</summary>
+    [AvaloniaFact]
+    public async Task The_native_paste_item_pastes_into_the_find_box_when_it_is_focused()
+    {
+        var (window, _, session, clipboard) = Show();
+        session.RaiseConnection(ConnectionState.Connected3270);
+        // What PasteAsync would send to the host if the focus guard were missing.
+        clipboard.Text = "typed-into-the-host-by-mistake";
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+        await window.Clipboard!.SetTextAsync("claude");
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Paste")).RaiseClicked();
+
+        Assert.Equal("claude", window.FindControl<TextBox>("FindBox")!.Text);
+        Assert.DoesNotContain(session.Calls, call => call.StartsWith("paste:"));
+    }
+
+    /// <inheritdoc cref="The_native_paste_item_pastes_into_the_find_box_when_it_is_focused"/>
+    [AvaloniaFact]
+    public async Task The_native_copy_item_copies_the_find_box_text_when_it_is_focused()
+    {
+        var (window, vm, _, _) = Show();
+        // The terminal has something to copy too, so a guard-free handler would have somewhere else to act.
+        vm.Selection = ScreenRegion.FromCorners(2, 3, 2, 7);
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+        var box = window.FindControl<TextBox>("FindBox")!;
+        box.Text = "needle";
+        box.SelectAll();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Copy")).RaiseClicked();
+
+        Assert.Equal("needle", await window.Clipboard!.TryGetTextAsync());
+    }
+
+    /// <inheritdoc cref="The_native_paste_item_pastes_into_the_find_box_when_it_is_focused"/>
+    [AvaloniaFact]
+    public void The_native_select_all_item_selects_the_find_box_text_when_it_is_focused()
+    {
+        var (window, vm, _, _) = Show();
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+        var box = window.FindControl<TextBox>("FindBox")!;
+        box.Text = "hello";
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "Select _All")).RaiseClicked();
+
+        Assert.Equal(0, box.SelectionStart);
+        Assert.Equal(5, box.SelectionEnd);
+        Assert.Null(vm.Selection);
     }
 }

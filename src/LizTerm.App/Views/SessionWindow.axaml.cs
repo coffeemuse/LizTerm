@@ -91,11 +91,35 @@ public partial class SessionWindow : Window
     // Deliberately the view model's methods, never the [RelayCommand]s. Each method carries its own guard; the
     // commands keep CommunityToolkit's default of disabling while running, which is fine for a click and wrong
     // for a keystroke — and on macOS Task 6's gestures make these keystrokes, activated by the OS.
-    private void OnCopyClickNative(object? sender, EventArgs e) => _ = ViewModel?.CopyAsync();
+    //
+    // Each one checks FindBox.IsFocused first. Task 8 gave this window its first focusable text field, and on
+    // macOS that made it reachable by these same key equivalents: NSApplication.sendEvent: dispatches an AppKit
+    // key equivalent to the menu ahead of the key window's responder chain, and Avalonia's TextBox is not a
+    // native NSTextField — it lives inside the same Avalonia NSView as the terminal, downstream of that
+    // interception. Without this guard, Cmd+V with the find box focused would fire this handler and type the
+    // clipboard into the 3270 screen and send it to the host — unintended input to a live session — while the
+    // box stayed empty; Cmd+A would select the whole terminal instead of the box's text; and Cmd+C would be
+    // intermittent, copying whichever of the two has something to copy. Routing to the box's own
+    // Copy/Paste/SelectAll instead keeps the key equivalent doing what the user looking at the focused box
+    // expects. The classic (non-native) handlers and the [RelayCommand]s are untouched on purpose: that path
+    // dispatches through the normal focus chain, so the box already wins there without help.
+    private void OnCopyClickNative(object? sender, EventArgs e)
+    {
+        if (FindBox.IsFocused) { FindBox.Copy(); return; }
+        _ = ViewModel?.CopyAsync();
+    }
 
-    private void OnPasteClickNative(object? sender, EventArgs e) => _ = ViewModel?.PasteAsync();
+    private void OnPasteClickNative(object? sender, EventArgs e)
+    {
+        if (FindBox.IsFocused) { FindBox.Paste(); return; }
+        _ = ViewModel?.PasteAsync();
+    }
 
-    private void OnSelectAllClickNative(object? sender, EventArgs e) => ViewModel?.SelectAll();
+    private void OnSelectAllClickNative(object? sender, EventArgs e)
+    {
+        if (FindBox.IsFocused) { FindBox.SelectAll(); return; }
+        ViewModel?.SelectAll();
+    }
 
     // MenuItem.Click and NativeMenuItem.Click have different delegate shapes, so each shared action is two
     // one-line handlers over one method.
