@@ -560,9 +560,16 @@ the backend tests.
   exists to stop relying on. (Two reviews have now proposed that gate; the cost it was chasing is already gone,
   because the anchors are read once per process and the file is written once per session.)
   `WriteCaFile(pem, kind)` writes both kinds, owner-only on Unix, because x3270 loads
-  `caFile` in `sio_init` for each connection. Their lifetimes differ: a pin file is deleted in the `finally` once
-  the Connect run has answered, while the roots file is the same public bytes every time and is written once by
-  `RootsFile` and kept for the session, so a reconnect reuses it; `DisposeAsync` deletes it. `acceptHostname` is `any` only
+  `caFile` in `sio_init` for each connection. **Both kinds have the same lifetime**, and the mechanism is one
+  class, `SessionCaFile`: written on first use, reused by every later connect whose PEM matches (a changed
+  one-shot `ConnectOptions.Pin` gets its own file and the superseded one is deleted), kept for the session, and
+  removed by `DisposeAsync`. The pin file used to be deleted in `ConnectAsync`'s `finally` once the Connect run
+  had answered, on the reasoning that the engine only loads `caFile` while building that connection's TLS
+  context — true, but `finish_connect` (4.5ga6 `Common/telnet.c:568-579`) runs `sio_init` for **every**
+  connection, the engine's own auto-reconnect attempts included, and a load failure is `SI_FAILURE` →
+  `NC_FAILED`. Auto-reconnect (#28) therefore turned that delete into "a pinned TLS profile can never reconnect",
+  failing every few seconds with "CA database load … failed" for as long as `host_retry_mode` stays armed. Both
+  files hold public certificates, so nothing was bought by the shorter life. `acceptHostname` is `any` only
   for a pin that is one self-signed certificate; a pin that also carries CA certificates makes each of them an
   OpenSSL trust anchor, so the engine's normal name check stays on to keep a certificate that CA issued for another
   host from verifying (`CertificateReader.CountCertificates` decides). `B3270Session.TrustAnchors` defaults to

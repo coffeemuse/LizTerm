@@ -350,9 +350,10 @@ public sealed class B3270Session : IEmulatorSession
         {
             // Closed last, and on every path: a fault (see OnProcessEnded) may already have cleared _process, but
             // the log still needs closing — and the Quit, plus whatever b3270 says on its way out, are exactly
-            // the lines a report about a hang on close turns on. The roots file goes the same way: it is kept
-            // across a session's connects, so this is where its life ends.
-            DeleteRootsFile();
+            // the lines a report about a hang on close turns on. Both CA files go the same way: each is kept
+            // across a session's connects, so this is where their life ends.
+            _rootsFile.Delete();
+            _pinFile.Delete();
             StopWireLog();
         }
     }
@@ -684,53 +685,44 @@ public sealed class B3270Session : IEmulatorSession
         // the CA file is fully written (or the source's short-circuit fully resolved) before the thread pool hop
         // back to the caller. The token goes with it: an attempt already cancelled skips work whose result is
         // known to be discarded, the way every other await on this path does.
-        var (caFile, anyName, ephemeral) = await Task.Run(() => DecideCaFile(pin, verify), cancellationToken);
+        var (caFile, anyName) = await Task.Run(() => DecideCaFile(pin, verify), cancellationToken);
         LastCaFile = caFile;
-        try
+        // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
+        // open before the Connect has even gone out. Every toggle this engine's tls-hello listed is sent every
+        // time so an attempt never inherits the previous one's trust settings (spec 2); TlsSettings returns null
+        // when tls-hello listed none of the three, in which case there is nothing to run at all.
+        if (TlsSettings(verify, caFile, anyName, EffectiveTlsOptions) is { } set)
+            await RunAsync([set], throwOnFailure: true, cancellationToken: cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await ConnectCoreAsync(cancellationToken);
+        // Armed here and nowhere earlier. b3270's other toggle, `retry`, would keep retrying a connect that
+        // failed, and that is what collides with everything ConnectAsync is built on: a failed Connect run
+        // meaning the attempt is over is what raises ConnectionFailedException, what feeds the certificate
+        // prompt, and what SessionViewModel's 30s timeout measures. `reconnect` armed after success touches
+        // none of it (spec 6.1).
+        //
+        // Not throwOnFailure, no caller token, and every failure swallowed: the connect has already
+        // succeeded, so nothing past this point may turn that success into a thrown exception and an error
+        // banner. throwOnFailure: false only covers a refused run-result; RunAsync writes the line before it
+        // ever looks at a token, so honouring the caller's cancellationToken here would arm a live engine and
+        // then still throw OperationCanceledException out of ConnectAsync if it fired mid-round-trip -- exactly
+        // the "leaves the session disconnected and reusable" contract on IEmulatorSession.ConnectAsync that a
+        // cancel is supposed to keep. So this run takes no token, is bounded by DisconnectTimeout instead so a
+        // wedged engine cannot hang an otherwise-successful connect, and the try/catch below swallows anything
+        // that still gets past that -- a dead engine (BackendUnavailableException), a closed stdin
+        // (IOException), or the bounded wait's own TimeoutException. Losing auto-reconnect is a far smaller
+        // loss than reporting a working connect as a failure, and a genuinely dead engine still corrects
+        // itself regardless: OnProcessEnded raises the fault and drops the connection state on its own.
+        if (Profile.AutoReconnect)
         {
-            // Bounded by the caller's token: b3270 answers Set at once, but a wedged engine must not hold the attempt
-            // open before the Connect has even gone out. Every toggle this engine's tls-hello listed is sent every
-            // time so an attempt never inherits the previous one's trust settings (spec 2); TlsSettings returns null
-            // when tls-hello listed none of the three, in which case there is nothing to run at all.
-            if (TlsSettings(verify, caFile, anyName, EffectiveTlsOptions) is { } set)
-                await RunAsync([set], throwOnFailure: true, cancellationToken: cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            await ConnectCoreAsync(cancellationToken);
-            // Armed here and nowhere earlier. b3270's other toggle, `retry`, would keep retrying a connect that
-            // failed, and that is what collides with everything ConnectAsync is built on: a failed Connect run
-            // meaning the attempt is over is what raises ConnectionFailedException, what feeds the certificate
-            // prompt, and what SessionViewModel's 30s timeout measures. `reconnect` armed after success touches
-            // none of it (spec 6.1).
-            //
-            // Not throwOnFailure, no caller token, and every failure swallowed: the connect has already
-            // succeeded, so nothing past this point may turn that success into a thrown exception and an error
-            // banner. throwOnFailure: false only covers a refused run-result; RunAsync writes the line before it
-            // ever looks at a token, so honouring the caller's cancellationToken here would arm a live engine and
-            // then still throw OperationCanceledException out of ConnectAsync if it fired mid-round-trip -- exactly
-            // the "leaves the session disconnected and reusable" contract on IEmulatorSession.ConnectAsync that a
-            // cancel is supposed to keep. So this run takes no token, is bounded by DisconnectTimeout instead so a
-            // wedged engine cannot hang an otherwise-successful connect, and the try/catch below swallows anything
-            // that still gets past that -- a dead engine (BackendUnavailableException), a closed stdin
-            // (IOException), or the bounded wait's own TimeoutException. Losing auto-reconnect is a far smaller
-            // loss than reporting a working connect as a failure, and a genuinely dead engine still corrects
-            // itself regardless: OnProcessEnded raises the fault and drops the connection state on its own.
-            if (Profile.AutoReconnect)
+            try
             {
-                try
-                {
-                    await RunAsync([new B3270Action("Set", "reconnect", "true")], throwOnFailure: false, timeout: DisconnectTimeout);
-                }
-                catch (Exception)
-                {
-                    // Swallow: see above.
-                }
+                await RunAsync([new B3270Action("Set", "reconnect", "true")], throwOnFailure: false, timeout: DisconnectTimeout);
             }
-        }
-        finally
-        {
-            // Only a pin file: it is per attempt and the secrecy argument applies to it. The roots file holds
-            // public certificates that do not change between attempts, so it lives until DisposeAsync.
-            if (ephemeral && caFile is not null) TryDeleteCaFile(caFile);
+            catch (Exception)
+            {
+                // Swallow: see above.
+            }
         }
     }
 
@@ -739,9 +731,9 @@ public sealed class B3270Session : IEmulatorSession
     /// engine has none it can use (spec 1); verification off gets no CA file at all. Evaluated off the caller's
     /// context (see <see cref="ConnectAsync"/>)
     /// since it is the only part of a connect that does real work: reading the trust source and writing its PEM to
-    /// disk. <c>Ephemeral</c> is whether the caller deletes the file after the Connect run: a pin file, not the
-    /// shared roots file.</summary>
-    private (string? CaFile, bool AnyName, bool Ephemeral) DecideCaFile(CertificatePin? pin, bool verify)
+    /// disk. Either file, once written, lives until <see cref="DisposeAsync"/>; see <see cref="SessionCaFile"/>
+    /// for why neither may be deleted after the Connect run that used it.</summary>
+    private (string? CaFile, bool AnyName) DecideCaFile(CertificatePin? pin, bool verify)
     {
         // A pin is the whole trust store, so it never reaches the trust-anchor source. Pem is declared
         // non-nullable but arrives from a user-editable profile file, so a pin that lost it must still fail the
@@ -766,9 +758,11 @@ public sealed class B3270Session : IEmulatorSession
             // A pin that also carries CA certificates makes each of them a trust anchor (OpenSSL trusts every
             // member of caFile), and only the engine's normal name check then keeps a certificate that CA issued
             // for another host from verifying here.
-            // The engine loads caFile when it builds the TLS context for this connection, inside the Connect run,
-            // so the file has to outlive that run and nothing more.
-            return (WriteCaFile(pinPem, "pin"), CertificateReader.CountCertificates(pinPem) == 1, Ephemeral: true);
+            // Kept for the session, exactly as the roots file is: the engine rebuilds its TLS context — and so
+            // reloads caFile — for every connection it makes, including the ones it starts itself once
+            // `reconnect` is armed (spec 6.1), so a file deleted after this Connect run answered would leave a
+            // pinned profile unable to reconnect, forever. See SessionCaFile.
+            return (_pinFile.PathFor(pinPem), CertificateReader.CountCertificates(pinPem) == 1);
         }
         if (!CanPinCertificates)
         {
@@ -779,47 +773,69 @@ public sealed class B3270Session : IEmulatorSession
             // on its own what caFile exists to do on the platforms that need it spelled out. Reading TrustAnchors
             // (a measured 210 ms) and writing its PEM to a file the engine has no toggle to ever be pointed at
             // would just be work spent restoring an anchor this platform never lost.
-            return (null, false, Ephemeral: false);
+            return (null, false);
         }
         // NOT gated on Profile.UseTls, however tempting: b3270 implements the TELNET START-TLS option, so a plain
         // profile can still upgrade to TLS mid-session, and an attempt that reached that point with an empty
         // caFile would verify against the engine's own compiled-in directory — the nonexistent Homebrew path this
         // milestone exists to stop relying on. The cost that made the gate look attractive is gone anyway: the
-        // anchors are read once per process and RootsFile writes the file once per session.
+        // anchors are read once per process and the file is written once per session.
         var anchors = verify ? TrustAnchors.ExportPem() : null;
         // A source with nothing to offer, or only whitespace, leaves caFile empty: an empty *file* fails the
         // connect outright, so "nothing usable" has to collapse to null before it reaches the file.
-        return (string.IsNullOrWhiteSpace(anchors) ? null : RootsFile(anchors), false, Ephemeral: false);
+        return (string.IsNullOrWhiteSpace(anchors) ? null : _rootsFile.PathFor(anchors), false);
     }
 
-    private readonly object _rootsLock = new();
-    private string? _rootsFile;
-    private string? _rootsPem;
+    private readonly SessionCaFile _rootsFile = new("roots");
+    private readonly SessionCaFile _pinFile = new("pin");
 
-    /// <summary>The anchors are the same public bytes for every attempt this session makes, so the file is written
-    /// once and reused by every later connect — a reconnect or a retry rewriting and deleting a quarter of a
-    /// megabyte each time bought nothing. <see cref="DisposeAsync"/> removes it.</summary>
-    private string RootsFile(string pem)
+    /// <summary>One CA file, written on first use and kept for the session: reused by every later connect while
+    /// its PEM is unchanged, rewritten when it is not, and removed by <see cref="DisposeAsync"/>.
+    /// <para>Session-lived rather than per-attempt because x3270 rebuilds its TLS context for every connection —
+    /// <c>finish_connect</c> (4.5ga6 <c>Common/telnet.c:568-579</c>) calls <c>sio_init</c>, which hands
+    /// <c>caFile</c> to <c>SSL_CTX_load_verify_locations</c>, and a load failure is <c>SI_FAILURE</c> →
+    /// <c>NC_FAILED</c>. The engine makes those connections on its own once <c>reconnect</c> is armed, so a file
+    /// deleted after the Connect run that used it would fail every reconnect with "CA database load … failed",
+    /// and, since <c>host_retry_mode</c> keeps the reconnect armed across that failure, would go on failing every
+    /// few seconds indefinitely. Both files are public certificates, so the secrecy argument that once justified
+    /// deleting the pin file promptly never outweighed that.</para>
+    /// <para>Keyed on the PEM rather than written once because <see cref="ConnectOptions.Pin"/> can carry a
+    /// different pin per attempt within one session: a changed pin has to get its own file rather than silently
+    /// reuse the last one.</para></summary>
+    private sealed class SessionCaFile(string kind)
     {
-        lock (_rootsLock)
-        {
-            if (_rootsFile is not null && _rootsPem == pem && File.Exists(_rootsFile)) return _rootsFile;
-            _rootsFile = WriteCaFile(pem, "roots");
-            _rootsPem = pem;
-            return _rootsFile;
-        }
-    }
+        private readonly object _lock = new();
+        private string? _path;
+        private string? _pem;
 
-    private void DeleteRootsFile()
-    {
-        string? path;
-        lock (_rootsLock)
+        public string PathFor(string pem)
         {
-            path = _rootsFile;
-            _rootsFile = null;
-            _rootsPem = null;
+            string path;
+            string? superseded;
+            lock (_lock)
+            {
+                if (_path is not null && _pem == pem && File.Exists(_path)) return _path;
+                superseded = _path;
+                _path = path = WriteCaFile(pem, kind);
+                _pem = pem;
+            }
+            // The PEM changed, so the previous file will never be named again: delete it here rather than leaving
+            // it in the temp directory until the process ends.
+            if (superseded is not null) TryDeleteCaFile(superseded);
+            return path;
         }
-        if (path is not null) TryDeleteCaFile(path);
+
+        public void Delete()
+        {
+            string? path;
+            lock (_lock)
+            {
+                path = _path;
+                _path = null;
+                _pem = null;
+            }
+            if (path is not null) TryDeleteCaFile(path);
+        }
     }
 
     /// <summary>The Set action carrying one attempt's trust settings (spec 4.1), or null when
@@ -857,7 +873,8 @@ public sealed class B3270Session : IEmulatorSession
         return pairs.Count == 0 ? null : new B3270Action("Set", [.. pairs]);
     }
 
-    /// <summary>The path of the last CA file written — a pin or the trust anchors — deleted or not. Test seam.</summary>
+    /// <summary>The path of the CA file the last connect pointed the engine at — a pin or the trust anchors — or
+    /// null when that connect sent none. Both kinds live until <see cref="DisposeAsync"/>. Test seam.</summary>
     internal string? LastCaFile { get; private set; }
 
     /// <param name="kind">"pin" or "roots": the file name says which of the two callers wrote it, which is what a

@@ -221,38 +221,97 @@ public class B3270SessionConnectTests
     }
 
     [Fact]
-    public async Task A_pinned_profile_verifies_against_a_temp_file_that_lives_only_for_the_connect_run()
+    public async Task A_pinned_profile_verifies_against_a_temp_file_that_lives_for_the_session()
     {
         var fake = new FakeB3270Process();
         string? contentDuringConnect = null;
         var existedDuringConnect = false;
         var ownerOnly = true;
-        await using var session = new B3270Session(Pinned, () => fake);
-        fake.RunResponder = line =>
+        string pinFile;
+        await using (var session = new B3270Session(Pinned, () => fake))
         {
-            if (line.Contains("\"Connect\""))
+            fake.RunResponder = line =>
             {
-                var path = session.LastCaFile!;
-                existedDuringConnect = File.Exists(path);
-                contentDuringConnect = File.ReadAllText(path);
-                if (!OperatingSystem.IsWindows()) ownerOnly = File.GetUnixFileMode(path) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            }
-            return [Ok(line)];
-        };
+                if (line.Contains("\"Connect\""))
+                {
+                    var path = session.LastCaFile!;
+                    existedDuringConnect = File.Exists(path);
+                    contentDuringConnect = File.ReadAllText(path);
+                    if (!OperatingSystem.IsWindows()) ownerOnly = File.GetUnixFileMode(path) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
+                return [Ok(line)];
+            };
 
-        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var set = LastSetLine(fake);
-        Assert.Contains("\"verifyHostCert\",\"true\"", set);
-        Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", set);
-        Assert.Contains("\"acceptHostname\",\"any\"", set);
-        Assert.True(existedDuringConnect, "the pin file did not exist while the Connect run was pending");
-        Assert.Equal(Pin.Pem, contentDuringConnect);
-        Assert.True(ownerOnly, "the pin file is not owner-only");
-        Assert.False(File.Exists(session.LastCaFile), "the pin file outlived the Connect run");
-        Assert.StartsWith(Path.GetTempPath(), session.LastCaFile);
-        Assert.StartsWith("lizterm-pin-", Path.GetFileName(session.LastCaFile!));
-        Assert.EndsWith(".pem", session.LastCaFile);
+            var set = LastSetLine(fake);
+            Assert.Contains("\"verifyHostCert\",\"true\"", set);
+            Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", set);
+            Assert.Contains("\"acceptHostname\",\"any\"", set);
+            Assert.True(existedDuringConnect, "the pin file did not exist while the Connect run was pending");
+            Assert.Equal(Pin.Pem, contentDuringConnect);
+            Assert.True(ownerOnly, "the pin file is not owner-only");
+            pinFile = session.LastCaFile!;
+            Assert.StartsWith(Path.GetTempPath(), pinFile);
+            Assert.StartsWith("lizterm-pin-", Path.GetFileName(pinFile));
+            Assert.EndsWith(".pem", pinFile);
+        }
+
+        Assert.False(File.Exists(pinFile), "the pin file outlived the session");
+    }
+
+    /// <summary>The pin file used to be deleted in ConnectAsync's finally, once the Connect run had answered. That
+    /// was survivable only while a second connect meant a user pressing Connect again. Auto-reconnect (#28) made
+    /// the engine start its own: x3270's finish_connect (4.5ga6 Common/telnet.c:568-579) runs sio_init for every
+    /// connection, sio_init hands caFile to SSL_CTX_load_verify_locations, and a load failure is SI_FAILURE →
+    /// NC_FAILED — so a pinned profile with AutoReconnect on could never come back, and because host_retry_mode
+    /// stays armed across that failure it would keep failing with "CA database load … failed" every few seconds
+    /// forever. The pin file now has the roots file's lifetime; this is the roots file's own test
+    /// (An_unpinned_verifying_connect_names_a_roots_file_holding_the_trust_anchors) applied to it.</summary>
+    [Fact]
+    public async Task A_pinned_session_keeps_its_ca_file_so_the_engine_can_reconnect()
+    {
+        var fake = new FakeB3270Process();
+        string pinFile;
+        await using (var session = new B3270Session(Pinned with { AutoReconnect = true }, () => fake))
+        {
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+            pinFile = session.LastCaFile!;
+            Assert.True(File.Exists(pinFile), "the pin file was deleted while the engine could still reconnect");
+            Assert.Equal(Pin.Pem, File.ReadAllText(pinFile));
+
+            // A second connect reuses the same file rather than writing another.
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal(pinFile, session.LastCaFile);
+            Assert.True(File.Exists(pinFile));
+        }
+
+        Assert.False(File.Exists(pinFile), "the pin file outlived the session");
+    }
+
+    /// <summary>ConnectOptions.Pin can differ per attempt, so the cache is keyed on the PEM: a changed pin gets its
+    /// own file instead of the engine being pointed at the previous pin's bytes.</summary>
+    [Fact]
+    public async Task A_changed_pin_gets_its_own_file()
+    {
+        var fake = new FakeB3270Process();
+        var oneShot = new CertificatePin("00:11", "CN=new", "-----BEGIN CERTIFICATE-----\nbmV3\n-----END CERTIFICATE-----\n");
+        string first;
+        string second;
+        await using (var session = new B3270Session(Pinned, () => fake))
+        {
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+            first = session.LastCaFile!;
+
+            await session.ConnectAsync(new ConnectOptions(Pin: oneShot), TestContext.Current.CancellationToken);
+            second = session.LastCaFile!;
+
+            Assert.NotEqual(first, second);
+            Assert.Equal(oneShot.Pem, File.ReadAllText(second));
+            Assert.False(File.Exists(first), "the superseded pin file was left in the temp directory");
+        }
+
+        Assert.False(File.Exists(second), "the pin file outlived the session");
     }
 
     [Fact]
@@ -291,8 +350,13 @@ public class B3270SessionConnectTests
         Assert.Equal(oneShot.Pem, content);
     }
 
+    /// <summary>A failed connect and a dead engine both leave the session reusable, so the pin file survives them
+    /// and goes with the session instead — the same rule the roots file has always had. It used to be deleted in
+    /// ConnectAsync's finally; see A_pinned_session_keeps_its_ca_file_so_the_engine_can_reconnect for why that
+    /// stopped being safe. A failed connect is in fact exactly when the file is needed next: b3270's own retry
+    /// is what tries again.</summary>
     [Fact]
-    public async Task The_pin_file_is_deleted_after_a_failed_connect_and_after_engine_death()
+    public async Task The_pin_file_survives_a_failed_connect_and_engine_death_and_goes_with_the_session()
     {
         var failing = new FakeB3270Process
         {
@@ -300,12 +364,15 @@ public class B3270SessionConnectTests
                 ? [Failed(Tag(line), "Connection failed:", "TLS: Host certificate verification failed:", "self-signed certificate (18)")]
                 : [Ok(line)],
         };
+        string pinFile;
         await using (var session = new B3270Session(Pinned, () => failing))
         {
             await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
-            Assert.NotNull(session.LastCaFile);
-            Assert.False(File.Exists(session.LastCaFile));
+            pinFile = session.LastCaFile!;
+            Assert.NotNull(pinFile);
+            Assert.True(File.Exists(pinFile));
         }
+        Assert.False(File.Exists(pinFile));
 
         var dying = new FakeB3270Process();
         dying.RunResponder = line =>
@@ -316,13 +383,15 @@ public class B3270SessionConnectTests
         await using (var session = new B3270Session(Pinned, () => dying))
         {
             await Assert.ThrowsAsync<BackendUnavailableException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
-            Assert.NotNull(session.LastCaFile);
-            Assert.False(File.Exists(session.LastCaFile));
+            pinFile = session.LastCaFile!;
+            Assert.NotNull(pinFile);
+            Assert.True(File.Exists(pinFile));
         }
+        Assert.False(File.Exists(pinFile));
     }
 
     [Fact]
-    public async Task The_pin_file_is_deleted_after_a_cancelled_connect()
+    public async Task The_pin_file_survives_a_cancelled_connect_and_goes_with_the_session()
     {
         string? connectTag = null;
         var fake = new FakeB3270Process();
@@ -333,14 +402,21 @@ public class B3270SessionConnectTests
                 return [Ok(line), Failed(connectTag!, "Connection failed"), """{"connection":{"state":"not-connected"}}"""];
             return [Ok(line)];
         };
-        await using var session = new B3270Session(Pinned, () => fake);
-        using var cts = new CancellationTokenSource();
-        var connect = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
-        Assert.True(File.Exists(session.LastCaFile));
-        cts.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connect);
-        Assert.False(File.Exists(session.LastCaFile));
+        string pinFile;
+        await using (var session = new B3270Session(Pinned, () => fake))
+        {
+            using var cts = new CancellationTokenSource();
+            var connect = session.ConnectAsync(cancellationToken: cts.Token);
+            await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
+            pinFile = session.LastCaFile!;
+            Assert.True(File.Exists(pinFile));
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connect);
+            // A cancel leaves the session reusable (IEmulatorSession.ConnectAsync's contract), so the file the
+            // next attempt would need stays put.
+            Assert.True(File.Exists(pinFile));
+        }
+        Assert.False(File.Exists(pinFile));
     }
 
     [Fact]
