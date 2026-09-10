@@ -147,7 +147,7 @@ public partial class FileTransferViewModel : ObservableObject
         {
             path = IsSend
                 ? await _picker.PickFileToSendAsync()
-                : await _picker.PickSaveLocationAsync(LocalFileNames.Suggest(HostFile, HostType));
+                : await _picker.PickSaveLocationAsync(LocalFileNames.Suggest(HostFile, HostType), "Save received file as");
         }
         catch (Exception ex)
         {

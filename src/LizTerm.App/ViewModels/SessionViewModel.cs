@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LizTerm.App.Capture;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
@@ -47,8 +48,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CopyCommand))]
     [NotifyCanExecuteChangedFor(nameof(SelectAllCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyScreenAsHtmlCommand))]
     [NotifyPropertyChangedFor(nameof(CanCopy))]
     [NotifyPropertyChangedFor(nameof(CanSelectAll))]
+    [NotifyPropertyChangedFor(nameof(CanCaptureScreen))]
     private ScreenSnapshot? _screen;
 
     [ObservableProperty] private string _connectionText = "";
@@ -143,11 +146,13 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     [ObservableProperty] private string _wireLogText = "";
 
-    public static string WireLogFileName(string profileName, DateTime now)
-    {
-        var safe = new string(profileName.Select(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-' ? c : '_').ToArray());
-        return $"wire-{safe}-{now:yyyyMMdd-HHmmss}.log";
-    }
+    public static string WireLogFileName(string profileName, DateTime now) =>
+        $"wire-{SafeFileName.Of(profileName)}-{now:yyyyMMdd-HHmmss}.log";
+
+    /// <summary>The name the Save dialog opens on. Same shape as a wire log's, so the two files a user might
+    /// keep from one session sort together.</summary>
+    public static string ScreenFileName(string profileName, DateTime now, string extension) =>
+        $"screen-{SafeFileName.Of(profileName)}-{now:yyyyMMdd-HHmmss}.{extension}";
 
     /// <summary>The path for a new file of that name, or the first of name-2, name-3, ... that does not exist yet.
     /// Two logs started in the same second must not share a file (spec 8).</summary>
@@ -509,6 +514,47 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     public void SelectAll()
     {
         if (Screen is { } screen) Selection = ScreenRegion.Full(screen.Rows, screen.Columns);
+    }
+
+    /// <summary>There is a screen to capture. Deliberately not IsConnected: capture needs no engine, and the
+    /// moment it is most wanted is often a session the host has just dropped (spec 3.1).</summary>
+    public bool CanCaptureScreen => Screen is not null;
+
+    /// <summary>File &gt; Save Screen As... The format follows the extension the OS dialog returned; we write
+    /// the bytes rather than handing a path to anything else, because the dialog has just made a promise about
+    /// overwriting and only we can keep it.</summary>
+    public async Task SaveScreenAsync(IFilePicker picker)
+    {
+        if (Screen is not { } screen) return;
+        try
+        {
+            var suggested = ScreenFileName(Profile.Name, DateTime.Now, "txt");
+            if (await picker.PickSaveLocationAsync(suggested, "Save screen as") is not { } path) return;
+
+            var html = Path.GetExtension(path).Equals(".html", StringComparison.OrdinalIgnoreCase)
+                       || Path.GetExtension(path).Equals(".htm", StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllTextAsync(path, html ? ScreenHtml.Render(screen) : screen.ToText());
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not save the screen: " + ex.Message;
+        }
+    }
+
+    /// <summary>Edit &gt; Copy Screen as HTML. The cheapest useful capture and the one that reaches a bug
+    /// report.</summary>
+    [RelayCommand(CanExecute = nameof(CanCaptureScreen))]
+    public async Task CopyScreenAsHtmlAsync()
+    {
+        if (Screen is not { } screen) return;
+        try
+        {
+            await _clipboard.SetTextAsync(ScreenHtml.Render(screen));
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not copy the screen: " + ex.Message;
+        }
     }
 
     /// <summary>Rejected actions are not errors to show: b3270 already explains them through the keyboard lock.</summary>

@@ -95,6 +95,22 @@ public partial class SessionWindow : Window
 
     private void OnSelectAllClickNative(object? sender, EventArgs e) => ViewModel?.SelectAll();
 
+    // MenuItem.Click and NativeMenuItem.Click have different delegate shapes, so each shared action is two
+    // one-line handlers over one method.
+    private void OnSaveScreenClick(object? sender, RoutedEventArgs e) => _ = SaveScreenAsync();
+    private void OnSaveScreenClickNative(object? sender, EventArgs e) => _ = SaveScreenAsync();
+
+    private async Task SaveScreenAsync()
+    {
+        if (ViewModel is not { } vm) return;
+        await vm.SaveScreenAsync(new AvaloniaFilePicker(this));
+        Screen.Focus();
+    }
+
+    // Native only: the classic item binds CopyScreenAsHtmlCommand. This calls the method rather than the
+    // command for the reason the Edit menu's other native items do — a command disables while it runs.
+    private void OnCopyScreenClickNative(object? sender, EventArgs e) => _ = ViewModel?.CopyScreenAsHtmlAsync();
+
     /// <summary>The native Wire Log item needs this handler for two independent reasons, and the classic item
     /// needs it for neither — which is why it is the one place the two menus' bindings differ (OneWay here,
     /// TwoWay there).

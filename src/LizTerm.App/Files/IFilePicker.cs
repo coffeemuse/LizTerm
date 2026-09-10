@@ -11,6 +11,7 @@ public interface IFilePicker
     /// <summary>OS Open dialog. Null when cancelled or when the choice has no local path.</summary>
     Task<string?> PickFileToSendAsync();
 
-    /// <summary>OS Save dialog, which asks before overwriting an existing file. Null when cancelled.</summary>
-    Task<string?> PickSaveLocationAsync(string suggestedFileName);
+    /// <summary>OS Save dialog, which asks before overwriting an existing file. Null when cancelled. The title
+    /// is the caller's because the two callers save different things: a received file, and a screen capture.</summary>
+    Task<string?> PickSaveLocationAsync(string suggestedFileName, string title);
 }

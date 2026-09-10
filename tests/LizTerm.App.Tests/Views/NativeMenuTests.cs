@@ -478,4 +478,16 @@ public class NativeMenuTests
             Assert.NotNull(Item(window, "_Keys", header).Command);
         }
     }
+
+    /// <summary>Capture needs no engine, so both items stay live with the session down. Gating them on
+    /// IsConnected would take them away at the moment they are most wanted.</summary>
+    [AvaloniaFact]
+    public void The_capture_items_stay_enabled_while_disconnected()
+    {
+        var (window, _, session, _) = Show();
+        session.RaiseConnection(ConnectionState.Disconnected);
+
+        Assert.True(Item(window, "_File", "_Save Screen As...").IsEnabled);
+        Assert.True(Item(window, "_Edit", "Copy Screen as _HTML").IsEnabled);
+    }
 }

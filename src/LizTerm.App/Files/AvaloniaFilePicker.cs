@@ -21,11 +21,11 @@ public sealed class AvaloniaFilePicker(TopLevel topLevel) : IFilePicker
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
-    public async Task<string?> PickSaveLocationAsync(string suggestedFileName)
+    public async Task<string?> PickSaveLocationAsync(string suggestedFileName, string title)
     {
         var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Save received file as",
+            Title = title,
             SuggestedFileName = suggestedFileName,
         });
         return file?.TryGetLocalPath();

@@ -23,7 +23,7 @@ public sealed class FakeFilePicker : IFilePicker
         return Exception is not null ? Task.FromException<string?>(Exception) : Task.FromResult(Result);
     }
 
-    public Task<string?> PickSaveLocationAsync(string suggestedFileName)
+    public Task<string?> PickSaveLocationAsync(string suggestedFileName, string title)
     {
         Calls.Add("save:" + suggestedFileName);
         return Exception is not null ? Task.FromException<string?>(Exception) : Task.FromResult(Result);

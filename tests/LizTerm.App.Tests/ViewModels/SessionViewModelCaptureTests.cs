@@ -1,0 +1,119 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
+using LizTerm.App.Tests.Fakes;
+using LizTerm.App.ViewModels;
+using LizTerm.Core.Screen;
+using LizTerm.Core.Session;
+
+namespace LizTerm.App.Tests.ViewModels;
+
+public class SessionViewModelCaptureTests
+{
+    private static (SessionViewModel Vm, FakeEmulatorSession Session, FakeTextClipboard Clipboard) Build()
+    {
+        var session = new FakeEmulatorSession();
+        var buffer = new ScreenBuffer(24, 80);
+        buffer.SetText(2, 3, "READY", HostColor.Green, null, null);
+        session.CurrentScreen = buffer.Snapshot();
+        var clipboard = new FakeTextClipboard();
+        return (new SessionViewModel(session, action => action(), clipboard), session, clipboard);
+    }
+
+    [Fact]
+    public void The_suggested_name_carries_the_profile_the_stamp_and_the_extension()
+    {
+        var name = SessionViewModel.ScreenFileName("TK5", new DateTime(2026, 9, 9, 14, 22, 33), "txt");
+
+        Assert.Equal("screen-TK5-20260909-142233.txt", name);
+    }
+
+    [Fact]
+    public void A_profile_name_with_path_characters_is_made_safe()
+    {
+        var name = SessionViewModel.ScreenFileName("a/b c", new DateTime(2026, 9, 9, 1, 2, 3), "html");
+
+        Assert.Equal("screen-a_b_c-20260909-010203.html", name);
+    }
+
+    [Fact]
+    public async Task Saving_writes_plain_text_for_a_txt_path()
+    {
+        var (vm, _, _) = Build();
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".txt");
+        var picker = new FakeFilePicker { Result = path };
+
+        await vm.SaveScreenAsync(picker);
+
+        var written = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.Contains("READY", written);
+        Assert.DoesNotContain("<span", written);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public async Task Saving_writes_html_for_an_html_path()
+    {
+        var (vm, _, _) = Build();
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".html");
+        var picker = new FakeFilePicker { Result = path };
+
+        await vm.SaveScreenAsync(picker);
+
+        var written = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.Contains("<span", written);
+        Assert.Contains("READY", written);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public async Task A_cancelled_save_dialog_writes_nothing_and_reports_nothing()
+    {
+        var (vm, _, _) = Build();
+        var picker = new FakeFilePicker { Result = null };
+
+        await vm.SaveScreenAsync(picker);
+
+        Assert.Null(vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task A_failing_save_reports_through_the_error_banner()
+    {
+        var (vm, _, _) = Build();
+        var picker = new FakeFilePicker { Result = Path.Combine(Path.GetTempPath(), "no-such-dir", "x.txt") };
+
+        await vm.SaveScreenAsync(picker);
+
+        Assert.NotNull(vm.ErrorMessage);
+        Assert.Contains("Could not save the screen", vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Copying_puts_html_on_the_clipboard()
+    {
+        var (vm, _, clipboard) = Build();
+
+        await vm.CopyScreenAsHtmlAsync();
+
+        Assert.NotNull(clipboard.Text);
+        Assert.Contains("<span", clipboard.Text);
+        Assert.Contains("READY", clipboard.Text);
+    }
+
+    /// <summary>The whole reason capture does not go through b3270: the moment you most want to keep a screen
+    /// is often one the host has just dropped.</summary>
+    [Fact]
+    public async Task Capture_works_while_disconnected()
+    {
+        var (vm, session, clipboard) = Build();
+        session.RaiseConnection(ConnectionState.Disconnected);
+
+        Assert.False(vm.IsConnected);
+        Assert.True(vm.CanCaptureScreen);
+
+        await vm.CopyScreenAsHtmlAsync();
+        Assert.NotNull(clipboard.Text);
+    }
+}
