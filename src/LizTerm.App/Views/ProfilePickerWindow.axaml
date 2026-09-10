@@ -14,6 +14,15 @@
         WindowStartupLocation="CenterScreen">
   <DockPanel Margin="16">
     <TextBlock DockPanel.Dock="Top" Text="Sessions" FontSize="20" Margin="0,0,0,10" />
+    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12" Spacing="4">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBox x:Name="QuickConnectBox" Text="{Binding QuickConnectText}" Width="300"
+                 PlaceholderText="host, host:port, or L:host for TLS" KeyDown="OnQuickConnectKeyDown" />
+        <Button Content="Quick Connect" Command="{Binding QuickConnectCommand}" />
+      </StackPanel>
+      <TextBlock Text="{Binding QuickConnectError}" Foreground="#FF8080" FontSize="12" TextWrapping="Wrap"
+                 IsVisible="{Binding QuickConnectError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </StackPanel>
     <StackPanel DockPanel.Dock="Right" Margin="12,0,0,0" Spacing="8" Width="120">
       <Button Content="Connect" Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch" IsDefault="True" />
       <Button Content="New..." Command="{Binding NewCommand}" HorizontalAlignment="Stretch" />
