@@ -436,6 +436,52 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal("Give the profile a name.", vm.ValidationMessage);
     }
 
+    /// <summary>And the harder half, which the two above cannot see: when the model change makes the geometry
+    /// ILLEGAL, the rule still has no claim on a box another rule owns. It used to overwrite it, so a user with a
+    /// blank name was sent to fix the oversize while Save went on refusing the name.</summary>
+    [Fact]
+    public void Changing_the_model_leaves_an_unrelated_message_alone_even_when_the_oversize_turns_illegal()
+    {
+        var vm = new ProfileEditorViewModel(null) { Host = "h", Oversize = "100x30" };
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+
+        // 100x30 clears model 2's floor and falls short of model 5's, so the rule does have a verdict here.
+        vm.SelectedModel = TerminalModel.Find(5)!;
+
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+    }
+
+    /// <summary>The model is not the only thing that can make the verdict stale: typing in the box does too, and
+    /// a red line under text the user has since corrected complains about numbers that are no longer there. Same
+    /// rule the picker's Quick Connect box follows.</summary>
+    [Fact]
+    public void Correcting_the_oversize_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
+        Assert.Null(vm.TryBuild());
+        Assert.StartsWith("200 columns by 200 rows", vm.ValidationMessage);
+
+        vm.Oversize = "132x43";
+
+        Assert.Null(vm.ValidationMessage);
+        Assert.NotNull(vm.TryBuild());
+    }
+
+    /// <summary>Emptying the box is a correction like any other: blank is a legal oversize, so the message goes
+    /// with it rather than needing a special case.</summary>
+    [Fact]
+    public void Emptying_the_oversize_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
+        Assert.Null(vm.TryBuild());
+        Assert.NotNull(vm.ValidationMessage);
+
+        vm.Oversize = "";
+
+        Assert.Null(vm.ValidationMessage);
+    }
+
     /// <summary>The box inherits the command line's tie-break rule by calling the same Parse and Resolve, so
     /// text that exactly names a saved profile connects THAT profile rather than a host of the same name.</summary>
     [Fact]

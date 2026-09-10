@@ -449,6 +449,37 @@ public class B3270SessionLifecycleTests
         Assert.Equal("nopSeconds=60", args[i + 1]);
     }
 
+    /// <summary>The profile editor is not the only way an oversize gets here: a profile file is user-editable and
+    /// nothing on the way in reads this field — ProfileStore.Read sanitises a broken pin and stops there. A
+    /// geometry b3270 would refuse is named before a single action is written, rather than becoming a popup that
+    /// reaches the app as an unexplained HostMessage with nothing tying it to what the user typed (spec 4.2).</summary>
+    [Fact]
+    public void BuildArguments_refuses_an_oversize_b3270_would_reject()
+    {
+        var profile = new SessionProfile { Name = "p", Host = "h", Oversize = "200x200" };
+        var refusal = Assert.Throws<ConnectionFailedException>(() => B3270Session.BuildArguments(profile));
+        Assert.StartsWith("200 columns by 200 rows is 40,000 cells", refusal.Message);
+    }
+
+    /// <summary>And the floor it measures against is the profile's own model's, so an oversize saved under model 2
+    /// and then hand-edited to model 5 is caught as well as an outright nonsense one.</summary>
+    [Fact]
+    public void BuildArguments_measures_the_oversize_against_the_profiles_model()
+    {
+        var under5 = new SessionProfile { Name = "p", Host = "h", Model = 5, Oversize = "100x30" };
+        Assert.Throws<ConnectionFailedException>(() => B3270Session.BuildArguments(under5));
+        Assert.Contains("100x30", B3270Session.BuildArguments(under5 with { Model = 2 }));
+    }
+
+    /// <summary>b3270's own spelling of "no oversize", which a hand-edited profile can carry: valid, and nothing
+    /// to put on the command line.</summary>
+    [Fact]
+    public void BuildArguments_sends_nothing_for_a_zero_by_zero_oversize()
+    {
+        var args = B3270Session.BuildArguments(new SessionProfile { Name = "p", Host = "h", Oversize = "0x0" });
+        Assert.DoesNotContain("-oversize", args);
+    }
+
     [Fact]
     public void BuildArguments_keeps_the_six_arguments_it_always_had()
     {

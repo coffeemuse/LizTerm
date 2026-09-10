@@ -119,8 +119,15 @@ public partial class App : Application
             {
                 // The existing editor, pre-filled: it already carries every row, validates them, and knows the
                 // model and code-page catalogues. Saving by name overwrites, exactly as the picker's New does.
-                if (await new ProfileEditorWindow(profile).ShowDialog<ProfileEdit?>(window) is { } edit)
-                    store.Save(edit.Profile);
+                if (await new ProfileEditorWindow(profile).ShowDialog<ProfileEdit?>(window) is not { } edit) return;
+                // The same read-back ProfilePickerViewModel.EditAsync does, for the same reason: this window's
+                // profile was fixed at construction, so the file under that name can already hold a pin written
+                // since — by the picker, or by another session window's WritePinBack. Overwriting the rest is
+                // what the user asked for; dropping a pin they never saw in this editor is not.
+                store.Save(edit.Profile with
+                {
+                    PinnedCertificate = PinMerge.Resolve(edit.Profile, store.Load(edit.Profile.Name), edit.PinCleared),
+                });
             });
         window.DataContext = viewModel;
         _sessions.Add(window);
@@ -158,7 +165,10 @@ public partial class App : Application
             _picker.Activate();
             return;
         }
-        _picker = new ProfilePickerWindow(_store ?? new ProfileStore(AppPaths.ProfilesDirectory()), (profile, fromStore) => OpenSession(profile, fromStore), Quit);
+        // ??=, as OpenSession does: one store for the process, rather than a throwaway here and a cached one
+        // there. Nothing depends on the identity today — a ProfileStore holds only its directory — but two
+        // spellings a few lines apart read as a distinction that does not exist.
+        _picker = new ProfilePickerWindow(_store ??= new ProfileStore(AppPaths.ProfilesDirectory()), (profile, fromStore) => OpenSession(profile, fromStore), Quit);
         // The same reason test the session windows get, for the mirror-image failure: a shutdown that closes the
         // picker would otherwise be answered with Quit() -> Shutdown(), a second DoShutdown re-entered inside the
         // first, which fires Exit twice.

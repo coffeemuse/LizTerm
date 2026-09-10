@@ -852,8 +852,16 @@ the backend tests.
   offers connect-anyway through `ICertificatePrompt` (`Dialogs/`, injected like the clipboard, asked with a
   `CertificatePromptRequest`: reason lines, what the host presented (read by the injected `ICertificateFetcher` for
   TLS profiles only, under a fresh `ConnectTimeout` source), the previous pin, `CanPin`, and `CannotPinReason`;
-  `CanPin` needs a saved TLS profile, a pinnable certificate, and a fingerprint that differs from the pin in force,
-  which is what stops a rejected pin from being offered again; "Trust this certificate for this profile" pins: the
+  `CanPin` needs a TLS profile, an engine that can pin (`CanPinCertificates`), a pinnable certificate, and a
+  fingerprint that differs from the pin in force, which is what stops a rejected pin from being offered again.
+  It is deliberately **not** gated on the profile being a saved one, though it was: a pin lives in `_pinOverride`
+  for the window's life whether or not there is a file behind the session, and gating the offer on having one made
+  Quick Connect's own headline case (#29, an ad hoc connection as the start of a profile) impossible — an ad hoc
+  TLS session got a bare Connect Anyway, no pin box, and not even a `CannotPinReason` to say why (that message is
+  behind the same gate), so `_pinOverride` was never set and File > Save as Profile produced a profile that failed
+  verification on every later connect. What having a file changes is only whether the accepted pin is *also*
+  written back: `_saveProfile` is null for an ad hoc session and the write-back is `?.Invoke`.
+  "Trust this certificate for this profile" pins: the
   profile is saved with the pin and verification on, `_pinOverride` carries it for the window's life because the
   session's profile is fixed, and Connect Anyway without it is one attempt with verification off; a changed
   certificate reopens the same window titled "Certificate changed" with both fingerprints; the editor shows a pinned

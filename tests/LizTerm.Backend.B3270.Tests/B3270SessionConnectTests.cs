@@ -919,6 +919,42 @@ public class B3270SessionConnectTests
         Assert.Contains(fake.InputLines, l => l.Contains("\"reconnect\""));
     }
 
+    /// <summary>Swallowed is not the same as unreported. An engine whose `reconnect` toggle is absent or refused
+    /// leaves auto-reconnect off while the profile's checkbox still says it is on, and the user would otherwise
+    /// only find out when a dropped session never came back — the same silent capability downgrade DecideCaFile
+    /// refuses to make for a pin. The connect still succeeds; what it must not do is stay quiet.</summary>
+    [Fact]
+    public async Task A_refused_reconnect_arm_is_reported_as_a_host_message()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"reconnect\"")
+            ? [Failed(Tag(line), "reconnect not supported")]
+            : [Ok(line)];
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        var messages = new List<string>();
+        session.HostMessage += (_, m) => messages.Add(m);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(messages, m => m.StartsWith("Automatic reconnect could not be turned on", StringComparison.Ordinal)
+            && m.Contains("reconnect not supported", StringComparison.Ordinal));
+    }
+
+    /// <summary>The other half: a profile that never asked for auto-reconnect must not be told about a toggle it
+    /// was never going to send, and an engine that accepts the arm has nothing to report either.</summary>
+    [Fact]
+    public async Task An_accepted_reconnect_arm_says_nothing()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        var messages = new List<string>();
+        session.HostMessage += (_, m) => messages.Add(m);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(messages, m => m.Contains("Automatic reconnect", StringComparison.Ordinal));
+    }
+
     /// <summary>THE behaviour this task exists for. Measured against 4.5ga6: with reconnect armed, sending the
     /// Disconnect action alone moves the engine straight to `reconnecting` and the session is back up two
     /// seconds later — the user's Disconnect is silently undone, on the most ordinary path in the app. Only

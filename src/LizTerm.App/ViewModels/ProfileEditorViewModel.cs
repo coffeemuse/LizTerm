@@ -5,6 +5,7 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LizTerm.Core;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.ViewModels;
@@ -122,16 +123,27 @@ public partial class ProfileEditorViewModel : ObservableObject
 
     /// <summary>An oversize legal under one model can be below another's floor — 100x30 clears model 2 and is
     /// short of model 5's floor — so a model change has to re-run the check rather than leave a stale verdict
-    /// beside the box. Scoped to a non-blank box on purpose: a blank one says nothing about the geometry. It
-    /// writes and clears only this rule's own message — an oversize that is now legal withdraws the oversize
-    /// error, and leaves "Give the profile a name." alone, because a model change says nothing about the name.
-    /// Clearing an unrelated message here would be a second, invisible behaviour.</summary>
-    partial void OnModelChanged(int value)
+    /// beside the box.</summary>
+    partial void OnModelChanged(int value) => RevalidateOversize();
+
+    /// <summary>And the box itself: a verdict the user has since typed their way out of is a red line under text
+    /// that no longer says what it complains about — the same reason
+    /// <see cref="ProfilePickerViewModel.OnQuickConnectTextChanged"/> clears its own message on the first
+    /// keystroke. Withdrawing the message on a change the model did not cause is the other half of the rule
+    /// <see cref="OnModelChanged"/> already applies.</summary>
+    partial void OnOversizeChanged(string value) => RevalidateOversize();
+
+    /// <summary>Re-runs the oversize rule and writes only its own verdict. The gate is the whole point: the box
+    /// is this rule's to write only while it is empty or already holding what this rule last put there. A message
+    /// another rule owns — "Give the profile a name.", which Save will still refuse on first — stays put whichever
+    /// way the geometry now reads, because neither the model nor the geometry says anything about the name.
+    /// A blank oversize needs no special case: <see cref="OversizeGeometry.TryParse"/> accepts it and yields no
+    /// error, so emptying the box withdraws the message the same way correcting it does.</summary>
+    private void RevalidateOversize()
     {
-        if (string.IsNullOrWhiteSpace(Oversize)) return;
-        var error = OversizeGeometry.TryParse(Oversize, SelectedModel, out _, out var parseError) ? null : parseError;
-        if (error is not null || ValidationMessage == _oversizeMessage) SetValidation(error, fromOversize: true);
-        else _oversizeMessage = null;
+        if (ValidationMessage != _oversizeMessage) return;
+        OversizeGeometry.TryParse(Oversize, SelectedModel, out _, out var error);
+        SetValidation(error, fromOversize: true);
     }
 
     partial void OnHostChanged(string value) => RefreshPin();
@@ -166,9 +178,10 @@ public partial class ProfileEditorViewModel : ObservableObject
         // for the same reason #45 replaced the text box: b3270 warns on stderr and starts on a fallback, so a
         // saved "" is a session that connects normally with quietly wrong characters.
         if (string.IsNullOrWhiteSpace(CodePage)) { SetValidation("Choose a code page."); return null; }
-        // NumberStyles.None rejects a sign and surrounding space, so "-1", "+60" and " 60" are refused rather
-        // than reaching the engine. The ceiling is a day: a larger one is a typo, not an intention.
-        if (!int.TryParse(KeepAliveText.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var keepAlive) || keepAlive > 86400)
+        // PlainNumber refuses a sign and any embedded space, so "-1", "+60" and "6 0" never reach the engine; the
+        // Trim is this call site's own choice, the same forgiveness PortText above gets, so " 60" IS a valid 60.
+        // The ceiling is a day: a larger one is a typo, not an intention.
+        if (!PlainNumber.TryParse(KeepAliveText.Trim(), 0, 86400, out var keepAlive))
         {
             SetValidation("Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).");
             return null;

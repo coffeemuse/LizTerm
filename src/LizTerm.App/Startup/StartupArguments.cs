@@ -2,7 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
-using System.Globalization;
+using LizTerm.Core;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.Startup;
@@ -73,11 +73,11 @@ public sealed record StartupArguments(
     /// 3270 rather than TLS to a host called <c>3270</c>.</summary>
     private static bool CouldBeHost(string rest) => rest.Length > 0 && !rest.All(char.IsAsciiDigit);
 
-    /// <summary>A port as x3270 writes one: plain digits in range. Culture-independent and without
-    /// <see cref="NumberStyles"/>' default tolerance for surrounding space and a leading sign, so "+3270",
-    /// " 3270", "-1", "0" and "99999" are all rejected rather than reaching the engine.</summary>
+    /// <summary>A port as x3270 writes one: plain digits in range, through <see cref="PlainNumber"/>, so "+3270",
+    /// " 3270", "-1", "0" and "99999" are all rejected rather than reaching the engine. Nothing is trimmed on the
+    /// way in, deliberately: this is a section of a larger argument, not a field a user typed on its own.</summary>
     private static bool TryParsePort(string text, out int port) =>
-        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out port) && port is >= 1 and <= 65535;
+        PlainNumber.TryParse(text, 1, 65535, out port);
 
     /// <summary>Host and optional port; a null host means the text does not name one.
     /// <paramref name="malformed"/> is set when the text carries a port section that is not a port

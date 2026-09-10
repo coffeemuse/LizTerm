@@ -145,6 +145,7 @@ public sealed class B3270Session : IEmulatorSession
     /// oversize change takes effect on the next connect, on the next process, or not at all. `reconnect` is the
     /// exception and must be a runtime Set, because it is armed only after a connect has succeeded.
     /// Both are omitted at their defaults, which are b3270's own.</summary>
+    /// <exception cref="ConnectionFailedException">The profile's oversize is one b3270 would refuse.</exception>
     public static IReadOnlyList<string> BuildArguments(SessionProfile profile)
     {
         var arguments = new List<string>
@@ -153,8 +154,22 @@ public sealed class B3270Session : IEmulatorSession
         };
         if (!string.IsNullOrWhiteSpace(profile.Oversize))
         {
-            arguments.Add("-oversize");
-            arguments.Add(profile.Oversize.Trim());
+            // Checked here, not only in the profile editor. A profile file is user-editable and nothing else on
+            // the way in looks at this field — ProfileStore.Read sanitises a broken pin and stops there — so a
+            // hand-edited "200x200", or a model raised to 5 under an oversize that only ever cleared model 2's
+            // floor, would reach argv unread. That is the exact outcome OversizeGeometry exists to prevent
+            // (spec 4.2): b3270 answers a bad -oversize with a popup, which arrives as an unexplained HostMessage
+            // with nothing naming the field the user typed. Throwing names it, and lands in the same error banner
+            // DecideCaFile's own refusal does, before a single action is written.
+            var model = TerminalModel.Find(profile.Model) ?? new TerminalModel(profile.Model, 0, 0);
+            if (!OversizeGeometry.TryParse(profile.Oversize, model, out var oversize, out var error))
+                throw new ConnectionFailedException([error!]);
+            // Null for b3270's own "0x0" spelling of none, which is valid and means: send nothing.
+            if (oversize is not null)
+            {
+                arguments.Add("-oversize");
+                arguments.Add(oversize.ToString());
+            }
         }
         if (profile.KeepAliveSeconds > 0)
         {
@@ -713,18 +728,33 @@ public sealed class B3270Session : IEmulatorSession
         // (IOException), or the bounded wait's own TimeoutException. Losing auto-reconnect is a far smaller
         // loss than reporting a working connect as a failure, and a genuinely dead engine still corrects
         // itself regardless: OnProcessEnded raises the fault and drops the connection state on its own.
+        //
+        // Swallowed is not the same as unreported, though. An engine whose `reconnect` toggle is absent or
+        // refused leaves auto-reconnect off while the profile's checkbox still says it is on, and the user only
+        // finds out when a dropped session never comes back -- the same silent capability downgrade DecideCaFile
+        // refuses to make for a pin. So the outcome is read and said out loud, as a HostMessage: the session is
+        // up and stays up, and the one thing that did not happen is named. (Raised from the connect's own thread
+        // rather than the reader's, as StartProcessAsync already does for the wire-log warning.)
         if (Profile.AutoReconnect)
         {
             try
             {
-                await RunAsync([new B3270Action("Set", "reconnect", "true")], throwOnFailure: false, timeout: DisconnectTimeout);
+                var armed = await RunAsync([new B3270Action("Set", "reconnect", "true")], throwOnFailure: false, timeout: DisconnectTimeout);
+                if (!armed.Success) ReportReconnectUnavailable(string.Join(" ", armed.Text));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Swallow: see above.
+                ReportReconnectUnavailable(ex.Message);
             }
         }
     }
+
+    /// <summary>Auto-reconnect is on in the profile and the engine would not have it. Says so rather than leaving
+    /// the user to discover it when a dropped session never returns; the connect itself has already succeeded and
+    /// is not disturbed.</summary>
+    private void ReportReconnectUnavailable(string reason) =>
+        HostMessage?.Invoke(this, "Automatic reconnect could not be turned on for this session"
+            + (string.IsNullOrWhiteSpace(reason) ? "." : ": " + reason));
 
     /// <summary>The trust decision for one connect attempt, and the file that carries it: spec 3, a pin is the whole
     /// trust store; without one, a verifying connect gets the machine's own anchors, because a statically linked
@@ -926,12 +956,11 @@ public sealed class B3270Session : IEmulatorSession
         try
         {
             using (cancellationToken.Register(() =>
-            {
-                Volatile.Write(ref disconnect, Task.Run(TryDisconnectQuietlyAsync));
-                // The Disconnect is what makes b3270 fail the pending Connect run, so allow that long for it to
-                // arrive and no longer: a wedged engine must not hold the attempt open past its cancellation.
-                runCts.CancelAfter(DisconnectTimeout);
-            }))
+                // The budget for the pending Connect run is started inside TryDisconnectQuietlyAsync, once the
+                // Disconnect is actually about to go out. Started here instead, an armed profile's disarm — itself
+                // bounded by DisconnectTimeout — could spend the entire window against a wedged engine before the
+                // Disconnect was even written, and the run would be abandoned for a reply nothing had yet asked for.
+                Volatile.Write(ref disconnect, Task.Run(() => TryDisconnectQuietlyAsync(runCts)))))
                 result = await run;
         }
         catch (OperationCanceledException) when (runCts.IsCancellationRequested)
@@ -967,13 +996,21 @@ public sealed class B3270Session : IEmulatorSession
         throw new ConnectionFailedException(outcome.Text, certificate);
     }
 
-    private async Task TryDisconnectQuietlyAsync()
+    /// <param name="pendingConnect">The pending Connect run's own source, when this is a cancel. It is the
+    /// Disconnect below that makes b3270 fail that run, so the run is allowed <see cref="DisconnectTimeout"/> from
+    /// the moment the Disconnect can go out — after the disarm, not before it — and no longer: a wedged engine
+    /// must not hold the attempt open past its cancellation. The caller awaits this task before the source leaves
+    /// scope, so the deadline can never be set on a disposed one.</param>
+    private async Task TryDisconnectQuietlyAsync(CancellationTokenSource? pendingConnect = null)
     {
         try
         {
             // The cancel path disconnects too, so it needs the same disarm: a user pressing Connect again while
-            // a reconnect is churning must not leave the old intent behind.
-            await DisarmReconnectAsync();
+            // a reconnect is churning must not leave the old intent behind. In a finally, so a disarm that fails
+            // in some way its own catch does not cover still cannot leave the pending Connect run with no deadline
+            // at all — which would hang the cancel rather than merely shorten it.
+            try { await DisarmReconnectAsync(); }
+            finally { pendingConnect?.CancelAfter(DisconnectTimeout); }
             await RunRawAsync([new B3270Action("Disconnect")], DisconnectTimeout);
         }
         catch (Exception)

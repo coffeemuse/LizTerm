@@ -349,8 +349,9 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     /// <summary>Spec 5.3. Reads what the host presented (TLS profiles only), asks once, and then either connects
     /// without verification for this attempt only or pins the certificate: the retry verifies against the pin, and
-    /// only once the engine has accepted it is the profile saved with the pin and verification on, after which every
-    /// later connect from this window passes the same pin. A pin the engine rejects on that retry is not offered
+    /// only once the engine has accepted it is the profile saved with the pin and verification on — for an ad hoc
+    /// session there is nothing to save it to, and the pin holds for this window alone until Save as Profile — after
+    /// which every later connect from this window passes the same pin. A pin the engine rejects on that retry is not offered
     /// again (the request says so), so this never loops, and it is not kept either, so the next prompt can offer
     /// Remember afresh. The prompt (a modal window), the fetch (a
     /// socket), and the save (a file write) can all fail, and this runs after the connect's catch clauses rather
@@ -379,15 +380,21 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             if (_disposed) return;
         }
 
-        var savedTlsProfile = _saveProfile is not null && Profile.UseTls;
+        // Deliberately NOT "_saveProfile is not null && Profile.UseTls". A pin lives in _pinOverride for the
+        // window's life whether or not there is a file behind this session, and gating the offer on having one
+        // made Quick Connect's own headline case (#29: an ad hoc connection is the start of a profile) impossible
+        // — an ad hoc TLS session got a bare Connect Anyway, no pin box, and not even a cannotPinReason to say
+        // why, and File > Save as Profile then produced a profile that failed verification on every later connect.
+        // What having a file changes is only whether the accepted pin is ALSO written back below.
+        var tlsProfile = Profile.UseTls;
         // Spec item 6 (plan 3d task 8): reuse the session's own rule rather than recompute it — the same
         // CanPinCertificates a Windows/Schannel session already used to refuse a pinned connect loudly (spec 4) is
         // what must stop this prompt offering to pin one, or a user could check "Trust this certificate" believing
         // it protects them when the engine has no way to enforce it.
-        var canPin = savedTlsProfile && _session.CanPinCertificates && presented is { Pinnable: true } &&
+        var canPin = tlsProfile && _session.CanPinCertificates && presented is { Pinnable: true } &&
             !CertificateReader.SameFingerprint(presented.Sha256, previous?.Sha256);
         string? cannotPinReason = null;
-        if (savedTlsProfile && !canPin && presented is not null)
+        if (tlsProfile && !canPin && presented is not null)
         {
             cannotPinReason = !_session.CanPinCertificates
                 ? "This engine cannot verify a pinned certificate; connecting anyway applies to this attempt only."
@@ -443,7 +450,9 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
         try
         {
-            _saveProfile!(Profile with { PinnedCertificate = pin, VerifyCertificate = true });
+            // Null for an ad hoc session: there is no file to write back to. The pin still holds for this window
+            // through _pinOverride, and File > Save as Profile is what makes it permanent.
+            _saveProfile?.Invoke(Profile with { PinnedCertificate = pin, VerifyCertificate = true });
         }
         catch (Exception ex)
         {
@@ -600,11 +609,13 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     public bool CanSaveAsProfile => _saveAsProfile is not null;
 
-    /// <summary>File &gt; Save as Profile. Public because both menus drive it through Click handlers rather than
-    /// the command, the way Save Screen As does. A pin taken in THIS window lives in _pinOverride rather than in
+    /// <summary>File &gt; Save as Profile. Public because both menus drive it through Click handlers rather than a
+    /// command, the way Save Screen As does — and so, like it, it carries no [RelayCommand]: the generated command
+    /// would be bound by nothing, and anyone who later bound it would silently get the disables-while-running
+    /// behaviour the Click handlers exist to avoid. CanSaveAsProfile is what the two menu items bind IsEnabled to.
+    /// A pin taken in THIS window lives in _pinOverride rather than in
     /// the session's profile, which is fixed at construction, so it is folded in here — otherwise a certificate
     /// the user deliberately trusted during an ad hoc session would be dropped by the profile it becomes.</summary>
-    [RelayCommand(CanExecute = nameof(CanSaveAsProfile))]
     public async Task SaveAsProfileAsync()
     {
         if (_saveAsProfile is null) return;

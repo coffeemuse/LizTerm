@@ -68,9 +68,9 @@ public sealed record OversizeGeometry(int Columns, int Rows)
         return true;
     }
 
-    /// <summary>Plain digits only. <see cref="NumberStyles.None"/> rejects a sign and surrounding space, so
-    /// "-5", "+5" and " 5" are format errors rather than reaching the engine — the same rule
-    /// <c>StartupArguments</c> applies to a port.</summary>
+    /// <summary>Plain digits only, which is <see cref="PlainNumber"/>'s whole job: "-5", "+5" and " 5" are format
+    /// errors rather than reaching the engine, and no trimming happens here, so "13 2x43" stays one. The ceiling
+    /// is left to the rules above, which name columns and rows separately.</summary>
     private static bool TryParseDimension(string text, out int value) =>
-        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value);
+        PlainNumber.TryParse(text, 0, int.MaxValue, out value);
 }

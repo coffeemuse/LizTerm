@@ -312,15 +312,49 @@ public class SessionViewModelConnectTests
         Assert.Null(prompt.LastRequest.CannotPinReason);
     }
 
+    /// <summary>An ad hoc session — Quick Connect's, or the command line's — CAN pin. It used to be refused,
+    /// because canPin was gated on having a file to write the pin back to, and the result was #29's headline case
+    /// failing exactly where it mattered: a TLS host reached by Quick Connect offered a bare Connect Anyway, no
+    /// pin box, and not even a CannotPinReason to say why, so _pinOverride was never set and File > Save as
+    /// Profile produced a profile that failed verification on every later connect. Having a file governs only
+    /// whether the accepted pin is ALSO written back (asserted here: nothing is saved), never whether it may be
+    /// taken at all.</summary>
     [Fact]
-    public async Task Ad_hoc_profile_sees_the_certificate_but_cannot_pin()
+    public async Task Ad_hoc_profile_can_pin_but_nothing_is_written_back()
     {
-        var (vm, _, prompt, fetcher, _) = CreateWithPrompt(saveable: false);
+        var (vm, session, prompt, fetcher, saved) = CreateWithPrompt(saveable: false);
+        prompt.Decision = new CertificateDecision(ConnectAnyway: true, Remember: true);
+        prompt.OnAsk = () => session.ConnectException = null;
+
         await vm.ConnectCommand.ExecuteAsync(null);
+
         Assert.Single(fetcher.Calls);
-        Assert.Equal(["ask:fake.host:False"], prompt.Calls);
+        Assert.Equal(["ask:fake.host:True"], prompt.Calls);
         Assert.NotNull(prompt.LastRequest!.Presented);
         Assert.Null(prompt.LastRequest.CannotPinReason);
+        // The retry carried the pin rather than turning verification off, and no file was written.
+        Assert.Equal(["connect", $"connect:pin:{fetcher.Result.Sha256}"], session.Calls);
+        Assert.Empty(saved);
+    }
+
+    /// <summary>And the pin it took is what makes Save as Profile the start of a real profile rather than one
+    /// that re-prompts forever — the other half of the case above, and the reason the fold in SaveAsProfileAsync
+    /// exists at all.</summary>
+    [Fact]
+    public async Task An_ad_hoc_pin_reaches_the_profile_save_as_profile_offers()
+    {
+        SessionProfile? offered = null;
+        var (vm, session, prompt, fetcher, _) = CreateWithPrompt(saveable: false,
+            saveAsProfile: p => { offered = p; return Task.CompletedTask; });
+        prompt.Decision = new CertificateDecision(ConnectAnyway: true, Remember: true);
+        prompt.OnAsk = () => session.ConnectException = null;
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        await vm.SaveAsProfileAsync();
+
+        Assert.Equal(new CertificatePin(fetcher.Result.Sha256, fetcher.Result.Subject, fetcher.Result.Pem),
+            offered!.PinnedCertificate);
+        Assert.True(offered.VerifyCertificate);
     }
 
     [Fact]
