@@ -215,6 +215,16 @@ b3270 has two independent toggles, both `false` by default:
   `RECONNECT_ERR_MS`);
 - **`reconnect`** — reconnect after the *host* drops an established session, after `RECONNECT_MS` (2 s).
 
+The two are not as separate as that reads, and the difference matters downstream. `host.c:643` sets
+`host_retry_mode = appres.reconnect || appres.retry` on **every** `host_connect`, and the `NC_FAILED` branch
+(`host.c:651-656`) re-arms `try_reconnect` at `RECONNECT_ERR_MS` whenever that mode is on. So with `reconnect`
+alone, a reconnect *attempt* that itself fails is retried, and goes on being retried indefinitely — against a
+host that stays down the engine cycles `Reconnecting → TcpPending → Reconnecting` every few seconds until
+something disconnects it. That is arguably what auto-reconnect should do, and this milestone keeps it; what it
+means is that `reconnect` is not confined to one attempt per drop. §6.4's command guards and the CA-file
+lifetime in §3 both depend on that being true: an engine-driven attempt runs with no `ConnectCommand` in
+flight, and it rebuilds its TLS context — reloading `caFile` — each time round.
+
 **This milestone takes `reconnect` and does not take `retry`.**
 
 `retry` is the half that collides with everything `ConnectAsync` is built on. That contract is deliberate and
@@ -308,6 +318,19 @@ offer the app cannot honour.
 `SessionViewModel` gates Connect on `Disconnected` and Disconnect on not-`Disconnected`, rather than both on
 `IsConnected()`.
 
+**On the raw state, and not on a bool derived from it.** A guard written as `!HasSocket()` — or as
+`!HasSocket() && state != Reconnecting` — is not the same rule: `HasSocket()` is also false for `Resolving`
+and `TcpPending`, so both of those offer Connect and grey Disconnect. That was invisible for as long as those
+two states were reachable only from inside `ConnectCommand`, whose `AsyncRelayCommand` disables itself for the
+length of its run. §6.1's arming makes them reachable with no command running: per `Common/host.c:643`,
+`host_retry_mode = appres.reconnect || appres.retry` is set on every `host_connect`, so against a host that
+stays down the engine cycles `Reconnecting → TcpPending → Reconnecting` every few seconds unprompted, and a
+derived guard flickers both menu items on that cycle. The view model therefore keeps the reported
+`ConnectionState` itself as an observable — named `Connection`, since an `[ObservableProperty]` cannot take the
+enum type's own name — and writes `CanConnect => !ConnectPending && Connection == Disconnected`,
+`CanDisconnect => ConnectPending || Connection != Disconnected`. `ConnectPending` is in both because the state
+is still `Disconnected` through the first moments of a manual connect.
+
 ## 7. #29: Quick Connect
 
 ### 7.1 Nearly all of it already exists
@@ -367,8 +390,14 @@ already present, including the new ones — and saves through `ProfileStore`.
   since it gets none of the greying a command's `CanExecute` gives the classic item.
 - With **no `Gesture`**. File is not Edit, and a `NativeMenuItem` gesture is an AppKit key equivalent
   dispatched ahead of the key window's responder chain.
-- Carrying the session's `_pinOverride` when one was taken this run, so a certificate trusted during an ad hoc
-  session survives into the profile it becomes.
+- Carrying the session's `_pinOverride` when one was taken this run, so a certificate trusted in this window
+  survives into the profile it becomes. Note that in practice this can only be a **saved** profile being
+  duplicated, never an ad hoc session: `_pinOverride` is set only where `canPin` is true, and `canPin` requires
+  `savedTlsProfile`, which requires the `saveProfile` callback `App.OpenSession` passes only for
+  `fromStore: true`. An ad hoc session's certificate prompt offers Connect Anyway but not "Trust this
+  certificate for this profile", precisely because there is no profile to write it to. The fold is still the
+  right code — it is what keeps a duplicated profile's pin — but it is not what carries an ad hoc trust
+  decision anywhere.
 
 The editor callback is injected into `SessionViewModel` the way `ICertificatePrompt`, `IFilePicker`,
 `IFolderOpener` and `ITextClipboard` already are, keeping the view model free of Avalonia dialog types and the
@@ -415,7 +444,11 @@ result of the three runs: b3270 reconnects from the user's own `Disconnect` acti
 
 - `OversizeGeometryTests` — one case per rejection arm, asserted on that arm's own message: the format error,
   the zero-dimension case, the per-dimension ceiling, the area limit (160x102 passes, 160x103 fails, 200x200
-  fails), and the model floor for each of models 2 through 5. Blank parses as "no oversize" and is valid.
+  fails), and the model floor for each of models 2 through 5. Blank parses as "no oversize" and is valid. Both
+  inclusive boundaries are asserted from the *accepting* side too — exactly `16383` in one dimension (paired
+  with `1`, against a model with no floor, so neither the area limit nor a floor fires first) and a geometry
+  exactly equal to the model's own (`80x24` on model 2) — since an off-by-one in either comparison passes every
+  refusal case unchanged.
 - `SessionProfileTests` — a JSON file carrying none of the three new fields reads back `60`, `false`, `null`
   (§2.2), and a saved `0` keep-alive survives a round trip rather than reading back as the default.
 
@@ -443,7 +476,9 @@ result of the three runs: b3270 reconnects from the user's own `Disconnect` acti
   list's default button.
 - Editor validation: a bad oversize blocks Save with its own message; changing the model re-validates an
   oversize that was legal under the old one.
-- Connect and Disconnect enablement across `Disconnected`, `Reconnecting` and connected (§6.4).
+- Connect and Disconnect enablement across `Disconnected`, `Reconnecting`, `Resolving`, `TcpPending` and
+  connected (§6.4) — as a table over the states, since `Resolving` and `TcpPending` are the two a guard derived
+  from `HasSocket()` gets wrong and the ones an engine-driven reconnect cycles through.
 - Menu parity and activation for Save as Profile.
 
 ### 9.5 Manual, against a live host
@@ -453,6 +488,14 @@ CI cannot answer these:
 - A real host drop (stop and restart the Hercules listener) with auto-reconnect on: the status bar reads
   `Reconnecting to <host>` and the session comes back.
 - The same, with Disconnect pressed during the two-second window: it stays disconnected.
+- **The same again for a profile whose certificate is pinned**, with auto-reconnect on: the session comes back,
+  rather than failing over and over with `CA database load ... failed` in the error banner. Nothing in CI reaches
+  this end to end — it needs a real OpenSSL engine reloading a real `caFile` on a connection it started itself —
+  so this checklist is the only place the whole path is exercised. The failure it looks for is the one an
+  ephemeral pin file caused: see §3 on the CA file's lifetime.
+- While a host that stays **down** is being reconnected to (kill the listener and leave it dead): File →
+  Disconnect stays enabled and Connect stays greyed for the whole `Reconnecting → TcpPending → Reconnecting`
+  cycle, rather than flickering between them every few seconds (§6.4).
 - An oversize profile against a host that accepts one, confirming the screen renders at the new geometry.
 - Quick Connect to the live host by `host:port`, then Save as Profile, then connect the saved profile.
 

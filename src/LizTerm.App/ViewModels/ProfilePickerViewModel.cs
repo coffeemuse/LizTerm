@@ -95,6 +95,11 @@ public partial class ProfilePickerViewModel : ObservableObject
     [ObservableProperty] private string _quickConnectText = "";
     [ObservableProperty] private string? _quickConnectError;
 
+    /// <summary>The message is about the text that was in the box when Connect was pressed, so the first
+    /// keystroke that changes it makes the message stale — and a red line under a box the user has since
+    /// retyped reads as a complaint about what they are typing now.</summary>
+    partial void OnQuickConnectTextChanged(string value) => QuickConnectError = null;
+
     /// <summary>Connect to what the box names, without saving anything. The parse and the profile-name
     /// precedence are the command line's own — the same Parse and Resolve, so the box cannot drift from it —
     /// which is why a saved profile called "CONS01@tk5" stays reachable by its own name here too (spec 7.1).</summary>

@@ -108,14 +108,30 @@ public partial class ProfileEditorViewModel : ObservableObject
         else if (!value && PortText == "992") PortText = "23";
     }
 
+    /// <summary>The oversize verdict currently in the validation box, or null when what is there came from
+    /// another rule (or nothing is). <see cref="OnModelChanged"/> withdraws only its own message; see there.</summary>
+    private string? _oversizeMessage;
+
+    /// <summary>The one writer of <see cref="ValidationMessage"/>, so the box always knows whether what it holds
+    /// is the oversize rule's verdict.</summary>
+    private void SetValidation(string? message, bool fromOversize = false)
+    {
+        ValidationMessage = message;
+        _oversizeMessage = fromOversize ? message : null;
+    }
+
     /// <summary>An oversize legal under one model can be below another's floor — 100x30 clears model 2 and is
     /// short of model 5's floor — so a model change has to re-run the check rather than leave a stale verdict
-    /// beside the box. Scoped to a non-blank box on purpose: a blank one says nothing about the geometry, and
-    /// clearing an unrelated validation message here would be a second, invisible behaviour.</summary>
+    /// beside the box. Scoped to a non-blank box on purpose: a blank one says nothing about the geometry. It
+    /// writes and clears only this rule's own message — an oversize that is now legal withdraws the oversize
+    /// error, and leaves "Give the profile a name." alone, because a model change says nothing about the name.
+    /// Clearing an unrelated message here would be a second, invisible behaviour.</summary>
     partial void OnModelChanged(int value)
     {
         if (string.IsNullOrWhiteSpace(Oversize)) return;
-        ValidationMessage = OversizeGeometry.TryParse(Oversize, SelectedModel, out _, out var error) ? null : error;
+        var error = OversizeGeometry.TryParse(Oversize, SelectedModel, out _, out var parseError) ? null : parseError;
+        if (error is not null || ValidationMessage == _oversizeMessage) SetValidation(error, fromOversize: true);
+        else _oversizeMessage = null;
     }
 
     partial void OnHostChanged(string value) => RefreshPin();
@@ -141,28 +157,28 @@ public partial class ProfileEditorViewModel : ObservableObject
 
     public SessionProfile? TryBuild()
     {
-        if (string.IsNullOrWhiteSpace(Name)) { ValidationMessage = "Give the profile a name."; return null; }
-        if (string.IsNullOrWhiteSpace(Host)) { ValidationMessage = "Enter the host name or address."; return null; }
-        if (!int.TryParse(PortText.Trim(), out var port) || port < 1 || port > 65535) { ValidationMessage = "Port must be a number from 1 to 65535."; return null; }
+        if (string.IsNullOrWhiteSpace(Name)) { SetValidation("Give the profile a name."); return null; }
+        if (string.IsNullOrWhiteSpace(Host)) { SetValidation("Enter the host name or address."); return null; }
+        if (!int.TryParse(PortText.Trim(), out var port) || port < 1 || port > 65535) { SetValidation("Port must be a number from 1 to 65535."); return null; }
         // The drop-down cannot produce this, but the seeding above can: a hand-edited file whose codePage is
         // null or blank is seeded into the list verbatim and selected, and CodePage.Trim() below would then
         // throw straight out of OnSaveClick, which has no catch. Blank is refused rather than passed through
         // for the same reason #45 replaced the text box: b3270 warns on stderr and starts on a fallback, so a
         // saved "" is a session that connects normally with quietly wrong characters.
-        if (string.IsNullOrWhiteSpace(CodePage)) { ValidationMessage = "Choose a code page."; return null; }
+        if (string.IsNullOrWhiteSpace(CodePage)) { SetValidation("Choose a code page."); return null; }
         // NumberStyles.None rejects a sign and surrounding space, so "-1", "+60" and " 60" are refused rather
         // than reaching the engine. The ceiling is a day: a larger one is a typo, not an intention.
         if (!int.TryParse(KeepAliveText.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var keepAlive) || keepAlive > 86400)
         {
-            ValidationMessage = "Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).";
+            SetValidation("Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).");
             return null;
         }
         if (!OversizeGeometry.TryParse(Oversize, SelectedModel, out var oversize, out var oversizeError))
         {
-            ValidationMessage = oversizeError;
+            SetValidation(oversizeError, fromOversize: true);
             return null;
         }
-        ValidationMessage = null;
+        SetValidation(null);
         return new SessionProfile
         {
             Name = Name.Trim(),

@@ -70,6 +70,19 @@ public class OversizeGeometryTests
         Assert.Equal("Oversize needs both a column count and a row count, for example 132x43.", error);
     }
 
+    /// <summary>The ceiling is inclusive, and only the two tests above ever named it — both from the refusing
+    /// side, which an off-by-one in the comparison would satisfy just as happily (spec 9.2). Paired with 1 so the
+    /// area limit does not fire first (16,383 x 1 is exactly MaxCells), and measured against a model with no
+    /// geometry so its floor does not either.</summary>
+    [Theory]
+    [InlineData("16383x1")]
+    [InlineData("1x16383")]
+    public void Exactly_the_ceiling_is_accepted(string text)
+    {
+        Assert.True(OversizeGeometry.TryParse(text, new TerminalModel(9, 0, 0), out var geometry, out var error), error);
+        Assert.NotNull(geometry);
+    }
+
     [Fact]
     public void Columns_above_the_ceiling_are_refused_by_name()
     {
@@ -111,6 +124,30 @@ public class OversizeGeometryTests
     {
         Assert.False(OversizeGeometry.TryParse("70x43", Model2, out _, out var error));
         Assert.Equal("Oversize must be at least 80 columns and 24 rows for model 2.", error);
+    }
+
+    /// <summary>The floor is inclusive: an oversize that exactly equals the model's own geometry is not an
+    /// oversize at all, but it is not an error either, and b3270 accepts it. Only the refusing side was covered,
+    /// which an off-by-one would also pass (spec 9.2).</summary>
+    [Fact]
+    public void Exactly_the_models_own_geometry_is_accepted()
+    {
+        Assert.True(OversizeGeometry.TryParse("80x24", Model2, out var geometry, out var error), error);
+        Assert.Equal(new OversizeGeometry(80, 24), geometry);
+    }
+
+    /// <summary>Models 3 and 4 share model 2's 80 columns but raise the row floor, so each has to be named: a
+    /// floor read from the wrong model would still pass a test that only ever used 2 and 5 (spec 9.2).</summary>
+    [Theory]
+    [InlineData(3, "80x31", "Oversize must be at least 80 columns and 32 rows for model 3.")]
+    [InlineData(4, "80x42", "Oversize must be at least 80 columns and 43 rows for model 4.")]
+    public void The_floors_for_models_3_and_4_are_their_own(int model, string text, string expected)
+    {
+        var terminal = TerminalModel.Find(model)!;
+        Assert.False(OversizeGeometry.TryParse(text, terminal, out _, out var error));
+        Assert.Equal(expected, error);
+        // And one row higher clears it, so the message is about the floor rather than about the model at all.
+        Assert.True(OversizeGeometry.TryParse($"80x{terminal.Rows}", terminal, out _, out _));
     }
 
     /// <summary>132x43 is legal on model 2, but 132x20 falls short of model 5's 27-row floor, which is why the

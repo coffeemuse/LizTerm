@@ -414,12 +414,15 @@ public class B3270SessionLifecycleTests
         Assert.Equal(0, spawned);
     }
 
-    /// <summary>Both are omitted at their defaults, because argv is evaluated once per process and b3270's own
-    /// defaults already match (oversize unset, nopSeconds 0). That is deliberately NOT the "send every toggle
-    /// explicitly every time" rule the TLS options follow: that rule exists because a connect can inherit the
-    /// previous connect's settings within one engine process, and argv cannot.</summary>
+    /// <summary>Both are omitted when the profile asks for what b3270 already does, because argv is evaluated once
+    /// per process and there is nothing to override (oversize unset, nopSeconds 0). Note the values here are
+    /// <em>b3270's</em> defaults, not <c>SessionProfile</c>'s: LizTerm defaults KeepAliveSeconds to 60, which is
+    /// exactly the case that DOES emit <c>-set nopSeconds=60</c> (asserted below), so this test has to set 0
+    /// explicitly. That is deliberately NOT the "send every toggle explicitly every time" rule the TLS options
+    /// follow: that rule exists because a connect can inherit the previous connect's settings within one engine
+    /// process, and argv cannot.</summary>
     [Fact]
-    public void BuildArguments_omits_oversize_and_keep_alive_at_their_defaults()
+    public void BuildArguments_omits_oversize_and_keep_alive_when_they_match_b3270s_own_defaults()
     {
         var args = B3270Session.BuildArguments(new SessionProfile { Name = "p", Host = "h", KeepAliveSeconds = 0 });
         Assert.DoesNotContain("-oversize", args);

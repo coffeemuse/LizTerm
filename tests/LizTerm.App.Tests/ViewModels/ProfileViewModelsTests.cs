@@ -420,6 +420,22 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal("Give the profile a name.", vm.ValidationMessage);
     }
 
+    /// <summary>The test above only covers a *blank* box, which the rule returns early on — so it passed while
+    /// the hook still wiped anything in the message box whenever the oversize happened to be legal. With a
+    /// non-blank oversize that is valid under both models, a model change used to clear "Give the profile a
+    /// name." as a side effect. The rule now withdraws only the message it put there itself.</summary>
+    [Fact]
+    public void Changing_the_model_leaves_an_unrelated_message_alone_with_a_valid_oversize_in_the_box()
+    {
+        var vm = new ProfileEditorViewModel(null) { Host = "h", Oversize = "132x43" };
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+
+        // 132x43 clears both model 2's floor and model 4's, so the oversize rule has nothing to say here.
+        vm.SelectedModel = TerminalModel.Find(4)!;
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+    }
+
     /// <summary>The box inherits the command line's tie-break rule by calling the same Parse and Resolve, so
     /// text that exactly names a saved profile connects THAT profile rather than a host of the same name.</summary>
     [Fact]
@@ -513,6 +529,22 @@ public class ProfileViewModelsTests : IDisposable
 
         Assert.False(opened);
         Assert.Equal("Type a host name, or the name of a saved session.", vm.QuickConnectError);
+    }
+
+    /// <summary>The message describes the text that was in the box when Connect was pressed, so it goes stale on
+    /// the next keystroke; leaving it there puts a red line under a box the user has since retyped.</summary>
+    [Fact]
+    public void Typing_in_the_box_clears_a_stale_quick_connect_error()
+    {
+        var vm = NewPicker((_, _) => { });
+
+        vm.QuickConnectText = "tk5";
+        vm.QuickConnectCommand.Execute(null);
+        Assert.NotNull(vm.QuickConnectError);
+
+        vm.QuickConnectText = "tk5:23";
+
+        Assert.Null(vm.QuickConnectError);
     }
 
     private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession) =>
