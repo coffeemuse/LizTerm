@@ -41,6 +41,10 @@ The traces come from the x3270 source distribution (BSD-3-Clause, Copyright Paul
   OpenSSL reason `self-signed certificate (18)`; the states run `tcp-pending`, `telnet-pending`, `tls-pending`,
   `not-connected`, and no `tls` indication is ever sent. The address was replaced with `gateway.test`.
 
+- `oversize-100x50.jsonl` — b3270's own `initialize` block started with `-oversize 100x50`, no host involved.
+  Recorded by running the engine for two seconds and keeping the first line. The only fixture with a geometry
+  that is not a model's, which is what proves `screen-mode` and `ScreenBuffer` handle oversize (#30).
+
 ## gateway-pinned-login.jsonl
 
 Inbound side of `LiveHostTests.A_pinned_certificate_verifies_and_a_decoy_pin_fails` against the TLS gateway
