@@ -311,4 +311,48 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Null(vm.TryBuild());
         Assert.Equal("Choose a code page.", vm.ValidationMessage);
     }
+
+    [Fact]
+    public void The_editor_round_trips_the_keep_alive_and_auto_reconnect()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile
+        {
+            Name = "MVS", Host = "mvs", KeepAliveSeconds = 30, AutoReconnect = true,
+        });
+
+        Assert.Equal("30", vm.KeepAliveText);
+        Assert.True(vm.AutoReconnect);
+
+        var built = vm.TryBuild();
+        Assert.NotNull(built);
+        Assert.Equal(30, built.KeepAliveSeconds);
+        Assert.True(built.AutoReconnect);
+    }
+
+    /// <summary>A new profile shows the record's own default, so the editor and the file agree about what
+    /// "on at 60 seconds" means rather than the editor quietly proposing something else.</summary>
+    [Fact]
+    public void A_new_profile_offers_the_declared_keep_alive_default()
+    {
+        Assert.Equal("60", new ProfileEditorViewModel(null).KeepAliveText);
+    }
+
+    [Fact]
+    public void Turning_the_keep_alive_off_saves_a_zero()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", KeepAliveText = "0" };
+        Assert.Equal(0, vm.TryBuild()!.KeepAliveSeconds);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("-1")]
+    [InlineData("90000")]
+    public void A_keep_alive_that_is_not_a_sane_number_of_seconds_blocks_save(string text)
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", KeepAliveText = text };
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).", vm.ValidationMessage);
+    }
 }

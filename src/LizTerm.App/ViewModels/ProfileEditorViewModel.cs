@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LizTerm.Core.Session;
@@ -20,6 +21,8 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private string _codePage = "cp037";
     [ObservableProperty] private string _luName = "";
     [ObservableProperty] private bool _destructiveBackspace = true;
+    [ObservableProperty] private string _keepAliveText = "60";
+    [ObservableProperty] private bool _autoReconnect;
     [ObservableProperty] private string? _validationMessage;
 
     /// <summary>The pin the profile carries, shown read-only. Forget clears it and Save then writes the profile
@@ -89,6 +92,8 @@ public partial class ProfileEditorViewModel : ObservableObject
         _codePage = existing.CodePage;
         _luName = existing.LuName ?? "";
         _destructiveBackspace = existing.DestructiveBackspace;
+        _keepAliveText = existing.KeepAliveSeconds.ToString(CultureInfo.InvariantCulture);
+        _autoReconnect = existing.AutoReconnect;
         _pinnedCertificate = existing.PinnedCertificate;
         _pinnedFor = existing.PinnedCertificate;
         _pinnedHost = existing.Host;
@@ -133,6 +138,13 @@ public partial class ProfileEditorViewModel : ObservableObject
         // for the same reason #45 replaced the text box: b3270 warns on stderr and starts on a fallback, so a
         // saved "" is a session that connects normally with quietly wrong characters.
         if (string.IsNullOrWhiteSpace(CodePage)) { ValidationMessage = "Choose a code page."; return null; }
+        // NumberStyles.None rejects a sign and surrounding space, so "-1", "+60" and " 60" are refused rather
+        // than reaching the engine. The ceiling is a day: a larger one is a typo, not an intention.
+        if (!int.TryParse(KeepAliveText.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var keepAlive) || keepAlive > 86400)
+        {
+            ValidationMessage = "Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).";
+            return null;
+        }
         ValidationMessage = null;
         return new SessionProfile
         {
@@ -147,6 +159,8 @@ public partial class ProfileEditorViewModel : ObservableObject
             CodePage = CodePage.Trim(),
             LuName = string.IsNullOrWhiteSpace(LuName) ? null : LuName.Trim(),
             DestructiveBackspace = DestructiveBackspace,
+            KeepAliveSeconds = keepAlive,
+            AutoReconnect = AutoReconnect,
         };
     }
 }

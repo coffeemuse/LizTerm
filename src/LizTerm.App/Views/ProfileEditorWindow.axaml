@@ -12,7 +12,7 @@
         Title="Session Profile" Width="480" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="10">
-    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" >
+    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" >
       <TextBlock Grid.Row="0" Text="Name" VerticalAlignment="Center" />
       <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name}" />
       <TextBlock Grid.Row="1" Text="Host" VerticalAlignment="Center" />
@@ -28,17 +28,32 @@
           <Button x:Name="ForgetButton" Content="Forget" Command="{Binding ForgetPinCommand}" />
         </StackPanel>
       </StackPanel>
-      <TextBlock Grid.Row="4" Text="Model" VerticalAlignment="Center" />
-      <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="12">
+      <TextBlock Grid.Row="4" Text="Connection" VerticalAlignment="Center" />
+      <StackPanel Grid.Row="4" Grid.Column="1" Spacing="4">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="Keep-alive every" VerticalAlignment="Center" />
+          <TextBox x:Name="KeepAliveBox" Text="{Binding KeepAliveText}" Width="60" />
+          <TextBlock Text="seconds (0 = off)" VerticalAlignment="Center" />
+        </StackPanel>
+        <!-- The caveat is inline in the row, the way the Keyboard row explains itself, because "keep-alive"
+             is otherwise read as "stops the host timing me out". A NOP is not 3270 data, so TSO's own idle
+             timer never sees it (spec 5.1). -->
+        <TextBlock Text="Keeps the network connection open; does not prevent a host idle logoff."
+                   Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap" />
+        <CheckBox x:Name="AutoReconnectBox" Content="Reconnect automatically if the host drops the session"
+                  IsChecked="{Binding AutoReconnect}" />
+      </StackPanel>
+      <TextBlock Grid.Row="5" Text="Model" VerticalAlignment="Center" />
+      <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Spacing="12">
         <ComboBox x:Name="ModelBox" ItemsSource="{Binding TerminalModels}" SelectedItem="{Binding SelectedModel}" Width="160" />
         <CheckBox Content="Extended data stream" IsChecked="{Binding Extended}" />
       </StackPanel>
-      <TextBlock Grid.Row="5" Text="Code page" VerticalAlignment="Center" />
-      <ComboBox x:Name="CodePageBox" Grid.Row="5" Grid.Column="1" ItemsSource="{Binding CodePages}" SelectedItem="{Binding SelectedCodePage}" Width="280" HorizontalAlignment="Left" />
-      <TextBlock Grid.Row="6" Text="LU name" VerticalAlignment="Center" />
-      <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding LuName}" Width="140" HorizontalAlignment="Left" PlaceholderText="optional" />
-      <TextBlock Grid.Row="7" Text="Keyboard" VerticalAlignment="Center" />
-      <CheckBox x:Name="BackspaceBox" Grid.Row="7" Grid.Column="1" Content="Backspace erases the previous character (off: Backspace only moves the cursor left)" IsChecked="{Binding DestructiveBackspace}" />
+      <TextBlock Grid.Row="7" Text="Code page" VerticalAlignment="Center" />
+      <ComboBox x:Name="CodePageBox" Grid.Row="7" Grid.Column="1" ItemsSource="{Binding CodePages}" SelectedItem="{Binding SelectedCodePage}" Width="280" HorizontalAlignment="Left" />
+      <TextBlock Grid.Row="8" Text="LU name" VerticalAlignment="Center" />
+      <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding LuName}" Width="140" HorizontalAlignment="Left" PlaceholderText="optional" />
+      <TextBlock Grid.Row="9" Text="Keyboard" VerticalAlignment="Center" />
+      <CheckBox x:Name="BackspaceBox" Grid.Row="9" Grid.Column="1" Content="Backspace erases the previous character (off: Backspace only moves the cursor left)" IsChecked="{Binding DestructiveBackspace}" />
     </Grid>
     <TextBlock Text="{Binding ValidationMessage}" Foreground="#FF8080" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
