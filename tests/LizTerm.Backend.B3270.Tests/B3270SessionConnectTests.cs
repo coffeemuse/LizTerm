@@ -353,8 +353,11 @@ public class B3270SessionConnectTests
     /// <summary>A failed connect and a dead engine both leave the session reusable, so the pin file survives them
     /// and goes with the session instead — the same rule the roots file has always had. It used to be deleted in
     /// ConnectAsync's finally; see A_pinned_session_keeps_its_ca_file_so_the_engine_can_reconnect for why that
-    /// stopped being safe. A failed connect is in fact exactly when the file is needed next: b3270's own retry
-    /// is what tries again.</summary>
+    /// stopped being safe. A failed connect is in fact exactly when the file is needed next: the session stays
+    /// reusable, so whatever starts the following attempt — the user pressing Connect again, or on an
+    /// auto-reconnect profile the engine starting one itself — has to find the file still there. Note this is
+    /// NOT b3270's `retry` toggle, which this milestone deliberately never enables (spec 6.1), and which this
+    /// fixture does not turn on either.</summary>
     [Fact]
     public async Task The_pin_file_survives_a_failed_connect_and_engine_death_and_goes_with_the_session()
     {

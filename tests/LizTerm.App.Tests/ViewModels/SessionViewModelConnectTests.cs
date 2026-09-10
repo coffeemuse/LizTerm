@@ -514,6 +514,38 @@ public class SessionViewModelConnectTests
         Assert.Equal(canDisconnect, vm.DisconnectCommand.CanExecute(null));
     }
 
+    /// <summary>CanConnect's other half, `!ConnectPending`, which the state theory above structurally cannot
+    /// see: a connect in flight leaves Connection at Disconnected until the engine reports otherwise, so the
+    /// state term alone still reads "connectable" while an attempt is already running. Deleting `!ConnectPending`
+    /// left the whole App suite green before this test existed.
+    ///
+    /// It is belt-and-braces today — the only bound surfaces are the commands, and [RelayCommand] on an async
+    /// method already refuses to run concurrently — so this pins the intent rather than a reachable bug. It
+    /// starts mattering the moment anything binds CanConnect directly, or a connect is started outside the
+    /// command.</summary>
+    [Fact]
+    public async Task Connect_is_disabled_while_an_attempt_is_already_pending()
+    {
+        var session = new FakeEmulatorSession();
+        // The plain 30s default rather than Create()'s 100ms: this has to hold the attempt open while asserting,
+        // and a timeout firing mid-test would prove the wrong thing.
+        var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard());
+        var completion = Pending();
+        session.ConnectCompletion = completion;
+
+        var attempt = vm.ConnectCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => vm.ConnectPending, "the connect to become pending");
+
+        // The engine has reported nothing, so the guard's state half still says Disconnected. That is what makes
+        // this an assertion about ConnectPending alone.
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection);
+        Assert.False(vm.CanConnect);
+        Assert.True(vm.CanDisconnect);
+
+        completion.SetResult();
+        await attempt;
+    }
+
     /// <summary>The two tests above prove the guard properties are correct, but IRelayCommand.CanExecute
     /// re-evaluates its predicate on every call regardless of whether CanExecuteChanged ever fired -- so they
     /// pass whether or not Connection's [NotifyCanExecuteChangedFor] attributes are present. Those
