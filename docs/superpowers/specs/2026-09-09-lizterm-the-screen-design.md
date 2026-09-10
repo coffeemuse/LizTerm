@@ -193,9 +193,16 @@ public static IReadOnlyList<ScreenRegion> Find(ScreenSnapshot snapshot, string t
   match spanning a row edge is almost always two unrelated fields that happen to abut.
 - Overlapping matches are not returned twice: the scan resumes after the end of each match.
 - An empty or whitespace-only term returns nothing rather than every position.
-- **A match may not begin or end mid-character.** `CellRendition` carries `Wide = 32`, `LeftHalf = 1024` and
-  `RightHalf = 2048` (`src/LizTerm.Core/Screen/CellRendition.cs`) for DBCS cells; a match whose first cell is
-  a `RightHalf` or whose last is a `LeftHalf` is rejected.
+- **A match cannot begin or end mid-character**, by construction rather than by rejection. `Cell.Character` is
+  a `Rune` and a DBCS character occupies two cells, the second carrying `CellRendition.RightHalf`
+  (`src/LizTerm.Core/Screen/CellRendition.cs`, `RightHalf = 2048`). So the search does not run over
+  `RowText`: it first folds each row into a sequence of one entry per *character*, each remembering its first
+  and last column, and matches against that. A half-cell match is then not a case to reject — it has no
+  representation.
+
+  This also avoids a real indexing bug. `RowText` is built by appending `Rune.ToString()` per cell
+  (`ScreenSnapshot.cs:42`), which is one UTF-16 char for BMP runes and two otherwise, so a string index into
+  it is not a column index in general. Searching the cells directly keeps the mapping exact.
 
 `ScreenRegion` is already the right return type — inclusive, zero-based, always normalized — and is already
 what `TerminalScreen` knows how to paint.
@@ -314,10 +321,15 @@ Three documented traps this has to clear:
    two-way and handler-free, because `DefaultMenuInteractionHandler.Click` toggles a `MenuItem` *before*
    raising Click.
 3. **`ToggleType="Radio"` on a `NativeMenuItem` is unverified.** `ToggleType` exists and `CheckBox` is proven
-   in this app; whether the macOS exporter renders `Radio` as a radio group is not. **Task 1 of the plan
-   verifies it on a real GUI session.** If it does not render, the four items fall back to `CheckBox` with the
-   handlers keeping exactly one checked — behaviourally identical, and the fallback is decided before the
-   items are written rather than discovered afterwards.
+   in this app; whether the macOS exporter renders `Radio` as a radio group is not. It cannot be checked
+   before a menu exists to check it on, so **the plan's View menu task carries the observation** — on a real
+   GUI session, at the point the four items first exist.
+
+   The *fallback is decided here, in advance*, so the task is an observation rather than a decision: if
+   `Radio` does not render as a group, the items become `CheckBox` and the Click handlers keep exactly one
+   checked. That is behaviourally identical either way, because the handlers must set the checks themselves
+   regardless — trap 2 means a `NativeMenuItem` never toggles itself. `Radio` is therefore a presentation
+   preference, and nothing else in this milestone depends on which way it goes.
 
 `NativeMenuTests.The_window_menu_has_the_same_four_top_level_menus_as_the_classic_one` (`:74`) becomes five and
 is renamed.
