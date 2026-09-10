@@ -1964,7 +1964,7 @@ In the picker:
 In the editor (New...):
 - Keep-alive shows `60`. Set it to `abc` and Save: the message names the range. Set `0` and Save: it saves.
 - Oversize `200x200` and Save: the message names 40,000 cells and b3270's 16,383.
-- Oversize `132x43` with model 2, then switch to model 5: the message appears without pressing Save. Switch back: it clears.
+- Oversize `100x30` with model 2, then switch to model 5: the message appears without pressing Save. Switch back: it clears.
 
 In a session:
 - **File > Save as Profile...** on the Quick Connect session. The editor opens pre-filled with the host and port. Save, then connect the new profile from the picker.
