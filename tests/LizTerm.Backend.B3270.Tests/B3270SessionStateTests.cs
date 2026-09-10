@@ -208,6 +208,11 @@ public class B3270SessionStateTests
         Assert.Contains(lines, l => l.Contains("""{"action":"Disconnect"}"""));
     }
 
+    /// <summary>Holds only because <see cref="Profile"/> leaves AutoReconnect at its false default (task 13
+    /// review, finding 4): with it on, DisarmReconnectAsync deliberately runs before this early-out, so a
+    /// Disconnect on an already-down session would still write a Set(reconnect,false) line. Turning AutoReconnect
+    /// on in this fixture would make the assertion below fail -- that is the disarm working as designed, not a
+    /// regression in it.</summary>
     [Fact]
     public async Task DisconnectAsync_sends_nothing_when_not_connected()
     {

@@ -867,6 +867,42 @@ public class B3270SessionConnectTests
         Assert.True(disarm < sent, "the disarm must precede the Disconnect");
     }
 
+    /// <summary>Task 13 review, finding 1: TryDisconnectQuietlyAsync's own <c>await DisarmReconnectAsync();</c>
+    /// line had no test — deleting it left the whole backend suite (215/215) green. This is the cancel path
+    /// rather than the explicit-Disconnect path above: a caller cancels a connect that is still pending on an
+    /// armed profile, which routes through TryDisconnectQuietlyAsync exactly as an explicit Disconnect would, and
+    /// the same ordering has to hold — Set(reconnect,false) before the cancel's own Disconnect — for the same
+    /// reason (spec 6.2). The Connect line is captured and never answered, reusing the shape
+    /// <see cref="Cancel_during_a_pending_connect_sends_disconnect_and_throws_cancellation"/> already uses to hold
+    /// an attempt open for a cancel to land on.</summary>
+    [Fact]
+    public async Task Cancelling_a_pending_connect_on_an_armed_profile_disarms_before_it_disconnects()
+    {
+        string? connectTag = null;
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\"")) { connectTag = Tag(line); return []; }
+            if (line.Contains("\"Disconnect\""))
+                return [Ok(line), Failed(connectTag!, "Connection failed"), """{"connection":{"state":"not-connected"}}"""];
+            return [Ok(line)];
+        };
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt);
+
+        var lines = fake.InputLines.ToList();
+        var disarm = lines.FindIndex(l => l.Contains("\"reconnect\"") && l.Contains("\"false\""));
+        var disconnect = lines.FindIndex(l => l.Contains("\"Disconnect\""));
+        Assert.True(disarm >= 0, "no Set(reconnect,false) was sent on the cancel path");
+        Assert.True(disconnect >= 0, "no Disconnect was sent on the cancel path");
+        Assert.True(disarm < disconnect, "the disarm must precede the cancel's own Disconnect");
+    }
+
     [Fact]
     public async Task A_profile_without_auto_reconnect_sends_no_disarm()
     {
@@ -884,9 +920,74 @@ public class B3270SessionConnectTests
         Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"reconnect\""));
     }
 
-    /// <summary>The disarm is also what produces the state the wait is waiting for: an armed drop never reports
-    /// not-connected on its own (spec 6.3), so a Disconnect that did not disarm would sit out the whole
-    /// DisconnectTimeout. Here the engine answers normally and the call returns well inside it.</summary>
+    /// <summary>Task 13 review, finding 2(a): nothing in the repo ever emitted a "reconnecting" indication before
+    /// this. Pins the measured engine sequence an armed, host-initiated drop actually produces (spec 6.3):
+    /// connected-3270 straight to reconnecting, with no not-connected in between. The exact two-element list is
+    /// the point — it is what proves not-connected never appears on this path, which is exactly why the disarm
+    /// has to be what completes <c>WaitForDisconnectedAsync</c>'s wait rather than that report.</summary>
+    [Fact]
+    public async Task A_host_initiated_drop_on_an_armed_session_reconnects_without_reporting_not_connected()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // SetConnectionState assigns the property before it raises the event, so waiting on the property and then
+        // reading the list races the last Add (see Connection_and_tls_map_and_reset in B3270SessionStateTests).
+        // Guard the list too: the reader thread appends while this thread reads it.
+        var states = new List<ConnectionState>();
+        var statesLock = new object();
+        List<ConnectionState> States() { lock (statesLock) return [.. states]; }
+        session.ConnectionChanged += (_, s) => { lock (statesLock) states.Add(s); };
+
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        fake.Emit("""{"connection":{"state":"reconnecting"}}""");
+        await Wait.UntilAsync(() => States().Count == 2, "two connection states");
+
+        Assert.Equal([ConnectionState.Connected3270, ConnectionState.Reconnecting], States());
+        Assert.Equal(ConnectionState.Reconnecting, session.ConnectionState);
+    }
+
+    /// <summary>Task 13 review, finding 2(b): the engine measurement behind this whole task also showed a
+    /// Disconnect issued while a countdown is already running is silently undone without the disarm — the
+    /// `reconnecting` state has to be treated the same as a live session, not brushed off as already on its way
+    /// out. Drives to Reconnecting exactly as <see cref="A_host_initiated_drop_on_an_armed_session_reconnects_without_reporting_not_connected"/>
+    /// does, then calls DisconnectAsync and waits for the Disconnect to actually go out (the same
+    /// <see cref="Wait.UntilAsync"/> shape <see cref="An_explicit_Disconnect_disarms_reconnect_before_it_sends_Disconnect"/>
+    /// uses) before emitting not-connected, so the early-out is never what lets this test pass.</summary>
+    [Fact]
+    public async Task A_Disconnect_issued_during_an_already_running_countdown_stays_disconnected()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake) { DisconnectTimeout = TimeSpan.FromSeconds(5) };
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+        fake.Emit("""{"connection":{"state":"reconnecting"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Reconnecting, "reconnecting");
+
+        var disconnecting = session.DisconnectAsync();
+        // Emit the close only once the Disconnect has gone out, to avoid racing the early-out (same reason as
+        // An_explicit_Disconnect_disarms_reconnect_before_it_sends_Disconnect above).
+        await Wait.UntilAsync(() => fake.InputLines.Any(l => l.Contains("\"Disconnect\"")), "the Disconnect to go out");
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await disconnecting;
+
+        var lines = fake.InputLines.ToList();
+        var disarm = lines.FindIndex(l => l.Contains("\"reconnect\"") && l.Contains("\"false\""));
+        var sent = lines.FindIndex(l => l.Contains("\"Disconnect\""));
+        Assert.True(disarm >= 0, "no Set(reconnect,false) was sent, so the running countdown would silently undo this Disconnect");
+        Assert.True(disarm < sent, "the disarm must precede the Disconnect even while a countdown is already running");
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
+    /// <summary>Pins only that the disarm's own Set run adds no stall of its own: the fake auto-answers every
+    /// line here and the test hand-emits not-connected regardless of whether the disarm actually fired, so this
+    /// still passes with <c>DisarmReconnectAsync</c>'s call removed entirely (task 13 review, finding 3). The
+    /// real §6.3 scenario -- that an armed drop never reports not-connected on its own, so the disarm is what
+    /// completes the wait -- is <see cref="A_Disconnect_issued_during_an_already_running_countdown_stays_disconnected"/>
+    /// above, which drives the session to Reconnecting via a host-initiated drop first and never hand-emits
+    /// not-connected until the real Disconnect line is on the wire.</summary>
     [Fact]
     public async Task Disconnecting_an_armed_session_does_not_sit_out_the_disconnect_timeout()
     {
