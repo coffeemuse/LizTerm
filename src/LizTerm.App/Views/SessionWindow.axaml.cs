@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
+using LizTerm.App.Rendering;
 using LizTerm.App.ViewModels;
 
 namespace LizTerm.App.Views;
@@ -132,6 +133,21 @@ public partial class SessionWindow : Window
     private void OnWireLogClickNative(object? sender, EventArgs e)
     {
         if (ViewModel is { } vm) vm.IsWireLogging = !vm.IsWireLogging;
+    }
+
+    // Two one-line handlers per mode: MenuItem.Click and NativeMenuItem.Click have different delegate shapes.
+    private void OnCrosshairNoneClick(object? sender, RoutedEventArgs e) => SetCrosshair(CrosshairMode.None);
+    private void OnCrosshairNoneClickNative(object? sender, EventArgs e) => SetCrosshair(CrosshairMode.None);
+    private void OnCrosshairHorizontalClick(object? sender, RoutedEventArgs e) => SetCrosshair(CrosshairMode.Horizontal);
+    private void OnCrosshairHorizontalClickNative(object? sender, EventArgs e) => SetCrosshair(CrosshairMode.Horizontal);
+    private void OnCrosshairVerticalClick(object? sender, RoutedEventArgs e) => SetCrosshair(CrosshairMode.Vertical);
+    private void OnCrosshairVerticalClickNative(object? sender, EventArgs e) => SetCrosshair(CrosshairMode.Vertical);
+    private void OnCrosshairBothClick(object? sender, RoutedEventArgs e) => SetCrosshair(CrosshairMode.Both);
+    private void OnCrosshairBothClickNative(object? sender, EventArgs e) => SetCrosshair(CrosshairMode.Both);
+
+    private void SetCrosshair(CrosshairMode mode)
+    {
+        if (ViewModel is { } vm) vm.Crosshair = mode;
     }
 
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.

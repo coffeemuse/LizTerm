@@ -48,6 +48,24 @@
           </NativeMenu>
         </NativeMenuItem.Menu>
       </NativeMenuItem>
+      <NativeMenuItem Header="_View">
+        <NativeMenuItem.Menu>
+          <NativeMenu>
+            <!-- OneWay plus a Click handler, not a TwoWay binding: a NativeMenuItem never toggles itself, so
+                 the handler sets the view model and these bindings carry every check mark back — including the
+                 three that have to go false. No Gesture: outside Edit, a native gesture is an AppKit key
+                 equivalent dispatched ahead of the responder chain, which would take the key from the terminal. -->
+            <NativeMenuItem Header="_None" ToggleType="Radio" Click="OnCrosshairNoneClickNative"
+                            IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
+            <NativeMenuItem Header="_Horizontal" ToggleType="Radio" Click="OnCrosshairHorizontalClickNative"
+                            IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
+            <NativeMenuItem Header="_Vertical" ToggleType="Radio" Click="OnCrosshairVerticalClickNative"
+                            IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
+            <NativeMenuItem Header="_Both" ToggleType="Radio" Click="OnCrosshairBothClickNative"
+                            IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+          </NativeMenu>
+        </NativeMenuItem.Menu>
+      </NativeMenuItem>
       <NativeMenuItem Header="_Keys">
         <NativeMenuItem.Menu>
           <NativeMenu>
@@ -114,6 +132,16 @@
         <Separator />
         <MenuItem Header="Copy Screen as _HTML" Command="{Binding CopyScreenAsHtmlCommand}" />
       </MenuItem>
+      <MenuItem Header="_View">
+        <MenuItem Header="_None" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairNoneClick"
+                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
+        <MenuItem Header="_Horizontal" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairHorizontalClick"
+                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
+        <MenuItem Header="_Vertical" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairVerticalClick"
+                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
+        <MenuItem Header="_Both" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairBothClick"
+                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+      </MenuItem>
       <MenuItem Header="_Keys">
         <MenuItem Header="Clear" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Clear}" />
         <MenuItem Header="Reset" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Reset}" />
@@ -172,6 +200,7 @@
     <controls:TerminalScreen x:Name="Screen"
                              Snapshot="{Binding Screen}"
                              Selection="{Binding Selection, Mode=TwoWay}"
+                             Crosshair="{Binding Crosshair}"
                              DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />
   </DockPanel>
 </Window>

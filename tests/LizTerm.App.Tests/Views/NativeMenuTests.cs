@@ -4,11 +4,14 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Platform;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using LizTerm.App.Controls;
 using LizTerm.App.Menus;
+using LizTerm.App.Rendering;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -71,12 +74,39 @@ public class NativeMenuTests
         ?? throw new InvalidOperationException($"no native menu item {top} > {child}");
 
     [AvaloniaFact]
-    public void The_window_menu_has_the_same_four_top_level_menus_as_the_classic_one()
+    public void The_window_menu_has_the_same_five_top_level_menus_as_the_classic_one()
     {
         var (window, _, _, _) = Show();
 
         var headers = NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().Select(i => i.Header!).ToArray();
-        Assert.Equal(["_File", "_Edit", "_Keys", "_Help"], headers);
+        Assert.Equal(["_File", "_Edit", "_View", "_Keys", "_Help"], headers);
+    }
+
+    /// <summary>A NativeMenuItem never toggles itself — RaiseClicked raises Click and executes Command and
+    /// never touches IsChecked — so the handler sets the view model and the OneWay bindings carry every check
+    /// mark, the three corrections to false included. Driven through RaiseClicked because that is the one entry
+    /// point both real renderers use; assigning IsChecked instead would only prove a binding round-trips.</summary>
+    [AvaloniaFact]
+    public void Choosing_a_crosshair_mode_checks_exactly_that_item()
+    {
+        var (window, vm, _, _) = Show();
+        var items = new[] { "_None", "_Horizontal", "_Vertical", "_Both" }
+            .Select(header => Item(window, "_View", header)).ToArray();
+
+        ((INativeMenuItemExporterEventsImplBridge)items[2]).RaiseClicked();
+
+        Assert.Equal(CrosshairMode.Vertical, vm.Crosshair);
+        Assert.Equal([false, false, true, false], items.Select(i => i.IsChecked));
+    }
+
+    [AvaloniaFact]
+    public void The_crosshair_reaches_the_terminal_screen()
+    {
+        var (window, vm, _, _) = Show();
+
+        vm.Crosshair = CrosshairMode.Both;
+
+        Assert.Equal(CrosshairMode.Both, window.FindControl<TerminalScreen>("Screen")!.Crosshair);
     }
 
     [AvaloniaFact]

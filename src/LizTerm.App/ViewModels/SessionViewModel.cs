@@ -8,6 +8,7 @@ using LizTerm.App.Capture;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
+using LizTerm.App.Rendering;
 using LizTerm.App.Status;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Screen;
@@ -53,6 +54,11 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(CanSelectAll))]
     [NotifyPropertyChangedFor(nameof(CanCaptureScreen))]
     private ScreenSnapshot? _screen;
+
+    /// <summary>Which crosshair lines follow the cursor, for this window only. Not a profile field: it is a
+    /// display preference, and a home for those is #19's job rather than something to invent here (spec 4.3).
+    /// </summary>
+    [ObservableProperty] private CrosshairMode _crosshair;
 
     [ObservableProperty] private string _connectionText = "";
     [ObservableProperty] private string _tlsText = "";
