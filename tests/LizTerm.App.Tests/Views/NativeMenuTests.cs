@@ -85,18 +85,30 @@ public class NativeMenuTests
     /// <summary>A NativeMenuItem never toggles itself — RaiseClicked raises Click and executes Command and
     /// never touches IsChecked — so the handler sets the view model and the OneWay bindings carry every check
     /// mark, the three corrections to false included. Driven through RaiseClicked because that is the one entry
-    /// point both real renderers use; assigning IsChecked instead would only prove a binding round-trips.</summary>
+    /// point both real renderers use; assigning IsChecked instead would only prove a binding round-trips.
+    ///
+    /// All four modes are exercised, not just Vertical: CrosshairModeConverter.Convert throws on a parameter
+    /// that does not parse as a CrosshairMode, so a mistyped ConverterParameter in SessionWindow.axaml
+    /// (say "Horizantal" for the Horizontal item) would surface here as a thrown exception on that item's own
+    /// click, rather than as a check mark that silently never lights — the failure mode a test that only ever
+    /// clicks Vertical could never see.</summary>
     [AvaloniaFact]
     public void Choosing_a_crosshair_mode_checks_exactly_that_item()
     {
         var (window, vm, _, _) = Show();
+        var modes = new[] { CrosshairMode.None, CrosshairMode.Horizontal, CrosshairMode.Vertical, CrosshairMode.Both };
         var items = new[] { "_None", "_Horizontal", "_Vertical", "_Both" }
             .Select(header => Item(window, "_View", header)).ToArray();
 
-        ((INativeMenuItemExporterEventsImplBridge)items[2]).RaiseClicked();
+        for (var chosen = 0; chosen < modes.Length; chosen++)
+        {
+            ((INativeMenuItemExporterEventsImplBridge)items[chosen]).RaiseClicked();
 
-        Assert.Equal(CrosshairMode.Vertical, vm.Crosshair);
-        Assert.Equal([false, false, true, false], items.Select(i => i.IsChecked));
+            Assert.Equal(modes[chosen], vm.Crosshair);
+            Assert.Equal(
+                Enumerable.Range(0, modes.Length).Select(i => i == chosen),
+                items.Select(i => i.IsChecked));
+        }
     }
 
     [AvaloniaFact]
@@ -363,7 +375,7 @@ public class NativeMenuTests
     /// Keys or Edit submenu, so a dropped separator, a reordered item, a Command copied from the wrong line
     /// (a "_Connect"-headed item wired to DisconnectCommand) or — the case that matters most on a 3270 client —
     /// a CommandParameter copied from the wrong line (a "PA1"-headed item silently wired to TerminalKey.PA2)
-    /// would pass every test above while still doing the wrong thing to the mainframe. This test walks all four
+    /// would pass every test above while still doing the wrong thing to the mainframe. This test walks all five
     /// top-level menus item for item, comparing header, separator position, Command and (on Keys)
     /// CommandParameter, normalising across the two menu kinds' different item types (MenuItem/NativeMenuItem)
     /// and separator types (Separator/NativeMenuItemSeparator).</summary>
