@@ -248,7 +248,8 @@ new KeyGesture(Key.F, hotkeys.CommandModifiers)
 ```
 
 That yields Cmd+F on macOS and Ctrl+F elsewhere, derived rather than assumed. It is checked in
-`TryHandleClipboardKey` (`:195`), which already runs before `Keymap.TryMap` (`:151`) — so the find gesture,
+`TryHandlePlatformGesture` — renamed from `TryHandleClipboardKey` when this arm was added, since it is no
+longer only about the clipboard — which already runs before `Keymap.TryMap`, so the find gesture,
 like copy and paste, takes precedence over the terminal keymap.
 
 **Ctrl+F is free.** `DefaultKeymap`'s complete set of Control chords is Ctrl+Enter (Enter), Ctrl+R (Reset),
