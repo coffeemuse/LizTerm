@@ -92,7 +92,7 @@ public class SessionViewModelConnectTests
         ["Connection failed:", "TLS: Host certificate verification failed:", "self-signed certificate (18)"], certificateVerificationFailed: true);
 
     private static (SessionViewModel Vm, FakeEmulatorSession Session, FakeCertificatePrompt Prompt, FakeCertificateFetcher Fetcher, List<SessionProfile> Saved)
-        CreateWithPrompt(bool saveable, bool tls = true, CertificatePin? pinned = null)
+        CreateWithPrompt(bool saveable, bool tls = true, CertificatePin? pinned = null, Func<SessionProfile, Task>? saveAsProfile = null)
     {
         var session = new FakeEmulatorSession { ConnectException = CertFailure };
         session.Profile = session.Profile with { UseTls = tls, Port = 4270, PinnedCertificate = pinned };
@@ -100,7 +100,7 @@ public class SessionViewModelConnectTests
         var fetcher = new FakeCertificateFetcher();
         var saved = new List<SessionProfile>();
         var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard(), prompt, saveable ? saved.Add : null,
-            certificateFetcher: fetcher);
+            certificateFetcher: fetcher, saveAsProfile: saveAsProfile);
         return (vm, session, prompt, fetcher, saved);
     }
 
@@ -157,6 +157,29 @@ public class SessionViewModelConnectTests
         await vm.ConnectCommand.ExecuteAsync(null);
         Assert.Equal(["connect", "connect:pin:AA:BB", "connect:pin:AA:BB"], session.Calls);
         Assert.Single(prompt.Calls);
+    }
+
+    /// <summary>Save as Profile folds a pin taken THIS session into the profile it offers: the session's own
+    /// Profile is fixed at construction, so a pin accepted mid-session lives only in _pinOverride, and without the
+    /// fold a certificate the user deliberately trusted would be silently dropped by the profile the session
+    /// becomes.</summary>
+    [Fact]
+    public async Task Save_as_profile_folds_a_pin_taken_this_session_into_the_offered_profile()
+    {
+        SessionProfile? offered = null;
+        var (vm, session, prompt, fetcher, saved) = CreateWithPrompt(saveable: true,
+            saveAsProfile: p => { offered = p; return Task.CompletedTask; });
+        prompt.Decision = new CertificateDecision(ConnectAnyway: true, Remember: true);
+        prompt.OnAsk = () => session.ConnectException = null;
+        await vm.ConnectCommand.ExecuteAsync(null);
+        Assert.Single(saved); // the pin round trip itself is covered elsewhere; this just puts one in _pinOverride.
+
+        await vm.SaveAsProfileAsync();
+
+        Assert.NotNull(offered);
+        Assert.Equal(new CertificatePin(fetcher.Result.Sha256, fetcher.Result.Subject, fetcher.Result.Pem), offered!.PinnedCertificate);
+        Assert.True(offered.VerifyCertificate);
+        Assert.Equal(session.Profile.Host, offered.Host);
     }
 
     [Fact]
