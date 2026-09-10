@@ -329,10 +329,20 @@ Three documented traps this has to clear:
    `(Command != null || HasClickHandlers) && IsEnabled`, so an item carrying only a binding is greyed out on
    macOS and inert everywhere. `NativeMenuTests.Every_native_item_can_actually_be_activated` is the guard.
 2. **A `NativeMenuItem` never toggles itself.** `RaiseClicked` raises Click and executes Command and never
-   touches `IsChecked`. The crosshair items therefore use the `Mode=OneWay` binding plus `Click` handler shape
-   that Wire Log already uses (`SessionWindow.axaml:82`), not a two-way binding — and the classic ones stay
-   two-way and handler-free, because `DefaultMenuInteractionHandler.Click` toggles a `MenuItem` *before*
-   raising Click.
+   touches `IsChecked`. The native crosshair items therefore use the `Mode=OneWay` binding plus `Click` handler
+   shape that Wire Log already uses (`SessionWindow.axaml:82`), not a two-way binding.
+
+   (As shipped, the classic items use that same OneWay-plus-Click shape too, not the two-way, handler-free one
+   this paragraph originally described. Wire Log's classic item can stay two-way and handler-free because
+   `DefaultMenuInteractionHandler.Click` toggling a `MenuItem`'s `IsChecked` *before* raising Click is exactly
+   right for one independent bool. The crosshair is four radio items sharing one `CrosshairMode` property, and a
+   two-way `IsChecked` binding on any of them would need `CrosshairModeConverter.ConvertBack` to turn a bare
+   `true` back into a specific mode — which it cannot: a `bool` says nothing about which of the other three
+   should become `false`, or which mode a click's own `false` should fall back to, so `ConvertBack` throws rather
+   than guess. Both menus' crosshair items therefore need the `Click` handler to set `Crosshair` explicitly, with
+   `Mode=OneWay` so it is the resulting property change, not the click, that writes every item's check mark back
+   — the three corrections to unchecked included. Two other spec deviations on this branch were recorded this
+   same way; this one was missed until the final review.)
 3. **`ToggleType="Radio"` on a `NativeMenuItem` is unverified.** `ToggleType` exists and `CheckBox` is proven
    in this app; whether the macOS exporter renders `Radio` as a radio group is not. It cannot be checked
    before a menu exists to check it on, so **the plan's View menu task carries the observation** — on a real

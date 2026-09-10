@@ -480,7 +480,7 @@ public sealed class TerminalScreen : Control
         foreach (var match in matches)
         {
             if (FindMatchGeometry.Rect(match, g, snapshot.Rows, snapshot.Columns) is not { } rect) continue;
-            var brush = match == current ? Palette.FindCurrent : Palette.FindMatch;
+            var brush = Palette.FindMatchBrush(match == current);
             context.FillRectangle(brush, rect);
         }
     }

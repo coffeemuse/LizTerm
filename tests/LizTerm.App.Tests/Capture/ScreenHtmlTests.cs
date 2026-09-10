@@ -36,6 +36,19 @@ public class ScreenHtmlTests
         Assert.Contains("READY", html);
     }
 
+    /// <summary>Mutation-confirmed: swapping the background line for `Resolve(style.Foreground, ...)` passed
+    /// every other test in this file, because none of them set a background that differs from the foreground --
+    /// the mutant renders every captured screen as text on a same-coloured background. Green-on-blue is chosen
+    /// specifically because the two hex strings cannot coincide by accident.</summary>
+    [Fact]
+    public void A_run_carries_its_background_as_a_hex_colour_distinct_from_its_foreground()
+    {
+        var html = ScreenHtml.Render(One("READY", HostColor.Green, HostColor.Blue));
+
+        Assert.Contains("color:#50FF50", html);
+        Assert.Contains("background:#5C8AFF", html);
+    }
+
     /// <summary>Neither ScreenBuffer's construction nor SetText's null-means-unchanged rule can ever produce a
     /// cell carrying HostColor.Default, so the snapshot has to be built directly to exercise Resolve's fallback
     /// branch -- the one ordinary, unformatted host text takes, and what ColorNames.ParseColor falls back to for
@@ -124,5 +137,28 @@ public class ScreenHtmlTests
         var html = ScreenHtml.Render(buffer.Snapshot());
 
         Assert.Equal(2, html.Split('\n').Length - 1);
+    }
+
+    /// <summary>The fix for a saved `.html` file rendering non-ASCII host text as mojibake when opened from
+    /// disk: a `file://` document has nothing else to declare its encoding, so RenderDocument has to.</summary>
+    [Fact]
+    public void RenderDocument_declares_utf8_and_still_carries_the_fragment()
+    {
+        var document = ScreenHtml.RenderDocument(One("READY", HostColor.Green));
+
+        Assert.Contains("<meta charset=\"utf-8\">", document);
+        Assert.Contains("<pre", document);
+        Assert.Contains("READY", document);
+    }
+
+    /// <summary>The clipboard path must not grow the wrapper: it is pasted into a document that already has its
+    /// own encoding, and a stray doctype/meta pair would land in the middle of that document's body.</summary>
+    [Fact]
+    public void Render_itself_stays_a_bare_fragment()
+    {
+        var html = ScreenHtml.Render(One("READY"));
+
+        Assert.DoesNotContain("<meta", html);
+        Assert.DoesNotContain("<!doctype", html, StringComparison.OrdinalIgnoreCase);
     }
 }

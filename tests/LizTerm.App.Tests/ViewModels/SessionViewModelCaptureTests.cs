@@ -67,6 +67,56 @@ public class SessionViewModelCaptureTests
         File.Delete(path);
     }
 
+    /// <summary>The saved file, unlike the clipboard, has no surrounding document to inherit an encoding from:
+    /// opened from disk as `file://` with no charset declared, a browser falls back to its locale default, and
+    /// LizTerm's own keymap types characters outside ASCII (`¬` on Ctrl+[, `¢` on Ctrl+6).</summary>
+    [Fact]
+    public async Task Saving_html_declares_utf8_so_a_reopened_file_is_not_mojibake()
+    {
+        var session = new FakeEmulatorSession();
+        var buffer = new ScreenBuffer(24, 80);
+        buffer.SetText(0, 0, "¬", null, null, null); // what Ctrl+[ types
+        session.CurrentScreen = buffer.Snapshot();
+        var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard());
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".html");
+        var picker = new FakeFilePicker { Result = path };
+
+        await vm.SaveScreenAsync(picker);
+
+        var written = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.Contains("<meta charset=\"utf-8\">", written);
+        Assert.Contains('¬', written);
+        File.Delete(path);
+    }
+
+    /// <summary>Only `.txt` and `.html` were ever exercised; `.htm`, an unrecognised extension, no extension at
+    /// all, and an upper-case `.HTML` all fall through the same branch and were untested.</summary>
+    [Theory]
+    [InlineData(".htm", true)]
+    [InlineData(".HTML", true)]
+    [InlineData(".log", false)]
+    [InlineData("", false)]
+    public async Task Saving_chooses_the_format_from_the_extension_case_insensitively(string extension, bool expectHtml)
+    {
+        var (vm, _, _) = Build();
+        var path = Path.Combine(Path.GetTempPath(), "lizterm-capture-" + Guid.NewGuid().ToString("N") + extension);
+        var picker = new FakeFilePicker { Result = path };
+
+        await vm.SaveScreenAsync(picker);
+
+        var written = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        if (expectHtml)
+        {
+            Assert.Contains("<span", written);
+        }
+        else
+        {
+            Assert.DoesNotContain("<span", written);
+            Assert.Contains("READY", written);
+        }
+        File.Delete(path);
+    }
+
     [Fact]
     public async Task A_cancelled_save_dialog_writes_nothing_and_reports_nothing()
     {

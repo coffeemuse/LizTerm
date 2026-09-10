@@ -89,10 +89,10 @@ public class NativeMenuTests
     /// point both real renderers use; assigning IsChecked instead would only prove a binding round-trips.
     ///
     /// All four modes are exercised, not just Vertical: CrosshairModeConverter.Convert throws on a parameter
-    /// that does not parse as a CrosshairMode, so a mistyped ConverterParameter in SessionWindow.axaml
-    /// (say "Horizantal" for the Horizontal item) would surface here as a thrown exception on that item's own
-    /// click, rather than as a check mark that silently never lights — the failure mode a test that only ever
-    /// clicks Vertical could never see.</summary>
+    /// that does not parse as a CrosshairMode, but Avalonia's binding engine swallows a converter's exception
+    /// rather than propagating it, so a mistyped ConverterParameter in SessionWindow.axaml (say "Horizantal" for
+    /// the Horizontal item) would surface here only as a wrong IsChecked value on that one item's own click —
+    /// never a thrown exception — the failure mode a test that only ever clicks Vertical could never see.</summary>
     [AvaloniaFact]
     public void Choosing_a_crosshair_mode_checks_exactly_that_item()
     {

@@ -15,6 +15,16 @@ namespace LizTerm.App.Capture;
 /// at. See spec section 3.1.</summary>
 public static class ScreenHtml
 {
+    /// <summary>The same markup as <see cref="Render"/>, wrapped as a standalone document. A file saved through
+    /// File &gt; Save Screen As... has no surrounding page to inherit an encoding from: opened from disk as
+    /// `file://`, a bare fragment falls back to the browser's locale default, and LizTerm's own keymap types
+    /// characters that are not ASCII (`¬` on Ctrl+[, `¢` on Ctrl+6) -- saved that way they come back as `Â¬`.
+    /// `&lt;meta charset="utf-8"&gt;` is what a browser actually looks for when sniffing a local file's encoding,
+    /// so this is the one place that pins it down. The clipboard path stays on <see cref="Render"/>: a bare
+    /// fragment is what belongs inside a document that already has its own encoding.</summary>
+    public static string RenderDocument(ScreenSnapshot snapshot) =>
+        $"<!doctype html>\n<meta charset=\"utf-8\">\n{Render(snapshot)}";
+
     /// <summary>One `pre` block, one line per row, one `span` per run of identically-styled cells.</summary>
     public static string Render(ScreenSnapshot snapshot)
     {

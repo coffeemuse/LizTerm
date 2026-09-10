@@ -602,15 +602,33 @@ the backend tests.
   (`EmulatorActionException`) are deliberately swallowed because b3270 already explains them through the
   keyboard lock; only unexpected and backend-unavailable errors set `ErrorMessage`. `SessionWindow` refocuses the
   screen after the error bar's Dismiss.
-- `TerminalScreen` prepares each row as runs of identical style — rectangle, brushes, and shaped `FormattedText`
-  — and keeps that list for as long as the snapshot instance and the `CellGeometry` are unchanged, so a blink
-  phase flip (a full `InvalidateVisual` twice a second, for as long as anything blinks) redraws the prepared runs
-  instead of re-segmenting and re-shaping every cell. A new snapshot or a new geometry rebuilds it; `RunPlanBuilds`
-  is the test seam for that. It is a custom `Control` that draws those runs scaled to fit
-  via `CellGeometry.Fit` (pure math, unit tested). It raises `KeyRequested`, `TextEntered`, and
-  `CellClicked`; `SessionWindow` wires those to the view model. Key events go through the platform copy, paste,
-  and select-all hotkeys first, then `Keymap.TryMap`, then `Keymap.TryText` (Ctrl+[ types `¬`, Ctrl+6 `¢`), then
-  fall through to Avalonia's text input so dead keys and IMEs work. `Keymap` (`Keyboard/`) is an immutable table
+- `TerminalScreen` prepares each row as runs of identical style (`Cell.SameStyleAs` in Core: foreground,
+  background, and rendition match, regardless of character — the same predicate `ScreenHtml`'s capture uses
+  below, so the renderer and a saved screen can never disagree about where a run ends) — rectangle, brushes, and
+  shaped `FormattedText` — and keeps that list for as long as the snapshot instance and the `CellGeometry` are
+  unchanged, so a blink phase flip (a full `InvalidateVisual` twice a second, for as long as anything blinks)
+  redraws the prepared runs instead of re-segmenting and re-shaping every cell. A new snapshot or a new geometry
+  rebuilds it; `RunPlanBuilds` is the test seam for that. It is a custom `Control` that draws those runs scaled
+  to fit via `CellGeometry.Fit` (pure math, unit tested). Three more styled properties overlay the screen the
+  same way `Selection` already did — painted in `Render` after `EnsureRunPlan`'s cached runs and never folded
+  into the run plan itself: `Crosshair` (which crosshair lines follow the cursor, per window; b3270's own
+  `CROSSHAIR` toggle is deliberately unused, since the engine has no display and routing a display preference
+  through a child process just to have it handed back would only make the crosshair unavailable while
+  disconnected) and `FindMatches`/`CurrentMatch` (every find match on the current screen, and the one the user is
+  on, recomputed by `FindViewModel` against each new snapshot and pushed in — the control only paints them).
+  `CrosshairGeometry.Rects` and `FindMatchGeometry.Rect` are the pure geometry helpers behind the two, the same
+  `CellGeometry.Fit` shape, so both are asserted on rectangles rather than pixels; `TerminalScreenCrosshairTests`
+  and `TerminalScreenFindTests` both assert that changing these properties leaves `RunPlanBuilds` unchanged,
+  since a crosshair mode or a match list is recomputed on every host repaint and must not pay for a full
+  re-segmentation each time. It raises `KeyRequested`, `TextEntered`, and
+  `CellClicked`; `SessionWindow` wires those to the view model. Key events go through `TryHandlePlatformGesture`
+  first, then `Keymap.TryMap`, then `Keymap.TryText` (Ctrl+[ types `¬`, Ctrl+6 `¢`), then fall through to
+  Avalonia's text input so dead keys and IMEs work. That method — renamed from `TryHandleClipboardKey` when the
+  Find arm was added, since it stopped being only about the clipboard — checks the platform's copy, paste,
+  select-all, *and* Find hotkeys in one place, ahead of the keymap; the rename matters because a reader who still
+  expects "clipboard hotkeys" and finds Ctrl+F unclaimed could add a Ctrl+F chord to `DefaultKeymap` and silently
+  shadow Find on Windows and Linux, where the classic menu strategy makes this control the only dispatch path for
+  it. `Keymap` (`Keyboard/`) is an immutable table
   of `KeyChord(Key, Modifiers, Tap)` to `TerminalKey`, built by
   `DefaultKeymap.Create(destructiveBackspace)` (two cached instances) from Vista TN3270's defaults, cross-checked
   against wc3270 in the 3b spec's section 6.2: Escape is Attn, Shift+Escape SysReq, Pause and Ctrl+Escape Clear,
@@ -661,7 +679,11 @@ the backend tests.
   assignments still run. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
   an argument, as `EngineRequirement.Decide` does, so every combination is testable anywhere. **No menu item
   anywhere outside Edit ever carries a `Gesture`** — the application menu included, since AppKit supplies its
-  own. Measured on macOS, a `NativeMenuItem` gesture is an AppKit key equivalent that
+  own. The **View** menu (four crosshair modes, radio-checked) and **File → Save Screen As...** and
+  **Edit → Copy Screen as HTML** all therefore carry none; **Edit → Find...** is the one new item this milestone
+  gave a `Gesture`, precisely because Edit is the menu with the established safe route for one — `ShowPlatformGestures`
+  builds it as `new KeyGesture(Key.F, hotkeys.CommandModifiers)`, since `PlatformHotkeyConfiguration` has no
+  `Find` of its own to read the way Copy, Paste, and Select All are read. Measured on macOS, a `NativeMenuItem` gesture is an AppKit key equivalent that
   `NSApplication.sendEvent:` dispatches before the key window's responder chain, so `Gesture="F1"` would
   silently swallow PF1 — `TerminalScreen` never sees the key. Edit's Cmd/Ctrl+C, V and A come from
   `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`/`PasteAsync`/`SelectAll` directly,
@@ -687,8 +709,11 @@ the backend tests.
   `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()` in tests: it is the one entry point both real
   renderers use, and assigning `IsChecked` instead only proves a binding round-trips.
   A Click-driven native item also has to bind `IsEnabled` for itself, since it gets none of the greying a
-  command's `CanExecute` gives the classic one — Edit binds `CanCopy`, `IsConnected` and `CanSelectAll` (public
-  on `SessionViewModel` for exactly this, and still the commands' `CanExecute`, so the two menus cannot drift),
+  command's `CanExecute` gives the classic one — Edit binds `CanCopy`, `IsConnected`, `CanSelectAll`, and `CanFind`
+  (public on `SessionViewModel` for exactly this: the first three are also `CopyCommand`/`PasteCommand`/
+  `SelectAllCommand`'s own `CanExecute`, reused on the classic side, while `CanFind` gates a Click-based item on
+  *both* menus — even the classic one, since opening the bar means focusing `FindBox`, a window-level concern no
+  `[RelayCommand]` can reach — so either way the two menus read the same property and cannot drift),
   because on macOS those items are key equivalents and an enabled one is an offer the app cannot honour. Safe to
   bind because `NativeMenuItem` overwrites `IsEnabled` only when its `Command` changes, and these carry none.
   `MenuLookup.Required` is what the code-behind uses rather than `Item`: it answers null when the *menu* is
@@ -700,6 +725,45 @@ the backend tests.
   `NativeMenuItemSeparator` derives from `NativeMenuItem`.
   Note `x:Name` does not compile on a `NativeMenuItem` (AVLN2000: it is not a `StyledElement` and has no `Name`),
   which is why these are header-string lookups at all.
+- Find is its own view model, `FindViewModel` (`ViewModels/`), rather than more weight on `SessionViewModel`,
+  which already owns the session, the connection lifecycle, the certificate prompt, the clipboard, the wire log,
+  and the transfer factory: find has its own lifetime — it opens, holds a term and a match list, and closes — and
+  names no Avalonia type, so every rule on it is a plain `[Fact]`. `ScreenSearch.Find` (Core) does the actual
+  scan: case-insensitive, in reading order, over one entry per *character* rather than per cell so a DBCS match
+  cannot begin or end mid-character, against one immutable `ScreenSnapshot` that needs no locking and nothing
+  kept alive between calls. `FindViewModel.OnScreen` re-runs that search against every new snapshot rather than
+  clearing the match list the way `Selection` clears — a 3270 screen repaints on every keystroke echo, and
+  clearing would make the highlight vanish and read as broken — and re-anchors the current match by position (the
+  match now starting where the old one did, else the first, else none), so a repaint that leaves your place alone
+  does not move you. `_visited` separately tracks whether the cursor has actually been moved to the match now
+  highlighted, so typing highlights match 1 without a `MoveCursor` per keystroke and the first Enter lands on it
+  rather than skipping past it; a reset to the first match — from opening, from a changed term, or from a
+  re-anchor that fell back — always counts as unvisited, or the same skip-a-match bug comes back through
+  whichever of those a fix misses. `SessionWindow`'s find bar is a docked `Border`, not a modal dialog, so the
+  screen being searched stays visible behind it; its `TextBox` (`FindBox`) binds `Find.Term` two-way, and its own
+  `KeyDown` handler (`OnFindBoxKeyDown`) routes Enter to `Find.NextAsync`, Shift+Enter to `Find.PreviousAsync`,
+  and Escape to closing the bar and refocusing the screen — so ordinary typing in the box is seen by neither
+  `Keymap` nor the host, the highest-consequence invariant of the whole feature.
+- Screen capture (#25) is two formats over one `ScreenSnapshot`: plain text via the existing
+  `ScreenSnapshot.ToText()` (Core), and `ScreenHtml.Render` (`Capture/`) — App rather than Core, because it
+  renders in `Palette`'s colours and `Palette` is Avalonia-typed, so it is App-only under the dependency rule;
+  deliberately not b3270's own `PrintText(html)` either, since that would add a member to `IEmulatorSession` for
+  a feature that needs no engine, would only work while connected, and would emit the engine's colours rather
+  than the ones the user is actually looking at. It emits one `<pre>` of `<span>` runs segmented by
+  `Cell.SameStyleAs`, the same predicate `TerminalScreen.EnsureRunPlan` uses (see above), so the two can never
+  disagree about where a run ends. `ScreenHtml.RenderDocument` wraps that same fragment with
+  `<meta charset="utf-8">` for the file path only: a saved `.html` file has nothing else to declare its encoding,
+  and LizTerm's own keymap types characters outside ASCII (`¬` on Ctrl+[, `¢` on Ctrl+6) that come back as
+  mojibake without it; the clipboard path stays on the bare fragment from `Render`, since it is pasted into a
+  document that already has its own. `SessionViewModel.CanCaptureScreen` (a screen exists) gates both capture
+  surfaces deliberately rather than `IsConnected`, since the moment a capture is most wanted is often a session
+  the host has just dropped. `SaveScreenAsync` (File → Save Screen As...) picks the format from the extension the
+  OS Save dialog returned, case-insensitively (`.html`/`.htm` → HTML via `RenderDocument`, everything else →
+  text), and writes the bytes itself rather than handing the path to anything else, because the dialog has just
+  made a promise about overwriting that only the caller can keep; `CopyScreenAsHtmlAsync` (Edit → Copy Screen as
+  HTML) always uses `Render`, never `RenderDocument`. `IFilePicker.PickSaveLocationAsync` now takes a `title`,
+  since its two callers — a received file transfer and a screen capture — save different things and the OS Save
+  dialog should say which.
 - Mouse selection is a `ScreenRegion` (Core; inclusive, zero-based, always normalized). `SelectionGesture`
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the

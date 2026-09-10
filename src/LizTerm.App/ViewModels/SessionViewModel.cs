@@ -548,9 +548,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             var suggested = ScreenFileName(Profile.Name, DateTime.Now, "txt");
             if (await picker.PickSaveLocationAsync(suggested, "Save screen as") is not { } path) return;
 
-            var html = Path.GetExtension(path).Equals(".html", StringComparison.OrdinalIgnoreCase)
-                       || Path.GetExtension(path).Equals(".htm", StringComparison.OrdinalIgnoreCase);
-            await File.WriteAllTextAsync(path, html ? ScreenHtml.Render(screen) : screen.ToText());
+            var extension = Path.GetExtension(path);
+            var html = extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
+                       || extension.Equals(".htm", StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllTextAsync(path, html ? ScreenHtml.RenderDocument(screen) : screen.ToText());
         }
         catch (Exception ex)
         {

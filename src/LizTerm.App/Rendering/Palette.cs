@@ -25,6 +25,13 @@ public static class Palette
     public static readonly IBrush FindMatch = new ImmutableSolidColorBrush(Color.FromArgb(0x66, 0xE0, 0xA0, 0x20));
     public static readonly IBrush FindCurrent = new ImmutableSolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xD0, 0x40));
 
+    /// <summary>Which of the two find brushes paints one match: <see cref="FindCurrent"/> for the match the user
+    /// is on, else <see cref="FindMatch"/>. Extracted out of TerminalScreen.DrawFindMatches's ternary as a pure
+    /// predicate: this project asserts overlay painting through geometry helpers (CrosshairGeometry,
+    /// FindMatchGeometry) rather than pixels, and neither of those can see which brush a rectangle got, so the
+    /// choice itself has to be reachable some other way to be testable at all.</summary>
+    public static IBrush FindMatchBrush(bool isCurrent) => isCurrent ? FindCurrent : FindMatch;
+
     private static readonly Dictionary<HostColor, Color> Colors = new()
     {
         [HostColor.Default] = Color.FromRgb(0xF0, 0xF0, 0xF0),

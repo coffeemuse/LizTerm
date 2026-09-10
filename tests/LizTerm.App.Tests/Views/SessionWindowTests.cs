@@ -105,6 +105,49 @@ public class SessionWindowTests
         Assert.Equal(ScreenRegion.Full(24, 80), screen.Selection);
     }
 
+    /// <summary>Enter reaches NextAsync and Shift+Enter reaches PreviousAsync from the box itself, not just from
+    /// FindViewModelTests' direct calls -- OnFindBoxKeyDown is what actually routes the two keys, and nothing
+    /// end to end asserted that before. FakeEmulatorSession's move: records let this be told apart from a no-op:
+    /// Next visits the first match without moving past it, so Previous from there wraps back to the second.</summary>
+    [AvaloniaFact]
+    public void Enter_walks_forward_and_shift_enter_walks_back_in_the_find_box()
+    {
+        var (window, _, vm, session, _) = Show();
+        var buffer = new ScreenBuffer(24, 80);
+        buffer.SetText(2, 3, "ab", null, null, null);
+        buffer.SetText(5, 3, "ab", null, null, null);
+        session.RaiseScreen(buffer.Snapshot());
+        vm.Find.Open();
+        vm.Find.Term = "ab";
+        window.FindControl<TextBox>("FindBox")!.Focus();
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Assert.Contains("move:2,3", session.Calls);
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.Shift);
+        Assert.Contains("move:5,3", session.Calls);
+    }
+
+    /// <summary>The highest-consequence invariant of the whole find feature: nothing typed into the box ever
+    /// reaches the host. Only the macOS native-menu paste guard (NativeMenuTests) currently covers a case where
+    /// typing-shaped input stays out of the session while the box has focus; this covers plain keystrokes through
+    /// the control that opens the bar for every platform, native menu or classic.</summary>
+    [AvaloniaFact]
+    public void Typing_in_the_find_box_sends_nothing_to_the_host()
+    {
+        var (window, _, vm, session, _) = Show();
+        session.RaiseConnection(ConnectionState.Connected3270);
+        vm.Find.Open();
+        var box = window.FindControl<TextBox>("FindBox")!;
+        box.Focus();
+
+        window.KeyTextInput("hello");
+
+        Assert.Equal("hello", box.Text);
+        Assert.Equal("hello", vm.Find.Term);
+        Assert.Empty(session.Calls);
+    }
+
     [AvaloniaFact]
     public void File_transfer_menu_item_follows_the_connection_state()
     {
