@@ -5,6 +5,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LizTerm.App.Startup;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
 
@@ -13,7 +14,7 @@ namespace LizTerm.App.ViewModels;
 public partial class ProfilePickerViewModel : ObservableObject
 {
     private readonly ProfileStore _store;
-    private readonly Action<SessionProfile> _openSession;
+    private readonly Action<SessionProfile, bool> _openSession;
     private readonly Func<SessionProfile?, Task<ProfileEdit?>> _editProfile;
     private readonly Action _quit;
 
@@ -23,8 +24,11 @@ public partial class ProfilePickerViewModel : ObservableObject
 
     public ObservableCollection<SessionProfile> Profiles { get; } = [];
 
+    /// <param name="openSession">Opens a session. The bool is whether the profile came from the store: a pin
+    /// chosen in that window can be written back only for a saved profile, and Quick Connect's ad hoc profiles
+    /// are not saved.</param>
     /// <param name="editProfile">Shows the editor for an existing profile (or null for a new one); returns null when cancelled.</param>
-    public ProfilePickerViewModel(ProfileStore store, Action<SessionProfile> openSession, Func<SessionProfile?, Task<ProfileEdit?>> editProfile, Action quit)
+    public ProfilePickerViewModel(ProfileStore store, Action<SessionProfile, bool> openSession, Func<SessionProfile?, Task<ProfileEdit?>> editProfile, Action quit)
     {
         _store = store;
         _openSession = openSession;
@@ -44,7 +48,7 @@ public partial class ProfilePickerViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(HasSelection))]
-    private void Connect() => _openSession(SelectedProfile!);
+    private void Connect() => _openSession(SelectedProfile!, true);
 
     [RelayCommand]
     private async Task NewAsync()
@@ -87,4 +91,35 @@ public partial class ProfilePickerViewModel : ObservableObject
 
     [RelayCommand]
     private void Quit() => _quit();
+
+    [ObservableProperty] private string _quickConnectText = "";
+    [ObservableProperty] private string? _quickConnectError;
+
+    /// <summary>Connect to what the box names, without saving anything. The parse and the profile-name
+    /// precedence are the command line's own — the same Parse and Resolve, so the box cannot drift from it —
+    /// which is why a saved profile called "CONS01@tk5" stays reachable by its own name here too (spec 7.1).</summary>
+    [RelayCommand]
+    private void QuickConnect()
+    {
+        var text = QuickConnectText.Trim();
+        if (text.Length == 0)
+        {
+            QuickConnectError = "Type a host name, or the name of a saved session.";
+            return;
+        }
+
+        var parsed = StartupArguments.Parse([text]);
+        if (parsed.Resolve([.. Profiles]) is { } profile)
+        {
+            QuickConnectError = null;
+            // fromStore is whether Resolve matched a saved name. It cannot mis-fire: an exact name match always
+            // wins there, so the ad hoc branch can never produce a name that a saved profile also has.
+            _openSession(profile, Profiles.Any(p => p.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase)));
+            return;
+        }
+
+        QuickConnectError = parsed.Error is null
+            ? $"\"{text}\" is not a saved session, and does not look like a host. Add a port to connect to it as a host, for example {text}:23."
+            : "Type host, host:port, or L:host for TLS. An IPv6 address goes in brackets.";
+    }
 }

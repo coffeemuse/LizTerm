@@ -21,7 +21,7 @@ public partial class ProfilePickerWindow : Window
         Activated += (_, _) => (DataContext as ProfilePickerViewModel)?.Reload();
     }
 
-    public ProfilePickerWindow(ProfileStore store, Action<SessionProfile> openSession, Action quit) : this()
+    public ProfilePickerWindow(ProfileStore store, Action<SessionProfile, bool> openSession, Action quit) : this()
     {
         DataContext = new ProfilePickerViewModel(
             store,

@@ -71,7 +71,7 @@ public class ProfileViewModelsTests : IDisposable
         SessionProfile? opened = null;
         var quit = false;
         SessionProfile? toReturn = new SessionProfile { Name = "c", Host = "c.host" };
-        var vm = new ProfilePickerViewModel(_store, p => opened = p, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
+        var vm = new ProfilePickerViewModel(_store, (p, _) => opened = p, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
 
         Assert.Equal(["a", "b"], vm.Profiles.Select(p => p.Name));
         Assert.False(vm.ConnectCommand.CanExecute(null));
@@ -101,7 +101,7 @@ public class ProfileViewModelsTests : IDisposable
     [Fact]
     public async Task Cancelled_editor_changes_nothing()
     {
-        var vm = new ProfilePickerViewModel(_store, _ => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { });
         await vm.NewCommand.ExecuteAsync(null);
         Assert.Empty(vm.Profiles);
     }
@@ -115,7 +115,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270 });
         var pin = new CertificatePin("AA:BB", "CN=mvs", "pem");
 
-        var picker = new ProfilePickerViewModel(_store, _ => { },
+        var picker = new ProfilePickerViewModel(_store, (_, _) => { },
             existing =>
             {
                 // Stands in for the session window pinning a certificate while the editor is open.
@@ -135,7 +135,7 @@ public class ProfileViewModelsTests : IDisposable
     {
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = new CertificatePin("AA:BB", "CN=mvs", "pem") });
 
-        var picker = new ProfilePickerViewModel(_store, _ => { },
+        var picker = new ProfilePickerViewModel(_store, (_, _) => { },
             existing => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { PinnedCertificate = null }, PinCleared: true)),
             () => { });
 
@@ -153,7 +153,7 @@ public class ProfileViewModelsTests : IDisposable
         var pin = new CertificatePin("AA:BB", "CN=mvs", "pem");
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = pin });
 
-        var picker = new ProfilePickerViewModel(_store, _ => { },
+        var picker = new ProfilePickerViewModel(_store, (_, _) => { },
             existing => Task.FromResult<ProfileEdit?>(
                 new ProfileEdit(existing! with { Name = "MVS-CE", PinnedCertificate = null }, PinCleared: false)),
             () => { });
@@ -415,4 +415,81 @@ public class ProfileViewModelsTests : IDisposable
         vm.SelectedModel = TerminalModel.Find(4)!;
         Assert.Equal("Give the profile a name.", vm.ValidationMessage);
     }
+
+    /// <summary>The box inherits the command line's tie-break rule by calling the same Parse and Resolve, so
+    /// text that exactly names a saved profile connects THAT profile rather than a host of the same name.</summary>
+    [Fact]
+    public void Quick_connect_prefers_a_saved_profile_of_the_same_name()
+    {
+        _store.Save(new SessionProfile { Name = "mvs.local", Host = "elsewhere", Port = 992 });
+        SessionProfile? opened = null;
+        var fromStore = false;
+        var vm = NewPicker((p, s) => { opened = p; fromStore = s; });
+
+        vm.QuickConnectText = "mvs.local";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.Equal("elsewhere", opened!.Host);
+        Assert.True(fromStore);
+        Assert.Null(vm.QuickConnectError);
+    }
+
+    [Fact]
+    public void Quick_connect_opens_an_ad_hoc_session_and_saves_nothing()
+    {
+        SessionProfile? opened = null;
+        var fromStore = true;
+        var vm = NewPicker((p, s) => { opened = p; fromStore = s; });
+
+        vm.QuickConnectText = "mvs.example:3270";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.Equal("mvs.example", opened!.Host);
+        Assert.Equal(3270, opened.Port);
+        Assert.False(fromStore);
+        Assert.Empty(_store.LoadAll());
+    }
+
+    [Fact]
+    public void Quick_connect_reports_a_syntax_error_inline_and_connects_nothing()
+    {
+        var opened = false;
+        var vm = NewPicker((_, _) => opened = true);
+
+        vm.QuickConnectText = "mvs.local:99999";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.False(opened);
+        Assert.Equal("Type host, host:port, or L:host for TLS. An IPv6 address goes in brackets.", vm.QuickConnectError);
+    }
+
+    /// <summary>A bare word is ambiguous with a profile name, so Parse only reads one as a host when it has a
+    /// dot or is localhost. The message has to teach the way out rather than merely refuse (spec 7.4).</summary>
+    [Fact]
+    public void A_bare_word_that_is_neither_a_profile_nor_a_host_suggests_the_port_form()
+    {
+        var opened = false;
+        var vm = NewPicker((_, _) => opened = true);
+
+        vm.QuickConnectText = "tk5";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.False(opened);
+        Assert.Equal("\"tk5\" is not a saved session, and does not look like a host. Add a port to connect to it as a host, for example tk5:23.", vm.QuickConnectError);
+    }
+
+    [Fact]
+    public void Quick_connect_with_an_empty_box_asks_for_something_to_connect_to()
+    {
+        var opened = false;
+        var vm = NewPicker((_, _) => opened = true);
+
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.False(opened);
+        Assert.Equal("Type a host name, or the name of a saved session.", vm.QuickConnectError);
+    }
+
+    private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession) =>
+        new(_store, openSession, _ => Task.FromResult<ProfileEdit?>(null), () => { });
 }

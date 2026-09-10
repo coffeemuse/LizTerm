@@ -151,7 +151,7 @@ public partial class App : Application
             _picker.Activate();
             return;
         }
-        _picker = new ProfilePickerWindow(_store ?? new ProfileStore(AppPaths.ProfilesDirectory()), profile => OpenSession(profile, fromStore: true), Quit);
+        _picker = new ProfilePickerWindow(_store ?? new ProfileStore(AppPaths.ProfilesDirectory()), (profile, fromStore) => OpenSession(profile, fromStore), Quit);
         // The same reason test the session windows get, for the mirror-image failure: a shutdown that closes the
         // picker would otherwise be answered with Quit() -> Shutdown(), a second DoShutdown re-entered inside the
         // first, which fires Exit twice.
