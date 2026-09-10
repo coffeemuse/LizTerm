@@ -114,7 +114,14 @@ public partial class App : Application
             new AvaloniaCertificatePrompt(window),
             fromStore ? updated => WritePinBack(store, updated) : null,
             new AvaloniaFolderOpener(window),
-            new SslStreamCertificateFetcher());
+            new SslStreamCertificateFetcher(),
+            async profile =>
+            {
+                // The existing editor, pre-filled: it already carries every row, validates them, and knows the
+                // model and code-page catalogues. Saving by name overwrites, exactly as the picker's New does.
+                if (await new ProfileEditorWindow(profile).ShowDialog<ProfileEdit?>(window) is { } edit)
+                    store.Save(edit.Profile);
+            });
         window.DataContext = viewModel;
         _sessions.Add(window);
         _lastActiveSession ??= window;

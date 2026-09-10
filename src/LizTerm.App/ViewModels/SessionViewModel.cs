@@ -26,6 +26,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly Action<SessionProfile>? _saveProfile;
     private readonly IFolderOpener? _folderOpener;
     private readonly ICertificateFetcher? _certificateFetcher;
+    private readonly Func<SessionProfile, Task>? _saveAsProfile;
     /// <summary>The pin chosen in this window. The session's profile is fixed at construction, so a pin made after
     /// the window opened travels as a one-shot option on every later connect from here (spec 5.3).</summary>
     private CertificatePin? _pinOverride;
@@ -101,9 +102,12 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// <param name="saveProfile">Persists the profile when the user pins its certificate; null for ad hoc profiles.</param>
     /// <param name="folderOpener">Opens the wire log directory for Help &gt; Show Wire Logs; null for tests that don't cover it.</param>
     /// <param name="certificateFetcher">Reads what a TLS host presented so the prompt can show and pin it; null shows the prompt without a fingerprint.</param>
+    /// <param name="saveAsProfile">Turns this session into a saved profile — the app opens the profile editor
+    /// pre-filled and writes the result; null disables the menu item.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
         ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
-        IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null)
+        IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null,
+        Func<SessionProfile, Task>? saveAsProfile = null)
     {
         _session = session;
         _dispatch = dispatch;
@@ -112,6 +116,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _saveProfile = saveProfile;
         _folderOpener = folderOpener;
         _certificateFetcher = certificateFetcher;
+        _saveAsProfile = saveAsProfile;
 
         _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
         _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
@@ -583,6 +588,28 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         catch (Exception ex)
         {
             ErrorMessage = "Could not copy the screen: " + ex.Message;
+        }
+    }
+
+    public bool CanSaveAsProfile => _saveAsProfile is not null;
+
+    /// <summary>File &gt; Save as Profile. Public because both menus drive it through Click handlers rather than
+    /// the command, the way Save Screen As does. A pin taken in THIS window lives in _pinOverride rather than in
+    /// the session's profile, which is fixed at construction, so it is folded in here — otherwise a certificate
+    /// the user deliberately trusted during an ad hoc session would be dropped by the profile it becomes.</summary>
+    [RelayCommand(CanExecute = nameof(CanSaveAsProfile))]
+    public async Task SaveAsProfileAsync()
+    {
+        if (_saveAsProfile is null) return;
+        try
+        {
+            await _saveAsProfile(_pinOverride is null
+                ? Profile
+                : Profile with { PinnedCertificate = _pinOverride, VerifyCertificate = true });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not save the profile: " + ex.Message;
         }
     }
 
