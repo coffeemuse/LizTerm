@@ -113,8 +113,8 @@ public class OversizeGeometryTests
         Assert.Equal("Oversize must be at least 80 columns and 24 rows for model 2.", error);
     }
 
-    /// <summary>132x43 is legal on model 2 and too short on model 5, which is why the editor re-validates
-    /// when the model changes (Task 5).</summary>
+    /// <summary>132x43 is legal on model 2, but 132x20 falls short of model 5's 27-row floor, which is why the
+    /// editor re-validates when the model changes (Task 5).</summary>
     [Fact]
     public void The_floor_is_the_chosen_models_floor_not_model_2s()
     {

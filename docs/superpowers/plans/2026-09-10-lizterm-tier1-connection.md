@@ -764,12 +764,12 @@ Append to `ProfileViewModelsTests` (the same single class):
         Assert.StartsWith("200 columns by 200 rows is 40,000 cells", vm.ValidationMessage);
     }
 
-    /// <summary>132x43 clears model 2's floor and is below model 5's 27x132, so switching the model has to
-    /// re-run the check — otherwise the editor shows a stale verdict about the geometry in the box.</summary>
+    /// <summary>100x30 clears model 2's floor but falls short of model 5's column floor, so switching the model
+    /// has to re-run the check — otherwise the editor shows a stale verdict about the geometry in the box.</summary>
     [Fact]
     public void Changing_the_model_re_validates_the_oversize()
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "132x43" };
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "100x30" };
         Assert.NotNull(vm.TryBuild());
 
         vm.SelectedModel = TerminalModel.Find(5)!;
@@ -817,8 +817,8 @@ In the constructor's `existing` block, after `_autoReconnect`:
 Add this partial method beside `OnUseTlsChanged`:
 
 ```csharp
-    /// <summary>An oversize legal under one model can be below another's floor — 132x43 clears model 2 and is
-    /// short of model 5's 27x132 — so a model change has to re-run the check rather than leave a stale verdict
+    /// <summary>An oversize legal under one model can be below another's floor — 100x30 clears model 2 and is
+    /// short of model 5's floor — so a model change has to re-run the check rather than leave a stale verdict
     /// beside the box. Scoped to a non-blank box on purpose: a blank one says nothing about the geometry, and
     /// clearing an unrelated validation message here would be a second, invisible behaviour.</summary>
     partial void OnModelChanged(int value)
@@ -875,9 +875,9 @@ git add src/LizTerm.App/ViewModels/ProfileEditorViewModel.cs src/LizTerm.App/Vie
 git commit -m "Add the editor's Oversize row, validated against the chosen model (#30)
 
 Placed under Model, since that is what its floor comes from, and
-re-validated when the model changes: 132x43 clears model 2 and is short
-of model 5's 27x132, so a stale verdict beside the box would otherwise
-outlive the choice that made it.
+re-validated when the model changes: an oversize geometry valid for one
+model can fall short of another's floor, so a stale verdict beside the
+box would otherwise outlive the choice that made it.
 
 The placeholder names the order, because b3270 takes columns first and
 the Model drop-down renders rows first. Neither is changed to match the

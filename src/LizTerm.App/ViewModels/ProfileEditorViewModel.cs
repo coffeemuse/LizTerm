@@ -108,8 +108,8 @@ public partial class ProfileEditorViewModel : ObservableObject
         else if (!value && PortText == "992") PortText = "23";
     }
 
-    /// <summary>An oversize legal under one model can be below another's floor — 132x43 clears model 2 and is
-    /// short of model 5's 27x132 — so a model change has to re-run the check rather than leave a stale verdict
+    /// <summary>An oversize legal under one model can be below another's floor — 100x30 clears model 2 and is
+    /// short of model 5's floor — so a model change has to re-run the check rather than leave a stale verdict
     /// beside the box. Scoped to a non-blank box on purpose: a blank one says nothing about the geometry, and
     /// clearing an unrelated validation message here would be a second, invisible behaviour.</summary>
     partial void OnModelChanged(int value)

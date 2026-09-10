@@ -385,14 +385,9 @@ public class ProfileViewModelsTests : IDisposable
     /// columns, 27 rows) on the column count, so switching the model has to re-run the check — otherwise the
     /// editor shows a stale verdict about the geometry in the box.
     ///
-    /// NOTE: the brief's own example for this test was "132x43", described there as clearing model 2 and
-    /// falling short of model 5's 27x132. That pair does not actually fail model 5's floor check: 132 columns
-    /// meets model 5's 132-column floor exactly, and 43 rows clears its 27-row floor, so
-    /// OversizeGeometry.TryParse legitimately returns valid for it (confirmed by running this test against the
-    /// already-committed OversizeGeometry and TerminalModel catalog before changing the numbers — the
-    /// implementation and wiring are correct; the brief's chosen numbers just do not demonstrate the failure
-    /// they were meant to). Swapped in 100x30, which fails only on the column dimension, to actually exercise
-    /// the re-validation path.</summary>
+    /// Note: Oversize is columns x rows. A geometry that clears one model's floor may fail another's. So this
+    /// test exercises the re-validation path by switching models after setting an oversize that is valid for
+    /// model 2 but fails model 5's column floor.</summary>
     [Fact]
     public void Changing_the_model_re_validates_the_oversize()
     {
