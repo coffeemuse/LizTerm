@@ -21,7 +21,7 @@ public partial class ProfilePickerWindow : Window
         Activated += (_, _) => (DataContext as ProfilePickerViewModel)?.Reload();
     }
 
-    public ProfilePickerWindow(ProfileStore store, Action<SessionProfile> openSession, Action quit) : this()
+    public ProfilePickerWindow(ProfileStore store, Action<SessionProfile, bool> openSession, Action quit) : this()
     {
         DataContext = new ProfilePickerViewModel(
             store,
@@ -33,5 +33,15 @@ public partial class ProfilePickerWindow : Window
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is ProfilePickerViewModel vm && vm.ConnectCommand.CanExecute(null)) vm.ConnectCommand.Execute(null);
+    }
+
+    /// <summary>Enter connects what is in the box. Handled here so the window's default button — Connect, for
+    /// the profile selected in the list — never sees it: a user who types a host and presses Enter must not be
+    /// connected somewhere else. Same shape as SessionWindow.OnFindBoxKeyDown.</summary>
+    private void OnQuickConnectKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return)) return;
+        e.Handled = true;
+        (DataContext as ProfilePickerViewModel)?.QuickConnectCommand.Execute(null);
     }
 }

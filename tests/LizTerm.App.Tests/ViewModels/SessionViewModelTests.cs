@@ -149,4 +149,42 @@ public class SessionViewModelTests
         await vm.ConnectCommand.ExecuteAsync(null);
         Assert.Contains("boom", vm.ErrorMessage);
     }
+
+    /// <summary>The ad hoc connection becomes the start of a profile. The callback is handed the session's own
+    /// profile so the editor opens pre-filled with every row, including the tier-1 ones.</summary>
+    [Fact]
+    public async Task Save_as_profile_hands_the_sessions_profile_to_the_callback()
+    {
+        var fake = new FakeEmulatorSession { Profile = new SessionProfile { Name = "mvs.example:3270", Host = "mvs.example", Port = 3270 } };
+        SessionProfile? offered = null;
+        var vm = new SessionViewModel(fake, a => a(), new FakeTextClipboard(),
+            saveAsProfile: p => { offered = p; return Task.CompletedTask; });
+
+        Assert.True(vm.CanSaveAsProfile);
+        await vm.SaveAsProfileAsync();
+
+        Assert.Equal("mvs.example", offered!.Host);
+        Assert.Equal(3270, offered.Port);
+    }
+
+    /// <summary>Without a callback there is nothing the item could do, and a native menu item that is enabled is
+    /// an offer the app cannot honour.</summary>
+    [Fact]
+    public void Save_as_profile_is_disabled_without_a_callback()
+    {
+        var vm = new SessionViewModel(new FakeEmulatorSession(), a => a(), new FakeTextClipboard());
+        Assert.False(vm.CanSaveAsProfile);
+    }
+
+    /// <summary>A failing save reaches the error banner rather than faulting an async void menu handler.</summary>
+    [Fact]
+    public async Task A_failing_save_as_profile_reports_rather_than_throws()
+    {
+        var vm = new SessionViewModel(new FakeEmulatorSession(), a => a(), new FakeTextClipboard(),
+            saveAsProfile: _ => throw new IOException("disk full"));
+
+        await vm.SaveAsProfileAsync();
+
+        Assert.Equal("Could not save the profile: disk full", vm.ErrorMessage);
+    }
 }

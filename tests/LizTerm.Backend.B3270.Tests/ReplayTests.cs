@@ -168,4 +168,31 @@ public class ReplayTests
             return fixture.SkipWhile(l => !l.Contains("connect-attempt")).Select(l => l.Replace("\"r-tag\":\"connect\"", $"\"r-tag\":\"{tag}\"")).ToList();
         return [];
     }
+
+    /// <summary>#30's one unproven claim: an oversize geometry reaches the buffer end-to-end, so the UI needs
+    /// no change. Every other fixture is a model geometry, so nothing established that until this one. This
+    /// fixture's own `initialize` block carries both a `screen-mode` and an `erase` indication with the same
+    /// oversize `100x50`, and `B3270Session` resizes on either one independently (`screen-mode` unconditionally,
+    /// `erase` whenever its logical dimensions disagree with the buffer's) -- so this test pins the outcome
+    /// both indications produce, not which of the two produced it. Trimming `erase` out to isolate `screen-mode`
+    /// would make the fixture no longer real recorded engine output, which is a worse trade.</summary>
+    [Fact]
+    public async Task An_oversize_geometry_resizes_the_buffer()
+    {
+        var fake = new FakeB3270Process { AutoInitialize = false, RunResponder = _ => [] };
+        foreach (var line in File.ReadLines(Fixture("oversize-100x50.jsonl"))) fake.Emit(line);
+        fake.Exit(0);
+
+        var profile = new SessionProfile { Name = "replay", Host = "127.0.0.1", Oversize = "100x50" };
+        var session = new B3270Session(profile, () => fake);
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, _) => ended.TrySetResult();
+
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        var screen = session.CurrentScreen;
+        Assert.Equal(50, screen.Rows);
+        Assert.Equal(100, screen.Columns);
+    }
 }

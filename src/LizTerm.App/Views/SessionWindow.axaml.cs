@@ -133,6 +133,18 @@ public partial class SessionWindow : Window
         Screen.Focus();
     }
 
+    private void OnSaveAsProfileClick(object? sender, RoutedEventArgs e) => _ = SaveAsProfileAsync();
+    private void OnSaveAsProfileClickNative(object? sender, EventArgs e) => _ = SaveAsProfileAsync();
+
+    /// <summary>Same shape as <see cref="SaveScreenAsync"/> above, and for the same reason: this opens the profile
+    /// editor as a modal dialog, so the keyboard has to come back to the screen once it closes.</summary>
+    private async Task SaveAsProfileAsync()
+    {
+        if (ViewModel is not { } vm) return;
+        await vm.SaveAsProfileAsync();
+        Screen.Focus();
+    }
+
     // Native only: the classic item binds CopyScreenAsHtmlCommand. This calls the method rather than the
     // command for the reason the Edit menu's other native items do — a command disables while it runs.
     private void OnCopyScreenClickNative(object? sender, EventArgs e) => _ = ViewModel?.CopyScreenAsHtmlAsync();

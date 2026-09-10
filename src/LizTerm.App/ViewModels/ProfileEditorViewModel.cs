@@ -2,8 +2,10 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LizTerm.Core;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.ViewModels;
@@ -20,6 +22,9 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private string _codePage = "cp037";
     [ObservableProperty] private string _luName = "";
     [ObservableProperty] private bool _destructiveBackspace = true;
+    [ObservableProperty] private string _keepAliveText = "60";
+    [ObservableProperty] private bool _autoReconnect;
+    [ObservableProperty] private string _oversize = "";
     [ObservableProperty] private string? _validationMessage;
 
     /// <summary>The pin the profile carries, shown read-only. Forget clears it and Save then writes the profile
@@ -89,6 +94,9 @@ public partial class ProfileEditorViewModel : ObservableObject
         _codePage = existing.CodePage;
         _luName = existing.LuName ?? "";
         _destructiveBackspace = existing.DestructiveBackspace;
+        _keepAliveText = existing.KeepAliveSeconds.ToString(CultureInfo.InvariantCulture);
+        _autoReconnect = existing.AutoReconnect;
+        _oversize = existing.Oversize ?? "";
         _pinnedCertificate = existing.PinnedCertificate;
         _pinnedFor = existing.PinnedCertificate;
         _pinnedHost = existing.Host;
@@ -99,6 +107,43 @@ public partial class ProfileEditorViewModel : ObservableObject
     {
         if (value && PortText == "23") PortText = "992";
         else if (!value && PortText == "992") PortText = "23";
+    }
+
+    /// <summary>The oversize verdict currently in the validation box, or null when what is there came from
+    /// another rule (or nothing is). <see cref="OnModelChanged"/> withdraws only its own message; see there.</summary>
+    private string? _oversizeMessage;
+
+    /// <summary>The one writer of <see cref="ValidationMessage"/>, so the box always knows whether what it holds
+    /// is the oversize rule's verdict.</summary>
+    private void SetValidation(string? message, bool fromOversize = false)
+    {
+        ValidationMessage = message;
+        _oversizeMessage = fromOversize ? message : null;
+    }
+
+    /// <summary>An oversize legal under one model can be below another's floor — 100x30 clears model 2 and is
+    /// short of model 5's floor — so a model change has to re-run the check rather than leave a stale verdict
+    /// beside the box.</summary>
+    partial void OnModelChanged(int value) => RevalidateOversize();
+
+    /// <summary>And the box itself: a verdict the user has since typed their way out of is a red line under text
+    /// that no longer says what it complains about — the same reason
+    /// <see cref="ProfilePickerViewModel.OnQuickConnectTextChanged"/> clears its own message on the first
+    /// keystroke. Withdrawing the message on a change the model did not cause is the other half of the rule
+    /// <see cref="OnModelChanged"/> already applies.</summary>
+    partial void OnOversizeChanged(string value) => RevalidateOversize();
+
+    /// <summary>Re-runs the oversize rule and writes only its own verdict. The gate is the whole point: the box
+    /// is this rule's to write only while it is empty or already holding what this rule last put there. A message
+    /// another rule owns — "Give the profile a name.", which Save will still refuse on first — stays put whichever
+    /// way the geometry now reads, because neither the model nor the geometry says anything about the name.
+    /// A blank oversize needs no special case: <see cref="OversizeGeometry.TryParse"/> accepts it and yields no
+    /// error, so emptying the box withdraws the message the same way correcting it does.</summary>
+    private void RevalidateOversize()
+    {
+        if (ValidationMessage != _oversizeMessage) return;
+        OversizeGeometry.TryParse(Oversize, SelectedModel, out _, out var error);
+        SetValidation(error, fromOversize: true);
     }
 
     partial void OnHostChanged(string value) => RefreshPin();
@@ -124,16 +169,29 @@ public partial class ProfileEditorViewModel : ObservableObject
 
     public SessionProfile? TryBuild()
     {
-        if (string.IsNullOrWhiteSpace(Name)) { ValidationMessage = "Give the profile a name."; return null; }
-        if (string.IsNullOrWhiteSpace(Host)) { ValidationMessage = "Enter the host name or address."; return null; }
-        if (!int.TryParse(PortText.Trim(), out var port) || port < 1 || port > 65535) { ValidationMessage = "Port must be a number from 1 to 65535."; return null; }
+        if (string.IsNullOrWhiteSpace(Name)) { SetValidation("Give the profile a name."); return null; }
+        if (string.IsNullOrWhiteSpace(Host)) { SetValidation("Enter the host name or address."); return null; }
+        if (!int.TryParse(PortText.Trim(), out var port) || port < 1 || port > 65535) { SetValidation("Port must be a number from 1 to 65535."); return null; }
         // The drop-down cannot produce this, but the seeding above can: a hand-edited file whose codePage is
         // null or blank is seeded into the list verbatim and selected, and CodePage.Trim() below would then
         // throw straight out of OnSaveClick, which has no catch. Blank is refused rather than passed through
         // for the same reason #45 replaced the text box: b3270 warns on stderr and starts on a fallback, so a
         // saved "" is a session that connects normally with quietly wrong characters.
-        if (string.IsNullOrWhiteSpace(CodePage)) { ValidationMessage = "Choose a code page."; return null; }
-        ValidationMessage = null;
+        if (string.IsNullOrWhiteSpace(CodePage)) { SetValidation("Choose a code page."); return null; }
+        // PlainNumber refuses a sign and any embedded space, so "-1", "+60" and "6 0" never reach the engine; the
+        // Trim is this call site's own choice, the same forgiveness PortText above gets, so " 60" IS a valid 60.
+        // The ceiling is a day: a larger one is a typo, not an intention.
+        if (!PlainNumber.TryParse(KeepAliveText.Trim(), 0, 86400, out var keepAlive))
+        {
+            SetValidation("Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).");
+            return null;
+        }
+        if (!OversizeGeometry.TryParse(Oversize, SelectedModel, out var oversize, out var oversizeError))
+        {
+            SetValidation(oversizeError, fromOversize: true);
+            return null;
+        }
+        SetValidation(null);
         return new SessionProfile
         {
             Name = Name.Trim(),
@@ -147,6 +205,9 @@ public partial class ProfileEditorViewModel : ObservableObject
             CodePage = CodePage.Trim(),
             LuName = string.IsNullOrWhiteSpace(LuName) ? null : LuName.Trim(),
             DestructiveBackspace = DestructiveBackspace,
+            KeepAliveSeconds = keepAlive,
+            AutoReconnect = AutoReconnect,
+            Oversize = oversize?.ToString(),
         };
     }
 }

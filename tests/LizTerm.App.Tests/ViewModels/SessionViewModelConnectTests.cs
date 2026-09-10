@@ -92,7 +92,7 @@ public class SessionViewModelConnectTests
         ["Connection failed:", "TLS: Host certificate verification failed:", "self-signed certificate (18)"], certificateVerificationFailed: true);
 
     private static (SessionViewModel Vm, FakeEmulatorSession Session, FakeCertificatePrompt Prompt, FakeCertificateFetcher Fetcher, List<SessionProfile> Saved)
-        CreateWithPrompt(bool saveable, bool tls = true, CertificatePin? pinned = null)
+        CreateWithPrompt(bool saveable, bool tls = true, CertificatePin? pinned = null, Func<SessionProfile, Task>? saveAsProfile = null)
     {
         var session = new FakeEmulatorSession { ConnectException = CertFailure };
         session.Profile = session.Profile with { UseTls = tls, Port = 4270, PinnedCertificate = pinned };
@@ -100,7 +100,7 @@ public class SessionViewModelConnectTests
         var fetcher = new FakeCertificateFetcher();
         var saved = new List<SessionProfile>();
         var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard(), prompt, saveable ? saved.Add : null,
-            certificateFetcher: fetcher);
+            certificateFetcher: fetcher, saveAsProfile: saveAsProfile);
         return (vm, session, prompt, fetcher, saved);
     }
 
@@ -157,6 +157,29 @@ public class SessionViewModelConnectTests
         await vm.ConnectCommand.ExecuteAsync(null);
         Assert.Equal(["connect", "connect:pin:AA:BB", "connect:pin:AA:BB"], session.Calls);
         Assert.Single(prompt.Calls);
+    }
+
+    /// <summary>Save as Profile folds a pin taken THIS session into the profile it offers: the session's own
+    /// Profile is fixed at construction, so a pin accepted mid-session lives only in _pinOverride, and without the
+    /// fold a certificate the user deliberately trusted would be silently dropped by the profile the session
+    /// becomes.</summary>
+    [Fact]
+    public async Task Save_as_profile_folds_a_pin_taken_this_session_into_the_offered_profile()
+    {
+        SessionProfile? offered = null;
+        var (vm, session, prompt, fetcher, saved) = CreateWithPrompt(saveable: true,
+            saveAsProfile: p => { offered = p; return Task.CompletedTask; });
+        prompt.Decision = new CertificateDecision(ConnectAnyway: true, Remember: true);
+        prompt.OnAsk = () => session.ConnectException = null;
+        await vm.ConnectCommand.ExecuteAsync(null);
+        Assert.Single(saved); // the pin round trip itself is covered elsewhere; this just puts one in _pinOverride.
+
+        await vm.SaveAsProfileAsync();
+
+        Assert.NotNull(offered);
+        Assert.Equal(new CertificatePin(fetcher.Result.Sha256, fetcher.Result.Subject, fetcher.Result.Pem), offered!.PinnedCertificate);
+        Assert.True(offered.VerifyCertificate);
+        Assert.Equal(session.Profile.Host, offered.Host);
     }
 
     [Fact]
@@ -289,15 +312,49 @@ public class SessionViewModelConnectTests
         Assert.Null(prompt.LastRequest.CannotPinReason);
     }
 
+    /// <summary>An ad hoc session — Quick Connect's, or the command line's — CAN pin. It used to be refused,
+    /// because canPin was gated on having a file to write the pin back to, and the result was #29's headline case
+    /// failing exactly where it mattered: a TLS host reached by Quick Connect offered a bare Connect Anyway, no
+    /// pin box, and not even a CannotPinReason to say why, so _pinOverride was never set and File > Save as
+    /// Profile produced a profile that failed verification on every later connect. Having a file governs only
+    /// whether the accepted pin is ALSO written back (asserted here: nothing is saved), never whether it may be
+    /// taken at all.</summary>
     [Fact]
-    public async Task Ad_hoc_profile_sees_the_certificate_but_cannot_pin()
+    public async Task Ad_hoc_profile_can_pin_but_nothing_is_written_back()
     {
-        var (vm, _, prompt, fetcher, _) = CreateWithPrompt(saveable: false);
+        var (vm, session, prompt, fetcher, saved) = CreateWithPrompt(saveable: false);
+        prompt.Decision = new CertificateDecision(ConnectAnyway: true, Remember: true);
+        prompt.OnAsk = () => session.ConnectException = null;
+
         await vm.ConnectCommand.ExecuteAsync(null);
+
         Assert.Single(fetcher.Calls);
-        Assert.Equal(["ask:fake.host:False"], prompt.Calls);
+        Assert.Equal(["ask:fake.host:True"], prompt.Calls);
         Assert.NotNull(prompt.LastRequest!.Presented);
         Assert.Null(prompt.LastRequest.CannotPinReason);
+        // The retry carried the pin rather than turning verification off, and no file was written.
+        Assert.Equal(["connect", $"connect:pin:{fetcher.Result.Sha256}"], session.Calls);
+        Assert.Empty(saved);
+    }
+
+    /// <summary>And the pin it took is what makes Save as Profile the start of a real profile rather than one
+    /// that re-prompts forever — the other half of the case above, and the reason the fold in SaveAsProfileAsync
+    /// exists at all.</summary>
+    [Fact]
+    public async Task An_ad_hoc_pin_reaches_the_profile_save_as_profile_offers()
+    {
+        SessionProfile? offered = null;
+        var (vm, session, prompt, fetcher, _) = CreateWithPrompt(saveable: false,
+            saveAsProfile: p => { offered = p; return Task.CompletedTask; });
+        prompt.Decision = new CertificateDecision(ConnectAnyway: true, Remember: true);
+        prompt.OnAsk = () => session.ConnectException = null;
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        await vm.SaveAsProfileAsync();
+
+        Assert.Equal(new CertificatePin(fetcher.Result.Sha256, fetcher.Result.Subject, fetcher.Result.Pem),
+            offered!.PinnedCertificate);
+        Assert.True(offered.VerifyCertificate);
     }
 
     [Fact]
@@ -362,8 +419,8 @@ public class SessionViewModelConnectTests
 
     /// <summary>#39. Connect was a bare RelayCommand, so it re-enabled the moment a connect finished and clicking
     /// it put "Unexpected error: verifyHostCert cannot change while connected" in the banner. The boundary is
-    /// HasSocket, not IsConnected: b3270 refuses the Set whenever it has a host session, which begins before the
-    /// 3270 session does.</summary>
+    /// the raw state, not IsConnected: b3270 refuses the Set whenever it has a host session, which begins before
+    /// the 3270 session does.</summary>
     [Fact]
     public async Task Connect_is_disabled_once_the_engine_holds_a_socket()
     {
@@ -385,8 +442,8 @@ public class SessionViewModelConnectTests
         await vm.DisposeAsync();
     }
 
-    /// <summary>TcpPending is deliberately on the enabled side of HasSocket, and Disconnect must still be live
-    /// there, because that is exactly when a user wants to cancel a connect that is going nowhere.</summary>
+    /// <summary>Disconnect must be live for every state but Disconnected, because a connect going nowhere is
+    /// exactly when a user wants to cancel it.</summary>
     [Fact]
     public async Task Disconnect_stays_live_for_a_pending_connect_and_greys_when_idle()
     {
@@ -405,10 +462,10 @@ public class SessionViewModelConnectTests
     }
 
     /// <summary>Review finding on #39: the test above never sets ConnectPending, so its whole
-    /// false-to-true-to-false sequence is explained by HasSocket alone and gives the "|| ConnectPending" half of
-    /// CanDisconnect no regression net. This one holds a connect in flight without ever letting the state reach
-    /// HasSocket (it stays Disconnected throughout), so a true CanExecute here can only come from ConnectPending,
-    /// and the assertion once the connect finishes pins ConnectWithAsync's finally clearing it back to false.</summary>
+    /// false-to-true-to-false sequence is explained by the reported state alone and gives the "ConnectPending ||"
+    /// half of CanDisconnect no regression net. This one holds a connect in flight while the state stays
+    /// Disconnected throughout, so a true CanExecute here can only come from ConnectPending, and the assertion
+    /// once the connect finishes pins ConnectWithAsync's finally clearing it back to false.</summary>
     [Fact]
     public async Task Disconnect_stays_live_for_a_pending_connect_that_never_reaches_a_socket()
     {
@@ -418,15 +475,130 @@ public class SessionViewModelConnectTests
 
         var attempt = vm.ConnectCommand.ExecuteAsync(null);
 
-        Assert.False(vm.HasSocket);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection);
         Assert.True(vm.DisconnectCommand.CanExecute(null));
 
         session.ConnectCompletion.SetResult();
         await attempt;
 
-        Assert.False(vm.HasSocket);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection);
         Assert.False(vm.DisconnectCommand.CanExecute(null));
 
         await vm.DisposeAsync();
+    }
+
+    /// <summary>Reconnecting is not a socket (Core's HasSocket excludes it), so without this the engine's own
+    /// reconnect would leave Connect enabled — offering to start a second attempt over one already running —
+    /// and Disconnect disabled, which is the one thing the user actually wants at that moment.</summary>
+    [Fact]
+    public void Connect_is_disabled_and_Disconnect_enabled_while_the_engine_reconnects()
+    {
+        var fake = new FakeEmulatorSession();
+        var vm = new SessionViewModel(fake, a => a(), new FakeTextClipboard());
+
+        fake.RaiseConnection(ConnectionState.Reconnecting);
+
+        Assert.Equal(ConnectionState.Reconnecting, vm.Connection);
+        Assert.False(vm.CanConnect);
+        Assert.True(vm.CanDisconnect);
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+        Assert.True(vm.DisconnectCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void Leaving_the_reconnect_restores_the_two_commands()
+    {
+        var fake = new FakeEmulatorSession();
+        var vm = new SessionViewModel(fake, a => a(), new FakeTextClipboard());
+
+        fake.RaiseConnection(ConnectionState.Reconnecting);
+        fake.RaiseConnection(ConnectionState.Disconnected);
+
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection);
+        Assert.True(vm.CanConnect);
+        Assert.False(vm.CanDisconnect);
+    }
+
+    /// <summary>Spec 6.4's rule over every state an engine-driven reconnect actually passes through. The guards
+    /// used to derive from HasSocket, which is false for Resolving and TcpPending as well as Disconnected, so
+    /// both of those offered Connect and refused Disconnect. That was invisible while those states were
+    /// reachable only inside ConnectCommand, whose AsyncRelayCommand disables itself while it runs; auto-reconnect
+    /// (#28) made the engine cycle Reconnecting → TcpPending → Reconnecting unprompted against a host that stays
+    /// down, with no command running and ConnectPending false, so the two menu items flickered on that cycle.
+    /// Asserted as a table rather than one state at a time, since the bug was in exactly the two rows the
+    /// single-state tests above never covered.</summary>
+    [Theory]
+    [InlineData(ConnectionState.Disconnected, true, false)]
+    [InlineData(ConnectionState.Reconnecting, false, true)]
+    [InlineData(ConnectionState.Resolving, false, true)]
+    [InlineData(ConnectionState.TcpPending, false, true)]
+    [InlineData(ConnectionState.TelnetPending, false, true)]
+    [InlineData(ConnectionState.Connected3270, false, true)]
+    public void The_two_guards_follow_the_state_the_engine_reported(
+        ConnectionState state, bool canConnect, bool canDisconnect)
+    {
+        var fake = new FakeEmulatorSession();
+        var vm = new SessionViewModel(fake, a => a(), new FakeTextClipboard());
+
+        fake.RaiseConnection(state);
+
+        Assert.Equal(canConnect, vm.CanConnect);
+        Assert.Equal(canDisconnect, vm.CanDisconnect);
+        Assert.Equal(canConnect, vm.ConnectCommand.CanExecute(null));
+        Assert.Equal(canDisconnect, vm.DisconnectCommand.CanExecute(null));
+    }
+
+    /// <summary>CanConnect's other half, `!ConnectPending`, which the state theory above structurally cannot
+    /// see: a connect in flight leaves Connection at Disconnected until the engine reports otherwise, so the
+    /// state term alone still reads "connectable" while an attempt is already running. Deleting `!ConnectPending`
+    /// left the whole App suite green before this test existed.
+    ///
+    /// It is belt-and-braces today — the only bound surfaces are the commands, and [RelayCommand] on an async
+    /// method already refuses to run concurrently — so this pins the intent rather than a reachable bug. It
+    /// starts mattering the moment anything binds CanConnect directly, or a connect is started outside the
+    /// command.</summary>
+    [Fact]
+    public async Task Connect_is_disabled_while_an_attempt_is_already_pending()
+    {
+        var session = new FakeEmulatorSession();
+        // The plain 30s default rather than Create()'s 100ms: this has to hold the attempt open while asserting,
+        // and a timeout firing mid-test would prove the wrong thing.
+        var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard());
+        var completion = Pending();
+        session.ConnectCompletion = completion;
+
+        var attempt = vm.ConnectCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => vm.ConnectPending, "the connect to become pending");
+
+        // The engine has reported nothing, so the guard's state half still says Disconnected. That is what makes
+        // this an assertion about ConnectPending alone.
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection);
+        Assert.False(vm.CanConnect);
+        Assert.True(vm.CanDisconnect);
+
+        completion.SetResult();
+        await attempt;
+    }
+
+    /// <summary>The two tests above prove the guard properties are correct, but IRelayCommand.CanExecute
+    /// re-evaluates its predicate on every call regardless of whether CanExecuteChanged ever fired -- so they
+    /// pass whether or not Connection's [NotifyCanExecuteChangedFor] attributes are present. Those
+    /// attributes are what make a bound menu item actually re-evaluate; without them the guard stays correct but
+    /// the UI goes stale. This asserts the notification itself.</summary>
+    [Fact]
+    public void Reconnecting_raises_CanExecuteChanged_on_both_commands()
+    {
+        var fake = new FakeEmulatorSession();
+        var vm = new SessionViewModel(fake, a => a(), new FakeTextClipboard());
+
+        var connectRaised = false;
+        var disconnectRaised = false;
+        vm.ConnectCommand.CanExecuteChanged += (_, _) => connectRaised = true;
+        vm.DisconnectCommand.CanExecuteChanged += (_, _) => disconnectRaised = true;
+
+        fake.RaiseConnection(ConnectionState.Reconnecting);
+
+        Assert.True(connectRaised);
+        Assert.True(disconnectRaised);
     }
 }

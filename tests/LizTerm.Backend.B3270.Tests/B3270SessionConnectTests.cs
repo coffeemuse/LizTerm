@@ -23,7 +23,12 @@ public class B3270SessionConnectTests
         "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n");
     private static readonly SessionProfile Pinned = Verifying with { PinnedCertificate = Pin };
 
-    private static string LastSetLine(FakeB3270Process fake) => fake.InputLines.Last(l => l.Contains("\"Set\""));
+    // Excludes the reconnect arm's own Set: for a profile with AutoReconnect true, "the last Set" would
+    // otherwise resolve to `Set reconnect true` rather than the TLS Set this helper exists to find (task 12
+    // review, finding 4). No current test enables both at once, but a future TLS test that also turns on
+    // auto-reconnect must not silently assert against the wrong line.
+    private static string LastSetLine(FakeB3270Process fake) =>
+        fake.InputLines.Last(l => l.Contains("\"Set\"") && !l.Contains("\"reconnect\""));
 
     /// <summary>One action argument as it appears on the wire, quotes included. A Windows pin path's backslashes
     /// are escaped there (<c>C:\\Users\\...</c>), so an assertion on the path has to escape them the same way.
@@ -216,38 +221,97 @@ public class B3270SessionConnectTests
     }
 
     [Fact]
-    public async Task A_pinned_profile_verifies_against_a_temp_file_that_lives_only_for_the_connect_run()
+    public async Task A_pinned_profile_verifies_against_a_temp_file_that_lives_for_the_session()
     {
         var fake = new FakeB3270Process();
         string? contentDuringConnect = null;
         var existedDuringConnect = false;
         var ownerOnly = true;
-        await using var session = new B3270Session(Pinned, () => fake);
-        fake.RunResponder = line =>
+        string pinFile;
+        await using (var session = new B3270Session(Pinned, () => fake))
         {
-            if (line.Contains("\"Connect\""))
+            fake.RunResponder = line =>
             {
-                var path = session.LastCaFile!;
-                existedDuringConnect = File.Exists(path);
-                contentDuringConnect = File.ReadAllText(path);
-                if (!OperatingSystem.IsWindows()) ownerOnly = File.GetUnixFileMode(path) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            }
-            return [Ok(line)];
-        };
+                if (line.Contains("\"Connect\""))
+                {
+                    var path = session.LastCaFile!;
+                    existedDuringConnect = File.Exists(path);
+                    contentDuringConnect = File.ReadAllText(path);
+                    if (!OperatingSystem.IsWindows()) ownerOnly = File.GetUnixFileMode(path) == (UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
+                return [Ok(line)];
+            };
 
-        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var set = LastSetLine(fake);
-        Assert.Contains("\"verifyHostCert\",\"true\"", set);
-        Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", set);
-        Assert.Contains("\"acceptHostname\",\"any\"", set);
-        Assert.True(existedDuringConnect, "the pin file did not exist while the Connect run was pending");
-        Assert.Equal(Pin.Pem, contentDuringConnect);
-        Assert.True(ownerOnly, "the pin file is not owner-only");
-        Assert.False(File.Exists(session.LastCaFile), "the pin file outlived the Connect run");
-        Assert.StartsWith(Path.GetTempPath(), session.LastCaFile);
-        Assert.StartsWith("lizterm-pin-", Path.GetFileName(session.LastCaFile!));
-        Assert.EndsWith(".pem", session.LastCaFile);
+            var set = LastSetLine(fake);
+            Assert.Contains("\"verifyHostCert\",\"true\"", set);
+            Assert.Contains($"\"caFile\",{WireArg(session.LastCaFile!)}", set);
+            Assert.Contains("\"acceptHostname\",\"any\"", set);
+            Assert.True(existedDuringConnect, "the pin file did not exist while the Connect run was pending");
+            Assert.Equal(Pin.Pem, contentDuringConnect);
+            Assert.True(ownerOnly, "the pin file is not owner-only");
+            pinFile = session.LastCaFile!;
+            Assert.StartsWith(Path.GetTempPath(), pinFile);
+            Assert.StartsWith("lizterm-pin-", Path.GetFileName(pinFile));
+            Assert.EndsWith(".pem", pinFile);
+        }
+
+        Assert.False(File.Exists(pinFile), "the pin file outlived the session");
+    }
+
+    /// <summary>The pin file used to be deleted in ConnectAsync's finally, once the Connect run had answered. That
+    /// was survivable only while a second connect meant a user pressing Connect again. Auto-reconnect (#28) made
+    /// the engine start its own: x3270's finish_connect (4.5ga6 Common/telnet.c:568-579) runs sio_init for every
+    /// connection, sio_init hands caFile to SSL_CTX_load_verify_locations, and a load failure is SI_FAILURE →
+    /// NC_FAILED — so a pinned profile with AutoReconnect on could never come back, and because host_retry_mode
+    /// stays armed across that failure it would keep failing with "CA database load … failed" every few seconds
+    /// forever. The pin file now has the roots file's lifetime; this is the roots file's own test
+    /// (An_unpinned_verifying_connect_names_a_roots_file_holding_the_trust_anchors) applied to it.</summary>
+    [Fact]
+    public async Task A_pinned_session_keeps_its_ca_file_so_the_engine_can_reconnect()
+    {
+        var fake = new FakeB3270Process();
+        string pinFile;
+        await using (var session = new B3270Session(Pinned with { AutoReconnect = true }, () => fake))
+        {
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+            pinFile = session.LastCaFile!;
+            Assert.True(File.Exists(pinFile), "the pin file was deleted while the engine could still reconnect");
+            Assert.Equal(Pin.Pem, File.ReadAllText(pinFile));
+
+            // A second connect reuses the same file rather than writing another.
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal(pinFile, session.LastCaFile);
+            Assert.True(File.Exists(pinFile));
+        }
+
+        Assert.False(File.Exists(pinFile), "the pin file outlived the session");
+    }
+
+    /// <summary>ConnectOptions.Pin can differ per attempt, so the cache is keyed on the PEM: a changed pin gets its
+    /// own file instead of the engine being pointed at the previous pin's bytes.</summary>
+    [Fact]
+    public async Task A_changed_pin_gets_its_own_file()
+    {
+        var fake = new FakeB3270Process();
+        var oneShot = new CertificatePin("00:11", "CN=new", "-----BEGIN CERTIFICATE-----\nbmV3\n-----END CERTIFICATE-----\n");
+        string first;
+        string second;
+        await using (var session = new B3270Session(Pinned, () => fake))
+        {
+            await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+            first = session.LastCaFile!;
+
+            await session.ConnectAsync(new ConnectOptions(Pin: oneShot), TestContext.Current.CancellationToken);
+            second = session.LastCaFile!;
+
+            Assert.NotEqual(first, second);
+            Assert.Equal(oneShot.Pem, File.ReadAllText(second));
+            Assert.False(File.Exists(first), "the superseded pin file was left in the temp directory");
+        }
+
+        Assert.False(File.Exists(second), "the pin file outlived the session");
     }
 
     [Fact]
@@ -286,8 +350,16 @@ public class B3270SessionConnectTests
         Assert.Equal(oneShot.Pem, content);
     }
 
+    /// <summary>A failed connect and a dead engine both leave the session reusable, so the pin file survives them
+    /// and goes with the session instead — the same rule the roots file has always had. It used to be deleted in
+    /// ConnectAsync's finally; see A_pinned_session_keeps_its_ca_file_so_the_engine_can_reconnect for why that
+    /// stopped being safe. A failed connect is in fact exactly when the file is needed next: the session stays
+    /// reusable, so whatever starts the following attempt — the user pressing Connect again, or on an
+    /// auto-reconnect profile the engine starting one itself — has to find the file still there. Note this is
+    /// NOT b3270's `retry` toggle, which this milestone deliberately never enables (spec 6.1), and which this
+    /// fixture does not turn on either.</summary>
     [Fact]
-    public async Task The_pin_file_is_deleted_after_a_failed_connect_and_after_engine_death()
+    public async Task The_pin_file_survives_a_failed_connect_and_engine_death_and_goes_with_the_session()
     {
         var failing = new FakeB3270Process
         {
@@ -295,12 +367,15 @@ public class B3270SessionConnectTests
                 ? [Failed(Tag(line), "Connection failed:", "TLS: Host certificate verification failed:", "self-signed certificate (18)")]
                 : [Ok(line)],
         };
+        string pinFile;
         await using (var session = new B3270Session(Pinned, () => failing))
         {
             await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
-            Assert.NotNull(session.LastCaFile);
-            Assert.False(File.Exists(session.LastCaFile));
+            pinFile = session.LastCaFile!;
+            Assert.NotNull(pinFile);
+            Assert.True(File.Exists(pinFile));
         }
+        Assert.False(File.Exists(pinFile));
 
         var dying = new FakeB3270Process();
         dying.RunResponder = line =>
@@ -311,13 +386,15 @@ public class B3270SessionConnectTests
         await using (var session = new B3270Session(Pinned, () => dying))
         {
             await Assert.ThrowsAsync<BackendUnavailableException>(() => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
-            Assert.NotNull(session.LastCaFile);
-            Assert.False(File.Exists(session.LastCaFile));
+            pinFile = session.LastCaFile!;
+            Assert.NotNull(pinFile);
+            Assert.True(File.Exists(pinFile));
         }
+        Assert.False(File.Exists(pinFile));
     }
 
     [Fact]
-    public async Task The_pin_file_is_deleted_after_a_cancelled_connect()
+    public async Task The_pin_file_survives_a_cancelled_connect_and_goes_with_the_session()
     {
         string? connectTag = null;
         var fake = new FakeB3270Process();
@@ -328,14 +405,21 @@ public class B3270SessionConnectTests
                 return [Ok(line), Failed(connectTag!, "Connection failed"), """{"connection":{"state":"not-connected"}}"""];
             return [Ok(line)];
         };
-        await using var session = new B3270Session(Pinned, () => fake);
-        using var cts = new CancellationTokenSource();
-        var connect = session.ConnectAsync(cancellationToken: cts.Token);
-        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
-        Assert.True(File.Exists(session.LastCaFile));
-        cts.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connect);
-        Assert.False(File.Exists(session.LastCaFile));
+        string pinFile;
+        await using (var session = new B3270Session(Pinned, () => fake))
+        {
+            using var cts = new CancellationTokenSource();
+            var connect = session.ConnectAsync(cancellationToken: cts.Token);
+            await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
+            pinFile = session.LastCaFile!;
+            Assert.True(File.Exists(pinFile));
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connect);
+            // A cancel leaves the session reusable (IEmulatorSession.ConnectAsync's contract), so the file the
+            // next attempt would need stays put.
+            Assert.True(File.Exists(pinFile));
+        }
+        Assert.False(File.Exists(pinFile));
     }
 
     [Fact]
@@ -763,5 +847,277 @@ public class B3270SessionConnectTests
 
         Assert.Contains("\"caFile\",\"\"", LastSetLine(fake));
         Assert.Null(session.LastCaFile);
+    }
+
+    private static readonly SessionProfile Reconnecting =
+        new() { Name = "t", Host = "h", Port = 23, AutoReconnect = true };
+
+    /// <summary>Only after the Connect run succeeded, which is the whole design: every failure path — the error,
+    /// the 30s timeout, the certificate prompt — reasons about an attempt that is over, and none of that holds
+    /// with an engine already retrying behind it. The ordering assertion is the point, not the presence one
+    /// (spec 6.1).</summary>
+    [Fact]
+    public async Task Reconnect_is_armed_only_after_the_connect_succeeds()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var lines = fake.InputLines.ToList();
+        var connect = lines.FindIndex(l => l.Contains("\"Connect\""));
+        var arm = lines.FindIndex(l => l.Contains("\"reconnect\"") && l.Contains("\"true\""));
+        Assert.True(connect >= 0, "no Connect was sent");
+        Assert.True(arm > connect, "reconnect must be armed after the Connect run, never before it");
+    }
+
+    [Fact]
+    public async Task Reconnect_is_not_armed_for_a_profile_that_did_not_ask_for_it()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting with { AutoReconnect = false }, () => fake);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"reconnect\""));
+    }
+
+    /// <summary>A connect that failed leaves the engine alone: arming there is exactly the `retry` behaviour this
+    /// milestone excluded, reached by the back door.</summary>
+    [Fact]
+    public async Task A_failed_connect_arms_nothing()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"Connect\"")
+            ? [Failed(Tag(line), "Connection failed"), """{"connection":{"state":"not-connected"}}"""]
+            : [Ok(line)];
+        await using var session = new B3270Session(Reconnecting, () => fake);
+
+        await Assert.ThrowsAsync<ConnectionFailedException>(
+            () => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"reconnect\""));
+    }
+
+    /// <summary>Task 12 review, finding 3: every other test on this arm uses the fake's auto-success responder, so
+    /// only the accepted path is covered. This refuses the reconnect line specifically -- every other run,
+    /// including Connect, still succeeds -- and checks that ConnectAsync completes anyway: throwOnFailure is false
+    /// and the arm's own catch swallows what that alone does not cover. Asserting the line was actually sent (not
+    /// just that the awaited call did not throw) is what stops this from passing vacuously if the responder match
+    /// were ever wrong.</summary>
+    [Fact]
+    public async Task A_refused_reconnect_arm_still_lets_the_connect_succeed()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"reconnect\"")
+            ? [Failed(Tag(line), "reconnect not supported")]
+            : [Ok(line)];
+        await using var session = new B3270Session(Reconnecting, () => fake);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(fake.InputLines, l => l.Contains("\"reconnect\""));
+    }
+
+    /// <summary>Swallowed is not the same as unreported. An engine whose `reconnect` toggle is absent or refused
+    /// leaves auto-reconnect off while the profile's checkbox still says it is on, and the user would otherwise
+    /// only find out when a dropped session never came back — the same silent capability downgrade DecideCaFile
+    /// refuses to make for a pin. The connect still succeeds; what it must not do is stay quiet.</summary>
+    [Fact]
+    public async Task A_refused_reconnect_arm_is_reported_as_a_host_message()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"reconnect\"")
+            ? [Failed(Tag(line), "reconnect not supported")]
+            : [Ok(line)];
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        var messages = new List<string>();
+        session.HostMessage += (_, m) => messages.Add(m);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(messages, m => m.StartsWith("Automatic reconnect could not be turned on", StringComparison.Ordinal)
+            && m.Contains("reconnect not supported", StringComparison.Ordinal));
+    }
+
+    /// <summary>The other half: a profile that never asked for auto-reconnect must not be told about a toggle it
+    /// was never going to send, and an engine that accepts the arm has nothing to report either.</summary>
+    [Fact]
+    public async Task An_accepted_reconnect_arm_says_nothing()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        var messages = new List<string>();
+        session.HostMessage += (_, m) => messages.Add(m);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(messages, m => m.Contains("Automatic reconnect", StringComparison.Ordinal));
+    }
+
+    /// <summary>THE behaviour this task exists for. Measured against 4.5ga6: with reconnect armed, sending the
+    /// Disconnect action alone moves the engine straight to `reconnecting` and the session is back up two
+    /// seconds later — the user's Disconnect is silently undone, on the most ordinary path in the app. Only
+    /// Set(reconnect,false) stops it, and it has to go out first (spec 6.2).</summary>
+    [Fact]
+    public async Task An_explicit_Disconnect_disarms_reconnect_before_it_sends_Disconnect()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "the session to come up");
+
+        var disconnecting = session.DisconnectAsync();
+        // Emit the close only once the Disconnect has gone out: emitting it earlier would satisfy
+        // DisconnectAsync's own early-out and the test would prove nothing.
+        await Wait.UntilAsync(() => fake.InputLines.Any(l => l.Contains("\"Disconnect\"")), "the Disconnect to go out");
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await disconnecting;
+
+        var lines = fake.InputLines.ToList();
+        var disarm = lines.FindIndex(l => l.Contains("\"reconnect\"") && l.Contains("\"false\""));
+        var sent = lines.FindIndex(l => l.Contains("\"Disconnect\""));
+        Assert.True(disarm >= 0, "no Set(reconnect,false) was sent, so the engine would reconnect from the Disconnect itself");
+        Assert.True(disarm < sent, "the disarm must precede the Disconnect");
+    }
+
+    /// <summary>Task 13 review, finding 1: TryDisconnectQuietlyAsync's own <c>await DisarmReconnectAsync();</c>
+    /// line had no test — deleting it left the whole backend suite (215/215) green. This is the cancel path
+    /// rather than the explicit-Disconnect path above: a caller cancels a connect that is still pending on an
+    /// armed profile, which routes through TryDisconnectQuietlyAsync exactly as an explicit Disconnect would, and
+    /// the same ordering has to hold — Set(reconnect,false) before the cancel's own Disconnect — for the same
+    /// reason (spec 6.2). The Connect line is captured and never answered, reusing the shape
+    /// <see cref="Cancel_during_a_pending_connect_sends_disconnect_and_throws_cancellation"/> already uses to hold
+    /// an attempt open for a cancel to land on.</summary>
+    [Fact]
+    public async Task Cancelling_a_pending_connect_on_an_armed_profile_disarms_before_it_disconnects()
+    {
+        string? connectTag = null;
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line =>
+        {
+            if (line.Contains("\"Connect\"")) { connectTag = Tag(line); return []; }
+            if (line.Contains("\"Disconnect\""))
+                return [Ok(line), Failed(connectTag!, "Connection failed"), """{"connection":{"state":"not-connected"}}"""];
+            return [Ok(line)];
+        };
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        using var cts = new CancellationTokenSource();
+
+        var attempt = session.ConnectAsync(cancellationToken: cts.Token);
+        await fake.WaitForInputAsync(l => l.Contains("\"Connect\""));
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attempt);
+
+        var lines = fake.InputLines.ToList();
+        var disarm = lines.FindIndex(l => l.Contains("\"reconnect\"") && l.Contains("\"false\""));
+        var disconnect = lines.FindIndex(l => l.Contains("\"Disconnect\""));
+        Assert.True(disarm >= 0, "no Set(reconnect,false) was sent on the cancel path");
+        Assert.True(disconnect >= 0, "no Disconnect was sent on the cancel path");
+        Assert.True(disarm < disconnect, "the disarm must precede the cancel's own Disconnect");
+    }
+
+    [Fact]
+    public async Task A_profile_without_auto_reconnect_sends_no_disarm()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting with { AutoReconnect = false }, () => fake);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "the session to come up");
+
+        var disconnecting = session.DisconnectAsync();
+        await Wait.UntilAsync(() => fake.InputLines.Any(l => l.Contains("\"Disconnect\"")), "the Disconnect to go out");
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await disconnecting;
+
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"reconnect\""));
+    }
+
+    /// <summary>Task 13 review, finding 2(a): nothing in the repo ever emitted a "reconnecting" indication before
+    /// this. Pins the measured engine sequence an armed, host-initiated drop actually produces (spec 6.3):
+    /// connected-3270 straight to reconnecting, with no not-connected in between. The exact two-element list is
+    /// the point — it is what proves not-connected never appears on this path, which is exactly why the disarm
+    /// has to be what completes <c>WaitForDisconnectedAsync</c>'s wait rather than that report.</summary>
+    [Fact]
+    public async Task A_host_initiated_drop_on_an_armed_session_reconnects_without_reporting_not_connected()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // SetConnectionState assigns the property before it raises the event, so waiting on the property and then
+        // reading the list races the last Add (see Connection_and_tls_map_and_reset in B3270SessionStateTests).
+        // Guard the list too: the reader thread appends while this thread reads it.
+        var states = new List<ConnectionState>();
+        var statesLock = new object();
+        List<ConnectionState> States() { lock (statesLock) return [.. states]; }
+        session.ConnectionChanged += (_, s) => { lock (statesLock) states.Add(s); };
+
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        fake.Emit("""{"connection":{"state":"reconnecting"}}""");
+        await Wait.UntilAsync(() => States().Count == 2, "two connection states");
+
+        Assert.Equal([ConnectionState.Connected3270, ConnectionState.Reconnecting], States());
+        Assert.Equal(ConnectionState.Reconnecting, session.ConnectionState);
+    }
+
+    /// <summary>Task 13 review, finding 2(b): the engine measurement behind this whole task also showed a
+    /// Disconnect issued while a countdown is already running is silently undone without the disarm — the
+    /// `reconnecting` state has to be treated the same as a live session, not brushed off as already on its way
+    /// out. Drives to Reconnecting exactly as <see cref="A_host_initiated_drop_on_an_armed_session_reconnects_without_reporting_not_connected"/>
+    /// does, then calls DisconnectAsync and waits for the Disconnect to actually go out (the same
+    /// <see cref="Wait.UntilAsync"/> shape <see cref="An_explicit_Disconnect_disarms_reconnect_before_it_sends_Disconnect"/>
+    /// uses) before emitting not-connected, so the early-out is never what lets this test pass.</summary>
+    [Fact]
+    public async Task A_Disconnect_issued_during_an_already_running_countdown_stays_disconnected()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake) { DisconnectTimeout = TimeSpan.FromSeconds(5) };
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "connected");
+        fake.Emit("""{"connection":{"state":"reconnecting"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Reconnecting, "reconnecting");
+
+        var disconnecting = session.DisconnectAsync();
+        // Emit the close only once the Disconnect has gone out, to avoid racing the early-out (same reason as
+        // An_explicit_Disconnect_disarms_reconnect_before_it_sends_Disconnect above).
+        await Wait.UntilAsync(() => fake.InputLines.Any(l => l.Contains("\"Disconnect\"")), "the Disconnect to go out");
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await disconnecting;
+
+        var lines = fake.InputLines.ToList();
+        var disarm = lines.FindIndex(l => l.Contains("\"reconnect\"") && l.Contains("\"false\""));
+        var sent = lines.FindIndex(l => l.Contains("\"Disconnect\""));
+        Assert.True(disarm >= 0, "no Set(reconnect,false) was sent, so the running countdown would silently undo this Disconnect");
+        Assert.True(disarm < sent, "the disarm must precede the Disconnect even while a countdown is already running");
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
+    /// <summary>Pins only that the disarm's own Set run adds no stall of its own: the fake auto-answers every
+    /// line here and the test hand-emits not-connected regardless of whether the disarm actually fired, so this
+    /// still passes with <c>DisarmReconnectAsync</c>'s call removed entirely (task 13 review, finding 3). The
+    /// real §6.3 scenario -- that an armed drop never reports not-connected on its own, so the disarm is what
+    /// completes the wait -- is <see cref="A_Disconnect_issued_during_an_already_running_countdown_stays_disconnected"/>
+    /// above, which drives the session to Reconnecting via a host-initiated drop first and never hand-emits
+    /// not-connected until the real Disconnect line is on the wire.</summary>
+    [Fact]
+    public async Task Disconnecting_an_armed_session_does_not_sit_out_the_disconnect_timeout()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake) { DisconnectTimeout = TimeSpan.FromSeconds(5) };
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "the session to come up");
+
+        var started = DateTime.UtcNow;
+        var disconnecting = session.DisconnectAsync();
+        await Wait.UntilAsync(() => fake.InputLines.Any(l => l.Contains("\"Disconnect\"")), "the Disconnect to go out");
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await disconnecting;
+
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(3), "DisconnectAsync waited out its timeout");
     }
 }

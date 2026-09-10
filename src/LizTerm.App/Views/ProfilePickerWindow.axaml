@@ -14,6 +14,18 @@
         WindowStartupLocation="CenterScreen">
   <DockPanel Margin="16">
     <TextBlock DockPanel.Dock="Top" Text="Sessions" FontSize="20" Margin="0,0,0,10" />
+    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12" Spacing="4">
+      <!-- Docked rather than a horizontal StackPanel with a fixed-width box: at the window's own MinWidth of 400
+           the row is 368px, and a 300px box plus the button ran past the right edge. The button keeps its natural
+           width and the box takes whatever is left. -->
+      <DockPanel LastChildFill="True">
+        <Button x:Name="QuickConnectButton" DockPanel.Dock="Right" Content="Quick Connect" Command="{Binding QuickConnectCommand}" Margin="8,0,0,0" />
+        <TextBox x:Name="QuickConnectBox" Text="{Binding QuickConnectText}"
+                 PlaceholderText="host, host:port, or L:host for TLS" KeyDown="OnQuickConnectKeyDown" />
+      </DockPanel>
+      <TextBlock Text="{Binding QuickConnectError}" Foreground="#FF8080" FontSize="12" TextWrapping="Wrap"
+                 IsVisible="{Binding QuickConnectError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </StackPanel>
     <StackPanel DockPanel.Dock="Right" Margin="12,0,0,0" Spacing="8" Width="120">
       <Button Content="Connect" Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch" IsDefault="True" />
       <Button Content="New..." Command="{Binding NewCommand}" HorizontalAlignment="Stretch" />

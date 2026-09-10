@@ -69,9 +69,10 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "b", Host = "b.host" });
         _store.Save(new SessionProfile { Name = "a", Host = "a.host" });
         SessionProfile? opened = null;
+        bool? openedFromStore = null;
         var quit = false;
         SessionProfile? toReturn = new SessionProfile { Name = "c", Host = "c.host" };
-        var vm = new ProfilePickerViewModel(_store, p => opened = p, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
+        var vm = new ProfilePickerViewModel(_store, (p, s) => { opened = p; openedFromStore = s; }, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
 
         Assert.Equal(["a", "b"], vm.Profiles.Select(p => p.Name));
         Assert.False(vm.ConnectCommand.CanExecute(null));
@@ -80,6 +81,9 @@ public class ProfileViewModelsTests : IDisposable
         Assert.True(vm.ConnectCommand.CanExecute(null));
         vm.ConnectCommand.Execute(null);
         Assert.Equal("b", opened!.Name);
+        // The list's Connect button always opens a saved profile: a pin the user accepts there is safe to write
+        // back. Flipping this to false would let a Connect-button pin silently vanish instead of saving.
+        Assert.True(openedFromStore);
 
         await vm.NewCommand.ExecuteAsync(null);
         Assert.Equal(["a", "b", "c"], vm.Profiles.Select(p => p.Name));
@@ -101,7 +105,7 @@ public class ProfileViewModelsTests : IDisposable
     [Fact]
     public async Task Cancelled_editor_changes_nothing()
     {
-        var vm = new ProfilePickerViewModel(_store, _ => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { });
         await vm.NewCommand.ExecuteAsync(null);
         Assert.Empty(vm.Profiles);
     }
@@ -115,7 +119,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270 });
         var pin = new CertificatePin("AA:BB", "CN=mvs", "pem");
 
-        var picker = new ProfilePickerViewModel(_store, _ => { },
+        var picker = new ProfilePickerViewModel(_store, (_, _) => { },
             existing =>
             {
                 // Stands in for the session window pinning a certificate while the editor is open.
@@ -135,7 +139,7 @@ public class ProfileViewModelsTests : IDisposable
     {
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = new CertificatePin("AA:BB", "CN=mvs", "pem") });
 
-        var picker = new ProfilePickerViewModel(_store, _ => { },
+        var picker = new ProfilePickerViewModel(_store, (_, _) => { },
             existing => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { PinnedCertificate = null }, PinCleared: true)),
             () => { });
 
@@ -153,7 +157,7 @@ public class ProfileViewModelsTests : IDisposable
         var pin = new CertificatePin("AA:BB", "CN=mvs", "pem");
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = pin });
 
-        var picker = new ProfilePickerViewModel(_store, _ => { },
+        var picker = new ProfilePickerViewModel(_store, (_, _) => { },
             existing => Task.FromResult<ProfileEdit?>(
                 new ProfileEdit(existing! with { Name = "MVS-CE", PinnedCertificate = null }, PinCleared: false)),
             () => { });
@@ -311,4 +315,284 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Null(vm.TryBuild());
         Assert.Equal("Choose a code page.", vm.ValidationMessage);
     }
+
+    [Fact]
+    public void The_editor_round_trips_the_keep_alive_and_auto_reconnect()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile
+        {
+            Name = "MVS", Host = "mvs", KeepAliveSeconds = 30, AutoReconnect = true,
+        });
+
+        Assert.Equal("30", vm.KeepAliveText);
+        Assert.True(vm.AutoReconnect);
+
+        var built = vm.TryBuild();
+        Assert.NotNull(built);
+        Assert.Equal(30, built.KeepAliveSeconds);
+        Assert.True(built.AutoReconnect);
+    }
+
+    /// <summary>A new profile shows the record's own default, so the editor and the file agree about what
+    /// "on at 60 seconds" means rather than the editor quietly proposing something else.</summary>
+    [Fact]
+    public void A_new_profile_offers_the_declared_keep_alive_default()
+    {
+        Assert.Equal("60", new ProfileEditorViewModel(null).KeepAliveText);
+    }
+
+    [Fact]
+    public void Turning_the_keep_alive_off_saves_a_zero()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", KeepAliveText = "0" };
+        Assert.Equal(0, vm.TryBuild()!.KeepAliveSeconds);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("-1")]
+    [InlineData("90000")]
+    public void A_keep_alive_that_is_not_a_sane_number_of_seconds_blocks_save(string text)
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", KeepAliveText = text };
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).", vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void The_editor_round_trips_an_oversize_geometry()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Oversize = "132x43" });
+        Assert.Equal("132x43", vm.Oversize);
+        Assert.Equal("132x43", vm.TryBuild()!.Oversize);
+    }
+
+    /// <summary>Blank means the model's own geometry, and must save as null rather than "": the argv check is
+    /// IsNullOrWhiteSpace, but a "" in the file would still be a lie about what the user chose.</summary>
+    [Fact]
+    public void A_blank_oversize_saves_as_null()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "   " };
+        Assert.Null(vm.TryBuild()!.Oversize);
+    }
+
+    [Fact]
+    public void An_illegal_oversize_blocks_save_with_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
+        Assert.Null(vm.TryBuild());
+        Assert.StartsWith("200 columns by 200 rows is 40,000 cells", vm.ValidationMessage);
+    }
+
+    /// <summary>100x30 clears model 2's floor (80 columns, 24 rows) but falls short of model 5's floor (132
+    /// columns, 27 rows) on the column count, so switching the model has to re-run the check — otherwise the
+    /// editor shows a stale verdict about the geometry in the box.
+    ///
+    /// Note: Oversize is columns x rows. A geometry that clears one model's floor may fail another's. So this
+    /// test exercises the re-validation path by switching models after setting an oversize that is valid for
+    /// model 2 but fails model 5's column floor.</summary>
+    [Fact]
+    public void Changing_the_model_re_validates_the_oversize()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "100x30" };
+        Assert.NotNull(vm.TryBuild());
+
+        vm.SelectedModel = TerminalModel.Find(5)!;
+        Assert.Equal("Oversize must be at least 132 columns and 27 rows for model 5.", vm.ValidationMessage);
+        Assert.Null(vm.TryBuild());
+
+        vm.SelectedModel = TerminalModel.Find(2)!;
+        Assert.Null(vm.ValidationMessage);
+        Assert.NotNull(vm.TryBuild());
+    }
+
+    /// <summary>Only the oversize verdict moves with the model. A blank box has nothing to say about it, and
+    /// clearing an unrelated message would be a second, invisible behaviour.</summary>
+    [Fact]
+    public void Changing_the_model_leaves_an_unrelated_message_alone()
+    {
+        var vm = new ProfileEditorViewModel(null) { Host = "h" };
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+
+        vm.SelectedModel = TerminalModel.Find(4)!;
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+    }
+
+    /// <summary>The test above only covers a *blank* box, which the rule returns early on — so it passed while
+    /// the hook still wiped anything in the message box whenever the oversize happened to be legal. With a
+    /// non-blank oversize that is valid under both models, a model change used to clear "Give the profile a
+    /// name." as a side effect. The rule now withdraws only the message it put there itself.</summary>
+    [Fact]
+    public void Changing_the_model_leaves_an_unrelated_message_alone_with_a_valid_oversize_in_the_box()
+    {
+        var vm = new ProfileEditorViewModel(null) { Host = "h", Oversize = "132x43" };
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+
+        // 132x43 clears both model 2's floor and model 4's, so the oversize rule has nothing to say here.
+        vm.SelectedModel = TerminalModel.Find(4)!;
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+    }
+
+    /// <summary>And the harder half, which the two above cannot see: when the model change makes the geometry
+    /// ILLEGAL, the rule still has no claim on a box another rule owns. It used to overwrite it, so a user with a
+    /// blank name was sent to fix the oversize while Save went on refusing the name.</summary>
+    [Fact]
+    public void Changing_the_model_leaves_an_unrelated_message_alone_even_when_the_oversize_turns_illegal()
+    {
+        var vm = new ProfileEditorViewModel(null) { Host = "h", Oversize = "100x30" };
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+
+        // 100x30 clears model 2's floor and falls short of model 5's, so the rule does have a verdict here.
+        vm.SelectedModel = TerminalModel.Find(5)!;
+
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+    }
+
+    /// <summary>The model is not the only thing that can make the verdict stale: typing in the box does too, and
+    /// a red line under text the user has since corrected complains about numbers that are no longer there. Same
+    /// rule the picker's Quick Connect box follows.</summary>
+    [Fact]
+    public void Correcting_the_oversize_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
+        Assert.Null(vm.TryBuild());
+        Assert.StartsWith("200 columns by 200 rows", vm.ValidationMessage);
+
+        vm.Oversize = "132x43";
+
+        Assert.Null(vm.ValidationMessage);
+        Assert.NotNull(vm.TryBuild());
+    }
+
+    /// <summary>Emptying the box is a correction like any other: blank is a legal oversize, so the message goes
+    /// with it rather than needing a special case.</summary>
+    [Fact]
+    public void Emptying_the_oversize_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
+        Assert.Null(vm.TryBuild());
+        Assert.NotNull(vm.ValidationMessage);
+
+        vm.Oversize = "";
+
+        Assert.Null(vm.ValidationMessage);
+    }
+
+    /// <summary>The box inherits the command line's tie-break rule by calling the same Parse and Resolve, so
+    /// text that exactly names a saved profile connects THAT profile rather than a host of the same name.</summary>
+    [Fact]
+    public void Quick_connect_prefers_a_saved_profile_of_the_same_name()
+    {
+        _store.Save(new SessionProfile { Name = "mvs.local", Host = "elsewhere", Port = 992 });
+        SessionProfile? opened = null;
+        var fromStore = false;
+        var vm = NewPicker((p, s) => { opened = p; fromStore = s; });
+
+        vm.QuickConnectText = "mvs.local";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.Equal("elsewhere", opened!.Host);
+        Assert.True(fromStore);
+        Assert.Null(vm.QuickConnectError);
+    }
+
+    /// <summary>The ad hoc branch defaults a missing port (23 here), so its generated name can collide with an
+    /// unrelated saved profile's name -- "mvs.example" typed with no port becomes "mvs.example:23", and a saved
+    /// profile happens to be named exactly that while pointing somewhere else entirely. fromStore has to say false
+    /// here: it is derived from which branch Resolve took (reference identity), not from a name lookup that would
+    /// re-collide with the very name Resolve just generated. Getting this wrong lets a certificate pin accepted
+    /// on this ad hoc connection get written into the unrelated saved profile's file (see App.WritePinBack).</summary>
+    [Fact]
+    public void Quick_connect_does_not_mistake_an_ad_hoc_host_for_a_saved_profile_of_the_same_generated_name()
+    {
+        _store.Save(new SessionProfile { Name = "mvs.example:23", Host = "totally-different-host" });
+        SessionProfile? opened = null;
+        var fromStore = true;
+        var vm = NewPicker((p, s) => { opened = p; fromStore = s; });
+
+        vm.QuickConnectText = "mvs.example";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.Equal("mvs.example", opened!.Host);
+        Assert.False(fromStore);
+    }
+
+    [Fact]
+    public void Quick_connect_opens_an_ad_hoc_session_and_saves_nothing()
+    {
+        SessionProfile? opened = null;
+        var fromStore = true;
+        var vm = NewPicker((p, s) => { opened = p; fromStore = s; });
+
+        vm.QuickConnectText = "mvs.example:3270";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.Equal("mvs.example", opened!.Host);
+        Assert.Equal(3270, opened.Port);
+        Assert.False(fromStore);
+        Assert.Empty(_store.LoadAll());
+    }
+
+    [Fact]
+    public void Quick_connect_reports_a_syntax_error_inline_and_connects_nothing()
+    {
+        var opened = false;
+        var vm = NewPicker((_, _) => opened = true);
+
+        vm.QuickConnectText = "mvs.local:99999";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.False(opened);
+        Assert.Equal("Type host, host:port, or L:host for TLS. An IPv6 address goes in brackets.", vm.QuickConnectError);
+    }
+
+    /// <summary>A bare word is ambiguous with a profile name, so Parse only reads one as a host when it has a
+    /// dot or is localhost. The message has to teach the way out rather than merely refuse (spec 7.4).</summary>
+    [Fact]
+    public void A_bare_word_that_is_neither_a_profile_nor_a_host_suggests_the_port_form()
+    {
+        var opened = false;
+        var vm = NewPicker((_, _) => opened = true);
+
+        vm.QuickConnectText = "tk5";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.False(opened);
+        Assert.Equal("\"tk5\" is not a saved session, and does not look like a host. Add a port to connect to it as a host, for example tk5:23.", vm.QuickConnectError);
+    }
+
+    [Fact]
+    public void Quick_connect_with_an_empty_box_asks_for_something_to_connect_to()
+    {
+        var opened = false;
+        var vm = NewPicker((_, _) => opened = true);
+
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.False(opened);
+        Assert.Equal("Type a host name, or the name of a saved session.", vm.QuickConnectError);
+    }
+
+    /// <summary>The message describes the text that was in the box when Connect was pressed, so it goes stale on
+    /// the next keystroke; leaving it there puts a red line under a box the user has since retyped.</summary>
+    [Fact]
+    public void Typing_in_the_box_clears_a_stale_quick_connect_error()
+    {
+        var vm = NewPicker((_, _) => { });
+
+        vm.QuickConnectText = "tk5";
+        vm.QuickConnectCommand.Execute(null);
+        Assert.NotNull(vm.QuickConnectError);
+
+        vm.QuickConnectText = "tk5:23";
+
+        Assert.Null(vm.QuickConnectError);
+    }
+
+    private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession) =>
+        new(_store, openSession, _ => Task.FromResult<ProfileEdit?>(null), () => { });
 }

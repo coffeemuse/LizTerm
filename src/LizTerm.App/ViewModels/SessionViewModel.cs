@@ -26,6 +26,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly Action<SessionProfile>? _saveProfile;
     private readonly IFolderOpener? _folderOpener;
     private readonly ICertificateFetcher? _certificateFetcher;
+    private readonly Func<SessionProfile, Task>? _saveAsProfile;
     /// <summary>The pin chosen in this window. The session's profile is fixed at construction, so a pin made after
     /// the window opened travels as a one-shot option on every later connect from here (spec 5.3).</summary>
     private CertificatePin? _pinOverride;
@@ -73,19 +74,21 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [NotifyCanExecuteChangedFor(nameof(PasteCommand))]
     private bool _isConnected;
 
-    /// <summary>b3270 has a socket to the host. Connect's boundary, and not IsConnected: b3270 refuses
-    /// `Set verifyHostCert` whenever it has a host session, which begins before the 3270 session comes up.
-    /// A second bool rather than the raw state, because IsConnected is bound in XAML and an [ObservableProperty]
-    /// named ConnectionState would collide with the enum type.</summary>
+    /// <summary>The connection state b3270 last reported, verbatim: what the two command guards are gated on
+    /// (spec 6.4). Named Connection rather than ConnectionState because an [ObservableProperty] cannot take the
+    /// name of the enum type it is declared with. Deriving bools from it — HasSocket, IsReconnecting — is what
+    /// let the guards drift out of step with the engine through Resolving and TcpPending, which an
+    /// engine-driven reconnect passes through with no command running.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConnectCommand))]
     [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
-    private bool _hasSocket;
+    private ConnectionState _connection;
 
     /// <summary>A connect attempt is in flight. Kept beside _connectCts, which is a plain field and raises
     /// nothing when assigned. Not ConnectCommand.IsRunning: that stays true through the certificate prompt and
     /// the profile save, which deliberately run after the connect's catch clauses.</summary>
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ConnectCommand))]
     [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
     private bool _connectPending;
 
@@ -101,9 +104,12 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// <param name="saveProfile">Persists the profile when the user pins its certificate; null for ad hoc profiles.</param>
     /// <param name="folderOpener">Opens the wire log directory for Help &gt; Show Wire Logs; null for tests that don't cover it.</param>
     /// <param name="certificateFetcher">Reads what a TLS host presented so the prompt can show and pin it; null shows the prompt without a fingerprint.</param>
+    /// <param name="saveAsProfile">Turns this session into a saved profile — the app opens the profile editor
+    /// pre-filled and writes the result; null disables the menu item.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
         ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
-        IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null)
+        IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null,
+        Func<SessionProfile, Task>? saveAsProfile = null)
     {
         _session = session;
         _dispatch = dispatch;
@@ -112,6 +118,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _saveProfile = saveProfile;
         _folderOpener = folderOpener;
         _certificateFetcher = certificateFetcher;
+        _saveAsProfile = saveAsProfile;
 
         _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
         _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
@@ -271,15 +278,19 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     {
         if (_disposed) return;
         IsConnected = state.IsConnected();
-        HasSocket = state.HasSocket();
+        Connection = state;
         ConnectionText = StatusFormatter.Connection(state, Profile.Host);
         TlsText = StatusFormatter.Tls(_session.Tls);
         if (state.HasSocket()) _socketOpened = true;
     }
 
-    /// <summary>Disabled once the engine holds a socket. x3270's own File menu disables it too; turning it into
-    /// a reconnect is a larger behaviour that overlaps #28 and is not smuggled in here.</summary>
-    public bool CanConnect => !HasSocket;
+    /// <summary>Offered only while the engine is fully idle: any state but Disconnected means an attempt is
+    /// already under way or a session is up, and a second attempt over one already running is not something the
+    /// app can honour. x3270's own File menu disables it too. ConnectPending is named as well because the state
+    /// is still Disconnected through the first moments of a manual connect. Gating on the raw state rather than
+    /// on HasSocket is spec 6.4's rule and matters because an engine-driven reconnect cycles through Resolving
+    /// and TcpPending with no command running to disable this one.</summary>
+    public bool CanConnect => !ConnectPending && Connection == ConnectionState.Disconnected;
 
     [RelayCommand(CanExecute = nameof(CanConnect))]
     private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions(Pin: _pinOverride));
@@ -338,8 +349,9 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     /// <summary>Spec 5.3. Reads what the host presented (TLS profiles only), asks once, and then either connects
     /// without verification for this attempt only or pins the certificate: the retry verifies against the pin, and
-    /// only once the engine has accepted it is the profile saved with the pin and verification on, after which every
-    /// later connect from this window passes the same pin. A pin the engine rejects on that retry is not offered
+    /// only once the engine has accepted it is the profile saved with the pin and verification on — for an ad hoc
+    /// session there is nothing to save it to, and the pin holds for this window alone until Save as Profile — after
+    /// which every later connect from this window passes the same pin. A pin the engine rejects on that retry is not offered
     /// again (the request says so), so this never loops, and it is not kept either, so the next prompt can offer
     /// Remember afresh. The prompt (a modal window), the fetch (a
     /// socket), and the save (a file write) can all fail, and this runs after the connect's catch clauses rather
@@ -368,15 +380,21 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             if (_disposed) return;
         }
 
-        var savedTlsProfile = _saveProfile is not null && Profile.UseTls;
+        // Deliberately NOT "_saveProfile is not null && Profile.UseTls". A pin lives in _pinOverride for the
+        // window's life whether or not there is a file behind this session, and gating the offer on having one
+        // made Quick Connect's own headline case (#29: an ad hoc connection is the start of a profile) impossible
+        // — an ad hoc TLS session got a bare Connect Anyway, no pin box, and not even a cannotPinReason to say
+        // why, and File > Save as Profile then produced a profile that failed verification on every later connect.
+        // What having a file changes is only whether the accepted pin is ALSO written back below.
+        var tlsProfile = Profile.UseTls;
         // Spec item 6 (plan 3d task 8): reuse the session's own rule rather than recompute it — the same
         // CanPinCertificates a Windows/Schannel session already used to refuse a pinned connect loudly (spec 4) is
         // what must stop this prompt offering to pin one, or a user could check "Trust this certificate" believing
         // it protects them when the engine has no way to enforce it.
-        var canPin = savedTlsProfile && _session.CanPinCertificates && presented is { Pinnable: true } &&
+        var canPin = tlsProfile && _session.CanPinCertificates && presented is { Pinnable: true } &&
             !CertificateReader.SameFingerprint(presented.Sha256, previous?.Sha256);
         string? cannotPinReason = null;
-        if (savedTlsProfile && !canPin && presented is not null)
+        if (tlsProfile && !canPin && presented is not null)
         {
             cannotPinReason = !_session.CanPinCertificates
                 ? "This engine cannot verify a pinned certificate; connecting anyway applies to this attempt only."
@@ -432,7 +450,9 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
         try
         {
-            _saveProfile!(Profile with { PinnedCertificate = pin, VerifyCertificate = true });
+            // Null for an ad hoc session: there is no file to write back to. The pin still holds for this window
+            // through _pinOverride, and File > Save as Profile is what makes it permanent.
+            _saveProfile?.Invoke(Profile with { PinnedCertificate = pin, VerifyCertificate = true });
         }
         catch (Exception ex)
         {
@@ -441,9 +461,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    /// <summary>Not the inverse of CanConnect: this also cancels a pending connect, and HasSocket is false
-    /// through Resolving and TcpPending, which is exactly when a user wants to give up on one.</summary>
-    public bool CanDisconnect => HasSocket || ConnectPending;
+    /// <summary>The inverse of CanConnect on the raw state, plus a pending connect: Resolving, TcpPending and
+    /// Reconnecting carry no socket yet, and those are exactly the moments a user wants to give up on an
+    /// attempt.</summary>
+    public bool CanDisconnect => ConnectPending || Connection != ConnectionState.Disconnected;
 
     /// <summary>While a connect is pending this cancels it (the backend sends the Disconnect); otherwise it disconnects.</summary>
     [RelayCommand(CanExecute = nameof(CanDisconnect))]
@@ -583,6 +604,30 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         catch (Exception ex)
         {
             ErrorMessage = "Could not copy the screen: " + ex.Message;
+        }
+    }
+
+    public bool CanSaveAsProfile => _saveAsProfile is not null;
+
+    /// <summary>File &gt; Save as Profile. Public because both menus drive it through Click handlers rather than a
+    /// command, the way Save Screen As does — and so, like it, it carries no [RelayCommand]: the generated command
+    /// would be bound by nothing, and anyone who later bound it would silently get the disables-while-running
+    /// behaviour the Click handlers exist to avoid. CanSaveAsProfile is what the two menu items bind IsEnabled to.
+    /// A pin taken in THIS window lives in _pinOverride rather than in
+    /// the session's profile, which is fixed at construction, so it is folded in here — otherwise a certificate
+    /// the user deliberately trusted during an ad hoc session would be dropped by the profile it becomes.</summary>
+    public async Task SaveAsProfileAsync()
+    {
+        if (_saveAsProfile is null) return;
+        try
+        {
+            await _saveAsProfile(_pinOverride is null
+                ? Profile
+                : Profile with { PinnedCertificate = _pinOverride, VerifyCertificate = true });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not save the profile: " + ex.Message;
         }
     }
 
