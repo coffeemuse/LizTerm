@@ -284,6 +284,13 @@ the old current match, that becomes the new current index; otherwise it resets t
 leaves your match where it was does not move you, and one that rewrites the screen underneath you starts over
 rather than pointing at something arbitrary. This rule is a pure function and is tested as one.
 
+**A reset to the first match counts as unvisited.** Enter moves the host cursor, so find tracks whether the
+cursor has actually been moved to the match now highlighted — that is what makes typing highlight match 1
+without sending a `MoveCursor` per character, and the first Enter land *on* it rather than past it. A re-anchor
+that keeps your place must preserve that flag, but a re-anchor that falls back has put you on a match the
+cursor has never visited, and must clear it. Missing this reproduces the same skip-a-match bug through a
+repaint that the flag exists to prevent for typing; it was found in review and both directions are now tested.
+
 ### 5.6 The bar
 
 A `Border` docked `Bottom` in `SessionWindow.axaml`'s `DockPanel`, declared after the error bar so it renders
