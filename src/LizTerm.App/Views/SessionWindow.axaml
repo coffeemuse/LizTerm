@@ -26,6 +26,7 @@
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="IND$FILE _Transfer..." Click="OnFileTransferClickNative" IsEnabled="{Binding IsConnected}" />
             <NativeMenuItem Header="_Save Screen As..." Click="OnSaveScreenClickNative" IsEnabled="{Binding CanCaptureScreen}" />
+            <NativeMenuItem Header="Save as _Profile..." Click="OnSaveAsProfileClickNative" IsEnabled="{Binding CanSaveAsProfile}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="C_lose" Click="OnCloseClickNative" />
           </NativeMenu>
@@ -134,6 +135,7 @@
         <Separator />
         <MenuItem x:Name="FileTransferMenuItem" Header="IND$FILE _Transfer..." Click="OnFileTransferClick" IsEnabled="{Binding IsConnected}" />
         <MenuItem Header="_Save Screen As..." Click="OnSaveScreenClick" IsEnabled="{Binding CanCaptureScreen}" />
+        <MenuItem Header="Save as _Profile..." Click="OnSaveAsProfileClick" IsEnabled="{Binding CanSaveAsProfile}" />
         <Separator />
         <MenuItem Header="C_lose" Click="OnCloseClick" />
       </MenuItem>

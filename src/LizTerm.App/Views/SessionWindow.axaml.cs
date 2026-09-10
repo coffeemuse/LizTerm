@@ -133,6 +133,9 @@ public partial class SessionWindow : Window
         Screen.Focus();
     }
 
+    private void OnSaveAsProfileClick(object? sender, RoutedEventArgs e) => _ = ViewModel?.SaveAsProfileAsync();
+    private void OnSaveAsProfileClickNative(object? sender, EventArgs e) => _ = ViewModel?.SaveAsProfileAsync();
+
     // Native only: the classic item binds CopyScreenAsHtmlCommand. This calls the method rather than the
     // command for the reason the Edit menu's other native items do — a command disables while it runs.
     private void OnCopyScreenClickNative(object? sender, EventArgs e) => _ = ViewModel?.CopyScreenAsHtmlAsync();
