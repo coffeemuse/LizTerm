@@ -25,13 +25,17 @@ public class AboutWindowTests
         Assert.Equal("/opt/homebrew/bin/b3270", window.FindControl<TextBlock>("EnginePathText")!.Text);
     }
 
-    /// <summary>The credit line is the one piece of this that is readable without scrolling, so it carries the
-    /// two facts a user is most likely to want: who owns the work and under what terms.</summary>
+    /// <summary>The credit line names the copyright and stops there. It used to carry the licence too, from when
+    /// the box below held third-party notices only and LizTerm's own terms appeared nowhere else; the box now
+    /// opens with "LizTerm, BSD-3-Clause" three lines under this one and the embedded LICENSE repeats the
+    /// copyright a few lines after that, so the suffix was restating what is already on screen twice.</summary>
     [AvaloniaFact]
-    public void Names_its_own_copyright_and_license_without_scrolling()
+    public void Names_its_own_copyright_without_repeating_the_license_below_it()
     {
         var window = Shown();
-        Assert.Equal("Copyright 2026 by CoffeeMuse - BSD-3-Clause", window.FindControl<TextBlock>("CopyrightText")!.Text);
+        var credit = window.FindControl<TextBlock>("CopyrightText")!.Text;
+        Assert.Equal("Copyright 2026 by CoffeeMuse", credit);
+        Assert.DoesNotContain("BSD-3-Clause", credit);
     }
 
     /// <summary>Until the license was chosen this box held third-party notices only, and the polish spec's
@@ -57,6 +61,14 @@ public class AboutWindowTests
         Assert.Contains("3270font", licenses);
         Assert.Contains("Avalonia", licenses);
         Assert.Contains("CommunityToolkit", licenses);
+    }
+
+    [AvaloniaFact]
+    public void About_shows_the_app_icon_beside_the_name()
+    {
+        var image = Shown().FindControl<Image>("AboutMark");
+        Assert.NotNull(image);
+        Assert.NotNull(image!.Source);
     }
 
     private static AboutWindow Shown()

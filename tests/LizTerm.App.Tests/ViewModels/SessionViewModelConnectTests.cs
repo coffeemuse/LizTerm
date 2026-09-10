@@ -359,4 +359,74 @@ public class SessionViewModelConnectTests
         Assert.Equal(["connect"], session.Calls);
         Assert.Equal("Could not ask about the certificate: owner closed", vm.ErrorMessage);
     }
+
+    /// <summary>#39. Connect was a bare RelayCommand, so it re-enabled the moment a connect finished and clicking
+    /// it put "Unexpected error: verifyHostCert cannot change while connected" in the banner. The boundary is
+    /// HasSocket, not IsConnected: b3270 refuses the Set whenever it has a host session, which begins before the
+    /// 3270 session does.</summary>
+    [Fact]
+    public async Task Connect_is_disabled_once_the_engine_holds_a_socket()
+    {
+        var session = new FakeEmulatorSession();
+        var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard());
+
+        Assert.True(vm.ConnectCommand.CanExecute(null));
+
+        session.RaiseConnection(ConnectionState.TelnetPending);
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+        Assert.False(vm.IsConnected);
+
+        session.RaiseConnection(ConnectionState.Connected3270);
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+
+        session.RaiseConnection(ConnectionState.Disconnected);
+        Assert.True(vm.ConnectCommand.CanExecute(null));
+
+        await vm.DisposeAsync();
+    }
+
+    /// <summary>TcpPending is deliberately on the enabled side of HasSocket, and Disconnect must still be live
+    /// there, because that is exactly when a user wants to cancel a connect that is going nowhere.</summary>
+    [Fact]
+    public async Task Disconnect_stays_live_for_a_pending_connect_and_greys_when_idle()
+    {
+        var session = new FakeEmulatorSession();
+        var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard());
+
+        Assert.False(vm.DisconnectCommand.CanExecute(null));
+
+        session.RaiseConnection(ConnectionState.Connected3270);
+        Assert.True(vm.DisconnectCommand.CanExecute(null));
+
+        session.RaiseConnection(ConnectionState.Disconnected);
+        Assert.False(vm.DisconnectCommand.CanExecute(null));
+
+        await vm.DisposeAsync();
+    }
+
+    /// <summary>Review finding on #39: the test above never sets ConnectPending, so its whole
+    /// false-to-true-to-false sequence is explained by HasSocket alone and gives the "|| ConnectPending" half of
+    /// CanDisconnect no regression net. This one holds a connect in flight without ever letting the state reach
+    /// HasSocket (it stays Disconnected throughout), so a true CanExecute here can only come from ConnectPending,
+    /// and the assertion once the connect finishes pins ConnectWithAsync's finally clearing it back to false.</summary>
+    [Fact]
+    public async Task Disconnect_stays_live_for_a_pending_connect_that_never_reaches_a_socket()
+    {
+        var (vm, session) = Create();
+        session.ConnectCompletion = Pending();
+        Assert.False(vm.DisconnectCommand.CanExecute(null));
+
+        var attempt = vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.False(vm.HasSocket);
+        Assert.True(vm.DisconnectCommand.CanExecute(null));
+
+        session.ConnectCompletion.SetResult();
+        await attempt;
+
+        Assert.False(vm.HasSocket);
+        Assert.False(vm.DisconnectCommand.CanExecute(null));
+
+        await vm.DisposeAsync();
+    }
 }

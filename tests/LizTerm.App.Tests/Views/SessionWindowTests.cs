@@ -243,7 +243,7 @@ public class SessionWindowTests
         window.FindControl<MenuItem>("FileTransferMenuItem")!.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
 
         await Wait.UntilAsync(() => vm.ErrorMessage is not null, "the error banner");
-        Assert.StartsWith("Could not open the File Transfer dialog:", vm.ErrorMessage);
+        Assert.StartsWith("Could not open the IND$FILE Transfer dialog:", vm.ErrorMessage);
     }
 
     /// <summary>About from a session window describes that session's engine and is modal to it. One method

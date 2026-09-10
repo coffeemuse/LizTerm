@@ -11,12 +11,14 @@
         Title="LizTerm" Width="480" Height="300" CanResize="False"
         WindowDecorations="None" WindowStartupLocation="CenterScreen" Background="Black"
         ShowInTaskbar="False" Topmost="True">
-  <!-- The mark. To replace it with an image later, put the file at Assets/Splash/liz.png and swap the
-       StackPanel below for <Image Source="avares://LizTerm.App/Assets/Splash/liz.png" Stretch="Uniform" />,
-       keeping the 480x300 window; the version line moves below or over the image as the picture allows. -->
+  <!-- The mark: the app icon above the wordmark. To replace the whole thing with artwork later, put the file at
+       Assets/Splash/liz.png and swap the StackPanel below for <Image Source="avares://LizTerm.App/Assets/Splash/liz.png"
+       Stretch="Uniform" />, keeping the 480x300 window and the SplashMark name that SplashWindowTests finds. -->
   <Grid RowDefinitions="*,Auto" Margin="24">
     <ContentControl x:Name="SplashMark" HorizontalAlignment="Center" VerticalAlignment="Center">
       <StackPanel>
+        <Image Source="avares://LizTerm.App/Assets/Icons/lizterm-256.png" Width="96" Height="96"
+               Stretch="Uniform" HorizontalAlignment="Center" Margin="0,0,0,8" />
         <TextBlock Text="LizTerm" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" FontSize="72" Foreground="#50FF50" HorizontalAlignment="Center" />
         <TextBlock Text="TN3270 terminal" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" FontSize="20" Foreground="#50FF50" HorizontalAlignment="Center" />
       </StackPanel>

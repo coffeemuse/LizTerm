@@ -8,6 +8,7 @@
         xmlns:vm="using:LizTerm.App.ViewModels"
         x:Class="LizTerm.App.Views.ProfileEditorWindow"
         x:DataType="vm:ProfileEditorViewModel"
+        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         Title="Session Profile" Width="480" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="10">
@@ -29,11 +30,11 @@
       </StackPanel>
       <TextBlock Grid.Row="4" Text="Model" VerticalAlignment="Center" />
       <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="12">
-        <ComboBox ItemsSource="{Binding Models}" SelectedItem="{Binding Model}" Width="80" />
+        <ComboBox x:Name="ModelBox" ItemsSource="{Binding TerminalModels}" SelectedItem="{Binding SelectedModel}" Width="160" />
         <CheckBox Content="Extended data stream" IsChecked="{Binding Extended}" />
       </StackPanel>
       <TextBlock Grid.Row="5" Text="Code page" VerticalAlignment="Center" />
-      <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding CodePage}" Width="140" HorizontalAlignment="Left" />
+      <ComboBox x:Name="CodePageBox" Grid.Row="5" Grid.Column="1" ItemsSource="{Binding CodePages}" SelectedItem="{Binding SelectedCodePage}" Width="280" HorizontalAlignment="Left" />
       <TextBlock Grid.Row="6" Text="LU name" VerticalAlignment="Center" />
       <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding LuName}" Width="140" HorizontalAlignment="Left" PlaceholderText="optional" />
       <TextBlock Grid.Row="7" Text="Keyboard" VerticalAlignment="Center" />

@@ -15,6 +15,10 @@ public partial class ProfilePickerWindow : Window
     public ProfilePickerWindow()
     {
         InitializeComponent();
+        // A picker opened from File > New Session sits alongside running sessions, and nothing tells it when one
+        // writes a pin into a profile. Reload() already preserves the selection by name; the cost is a directory
+        // read on focus.
+        Activated += (_, _) => (DataContext as ProfilePickerViewModel)?.Reload();
     }
 
     public ProfilePickerWindow(ProfileStore store, Action<SessionProfile> openSession, Action quit) : this()
@@ -22,7 +26,7 @@ public partial class ProfilePickerWindow : Window
         DataContext = new ProfilePickerViewModel(
             store,
             openSession,
-            existing => new ProfileEditorWindow(existing).ShowDialog<SessionProfile?>(this),
+            existing => new ProfileEditorWindow(existing).ShowDialog<ProfileEdit?>(this),
             quit);
     }
 

@@ -83,7 +83,7 @@ public class NativeMenuTests
     public void File_transfer_follows_the_connection_state()
     {
         var (window, _, session, _) = Show();
-        var item = Item(window, "_File", "File _Transfer...");
+        var item = Item(window, "_File", "IND$FILE _Transfer...");
 
         Assert.False(item.IsEnabled);
         session.RaiseConnection(ConnectionState.Connected3270);
@@ -464,5 +464,18 @@ public class NativeMenuTests
         window.KeyPressQwerty(PhysicalKey.V, RawInputModifiers.Control);
 
         Assert.Equal(["paste:claude"], session.Calls);
+    }
+
+    /// <summary>#16: both are mapped in ActionMap and were reachable only from C#. The menu is the whole fix —
+    /// keymap chords are a separate decision, since any chord has to clear the copy/paste/select-all gestures
+    /// TerminalScreen checks before the keymap.</summary>
+    [AvaloniaFact]
+    public void Keys_menu_offers_Dup_and_FieldMark()
+    {
+        var (window, _, _, _) = Show();
+        foreach (var header in new[] { "Dup", "Field Mark" })
+        {
+            Assert.NotNull(Item(window, "_Keys", header).Command);
+        }
     }
 }

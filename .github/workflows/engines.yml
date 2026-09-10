@@ -75,8 +75,64 @@ jobs:
       # Runs whether or not the engine came from the cache. On a cache hit the build step never executes, so
       # this is the only thing between a stale cached binary and an artifact upload -- the reason engine-linux
       # and engine-windows each run their gate unconditionally too.
-      - name: The gate accepts the engine
-        run: native/build/verify-macos.sh native/out/${{ matrix.rid }}/b3270 ${{ matrix.arch }}
+      #
+      # Both fixtures are compiled here rather than picked off the disk. #13 proposed /opt/homebrew/bin/openssl
+      # for the dependency arm, on the grounds that build-macos.sh requires Homebrew openssl@3 -- that stopped
+      # being true when OpenSSL moved to the pinned tarball. It proposed /bin/echo for the TLS arm, but
+      # verify-macos.sh checks the machine type FIRST and lipo reports /bin/echo as "x86_64 arm64e" against a
+      # uname of arm64, so it dies at the architecture arm and never reaches the one it was chosen to prove.
+      # That is not specific to echo: every macOS platform binary is universal with an arm64e slice, so none
+      # can serve here. cc is guaranteed instead, because Xcode CLT is already a hard requirement of
+      # build-macos.sh -- and engine-windows builds its own import fixture the same way.
+      - name: The gate accepts the engine and rejects both fixtures
+        run: |
+          set -euo pipefail
+          ARCH='${{ matrix.arch }}'
+          FIX=native/build-tmp/fixtures
+          mkdir -p "$FIX"
+
+          # Built for the leg's own architecture so both fixtures clear the machine-type arm and reach the arm
+          # each is meant to prove. On osx-x64 these are x86_64 binaries on an arm64 runner; the Rosetta step
+          # above is what lets the TLS arm execute one.
+          cat > "$FIX/clean.c" <<'EOF'
+          int main(void) { return 0; }
+          EOF
+          cat > "$FIX/lib.c" <<'EOF'
+          int fixture(void) { return 0; }
+          EOF
+          cat > "$FIX/uses-lib.c" <<'EOF'
+          int fixture(void);
+          int main(void) { return fixture(); }
+          EOF
+
+          # clean: links only libSystem and exits 0 with no banner -- clears architecture and dependency, dies at TLS.
+          cc -arch "$ARCH" -o "$FIX/clean" "$FIX/clean.c"
+          # dirty: an install_name outside /usr/lib and /System/Library -- clears architecture, dies at dependency.
+          cc -arch "$ARCH" -dynamiclib -install_name "@executable_path/libfixture.dylib" -o "$FIX/libfixture.dylib" "$FIX/lib.c"
+          cc -arch "$ARCH" -o "$FIX/dirty" "$FIX/uses-lib.c" -L"$FIX" -lfixture
+
+          echo "--- the gate must accept the engine it is gating"
+          native/build/verify-macos.sh native/out/${{ matrix.rid }}/b3270 "$ARCH"
+
+          # Capture and match; do not pipe. grep -q exits on its first match and SIGPIPEs the writer, which
+          # under pipefail becomes 141 -- the trap this script family has already paid for once.
+          reject() {
+            echo "--- the gate must reject $2 by its $1"
+            if output=$(native/build/verify-macos.sh "$2" "$ARCH" 2>&1); then
+              printf "%s\n" "$output"
+              echo "FAILED: verify-macos.sh accepted $2; its $1 is not working" >&2
+              exit 1
+            fi
+            printf "%s\n" "$output"
+            case "$output" in
+              *"$3"*) echo "OK: rejected by the $1" ;;
+              *) echo "FAILED: verify-macos.sh rejected $2, but not by its $1 (nothing matched: $3)" >&2
+                 exit 1 ;;
+            esac
+          }
+
+          reject "dependency allowlist" "$FIX/dirty" "non-system dynamic dependencies"
+          reject "TLS provider check"   "$FIX/clean" "does not report the expected TLS provider"
 
       - uses: actions/setup-dotnet@v6
         with:

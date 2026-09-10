@@ -21,6 +21,7 @@ public static class HostStringBuilder
         return sb.ToString();
     }
 
-    public static string ModelArgument(SessionProfile profile) =>
-        $"3279-{profile.Model}{(profile.Extended ? "-E" : "")}";
+    /// <summary>b3270's -model argument. The spelling lives in Core because the status bar shows the same
+    /// string; this stays as the name the protocol code calls it by.</summary>
+    public static string ModelArgument(SessionProfile profile) => TerminalType.For(profile);
 }

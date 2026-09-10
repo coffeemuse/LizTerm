@@ -25,7 +25,7 @@ public class SessionViewModelTests
         Assert.Same(session.CurrentScreen, vm.Screen);
         Assert.Equal("Not connected", vm.ConnectionText);
         Assert.Equal("✕ Not connected", vm.KeyboardText);
-        Assert.Equal("Model 2-E", vm.ModelText);
+        Assert.Equal("3279-2-E", vm.ModelText);
         Assert.False(vm.IsConnected);
     }
 
@@ -58,7 +58,7 @@ public class SessionViewModelTests
         session.RaiseStatus(new KeyboardStatus(KeyboardLock.Unlocked, null, true, false, "LU01"));
         Assert.Equal("✓ Ready", vm.KeyboardText);
         Assert.Equal("INS", vm.InsertText);
-        Assert.Equal("Model 2-E  LU LU01", vm.ModelText);
+        Assert.Equal("3279-2-E  LU LU01", vm.ModelText);
     }
 
     [Fact]

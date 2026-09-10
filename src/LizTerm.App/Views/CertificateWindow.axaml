@@ -7,6 +7,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:LizTerm.App.Controls"
         x:Class="LizTerm.App.Views.CertificateWindow"
+        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         Title="Certificate not verified" Width="560" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="12">

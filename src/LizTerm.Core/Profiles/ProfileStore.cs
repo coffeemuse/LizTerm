@@ -54,12 +54,29 @@ public sealed class ProfileStore(string directory)
         return profile;
     }
 
+    /// <summary>Writes through a temp file in the same directory and renames over the target, so a reader never
+    /// sees a partial profile. Read swallows a JsonException and LoadAll skips the file, so a write interrupted
+    /// by a crash, a full disk or a kill would otherwise leave a profile that looks deleted rather than broken.
+    /// The temp file is a sibling on purpose: File.Move across a filesystem is a copy, which is not atomic.</summary>
     public void Save(SessionProfile profile)
     {
         if (string.IsNullOrWhiteSpace(profile.Name)) throw new ArgumentException("Profile needs a name", nameof(profile));
         System.IO.Directory.CreateDirectory(Directory);
         var json = JsonSerializer.Serialize(profile, ProfileJsonContext.Default.SessionProfile);
-        File.WriteAllText(Path.Combine(Directory, FileNameFor(profile.Name)), json);
+        var path = Path.Combine(Directory, FileNameFor(profile.Name));
+        // Not ".json": LoadAll enumerates *.json, and a temp file left by a crash mid-write must not be read
+        // back as a profile of its own.
+        var temp = path + ".tmp";
+        try
+        {
+            File.WriteAllText(temp, json);
+            File.Move(temp, path, overwrite: true);
+        }
+        catch
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); } catch { /* the write already failed; this is cleanup */ }
+            throw;
+        }
     }
 
     public void Delete(string name)
