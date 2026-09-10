@@ -40,10 +40,11 @@ The traces come from the x3270 source distribution (BSD-3-Clause, Copyright Paul
   tags). The Connect run fails with `Connection failed:`, `TLS: Host certificate verification failed:`, and the
   OpenSSL reason `self-signed certificate (18)`; the states run `tcp-pending`, `telnet-pending`, `tls-pending`,
   `not-connected`, and no `tls` indication is ever sent. The address was replaced with `gateway.test`.
-
-- `oversize-100x50.jsonl` — b3270's own `initialize` block started with `-oversize 100x50`, no host involved.
+- `oversize-100x50.jsonl`: b3270's own `initialize` block started with `-oversize 100x50`, no host involved.
   Recorded by running the engine for two seconds and keeping the first line. The only fixture with a geometry
-  that is not a model's, which is what proves `screen-mode` and `ScreenBuffer` handle oversize (#30).
+  that is not a model's; its `screen-mode` and `erase` indications both carry the oversize geometry, so what it
+  proves is that the buffer ends up resized end-to-end and the UI needs no change (#30), not which of the two
+  indications does the resizing.
 
 ## gateway-pinned-login.jsonl
 

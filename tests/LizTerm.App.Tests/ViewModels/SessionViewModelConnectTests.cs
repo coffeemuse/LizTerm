@@ -484,4 +484,26 @@ public class SessionViewModelConnectTests
         Assert.True(vm.CanConnect);
         Assert.False(vm.CanDisconnect);
     }
+
+    /// <summary>The two tests above prove the guard properties are correct, but IRelayCommand.CanExecute
+    /// re-evaluates its predicate on every call regardless of whether CanExecuteChanged ever fired -- so they
+    /// pass whether or not IsReconnecting's [NotifyCanExecuteChangedFor] attributes are present. Those
+    /// attributes are what make a bound menu item actually re-evaluate; without them the guard stays correct but
+    /// the UI goes stale. This asserts the notification itself.</summary>
+    [Fact]
+    public void Reconnecting_raises_CanExecuteChanged_on_both_commands()
+    {
+        var fake = new FakeEmulatorSession();
+        var vm = new SessionViewModel(fake, a => a(), new FakeTextClipboard());
+
+        var connectRaised = false;
+        var disconnectRaised = false;
+        vm.ConnectCommand.CanExecuteChanged += (_, _) => connectRaised = true;
+        vm.DisconnectCommand.CanExecuteChanged += (_, _) => disconnectRaised = true;
+
+        fake.RaiseConnection(ConnectionState.Reconnecting);
+
+        Assert.True(connectRaised);
+        Assert.True(disconnectRaised);
+    }
 }
