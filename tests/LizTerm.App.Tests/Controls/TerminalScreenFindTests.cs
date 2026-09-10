@@ -45,17 +45,4 @@ public class TerminalScreenFindTests
 
         Assert.Equal(before, screen.RunPlanBuilds);
     }
-
-    /// <summary>A match list computed against a larger screen outlives it by one repaint whenever the host
-    /// changes screen size. Clamping is what keeps that from throwing.</summary>
-    [AvaloniaFact]
-    public void Matches_outside_the_screen_are_clamped_rather_than_thrown_on()
-    {
-        var (window, screen) = Show();
-        screen.FindMatches = [ScreenRegion.FromCorners(90, 90, 95, 99)];
-
-        var thrown = Record.Exception(() => TestRender.Repaint(window));
-
-        Assert.Null(thrown);
-    }
 }

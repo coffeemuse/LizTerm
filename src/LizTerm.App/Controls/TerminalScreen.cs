@@ -458,7 +458,8 @@ public sealed class TerminalScreen : Control
 
     /// <summary>An overlay, exactly as the selection is — never folded into the run plan. Matches arrive
     /// already recomputed for this snapshot, so a stale region here means only that the host has just resized
-    /// the screen; Clamp answers that rather than throwing.</summary>
+    /// the screen; FindMatchGeometry answers that rather than throwing (see its own comment for why a match
+    /// list can outlive the screen it was computed against).</summary>
     private void DrawFindMatches(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
     {
         if (FindMatches is not { Count: > 0 } matches) return;
@@ -466,11 +467,9 @@ public sealed class TerminalScreen : Control
 
         foreach (var match in matches)
         {
-            if (match.Clamp(snapshot.Rows, snapshot.Columns) is not { } region) continue;
-            var topLeft = g.CellRect(region.Top, region.Left);
-            var bottomRight = g.CellRect(region.Bottom, region.Right);
+            if (FindMatchGeometry.Rect(match, g, snapshot.Rows, snapshot.Columns) is not { } rect) continue;
             var brush = match == current ? Palette.FindCurrent : Palette.FindMatch;
-            context.FillRectangle(brush, new Rect(topLeft.TopLeft, bottomRight.BottomRight));
+            context.FillRectangle(brush, rect);
         }
     }
 
