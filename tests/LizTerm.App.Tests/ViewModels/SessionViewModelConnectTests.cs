@@ -452,4 +452,36 @@ public class SessionViewModelConnectTests
 
         await vm.DisposeAsync();
     }
+
+    /// <summary>Reconnecting is not a socket (Core's HasSocket excludes it), so without this the engine's own
+    /// reconnect would leave Connect enabled — offering to start a second attempt over one already running —
+    /// and Disconnect disabled, which is the one thing the user actually wants at that moment.</summary>
+    [Fact]
+    public void Connect_is_disabled_and_Disconnect_enabled_while_the_engine_reconnects()
+    {
+        var fake = new FakeEmulatorSession();
+        var vm = new SessionViewModel(fake, a => a(), new FakeTextClipboard());
+
+        fake.RaiseConnection(ConnectionState.Reconnecting);
+
+        Assert.True(vm.IsReconnecting);
+        Assert.False(vm.CanConnect);
+        Assert.True(vm.CanDisconnect);
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+        Assert.True(vm.DisconnectCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void Leaving_the_reconnect_restores_the_two_commands()
+    {
+        var fake = new FakeEmulatorSession();
+        var vm = new SessionViewModel(fake, a => a(), new FakeTextClipboard());
+
+        fake.RaiseConnection(ConnectionState.Reconnecting);
+        fake.RaiseConnection(ConnectionState.Disconnected);
+
+        Assert.False(vm.IsReconnecting);
+        Assert.True(vm.CanConnect);
+        Assert.False(vm.CanDisconnect);
+    }
 }

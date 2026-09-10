@@ -90,6 +90,15 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
     private bool _connectPending;
 
+    /// <summary>b3270 is reconnecting on its own initiative after the host dropped an established session. A
+    /// third bool rather than the raw state, for the reason HasSocket is one: an [ObservableProperty] named
+    /// ConnectionState would collide with the enum type. Reconnecting is deliberately NOT a socket in Core's
+    /// HasSocket, so both command guards have to name it separately.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ConnectCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
+    private bool _isReconnecting;
+
     /// <summary>The mouse selection, bound two-way to the screen control. Cleared here whenever input goes to the host.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CopyCommand))]
@@ -277,14 +286,16 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         if (_disposed) return;
         IsConnected = state.IsConnected();
         HasSocket = state.HasSocket();
+        IsReconnecting = state == ConnectionState.Reconnecting;
         ConnectionText = StatusFormatter.Connection(state, Profile.Host);
         TlsText = StatusFormatter.Tls(_session.Tls);
         if (state.HasSocket()) _socketOpened = true;
     }
 
-    /// <summary>Disabled once the engine holds a socket. x3270's own File menu disables it too; turning it into
-    /// a reconnect is a larger behaviour that overlaps #28 and is not smuggled in here.</summary>
-    public bool CanConnect => !HasSocket;
+    /// <summary>Disabled once the engine holds a socket, and while it is reconnecting on its own: a second
+    /// attempt over one already running is not something the app can honour. x3270's own File menu disables it
+    /// too.</summary>
+    public bool CanConnect => !HasSocket && !IsReconnecting;
 
     [RelayCommand(CanExecute = nameof(CanConnect))]
     private Task ConnectAsync() => ConnectWithAsync(new ConnectOptions(Pin: _pinOverride));
@@ -447,8 +458,9 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     }
 
     /// <summary>Not the inverse of CanConnect: this also cancels a pending connect, and HasSocket is false
-    /// through Resolving and TcpPending, which is exactly when a user wants to give up on one.</summary>
-    public bool CanDisconnect => HasSocket || ConnectPending;
+    /// through Resolving and TcpPending, which is exactly when a user wants to give up on one. Reconnecting is
+    /// the same case — no socket yet, and the one moment Disconnect matters most.</summary>
+    public bool CanDisconnect => HasSocket || ConnectPending || IsReconnecting;
 
     /// <summary>While a connect is pending this cancels it (the backend sends the Disconnect); otherwise it disconnects.</summary>
     [RelayCommand(CanExecute = nameof(CanDisconnect))]
