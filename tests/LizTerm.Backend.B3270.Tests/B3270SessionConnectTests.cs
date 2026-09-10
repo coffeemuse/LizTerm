@@ -839,4 +839,69 @@ public class B3270SessionConnectTests
 
         Assert.Contains(fake.InputLines, l => l.Contains("\"reconnect\""));
     }
+
+    /// <summary>THE behaviour this task exists for. Measured against 4.5ga6: with reconnect armed, sending the
+    /// Disconnect action alone moves the engine straight to `reconnecting` and the session is back up two
+    /// seconds later — the user's Disconnect is silently undone, on the most ordinary path in the app. Only
+    /// Set(reconnect,false) stops it, and it has to go out first (spec 6.2).</summary>
+    [Fact]
+    public async Task An_explicit_Disconnect_disarms_reconnect_before_it_sends_Disconnect()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "the session to come up");
+
+        var disconnecting = session.DisconnectAsync();
+        // Emit the close only once the Disconnect has gone out: emitting it earlier would satisfy
+        // DisconnectAsync's own early-out and the test would prove nothing.
+        await Wait.UntilAsync(() => fake.InputLines.Any(l => l.Contains("\"Disconnect\"")), "the Disconnect to go out");
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await disconnecting;
+
+        var lines = fake.InputLines.ToList();
+        var disarm = lines.FindIndex(l => l.Contains("\"reconnect\"") && l.Contains("\"false\""));
+        var sent = lines.FindIndex(l => l.Contains("\"Disconnect\""));
+        Assert.True(disarm >= 0, "no Set(reconnect,false) was sent, so the engine would reconnect from the Disconnect itself");
+        Assert.True(disarm < sent, "the disarm must precede the Disconnect");
+    }
+
+    [Fact]
+    public async Task A_profile_without_auto_reconnect_sends_no_disarm()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting with { AutoReconnect = false }, () => fake);
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "the session to come up");
+
+        var disconnecting = session.DisconnectAsync();
+        await Wait.UntilAsync(() => fake.InputLines.Any(l => l.Contains("\"Disconnect\"")), "the Disconnect to go out");
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await disconnecting;
+
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"reconnect\""));
+    }
+
+    /// <summary>The disarm is also what produces the state the wait is waiting for: an armed drop never reports
+    /// not-connected on its own (spec 6.3), so a Disconnect that did not disarm would sit out the whole
+    /// DisconnectTimeout. Here the engine answers normally and the call returns well inside it.</summary>
+    [Fact]
+    public async Task Disconnecting_an_armed_session_does_not_sit_out_the_disconnect_timeout()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake) { DisconnectTimeout = TimeSpan.FromSeconds(5) };
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        fake.Emit("""{"connection":{"state":"connected-3270","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Connected3270, "the session to come up");
+
+        var started = DateTime.UtcNow;
+        var disconnecting = session.DisconnectAsync();
+        await Wait.UntilAsync(() => fake.InputLines.Any(l => l.Contains("\"Disconnect\"")), "the Disconnect to go out");
+        fake.Emit("""{"connection":{"state":"not-connected"}}""");
+        await disconnecting;
+
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(3), "DisconnectAsync waited out its timeout");
+    }
 }

@@ -954,6 +954,9 @@ public sealed class B3270Session : IEmulatorSession
     {
         try
         {
+            // The cancel path disconnects too, so it needs the same disarm: a user pressing Connect again while
+            // a reconnect is churning must not leave the old intent behind.
+            await DisarmReconnectAsync();
             await RunRawAsync([new B3270Action("Disconnect")], DisconnectTimeout);
         }
         catch (Exception)
@@ -968,9 +971,35 @@ public sealed class B3270Session : IEmulatorSession
     public async Task DisconnectAsync()
     {
         if (_process is null) return;
+        // Before the early-out, deliberately. Measured against 4.5ga6: with reconnect armed, b3270 reconnects
+        // from the Disconnect action itself — the state goes straight to `reconnecting` and the session is back
+        // two seconds later — so a Disconnect sent without this is silently undone. The early-out turns out to
+        // be unreachable during a reconnect anyway, because the engine never reports not-connected while armed;
+        // the disarm stays ahead of it because that is an engine behaviour we have measured once and cannot
+        // enforce, and one extra action on this path costs nothing (spec 6.2).
+        await DisarmReconnectAsync();
         if (ConnectionState == ConnectionState.Disconnected) return;
         await RunRawAsync([new B3270Action("Disconnect")]);
         await WaitForDisconnectedAsync();
+    }
+
+    /// <summary>Turns b3270's own reconnect off, which is the only thing that stops one: the Disconnect action
+    /// does not clear the intent. It is also what makes the engine report `not-connected` during a reconnect —
+    /// about 50 ms later, measured — which is the state <see cref="WaitForDisconnectedAsync"/> is waiting for.
+    /// Quiet, and bounded: the caller is on its way to disconnecting, and neither a refused Set nor a wedged
+    /// engine may be what stops it.</summary>
+    private async Task DisarmReconnectAsync()
+    {
+        if (!Profile.AutoReconnect || _process is null) return;
+        try
+        {
+            await RunRawAsync([new B3270Action("Set", "reconnect", "false")], DisconnectTimeout);
+        }
+        catch (Exception)
+        {
+            // The process may be gone, or the engine may accept the Set and never answer it. The Disconnect
+            // that follows deals with both.
+        }
     }
 
     /// <summary>Waits until b3270 reports the connection closed, or until <see cref="DisconnectTimeout"/> passes.
