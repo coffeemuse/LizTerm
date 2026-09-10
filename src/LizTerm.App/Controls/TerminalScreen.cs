@@ -34,6 +34,12 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<ScreenRegion?> SelectionProperty =
         AvaloniaProperty.Register<TerminalScreen, ScreenRegion?>(nameof(Selection), defaultBindingMode: BindingMode.TwoWay);
 
+    /// <summary>Which crosshair lines follow the cursor, per window. b3270's own CROSSHAIR toggle is
+    /// deliberately unused: the engine has no display, so routing a display preference through a child process
+    /// to have it handed back would only make the crosshair unavailable while disconnected (spec 4.1).</summary>
+    public static readonly StyledProperty<CrosshairMode> CrosshairProperty =
+        AvaloniaProperty.Register<TerminalScreen, CrosshairMode>(nameof(Crosshair));
+
     public static readonly FontFamily TerminalFont = FontFamily.Parse("avares://LizTerm.App/Assets/Fonts#IBM 3270");
 
     private readonly Typeface _typeface = new(TerminalFont);
@@ -46,7 +52,7 @@ public sealed class TerminalScreen : Control
 
     static TerminalScreen()
     {
-        AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty);
+        AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty, CrosshairProperty);
         AffectsArrange<TerminalScreen>(SnapshotProperty);
         FocusableProperty.OverrideDefaultValue<TerminalScreen>(true);
     }
@@ -123,6 +129,12 @@ public sealed class TerminalScreen : Control
     {
         get => GetValue(SelectionProperty);
         set => SetValue(SelectionProperty, value);
+    }
+
+    public CrosshairMode Crosshair
+    {
+        get => GetValue(CrosshairProperty);
+        set => SetValue(CrosshairProperty, value);
     }
 
     internal CellGeometry LastGeometry { get; private set; }
@@ -328,6 +340,7 @@ public sealed class TerminalScreen : Control
                 context.DrawLine(pen, new Point(run.Rect.Left, y), new Point(run.Rect.Right, y));
             }
         }
+        DrawCrosshair(context, snapshot, g);
         DrawSelection(context, snapshot, g);
         DrawCursor(context, snapshot, g);
     }
@@ -403,6 +416,13 @@ public sealed class TerminalScreen : Control
 
         var underline = style.Rendition.HasFlag(CellRendition.Underline) ? new Pen(Palette.Brush(fg, false)) : null;
         return new RunVisual(rect, background, formatted, underline, style.Rendition.HasFlag(CellRendition.Blink));
+    }
+
+    private void DrawCrosshair(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
+    {
+        var (horizontal, vertical) = CrosshairGeometry.Rects(Crosshair, snapshot.Cursor, g, snapshot.Rows, snapshot.Columns);
+        if (horizontal is { } h) context.FillRectangle(Palette.Crosshair, h);
+        if (vertical is { } v) context.FillRectangle(Palette.Crosshair, v);
     }
 
     private void DrawSelection(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)

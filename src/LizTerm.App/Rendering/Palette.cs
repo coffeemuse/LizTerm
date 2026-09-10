@@ -16,6 +16,10 @@ public static class Palette
     /// <summary>Overlay for the mouse selection: muted blue at 40% opacity so host colors stay readable under it.</summary>
     public static readonly IBrush Selection = new ImmutableSolidColorBrush(Color.FromArgb(0x66, 0x60, 0x90, 0xE0));
 
+    /// <summary>The crosshair ruler. Dimmer than Selection because it is on screen continuously rather than
+    /// for as long as a drag lasts, and host text has to stay readable straight through it.</summary>
+    public static readonly IBrush Crosshair = new ImmutableSolidColorBrush(Color.FromArgb(0x30, 0xE0, 0xE0, 0x60));
+
     private static readonly Dictionary<HostColor, Color> Colors = new()
     {
         [HostColor.Default] = Color.FromRgb(0xF0, 0xF0, 0xF0),
