@@ -4,11 +4,15 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Platform;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.VisualTree;
+using LizTerm.App.Controls;
 using LizTerm.App.Menus;
+using LizTerm.App.Rendering;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -70,13 +74,81 @@ public class NativeMenuTests
         MenuLookup.Item(NativeMenu.GetMenu(window), top, child)
         ?? throw new InvalidOperationException($"no native menu item {top} > {child}");
 
+    /// <summary>The crosshair modes live one level deeper than everything else, in a View &gt; Crosshair
+    /// submenu: "Horizontal" and "Vertical" sitting bare under View read as window tiling.</summary>
+    private static NativeMenuItem CrosshairItem(SessionWindow window, string header) =>
+        MenuLookup.Item(Item(window, "_View", "_Crosshair").Menu, header)
+        ?? throw new InvalidOperationException($"no native menu item _View > _Crosshair > {header}");
+
     [AvaloniaFact]
-    public void The_window_menu_has_the_same_four_top_level_menus_as_the_classic_one()
+    public void The_window_menu_has_the_same_five_top_level_menus_as_the_classic_one()
     {
         var (window, _, _, _) = Show();
 
         var headers = NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().Select(i => i.Header!).ToArray();
-        Assert.Equal(["_File", "_Edit", "_Keys", "_Help"], headers);
+        Assert.Equal(["_File", "_Edit", "_View", "_Keys", "_Help"], headers);
+    }
+
+    /// <summary>A NativeMenuItem never toggles itself — RaiseClicked raises Click and executes Command and
+    /// never touches IsChecked — so the handler sets the view model and the OneWay bindings carry every check
+    /// mark, the three corrections to false included. Driven through RaiseClicked because that is the one entry
+    /// point both real renderers use; assigning IsChecked instead would only prove a binding round-trips.
+    ///
+    /// All four modes are exercised, not just Vertical: CrosshairModeConverter.Convert throws on a parameter
+    /// that does not parse as a CrosshairMode, but Avalonia's binding engine swallows a converter's exception
+    /// rather than propagating it, so a mistyped ConverterParameter in SessionWindow.axaml (say "Horizantal" for
+    /// the Horizontal item) would surface here only as a wrong IsChecked value on that one item's own click —
+    /// never a thrown exception — the failure mode a test that only ever clicks Vertical could never see.</summary>
+    [AvaloniaFact]
+    public void Choosing_a_crosshair_mode_checks_exactly_that_item()
+    {
+        var (window, vm, _, _) = Show();
+        var modes = new[] { CrosshairMode.None, CrosshairMode.Horizontal, CrosshairMode.Vertical, CrosshairMode.Both };
+        var items = new[] { "_None", "_Horizontal", "_Vertical", "_Both" }
+            .Select(header => CrosshairItem(window, header)).ToArray();
+
+        for (var chosen = 0; chosen < modes.Length; chosen++)
+        {
+            ((INativeMenuItemExporterEventsImplBridge)items[chosen]).RaiseClicked();
+
+            Assert.Equal(modes[chosen], vm.Crosshair);
+            Assert.Equal(
+                Enumerable.Range(0, modes.Length).Select(i => i == chosen),
+                items.Select(i => i.IsChecked));
+        }
+    }
+
+    [AvaloniaFact]
+    public void The_crosshair_reaches_the_terminal_screen()
+    {
+        var (window, vm, _, _) = Show();
+
+        vm.Crosshair = CrosshairMode.Both;
+
+        Assert.Equal(CrosshairMode.Both, window.FindControl<TerminalScreen>("Screen")!.Crosshair);
+    }
+
+    /// <summary>The four modes are grouped under a Crosshair submenu rather than sitting bare under View,
+    /// where "Horizontal" and "Vertical" read as window tiling to anyone who has not been told otherwise —
+    /// which is exactly what a first look at this menu produced. Asserted on both menus, because the parity
+    /// walk compares structure but this is the structure it would be comparing.</summary>
+    [AvaloniaFact]
+    public void The_crosshair_modes_are_grouped_under_their_own_submenu()
+    {
+        var (window, _, _, _) = Show();
+        var expected = new[] { "_None", "_Horizontal", "_Vertical", "_Both" };
+
+        var nativeView = MenuLookup.Item(NativeMenu.GetMenu(window), "_View")!;
+        var nativeChildren = nativeView.Menu!.Items.OfType<NativeMenuItem>().ToArray();
+        var nativeCrosshair = Assert.Single(nativeChildren);
+        Assert.Equal("_Crosshair", nativeCrosshair.Header);
+        Assert.Equal(expected, nativeCrosshair.Menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header));
+
+        var classicView = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>()
+            .Single(i => (string)i.Header! == "_View");
+        var classicCrosshair = Assert.Single(classicView.Items.OfType<MenuItem>());
+        Assert.Equal("_Crosshair", classicCrosshair.Header);
+        Assert.Equal(expected, classicCrosshair.Items.OfType<MenuItem>().Select(i => (string)i.Header!));
     }
 
     [AvaloniaFact]
@@ -195,15 +267,27 @@ public class NativeMenuTests
     {
         var (window, _, _, _) = Show();
 
-        // NativeMenuItemSeparator derives from NativeMenuItem, so OfType alone would demand a Click handler
-        // on the dividers too.
         foreach (var top in NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>())
+            AssertEveryLeafIsActivatable(top.Header!, top.Menu!);
+    }
+
+    /// <summary>Recurses, because View &gt; Crosshair put items a level deeper than this guard used to look and
+    /// an unwalked submenu is an unguarded one. A submenu *parent* is exempt: it opens its submenu rather than
+    /// activating, and the exporter does not grey it out for carrying no Command — only its leaves must answer.
+    /// NativeMenuItemSeparator derives from NativeMenuItem, so OfType alone would demand a handler on the
+    /// dividers too.</summary>
+    private static void AssertEveryLeafIsActivatable(string path, NativeMenu menu)
+    {
+        foreach (var item in menu.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator))
         {
-            foreach (var item in top.Menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator))
+            if (item.Menu is { } submenu)
             {
-                Assert.True(item.Command is not null || item.HasClickHandlers,
-                    $"{top.Header} > {item.Header}: no Command and no Click handler, so macOS greys it out");
+                AssertEveryLeafIsActivatable($"{path} > {item.Header}", submenu);
+                continue;
             }
+
+            Assert.True(item.Command is not null || item.HasClickHandlers,
+                $"{path} > {item.Header}: no Command and no Click handler, so macOS greys it out");
         }
     }
 
@@ -333,10 +417,10 @@ public class NativeMenuTests
     /// Keys or Edit submenu, so a dropped separator, a reordered item, a Command copied from the wrong line
     /// (a "_Connect"-headed item wired to DisconnectCommand) or — the case that matters most on a 3270 client —
     /// a CommandParameter copied from the wrong line (a "PA1"-headed item silently wired to TerminalKey.PA2)
-    /// would pass every test above while still doing the wrong thing to the mainframe. This test walks all four
-    /// top-level menus item for item, comparing header, separator position, Command and (on Keys)
-    /// CommandParameter, normalising across the two menu kinds' different item types (MenuItem/NativeMenuItem)
-    /// and separator types (Separator/NativeMenuItemSeparator).</summary>
+    /// would pass every test above while still doing the wrong thing to the mainframe. This test walks all five
+    /// top-level menus item for item — and recursively into their submenus — comparing header, separator
+    /// position, Command and (on Keys) CommandParameter, normalising across the two menu kinds' different item
+    /// types (MenuItem/NativeMenuItem) and separator types (Separator/NativeMenuItemSeparator).</summary>
     [AvaloniaFact]
     public void The_native_menu_matches_the_classic_menu_item_for_item()
     {
@@ -350,65 +434,64 @@ public class NativeMenuTests
         {
             var topHeader = (string)classicTop[i].Header!;
             Assert.Equal(topHeader, nativeTop[i].Header);
+            AssertMenusMatch(topHeader, topHeader, classicTop[i].Items.Cast<object>().ToArray(), [.. nativeTop[i].Menu!.Items]);
+        }
+    }
 
-            var classicChildren = classicTop[i].Items.Cast<object>().ToArray();
-            var nativeChildren = nativeTop[i].Menu!.Items.ToArray();
-            Assert.True(classicChildren.Length == nativeChildren.Length,
-                $"{topHeader}: {classicChildren.Length} classic items vs {nativeChildren.Length} native items");
+    /// <summary>One level of the walk above, recursing into submenus — View &gt; Crosshair put four items a
+    /// level deeper, and a submenu this did not descend into would be four items with no parity coverage at
+    /// all. <paramref name="rootHeader"/> stays the *top-level* menu's header as the recursion descends,
+    /// because the two exemptions below are properties of the top-level menu rather than of a depth.</summary>
+    private static void AssertMenusMatch(string path, string rootHeader, object[] classicChildren, NativeMenuItemBase[] nativeChildren)
+    {
+        Assert.True(classicChildren.Length == nativeChildren.Length,
+            $"{path}: {classicChildren.Length} classic items vs {nativeChildren.Length} native items");
 
-            for (var j = 0; j < classicChildren.Length; j++)
-            {
-                var classicIsSeparator = classicChildren[j] is Separator;
-                var nativeIsSeparator = nativeChildren[j] is NativeMenuItemSeparator;
-                Assert.True(classicIsSeparator == nativeIsSeparator,
-                    $"{topHeader}[{j}]: separator position differs (classic {classicIsSeparator}, native {nativeIsSeparator})");
-                if (classicIsSeparator) continue;
+        for (var j = 0; j < classicChildren.Length; j++)
+        {
+            var classicIsSeparator = classicChildren[j] is Separator;
+            var nativeIsSeparator = nativeChildren[j] is NativeMenuItemSeparator;
+            Assert.True(classicIsSeparator == nativeIsSeparator,
+                $"{path}[{j}]: separator position differs (classic {classicIsSeparator}, native {nativeIsSeparator})");
+            if (classicIsSeparator) continue;
 
-                var classicHeader = ((MenuItem)classicChildren[j]).Header as string;
-                var nativeHeader = ((NativeMenuItem)nativeChildren[j]).Header;
-                Assert.Equal(classicHeader, nativeHeader);
-            }
+            var classicItem = (MenuItem)classicChildren[j];
+            var nativeItem = (NativeMenuItem)nativeChildren[j];
+            Assert.Equal(classicItem.Header as string, nativeItem.Header);
 
-            // Command, for every menu but Edit. Everything checked above — headers, separator positions, and
-            // the Keys CommandParameter walk below — passes with "_Connect" bound to DisconnectCommand; only
-            // this comparison sees it. Reference equality is the right test: both sides bind the same
+            // Command, for every menu but Edit. Everything else checked here — headers, separator positions,
+            // and the Keys CommandParameter check below — passes with "_Connect" bound to DisconnectCommand;
+            // only this comparison sees it. Reference equality is the right test: both sides bind the same
             // [RelayCommand] instance off the one view model, and a null Command on both is what a Click-driven
-            // item (New Session, File Transfer, Close, About) correctly looks like.
-            if (topHeader != "_Edit")
+            // item (New Session, File Transfer, Close, About, the crosshair modes) correctly looks like.
+            //
+            // Edit is a deliberate exception, not an oversight: its classic items bind Command (so the
+            // [RelayCommand]s disable while running, which is correct for a mouse click on a menu item), while
+            // its native items use Click handlers wired straight to the view model's methods — a native menu
+            // gesture is a keystroke, and it must never be swallowed by a command disabled mid-round-trip. See
+            // OnCopyClickNative and its neighbours in SessionWindow.axaml.cs.
+            if (rootHeader != "_Edit")
             {
-                for (var j = 0; j < classicChildren.Length; j++)
-                {
-                    if (classicChildren[j] is Separator) continue;
-                    var classicItem = (MenuItem)classicChildren[j];
-                    var nativeItem = (NativeMenuItem)nativeChildren[j];
-                    Assert.True(ReferenceEquals(classicItem.Command, nativeItem.Command),
-                        $"{topHeader} > {classicItem.Header}: classic and native bind different commands");
-                }
+                Assert.True(ReferenceEquals(classicItem.Command, nativeItem.Command),
+                    $"{path} > {classicItem.Header}: classic and native bind different commands");
             }
 
-            if (topHeader == "_Edit")
+            // The highest-value assertion in this test. Every Keys item binds SendKeyCommand, so header text
+            // alone cannot tell "PA1" wired to TerminalKey.PA1 apart from "PA1" wired to TerminalKey.PA2 — only
+            // the CommandParameter can, and getting it wrong sends the wrong key to the mainframe.
+            if (rootHeader == "_Keys")
             {
-                // Deliberate exception, not an oversight: the classic Edit items bind Command (so the
-                // [RelayCommand]s disable while running, which is correct for a mouse click on a menu item),
-                // while the native Edit items use Click handlers instead, wired straight to the view model's
-                // methods (a native menu gesture is a keystroke, and it must never be swallowed by a command
-                // that is disabled mid-round-trip — see OnCopyClickNative and its neighbours in
-                // SessionWindow.axaml.cs). Command/CommandParameter is therefore never compared for Edit; only
-                // header text and separator positions are, in the loop above.
+                Assert.Equal(classicItem.CommandParameter, nativeItem.CommandParameter);
             }
-            else if (topHeader == "_Keys")
+
+            // Both menus must agree about *where* the nesting is, before descending into it.
+            var classicHasSubmenu = classicItem.Items.Count > 0;
+            Assert.True(classicHasSubmenu == (nativeItem.Menu is not null),
+                $"{path} > {classicItem.Header}: one menu nests a submenu here and the other does not");
+            if (nativeItem.Menu is { } nativeSubmenu)
             {
-                // The highest-value assertion in this test. Every Keys item binds SendKeyCommand, so header
-                // text alone cannot tell "PA1" wired to TerminalKey.PA1 apart from "PA1" wired to
-                // TerminalKey.PA2 — only the CommandParameter can, and getting it wrong sends the wrong key to
-                // the mainframe.
-                for (var j = 0; j < classicChildren.Length; j++)
-                {
-                    if (classicChildren[j] is Separator) continue;
-                    var classicParam = ((MenuItem)classicChildren[j]).CommandParameter;
-                    var nativeParam = ((NativeMenuItem)nativeChildren[j]).CommandParameter;
-                    Assert.Equal(classicParam, nativeParam);
-                }
+                AssertMenusMatch($"{path} > {classicItem.Header}", rootHeader,
+                    classicItem.Items.Cast<object>().ToArray(), [.. nativeSubmenu.Items]);
             }
         }
     }
@@ -425,21 +508,28 @@ public class NativeMenuTests
         Assert.Equal(hotkeys.Paste.FirstOrDefault(), Item(window, "_Edit", "_Paste").Gesture);
         Assert.Equal(hotkeys.SelectAll.FirstOrDefault(), Item(window, "_Edit", "Select _All").Gesture);
 
-        // A gesture here would be a 3270 client that cannot send the key, silently, with nothing in the wire log.
-        foreach (var (top, child) in new[]
-                 {
-                     ("_File", "_Connect"), ("_File", "C_lose"),
-                     ("_Keys", "PA1"), ("_Keys", "PF13"), ("_Keys", "Clear"),
-                     ("_Help", "_Wire Log"),
-                 })
+        // A gesture anywhere outside Edit is a 3270 client that cannot send that key, silently, with nothing in
+        // the wire log: an AppKit key equivalent is dispatched ahead of the key window's responder chain, so
+        // TerminalScreen never sees it. Walked exhaustively rather than from a list of examples — a list only
+        // covers the items someone remembered to add to it, and View > Crosshair is precisely the submenu one
+        // would have missed.
+        foreach (var top in NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().Where(i => i.Header != "_Edit"))
+            AssertNoGestures(top.Header!, top.Menu!);
+    }
+
+    private static void AssertNoGestures(string path, NativeMenu menu)
+    {
+        foreach (var item in menu.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator))
         {
-            Assert.Null(Item(window, top, child).Gesture);
+            Assert.True(item.Gesture is null,
+                $"{path} > {item.Header} carries a gesture, which takes that key away from the terminal");
+            if (item.Menu is { } submenu) AssertNoGestures($"{path} > {item.Header}", submenu);
         }
     }
 
     /// <summary>What this guards: with the native menu installed and its Edit gestures assigned (Task 6),
     /// Ctrl+V still reaches the host exactly once under both strategies, via
-    /// <c>TerminalScreen.TryHandleClipboardKey</c> alone. That is real coverage against two regressions — a
+    /// <c>TerminalScreen.TryHandlePlatformGesture</c> alone. That is real coverage against two regressions — a
     /// future change that starts wiring a menu gesture to actual dispatch (switching <c>Gesture</c> to
     /// <c>MenuItem.HotKey</c>, which Avalonia's <c>HotKeyManager</c> does dispatch), and a break in
     /// <c>TerminalScreen</c>'s own clipboard routing.
@@ -477,5 +567,165 @@ public class NativeMenuTests
         {
             Assert.NotNull(Item(window, "_Keys", header).Command);
         }
+    }
+
+    /// <summary>Capture needs no engine, so both items stay live with the session down. Gating them on
+    /// IsConnected would take them away at the moment they are most wanted.</summary>
+    [AvaloniaFact]
+    public void The_capture_items_stay_enabled_while_disconnected()
+    {
+        var (window, _, session, _) = Show();
+        session.RaiseConnection(ConnectionState.Disconnected);
+
+        Assert.True(Item(window, "_File", "_Save Screen As...").IsEnabled);
+        Assert.True(Item(window, "_Edit", "Copy Screen as _HTML").IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void The_edit_menu_offers_find()
+    {
+        var (window, _, _, _) = Show();
+
+        Assert.True(Item(window, "_Edit", "_Find...").IsEnabled);
+    }
+
+    /// <summary>Cmd+F on macOS, Ctrl+F elsewhere, built from the platform's CommandModifiers because
+    /// PlatformHotkeyConfiguration carries no Find of its own (spec 5.3).</summary>
+    [AvaloniaFact]
+    public void Find_carries_the_platform_gesture()
+    {
+        var (window, _, _, _) = Show();
+        // The same extension the production code uses; TopLevel.PlatformSettings is an explicit interface
+        // implementation in 12.1.2 and is not reachable as a plain property.
+        var expected = window.GetPlatformSettings()!.HotkeyConfiguration.CommandModifiers;
+
+        var gesture = Item(window, "_Edit", "_Find...").Gesture;
+
+        Assert.NotNull(gesture);
+        Assert.Equal(Key.F, gesture!.Key);
+        Assert.Equal(expected, gesture.KeyModifiers);
+    }
+
+    [AvaloniaFact]
+    public void The_find_bar_opens_from_the_menu_and_focuses_its_box()
+    {
+        var (window, vm, _, _) = Show();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+
+        Assert.True(vm.Find.IsOpen);
+        Assert.True(window.FindControl<TextBox>("FindBox")!.IsFocused);
+    }
+
+    /// <summary>Escape closes the bar and hands focus back, the same path the error bar's Dismiss uses.</summary>
+    [AvaloniaFact]
+    public void Escape_closes_the_find_bar_and_returns_focus_to_the_screen()
+    {
+        var (window, vm, _, _) = Show();
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+
+        Assert.False(vm.Find.IsOpen);
+        Assert.True(window.FindControl<TerminalScreen>("Screen")!.IsFocused);
+    }
+
+    /// <summary>Matches reach the control, so the overlay has something to paint. Show()'s fixture seeds "hello"
+    /// at row 2 column 3, so asserting a single match first is what stops this passing vacuously if
+    /// ScreenSearch.Find regressed to returning nothing — both sides would still be empty/null and the two
+    /// Equal calls below would not notice.</summary>
+    [AvaloniaFact]
+    public void Find_matches_reach_the_terminal_screen()
+    {
+        var (window, vm, _, _) = Show();
+        vm.Find.Open();
+
+        vm.Find.Term = "hello";
+
+        Assert.Single(vm.Find.Matches);
+        var screen = window.FindControl<TerminalScreen>("Screen")!;
+        Assert.Equal(vm.Find.Matches, screen.FindMatches);
+        Assert.Equal(vm.Find.CurrentMatch, screen.CurrentMatch);
+    }
+
+    /// <summary>What none of the tests above cover: every one of them reaches the find bar through
+    /// <c>RaiseClicked</c> or by poking the view model directly, never through the control. That matters because
+    /// under the classic menu strategy — the default on Windows and Linux — the native menu is detached and
+    /// <c>MenuItem.InputGesture</c> is display only (see the decompilation note on
+    /// <see cref="The_paste_hotkey_reaches_the_host_exactly_once_via_TerminalScreen_under_headless"/>), so
+    /// <c>TerminalScreen.TryHandlePlatformGesture</c> → <c>FindRequested</c> → <c>ShowFind</c> is the *only*
+    /// dispatch path that exists there. Modelled on that same paste test, over both menu strategies for the same
+    /// reason: this path does not go through either menu at all, so both must reach the bar identically.</summary>
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_find_gesture_opens_the_bar_via_TerminalScreen(bool useNativeMenu)
+    {
+        var (window, vm, _, _) = Show(useNativeMenu);
+        window.FindControl<TerminalScreen>("Screen")!.Focus();
+
+        window.KeyPressQwerty(PhysicalKey.F, RawInputModifiers.Control);
+
+        Assert.True(vm.Find.IsOpen);
+        Assert.True(window.FindControl<TextBox>("FindBox")!.IsFocused);
+    }
+
+    /// <summary>Item 2: on macOS these three native Edit items are AppKit key equivalents that
+    /// <c>NSApplication.sendEvent:</c> dispatches ahead of the key window's responder chain (see
+    /// <c>OnPasteClickNative</c> and its neighbours in SessionWindow.axaml.cs). Task 8 gave this window its
+    /// first focusable text field, which makes the find box reachable by them, so each handler must route to
+    /// the box instead of the session while it is focused. Driven through <c>RaiseClicked</c>, the entry point
+    /// both real renderers use.
+    ///
+    /// The clipboard used here is Avalonia's own (<c>window.Clipboard</c>, what <c>TextBox.Paste</c>/<c>Copy</c>
+    /// read and write), which is a different store from the <c>FakeTextClipboard</c> the session's
+    /// Copy/PasteAsync go through — the two must not be confused for this test to mean anything.</summary>
+    [AvaloniaFact]
+    public async Task The_native_paste_item_pastes_into_the_find_box_when_it_is_focused()
+    {
+        var (window, _, session, clipboard) = Show();
+        session.RaiseConnection(ConnectionState.Connected3270);
+        // What PasteAsync would send to the host if the focus guard were missing.
+        clipboard.Text = "typed-into-the-host-by-mistake";
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+        await window.Clipboard!.SetTextAsync("claude");
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Paste")).RaiseClicked();
+
+        Assert.Equal("claude", window.FindControl<TextBox>("FindBox")!.Text);
+        Assert.DoesNotContain(session.Calls, call => call.StartsWith("paste:"));
+    }
+
+    /// <inheritdoc cref="The_native_paste_item_pastes_into_the_find_box_when_it_is_focused"/>
+    [AvaloniaFact]
+    public async Task The_native_copy_item_copies_the_find_box_text_when_it_is_focused()
+    {
+        var (window, vm, _, _) = Show();
+        // The terminal has something to copy too, so a guard-free handler would have somewhere else to act.
+        vm.Selection = ScreenRegion.FromCorners(2, 3, 2, 7);
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+        var box = window.FindControl<TextBox>("FindBox")!;
+        box.Text = "needle";
+        box.SelectAll();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Copy")).RaiseClicked();
+
+        Assert.Equal("needle", await window.Clipboard!.TryGetTextAsync());
+    }
+
+    /// <inheritdoc cref="The_native_paste_item_pastes_into_the_find_box_when_it_is_focused"/>
+    [AvaloniaFact]
+    public void The_native_select_all_item_selects_the_find_box_text_when_it_is_focused()
+    {
+        var (window, vm, _, _) = Show();
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+        var box = window.FindControl<TextBox>("FindBox")!;
+        box.Text = "hello";
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "Select _All")).RaiseClicked();
+
+        Assert.Equal(0, box.SelectionStart);
+        Assert.Equal(5, box.SelectionEnd);
+        Assert.Null(vm.Selection);
     }
 }

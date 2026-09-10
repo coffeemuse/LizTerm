@@ -34,6 +34,21 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<ScreenRegion?> SelectionProperty =
         AvaloniaProperty.Register<TerminalScreen, ScreenRegion?>(nameof(Selection), defaultBindingMode: BindingMode.TwoWay);
 
+    /// <summary>Which crosshair lines follow the cursor, per window. b3270's own CROSSHAIR toggle is
+    /// deliberately unused: the engine has no display, so routing a display preference through a child process
+    /// to have it handed back would only make the crosshair unavailable while disconnected (spec 4.1).</summary>
+    public static readonly StyledProperty<CrosshairMode> CrosshairProperty =
+        AvaloniaProperty.Register<TerminalScreen, CrosshairMode>(nameof(Crosshair));
+
+    /// <summary>Every find match on the current screen, or null. Recomputed by FindViewModel against each new
+    /// snapshot and pushed in; the control only paints them.</summary>
+    public static readonly StyledProperty<IReadOnlyList<ScreenRegion>?> FindMatchesProperty =
+        AvaloniaProperty.Register<TerminalScreen, IReadOnlyList<ScreenRegion>?>(nameof(FindMatches));
+
+    /// <summary>The match the user is on, painted distinctly from the others.</summary>
+    public static readonly StyledProperty<ScreenRegion?> CurrentMatchProperty =
+        AvaloniaProperty.Register<TerminalScreen, ScreenRegion?>(nameof(CurrentMatch));
+
     public static readonly FontFamily TerminalFont = FontFamily.Parse("avares://LizTerm.App/Assets/Fonts#IBM 3270");
 
     private readonly Typeface _typeface = new(TerminalFont);
@@ -46,7 +61,8 @@ public sealed class TerminalScreen : Control
 
     static TerminalScreen()
     {
-        AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty);
+        AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty, CrosshairProperty,
+            FindMatchesProperty, CurrentMatchProperty);
         AffectsArrange<TerminalScreen>(SnapshotProperty);
         FocusableProperty.OverrideDefaultValue<TerminalScreen>(true);
     }
@@ -125,6 +141,24 @@ public sealed class TerminalScreen : Control
         set => SetValue(SelectionProperty, value);
     }
 
+    public CrosshairMode Crosshair
+    {
+        get => GetValue(CrosshairProperty);
+        set => SetValue(CrosshairProperty, value);
+    }
+
+    public IReadOnlyList<ScreenRegion>? FindMatches
+    {
+        get => GetValue(FindMatchesProperty);
+        set => SetValue(FindMatchesProperty, value);
+    }
+
+    public ScreenRegion? CurrentMatch
+    {
+        get => GetValue(CurrentMatchProperty);
+        set => SetValue(CurrentMatchProperty, value);
+    }
+
     internal CellGeometry LastGeometry { get; private set; }
 
     public event EventHandler<TerminalKey>? KeyRequested;
@@ -136,13 +170,17 @@ public sealed class TerminalScreen : Control
     public event EventHandler? PasteRequested;
     public event EventHandler? SelectAllRequested;
 
+    /// <summary>Raised for the platform's Find gesture. Checked here, ahead of Keymap.TryMap, for the same
+    /// reason copy and paste are: the window owns what happens, the control owns only the keystroke.</summary>
+    public event EventHandler? FindRequested;
+
     /// <summary>Spec 6.2 ordering: the platform's copy, paste, and select-all hotkeys first (they are not in the
     /// table), then the key table, then the text table, then Avalonia's text input for everything else so dead
     /// keys and IMEs keep working.</summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         _taps.KeyDown(e.Key);
-        if (TryHandleClipboardKey(e))
+        if (TryHandlePlatformGesture(e))
         {
             e.Handled = true;
             return;
@@ -192,12 +230,20 @@ public sealed class TerminalScreen : Control
 
     private void OnWindowDeactivated(object? sender, EventArgs e) => _taps.Reset();
 
-    private bool TryHandleClipboardKey(KeyEventArgs e)
+    private bool TryHandlePlatformGesture(KeyEventArgs e)
     {
         var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
         if (Matches(hotkeys?.Copy, e, Key.C)) { CopyRequested?.Invoke(this, EventArgs.Empty); return true; }
         if (Matches(hotkeys?.Paste, e, Key.V)) { PasteRequested?.Invoke(this, EventArgs.Empty); return true; }
         if (Matches(hotkeys?.SelectAll, e, Key.A)) { SelectAllRequested?.Invoke(this, EventArgs.Empty); return true; }
+
+        // PlatformHotkeyConfiguration carries no Find, so this one is built rather than read. CommandModifiers
+        // still supplies Cmd on macOS and Ctrl elsewhere, so nothing here is hardcoded per platform.
+        if (e.Key == Key.F && e.KeyModifiers == (hotkeys?.CommandModifiers ?? KeyModifiers.Control))
+        {
+            FindRequested?.Invoke(this, EventArgs.Empty);
+            return true;
+        }
         return false;
     }
 
@@ -328,7 +374,9 @@ public sealed class TerminalScreen : Control
                 context.DrawLine(pen, new Point(run.Rect.Left, y), new Point(run.Rect.Right, y));
             }
         }
+        DrawCrosshair(context, snapshot, g);
         DrawSelection(context, snapshot, g);
+        DrawFindMatches(context, snapshot, g);
         DrawCursor(context, snapshot, g);
     }
 
@@ -348,9 +396,6 @@ public sealed class TerminalScreen : Control
         _advancePerEm = probe.Width > 0 ? probe.Width / probeSize : 0.6;
         _lineHeightPerEm = probe.Height > 0 ? probe.Height / probeSize : 1.2;
     }
-
-    private static bool SameStyle(in Cell a, in Cell b) =>
-        a.Foreground == b.Foreground && a.Background == b.Background && a.Rendition == b.Rendition;
 
     /// <summary>One run of identically styled cells, with its text already shaped. Held for as long as the
     /// snapshot and the cell geometry are unchanged, so a blink phase flip — a full repaint twice a second, for
@@ -375,7 +420,7 @@ public sealed class TerminalScreen : Control
             {
                 var start = col;
                 var style = cells[col];
-                while (col < cells.Length && SameStyle(cells[col], style)) col++;
+                while (col < cells.Length && cells[col].SameStyleAs(style)) col++;
                 plan.Add(BuildRun(snapshot, row, start, col - start, style, g));
             }
         }
@@ -408,12 +453,36 @@ public sealed class TerminalScreen : Control
         return new RunVisual(rect, background, formatted, underline, style.Rendition.HasFlag(CellRendition.Blink));
     }
 
+    private void DrawCrosshair(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
+    {
+        var (horizontal, vertical) = CrosshairGeometry.Rects(Crosshair, snapshot.Cursor, g, snapshot.Rows, snapshot.Columns);
+        if (horizontal is { } h) context.FillRectangle(Palette.Crosshair, h);
+        if (vertical is { } v) context.FillRectangle(Palette.Crosshair, v);
+    }
+
     private void DrawSelection(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
     {
         if (Selection?.Clamp(snapshot.Rows, snapshot.Columns) is not { } region) return;
         var topLeft = g.CellRect(region.Top, region.Left);
         var bottomRight = g.CellRect(region.Bottom, region.Right);
         context.FillRectangle(Palette.Selection, new Rect(topLeft.TopLeft, bottomRight.BottomRight));
+    }
+
+    /// <summary>An overlay, exactly as the selection is — never folded into the run plan. Matches arrive
+    /// already recomputed for this snapshot, so a stale region here means only that the host has just resized
+    /// the screen; FindMatchGeometry answers that rather than throwing (see its own comment for why a match
+    /// list can outlive the screen it was computed against).</summary>
+    private void DrawFindMatches(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
+    {
+        if (FindMatches is not { Count: > 0 } matches) return;
+        var current = CurrentMatch;
+
+        foreach (var match in matches)
+        {
+            if (FindMatchGeometry.Rect(match, g, snapshot.Rows, snapshot.Columns) is not { } rect) continue;
+            var brush = Palette.FindMatchBrush(match == current);
+            context.FillRectangle(brush, rect);
+        }
     }
 
     private void DrawCursor(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)

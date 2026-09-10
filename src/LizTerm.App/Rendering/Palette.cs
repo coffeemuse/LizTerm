@@ -16,6 +16,22 @@ public static class Palette
     /// <summary>Overlay for the mouse selection: muted blue at 40% opacity so host colors stay readable under it.</summary>
     public static readonly IBrush Selection = new ImmutableSolidColorBrush(Color.FromArgb(0x66, 0x60, 0x90, 0xE0));
 
+    /// <summary>The crosshair ruler. Dimmer than Selection because it is on screen continuously rather than
+    /// for as long as a drag lasts, and host text has to stay readable straight through it.</summary>
+    public static readonly IBrush Crosshair = new ImmutableSolidColorBrush(Color.FromArgb(0x30, 0xE0, 0xE0, 0x60));
+
+    /// <summary>A find match, and the one the user is on. Amber rather than Selection's blue so a search over a
+    /// selected region stays readable, and the current match is opaque enough to pick out of a screenful.</summary>
+    public static readonly IBrush FindMatch = new ImmutableSolidColorBrush(Color.FromArgb(0x66, 0xE0, 0xA0, 0x20));
+    public static readonly IBrush FindCurrent = new ImmutableSolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xD0, 0x40));
+
+    /// <summary>Which of the two find brushes paints one match: <see cref="FindCurrent"/> for the match the user
+    /// is on, else <see cref="FindMatch"/>. Extracted out of TerminalScreen.DrawFindMatches's ternary as a pure
+    /// predicate: this project asserts overlay painting through geometry helpers (CrosshairGeometry,
+    /// FindMatchGeometry) rather than pixels, and neither of those can see which brush a rectangle got, so the
+    /// choice itself has to be reachable some other way to be testable at all.</summary>
+    public static IBrush FindMatchBrush(bool isCurrent) => isCurrent ? FindCurrent : FindMatch;
+
     private static readonly Dictionary<HostColor, Color> Colors = new()
     {
         [HostColor.Default] = Color.FromRgb(0xF0, 0xF0, 0xF0),

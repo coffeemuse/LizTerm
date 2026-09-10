@@ -4,9 +4,11 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LizTerm.App.Capture;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
+using LizTerm.App.Rendering;
 using LizTerm.App.Status;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Screen;
@@ -47,9 +49,17 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CopyCommand))]
     [NotifyCanExecuteChangedFor(nameof(SelectAllCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyScreenAsHtmlCommand))]
     [NotifyPropertyChangedFor(nameof(CanCopy))]
     [NotifyPropertyChangedFor(nameof(CanSelectAll))]
+    [NotifyPropertyChangedFor(nameof(CanCaptureScreen))]
+    [NotifyPropertyChangedFor(nameof(CanFind))]
     private ScreenSnapshot? _screen;
+
+    /// <summary>Which crosshair lines follow the cursor, for this window only. Not a profile field: it is a
+    /// display preference, and a home for those is #19's job rather than something to invent here (spec 4.3).
+    /// </summary>
+    [ObservableProperty] private CrosshairMode _crosshair;
 
     [ObservableProperty] private string _connectionText = "";
     [ObservableProperty] private string _tlsText = "";
@@ -123,6 +133,8 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         session.Faulted += _onFaulted;
         session.HostMessage += _onHostMessage;
 
+        Find = new FindViewModel(MoveCursorAsync);
+
         ApplyScreen(session.CurrentScreen);
         ApplyStatus(session.KeyboardStatus);
         ApplyConnection(session.ConnectionState);
@@ -135,6 +147,13 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     public string Title => $"{Profile.Name} - {Profile.Host}";
     public EngineInfo Engine => _session.Engine;
 
+    /// <summary>Find state for this window. Its own view model: see FindViewModel's own summary.</summary>
+    public FindViewModel Find { get; }
+
+    /// <summary>There is a screen to search. Like CanCaptureScreen, deliberately not IsConnected — find reads
+    /// the snapshot and never needs an engine.</summary>
+    public bool CanFind => Screen is not null;
+
     /// <summary>Where new wire logs go; the app uses the per-OS logs folder, tests a temp directory.</summary>
     public string WireLogDirectory { get; set; } = AppPaths.LogsDirectory();
 
@@ -143,11 +162,13 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     [ObservableProperty] private string _wireLogText = "";
 
-    public static string WireLogFileName(string profileName, DateTime now)
-    {
-        var safe = new string(profileName.Select(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-' ? c : '_').ToArray());
-        return $"wire-{safe}-{now:yyyyMMdd-HHmmss}.log";
-    }
+    public static string WireLogFileName(string profileName, DateTime now) =>
+        $"wire-{SafeFileName.Of(profileName)}-{now:yyyyMMdd-HHmmss}.log";
+
+    /// <summary>The name the Save dialog opens on. Same shape as a wire log's, so the two files a user might
+    /// keep from one session sort together.</summary>
+    public static string ScreenFileName(string profileName, DateTime now, string extension) =>
+        $"screen-{SafeFileName.Of(profileName)}-{now:yyyyMMdd-HHmmss}.{extension}";
 
     /// <summary>The path for a new file of that name, or the first of name-2, name-3, ... that does not exist yet.
     /// Two logs started in the same second must not share a file (spec 8).</summary>
@@ -235,6 +256,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         if (_disposed) return;
         Screen = snapshot;
         CursorText = StatusFormatter.Cursor(snapshot.Cursor);
+        Find.OnScreen(snapshot);
     }
 
     private void ApplyStatus(KeyboardStatus status)
@@ -509,6 +531,59 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     public void SelectAll()
     {
         if (Screen is { } screen) Selection = ScreenRegion.Full(screen.Rows, screen.Columns);
+    }
+
+    /// <summary>There is a screen to capture. Deliberately not IsConnected: capture needs no engine, and the
+    /// moment it is most wanted is often a session the host has just dropped (spec 3.1).</summary>
+    public bool CanCaptureScreen => Screen is not null;
+
+    /// <summary>What the Save dialog's own File Format popup offers. Text first, because it is what
+    /// <see cref="ScreenFileName"/> suggests and the dialog opens on its first entry — a popup contradicting
+    /// the filename beside it is worse than no popup. The extension still decides the format below; this only
+    /// makes that choice visible and gets the extension appended, which typing ".html" by hand used to be the
+    /// only route to.</summary>
+    private static readonly IReadOnlyList<SaveFormat> ScreenFormats =
+    [
+        new("Plain text", "txt"),
+        new("HTML", "html"),
+    ];
+
+    /// <summary>File &gt; Save Screen As... The format follows the extension the OS dialog returned; we write
+    /// the bytes rather than handing a path to anything else, because the dialog has just made a promise about
+    /// overwriting and only we can keep it.</summary>
+    public async Task SaveScreenAsync(IFilePicker picker)
+    {
+        if (Screen is not { } screen) return;
+        try
+        {
+            var suggested = ScreenFileName(Profile.Name, DateTime.Now, "txt");
+            if (await picker.PickSaveLocationAsync(suggested, "Save screen as", ScreenFormats) is not { } path) return;
+
+            var extension = Path.GetExtension(path);
+            var html = extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
+                       || extension.Equals(".htm", StringComparison.OrdinalIgnoreCase);
+            await File.WriteAllTextAsync(path, html ? ScreenHtml.RenderDocument(screen) : screen.ToText());
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not save the screen: " + ex.Message;
+        }
+    }
+
+    /// <summary>Edit &gt; Copy Screen as HTML. The cheapest useful capture and the one that reaches a bug
+    /// report.</summary>
+    [RelayCommand(CanExecute = nameof(CanCaptureScreen))]
+    public async Task CopyScreenAsHtmlAsync()
+    {
+        if (Screen is not { } screen) return;
+        try
+        {
+            await _clipboard.SetTextAsync(ScreenHtml.Render(screen));
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not copy the screen: " + ex.Message;
+        }
     }
 
     /// <summary>Rejected actions are not errors to show: b3270 already explains them through the keyboard lock.</summary>

@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
+using LizTerm.App.Rendering;
 using LizTerm.App.ViewModels;
 
 namespace LizTerm.App.Views;
@@ -29,6 +30,7 @@ public partial class SessionWindow : Window
         Screen.CopyRequested += (_, _) => _ = ViewModel?.CopyAsync();
         Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteAsync();
         Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAll();
+        Screen.FindRequested += (_, _) => ShowFind();
         ApplyMenuStrategy(useNativeMenu);
         Opened += (_, _) =>
         {
@@ -89,11 +91,92 @@ public partial class SessionWindow : Window
     // Deliberately the view model's methods, never the [RelayCommand]s. Each method carries its own guard; the
     // commands keep CommunityToolkit's default of disabling while running, which is fine for a click and wrong
     // for a keystroke — and on macOS Task 6's gestures make these keystrokes, activated by the OS.
-    private void OnCopyClickNative(object? sender, EventArgs e) => _ = ViewModel?.CopyAsync();
+    //
+    // Each one checks FindBox.IsFocused first. Task 8 gave this window its first focusable text field, and on
+    // macOS that made it reachable by these same key equivalents: NSApplication.sendEvent: dispatches an AppKit
+    // key equivalent to the menu ahead of the key window's responder chain, and Avalonia's TextBox is not a
+    // native NSTextField — it lives inside the same Avalonia NSView as the terminal, downstream of that
+    // interception. Without this guard, Cmd+V with the find box focused would fire this handler and type the
+    // clipboard into the 3270 screen and send it to the host — unintended input to a live session — while the
+    // box stayed empty; Cmd+A would select the whole terminal instead of the box's text; and Cmd+C would be
+    // intermittent, copying whichever of the two has something to copy. Routing to the box's own
+    // Copy/Paste/SelectAll instead keeps the key equivalent doing what the user looking at the focused box
+    // expects. The classic (non-native) handlers and the [RelayCommand]s are untouched on purpose: that path
+    // dispatches through the normal focus chain, so the box already wins there without help.
+    private void OnCopyClickNative(object? sender, EventArgs e)
+    {
+        if (FindBox.IsFocused) { FindBox.Copy(); return; }
+        _ = ViewModel?.CopyAsync();
+    }
 
-    private void OnPasteClickNative(object? sender, EventArgs e) => _ = ViewModel?.PasteAsync();
+    private void OnPasteClickNative(object? sender, EventArgs e)
+    {
+        if (FindBox.IsFocused) { FindBox.Paste(); return; }
+        _ = ViewModel?.PasteAsync();
+    }
 
-    private void OnSelectAllClickNative(object? sender, EventArgs e) => ViewModel?.SelectAll();
+    private void OnSelectAllClickNative(object? sender, EventArgs e)
+    {
+        if (FindBox.IsFocused) { FindBox.SelectAll(); return; }
+        ViewModel?.SelectAll();
+    }
+
+    // MenuItem.Click and NativeMenuItem.Click have different delegate shapes, so each shared action is two
+    // one-line handlers over one method.
+    private void OnSaveScreenClick(object? sender, RoutedEventArgs e) => _ = SaveScreenAsync();
+    private void OnSaveScreenClickNative(object? sender, EventArgs e) => _ = SaveScreenAsync();
+
+    private async Task SaveScreenAsync()
+    {
+        if (ViewModel is not { } vm) return;
+        await vm.SaveScreenAsync(new AvaloniaFilePicker(this));
+        Screen.Focus();
+    }
+
+    // Native only: the classic item binds CopyScreenAsHtmlCommand. This calls the method rather than the
+    // command for the reason the Edit menu's other native items do — a command disables while it runs.
+    private void OnCopyScreenClickNative(object? sender, EventArgs e) => _ = ViewModel?.CopyScreenAsHtmlAsync();
+
+    private void OnFindClick(object? sender, RoutedEventArgs e) => ShowFind();
+    private void OnFindClickNative(object? sender, EventArgs e) => ShowFind();
+
+    /// <summary>Opens the bar and puts the caret in it. Focus is the whole point of a docked bar over a modal
+    /// dialog: the screen being searched stays visible behind it.</summary>
+    private void ShowFind()
+    {
+        if (ViewModel is not { } vm) return;
+        vm.Find.Open();
+        FindBox.Focus();
+        FindBox.SelectAll();
+    }
+
+    private void CloseFind()
+    {
+        ViewModel?.Find.Close();
+        Screen.Focus();
+    }
+
+    private void OnFindCloseClick(object? sender, RoutedEventArgs e) => CloseFind();
+    private void OnFindNextClick(object? sender, RoutedEventArgs e) => _ = ViewModel?.Find.NextAsync();
+    private void OnFindPreviousClick(object? sender, RoutedEventArgs e) => _ = ViewModel?.Find.PreviousAsync();
+
+    /// <summary>Enter walks forward, Shift+Enter back, Escape closes. Handled on the box rather than on the
+    /// window so a keystroke meant for the terminal is never taken while the bar is shut.</summary>
+    private void OnFindBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        switch (e.Key)
+        {
+            case Key.Escape:
+                CloseFind();
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                _ = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? vm.Find.PreviousAsync() : vm.Find.NextAsync();
+                e.Handled = true;
+                break;
+        }
+    }
 
     /// <summary>The native Wire Log item needs this handler for two independent reasons, and the classic item
     /// needs it for neither — which is why it is the one place the two menus' bindings differ (OneWay here,
@@ -118,14 +201,29 @@ public partial class SessionWindow : Window
         if (ViewModel is { } vm) vm.IsWireLogging = !vm.IsWireLogging;
     }
 
+    // Two one-line handlers per mode: MenuItem.Click and NativeMenuItem.Click have different delegate shapes.
+    private void OnCrosshairNoneClick(object? sender, RoutedEventArgs e) => SetCrosshair(CrosshairMode.None);
+    private void OnCrosshairNoneClickNative(object? sender, EventArgs e) => SetCrosshair(CrosshairMode.None);
+    private void OnCrosshairHorizontalClick(object? sender, RoutedEventArgs e) => SetCrosshair(CrosshairMode.Horizontal);
+    private void OnCrosshairHorizontalClickNative(object? sender, EventArgs e) => SetCrosshair(CrosshairMode.Horizontal);
+    private void OnCrosshairVerticalClick(object? sender, RoutedEventArgs e) => SetCrosshair(CrosshairMode.Vertical);
+    private void OnCrosshairVerticalClickNative(object? sender, EventArgs e) => SetCrosshair(CrosshairMode.Vertical);
+    private void OnCrosshairBothClick(object? sender, RoutedEventArgs e) => SetCrosshair(CrosshairMode.Both);
+    private void OnCrosshairBothClickNative(object? sender, EventArgs e) => SetCrosshair(CrosshairMode.Both);
+
+    private void SetCrosshair(CrosshairMode mode)
+    {
+        if (ViewModel is { } vm) vm.Crosshair = mode;
+    }
+
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
     /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these
-    /// three, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
+    /// four, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
     /// carries one.
     ///
-    /// Under the classic strategy ApplyMenuStrategy has detached the native menu, so the three classic
-    /// InputGesture assignments still run and the three native ones find no item and do nothing — no key
+    /// Under the classic strategy ApplyMenuStrategy has detached the native menu, so the four classic
+    /// InputGesture assignments still run and the four native ones find no item and do nothing — no key
     /// equivalent is installed for a menu that is not exported.</summary>
     private void ShowPlatformGestures()
     {
@@ -137,11 +235,17 @@ public partial class SessionWindow : Window
 
         // Null under the classic strategy, where the menu is detached and there is nothing to install a key
         // equivalent on. Required draws the line the plain lookup could not: null here means only that, and a
-        // menu missing one of these three items throws rather than dropping its gesture silently.
+        // menu missing one of these four items throws rather than dropping its gesture silently.
         var menu = NativeMenu.GetMenu(this);
         Gesture(menu, "_Copy", hotkeys.Copy.FirstOrDefault());
         Gesture(menu, "_Paste", hotkeys.Paste.FirstOrDefault());
         Gesture(menu, "Select _All", hotkeys.SelectAll.FirstOrDefault());
+
+        // Built rather than read: PlatformHotkeyConfiguration has no Find. CommandModifiers still gives Cmd on
+        // macOS and Ctrl elsewhere.
+        var find = new KeyGesture(Key.F, hotkeys.CommandModifiers);
+        FindMenuItem.InputGesture = find;
+        Gesture(menu, "_Find...", find);
 
         static void Gesture(NativeMenu? menu, string child, KeyGesture? gesture)
         {

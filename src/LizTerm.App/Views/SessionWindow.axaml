@@ -25,6 +25,7 @@
             <NativeMenuItem Header="_Disconnect" Command="{Binding DisconnectCommand}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="IND$FILE _Transfer..." Click="OnFileTransferClickNative" IsEnabled="{Binding IsConnected}" />
+            <NativeMenuItem Header="_Save Screen As..." Click="OnSaveScreenClickNative" IsEnabled="{Binding CanCaptureScreen}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="C_lose" Click="OnCloseClickNative" />
           </NativeMenu>
@@ -42,6 +43,39 @@
             <NativeMenuItem Header="_Paste" Click="OnPasteClickNative" IsEnabled="{Binding IsConnected}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="Select _All" Click="OnSelectAllClickNative" IsEnabled="{Binding CanSelectAll}" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Copy Screen as _HTML" Click="OnCopyScreenClickNative" IsEnabled="{Binding CanCaptureScreen}" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="_Find..." Click="OnFindClickNative" IsEnabled="{Binding CanFind}" />
+          </NativeMenu>
+        </NativeMenuItem.Menu>
+      </NativeMenuItem>
+      <NativeMenuItem Header="_View">
+        <NativeMenuItem.Menu>
+          <NativeMenu>
+            <!-- A submenu rather than four bare items: "Horizontal" and "Vertical" sitting alone under View
+                 read as window tiling to anyone who has not been told they are the crosshair's, which is what
+                 happened the first time someone opened this menu. Nesting states the noun once. -->
+            <NativeMenuItem Header="_Crosshair">
+              <NativeMenuItem.Menu>
+                <NativeMenu>
+                  <!-- OneWay plus a Click handler, not a TwoWay binding: a NativeMenuItem never toggles itself,
+                       so the handler sets the view model and these bindings carry every check mark back —
+                       including the three that have to go false. No Gesture: outside Edit, a native gesture is
+                       an AppKit key equivalent dispatched ahead of the responder chain, which would take the
+                       key from the terminal. Radio renders as a bullet rather than a tick on macOS, which is
+                       AppKit's own radio-group mark (verified on a real GUI session 2026-09-10). -->
+                  <NativeMenuItem Header="_None" ToggleType="Radio" Click="OnCrosshairNoneClickNative"
+                                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
+                  <NativeMenuItem Header="_Horizontal" ToggleType="Radio" Click="OnCrosshairHorizontalClickNative"
+                                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
+                  <NativeMenuItem Header="_Vertical" ToggleType="Radio" Click="OnCrosshairVerticalClickNative"
+                                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
+                  <NativeMenuItem Header="_Both" ToggleType="Radio" Click="OnCrosshairBothClickNative"
+                                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+                </NativeMenu>
+              </NativeMenuItem.Menu>
+            </NativeMenuItem>
           </NativeMenu>
         </NativeMenuItem.Menu>
       </NativeMenuItem>
@@ -99,6 +133,7 @@
         <MenuItem Header="_Disconnect" Command="{Binding DisconnectCommand}" />
         <Separator />
         <MenuItem x:Name="FileTransferMenuItem" Header="IND$FILE _Transfer..." Click="OnFileTransferClick" IsEnabled="{Binding IsConnected}" />
+        <MenuItem Header="_Save Screen As..." Click="OnSaveScreenClick" IsEnabled="{Binding CanCaptureScreen}" />
         <Separator />
         <MenuItem Header="C_lose" Click="OnCloseClick" />
       </MenuItem>
@@ -107,6 +142,22 @@
         <MenuItem x:Name="PasteMenuItem" Header="_Paste" Command="{Binding PasteCommand}" />
         <Separator />
         <MenuItem x:Name="SelectAllMenuItem" Header="Select _All" Command="{Binding SelectAllCommand}" />
+        <Separator />
+        <MenuItem Header="Copy Screen as _HTML" Command="{Binding CopyScreenAsHtmlCommand}" />
+        <Separator />
+        <MenuItem x:Name="FindMenuItem" Header="_Find..." Click="OnFindClick" IsEnabled="{Binding CanFind}" />
+      </MenuItem>
+      <MenuItem Header="_View">
+        <MenuItem Header="_Crosshair">
+          <MenuItem Header="_None" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairNoneClick"
+                    IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
+          <MenuItem Header="_Horizontal" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairHorizontalClick"
+                    IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
+          <MenuItem Header="_Vertical" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairVerticalClick"
+                    IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
+          <MenuItem Header="_Both" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairBothClick"
+                    IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+        </MenuItem>
       </MenuItem>
       <MenuItem Header="_Keys">
         <MenuItem Header="Clear" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Clear}" />
@@ -163,9 +214,25 @@
       </DockPanel>
     </Border>
 
+    <Border DockPanel.Dock="Bottom" Background="#202020" Padding="10,6"
+            IsVisible="{Binding Find.IsOpen}">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="Close" Click="OnFindCloseClick" Margin="4,0,0,0" />
+        <Button DockPanel.Dock="Right" Content="Next" Click="OnFindNextClick" Margin="4,0,0,0" />
+        <Button DockPanel.Dock="Right" Content="Previous" Click="OnFindPreviousClick" Margin="4,0,0,0" />
+        <TextBlock DockPanel.Dock="Right" Text="{Binding Find.CountText}" Foreground="#C0C0C0"
+                   VerticalAlignment="Center" Margin="10,0" MinWidth="80" />
+        <TextBox x:Name="FindBox" Text="{Binding Find.Term, Mode=TwoWay}" KeyDown="OnFindBoxKeyDown"
+                 PlaceholderText="Find on screen" />
+      </DockPanel>
+    </Border>
+
     <controls:TerminalScreen x:Name="Screen"
                              Snapshot="{Binding Screen}"
                              Selection="{Binding Selection, Mode=TwoWay}"
+                             Crosshair="{Binding Crosshair}"
+                             FindMatches="{Binding Find.Matches}"
+                             CurrentMatch="{Binding Find.CurrentMatch}"
                              DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />
   </DockPanel>
 </Window>

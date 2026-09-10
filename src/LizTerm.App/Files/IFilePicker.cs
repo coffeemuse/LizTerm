@@ -11,6 +11,12 @@ public interface IFilePicker
     /// <summary>OS Open dialog. Null when cancelled or when the choice has no local path.</summary>
     Task<string?> PickFileToSendAsync();
 
-    /// <summary>OS Save dialog, which asks before overwriting an existing file. Null when cancelled.</summary>
-    Task<string?> PickSaveLocationAsync(string suggestedFileName);
+    /// <summary>OS Save dialog, which asks before overwriting an existing file. Null when cancelled. The title
+    /// is the caller's because the two callers save different things: a received file, and a screen capture.
+    ///
+    /// <paramref name="formats"/> fills the dialog's own File Format popup, so the user can see the choice and
+    /// have the extension appended for them. Null offers none, which is right for a received file — it can be
+    /// anything. A screen capture passes both of its formats, and the first is the one the dialog opens on, so
+    /// it must agree with <paramref name="suggestedFileName"/>'s own extension.</summary>
+    Task<string?> PickSaveLocationAsync(string suggestedFileName, string title, IReadOnlyList<SaveFormat>? formats = null);
 }
