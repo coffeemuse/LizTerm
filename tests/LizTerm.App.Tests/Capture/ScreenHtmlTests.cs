@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Text;
 using LizTerm.App.Capture;
 using LizTerm.Core.Screen;
 
@@ -33,6 +34,22 @@ public class ScreenHtmlTests
 
         Assert.Contains("color:#50FF50", html);
         Assert.Contains("READY", html);
+    }
+
+    /// <summary>Neither ScreenBuffer's construction nor SetText's null-means-unchanged rule can ever produce a
+    /// cell carrying HostColor.Default, so the snapshot has to be built directly to exercise Resolve's fallback
+    /// branch -- the one ordinary, unformatted host text takes, and what ColorNames.ParseColor falls back to for
+    /// any colour name b3270 does not recognise.</summary>
+    [Fact]
+    public void Default_foreground_and_background_resolve_to_neutral_white_and_black()
+    {
+        var cells = new[] { new Cell(new Rune('X'), HostColor.Default, HostColor.Default, CellRendition.None) };
+        var snapshot = new ScreenSnapshot(1, 1, cells, CursorPosition.Hidden);
+
+        var html = ScreenHtml.Render(snapshot);
+
+        Assert.Contains("color:#F0F0F0", html);
+        Assert.Contains("background:#000000", html);
     }
 
     [Fact]

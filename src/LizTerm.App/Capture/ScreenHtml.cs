@@ -30,7 +30,7 @@ public static class ScreenHtml
             {
                 var start = column;
                 var style = cells[column];
-                while (column < cells.Length && SameStyle(cells[column], style)) column++;
+                while (column < cells.Length && cells[column].SameStyleAs(style)) column++;
                 AppendRun(sb, snapshot.GetText(row, start, column - start), style);
             }
         }
@@ -38,11 +38,6 @@ public static class ScreenHtml
         sb.Append("</pre>");
         return sb.ToString();
     }
-
-    /// <summary>The renderer's rule, repeated rather than shared: RunVisual holds shaped FormattedText and
-    /// Avalonia brushes, which HTML has no use for. ScreenHtmlTests asserts the two agree on run count.</summary>
-    private static bool SameStyle(in Cell a, in Cell b) =>
-        a.Foreground == b.Foreground && a.Background == b.Background && a.Rendition == b.Rendition;
 
     private static void AppendRun(StringBuilder sb, string text, in Cell style)
     {

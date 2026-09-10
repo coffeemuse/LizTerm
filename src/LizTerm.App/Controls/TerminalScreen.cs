@@ -349,9 +349,6 @@ public sealed class TerminalScreen : Control
         _lineHeightPerEm = probe.Height > 0 ? probe.Height / probeSize : 1.2;
     }
 
-    private static bool SameStyle(in Cell a, in Cell b) =>
-        a.Foreground == b.Foreground && a.Background == b.Background && a.Rendition == b.Rendition;
-
     /// <summary>One run of identically styled cells, with its text already shaped. Held for as long as the
     /// snapshot and the cell geometry are unchanged, so a blink phase flip — a full repaint twice a second, for
     /// as long as anything on screen blinks — redraws these instead of re-segmenting and re-shaping every cell.
@@ -375,7 +372,7 @@ public sealed class TerminalScreen : Control
             {
                 var start = col;
                 var style = cells[col];
-                while (col < cells.Length && SameStyle(cells[col], style)) col++;
+                while (col < cells.Length && cells[col].SameStyleAs(style)) col++;
                 plan.Add(BuildRun(snapshot, row, start, col - start, style, g));
             }
         }
