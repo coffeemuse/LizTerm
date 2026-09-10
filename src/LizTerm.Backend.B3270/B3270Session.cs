@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using LizTerm.Backend.B3270.Process;
 using LizTerm.Backend.B3270.Protocol;
@@ -139,8 +140,30 @@ public sealed class B3270Session : IEmulatorSession
     public event EventHandler<BackendFault>? Faulted;
     public event EventHandler<string>? HostMessage;
 
-    public static IReadOnlyList<string> BuildArguments(SessionProfile profile) =>
-        ["-json", "-utf8", "-model", HostStringBuilder.ModelArgument(profile), "-codepage", profile.CodePage];
+    /// <summary>The engine's command line. Oversize and the keep-alive ride here rather than as runtime Set
+    /// actions: it needs no new protocol handling, and it sidesteps the unverified question of whether a runtime
+    /// oversize change takes effect on the next connect, on the next process, or not at all. `reconnect` is the
+    /// exception and must be a runtime Set, because it is armed only after a connect has succeeded.
+    /// Both are omitted at their defaults, which are b3270's own.</summary>
+    public static IReadOnlyList<string> BuildArguments(SessionProfile profile)
+    {
+        var arguments = new List<string>
+        {
+            "-json", "-utf8", "-model", HostStringBuilder.ModelArgument(profile), "-codepage", profile.CodePage,
+        };
+        if (!string.IsNullOrWhiteSpace(profile.Oversize))
+        {
+            arguments.Add("-oversize");
+            arguments.Add(profile.Oversize.Trim());
+        }
+        if (profile.KeepAliveSeconds > 0)
+        {
+            // "-set name=value" is the only form the engine takes: "-nopSeconds 60" is not an option at all.
+            arguments.Add("-set");
+            arguments.Add($"nopSeconds={profile.KeepAliveSeconds.ToString(CultureInfo.InvariantCulture)}");
+        }
+        return arguments;
+    }
 
     // ---- lifecycle ----
 

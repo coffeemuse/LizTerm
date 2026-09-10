@@ -16,7 +16,7 @@ public class B3270SessionLifecycleTests
     [Fact]
     public void BuildArguments_uses_json_utf8_model_and_codepage()
     {
-        Assert.Equal(["-json", "-utf8", "-model", "3279-3-E", "-codepage", "bracket"], B3270Session.BuildArguments(Profile));
+        Assert.Equal(["-json", "-utf8", "-model", "3279-3-E", "-codepage", "bracket", "-set", "nopSeconds=60"], B3270Session.BuildArguments(Profile));
     }
 
     [Fact]
@@ -412,5 +412,44 @@ public class B3270SessionLifecycleTests
         await Assert.ThrowsAsync<ObjectDisposedException>(
             () => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal(0, spawned);
+    }
+
+    /// <summary>Both are omitted at their defaults, because argv is evaluated once per process and b3270's own
+    /// defaults already match (oversize unset, nopSeconds 0). That is deliberately NOT the "send every toggle
+    /// explicitly every time" rule the TLS options follow: that rule exists because a connect can inherit the
+    /// previous connect's settings within one engine process, and argv cannot.</summary>
+    [Fact]
+    public void BuildArguments_omits_oversize_and_keep_alive_at_their_defaults()
+    {
+        var args = B3270Session.BuildArguments(new SessionProfile { Name = "p", Host = "h", KeepAliveSeconds = 0 });
+        Assert.DoesNotContain("-oversize", args);
+        Assert.DoesNotContain("-set", args);
+    }
+
+    [Fact]
+    public void BuildArguments_passes_the_oversize_geometry_verbatim()
+    {
+        var args = B3270Session.BuildArguments(new SessionProfile { Name = "p", Host = "h", Oversize = "132x43", KeepAliveSeconds = 0 });
+        var i = args.ToList().IndexOf("-oversize");
+        Assert.True(i >= 0, "-oversize is missing");
+        Assert.Equal("132x43", args[i + 1]);
+    }
+
+    /// <summary>"-set name=value" is the only form: "-nopSeconds 60" is rejected by the engine outright as
+    /// "Unknown or incomplete option" (measured against 4.5ga6, spec 9.1).</summary>
+    [Fact]
+    public void BuildArguments_passes_the_keep_alive_as_a_set_assignment()
+    {
+        var args = B3270Session.BuildArguments(new SessionProfile { Name = "p", Host = "h", KeepAliveSeconds = 60 });
+        var i = args.ToList().IndexOf("-set");
+        Assert.True(i >= 0, "-set is missing");
+        Assert.Equal("nopSeconds=60", args[i + 1]);
+    }
+
+    [Fact]
+    public void BuildArguments_keeps_the_six_arguments_it_always_had()
+    {
+        var args = B3270Session.BuildArguments(new SessionProfile { Name = "p", Host = "h", Model = 3 });
+        Assert.Equal(["-json", "-utf8", "-model", "3279-3-E", "-codepage", "cp037"], args.Take(6));
     }
 }
