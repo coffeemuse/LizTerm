@@ -83,14 +83,24 @@ public class SessionViewModelCaptureTests
         Assert.EndsWith(".txt", Assert.Single(picker.Calls));
     }
 
-    /// <summary>A received file can be anything, so the transfer dialog offers no format list at all.</summary>
+    /// <summary>A received file can be anything, so the transfer dialog offers no format list at all.
+    ///
+    /// Driven through the real Browse command rather than by calling the picker directly: calling it directly
+    /// would only prove that C# fills in an omitted optional argument, and would keep passing if someone later
+    /// wired the capture's own format list into the transfer path by mistake.</summary>
     [Fact]
     public async Task A_transfer_save_offers_no_formats()
     {
+        var (vm, _, _) = Build();
         var picker = new FakeFilePicker { Result = null };
+        var transfer = vm.CreateTransfer(picker);
+        transfer.IsSend = false;
 
-        await picker.PickSaveLocationAsync("REPORT.TXT", "Save received file as");
+        await transfer.BrowseCommand.ExecuteAsync(null);
 
+        // The suggested name itself is LocalFileNames' business, tested there; what matters here is that the
+        // save dialog was the one that opened, and that it was offered no formats.
+        Assert.StartsWith("save:", Assert.Single(picker.Calls));
         Assert.Null(picker.LastSaveFormats);
     }
 
