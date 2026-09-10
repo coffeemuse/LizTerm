@@ -385,8 +385,8 @@ public class SessionViewModelConnectTests
 
     /// <summary>#39. Connect was a bare RelayCommand, so it re-enabled the moment a connect finished and clicking
     /// it put "Unexpected error: verifyHostCert cannot change while connected" in the banner. The boundary is
-    /// HasSocket, not IsConnected: b3270 refuses the Set whenever it has a host session, which begins before the
-    /// 3270 session does.</summary>
+    /// the raw state, not IsConnected: b3270 refuses the Set whenever it has a host session, which begins before
+    /// the 3270 session does.</summary>
     [Fact]
     public async Task Connect_is_disabled_once_the_engine_holds_a_socket()
     {
@@ -408,8 +408,8 @@ public class SessionViewModelConnectTests
         await vm.DisposeAsync();
     }
 
-    /// <summary>TcpPending is deliberately on the enabled side of HasSocket, and Disconnect must still be live
-    /// there, because that is exactly when a user wants to cancel a connect that is going nowhere.</summary>
+    /// <summary>Disconnect must be live for every state but Disconnected, because a connect going nowhere is
+    /// exactly when a user wants to cancel it.</summary>
     [Fact]
     public async Task Disconnect_stays_live_for_a_pending_connect_and_greys_when_idle()
     {
@@ -428,10 +428,10 @@ public class SessionViewModelConnectTests
     }
 
     /// <summary>Review finding on #39: the test above never sets ConnectPending, so its whole
-    /// false-to-true-to-false sequence is explained by HasSocket alone and gives the "|| ConnectPending" half of
-    /// CanDisconnect no regression net. This one holds a connect in flight without ever letting the state reach
-    /// HasSocket (it stays Disconnected throughout), so a true CanExecute here can only come from ConnectPending,
-    /// and the assertion once the connect finishes pins ConnectWithAsync's finally clearing it back to false.</summary>
+    /// false-to-true-to-false sequence is explained by the reported state alone and gives the "ConnectPending ||"
+    /// half of CanDisconnect no regression net. This one holds a connect in flight while the state stays
+    /// Disconnected throughout, so a true CanExecute here can only come from ConnectPending, and the assertion
+    /// once the connect finishes pins ConnectWithAsync's finally clearing it back to false.</summary>
     [Fact]
     public async Task Disconnect_stays_live_for_a_pending_connect_that_never_reaches_a_socket()
     {
@@ -441,13 +441,13 @@ public class SessionViewModelConnectTests
 
         var attempt = vm.ConnectCommand.ExecuteAsync(null);
 
-        Assert.False(vm.HasSocket);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection);
         Assert.True(vm.DisconnectCommand.CanExecute(null));
 
         session.ConnectCompletion.SetResult();
         await attempt;
 
-        Assert.False(vm.HasSocket);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection);
         Assert.False(vm.DisconnectCommand.CanExecute(null));
 
         await vm.DisposeAsync();
@@ -464,7 +464,7 @@ public class SessionViewModelConnectTests
 
         fake.RaiseConnection(ConnectionState.Reconnecting);
 
-        Assert.True(vm.IsReconnecting);
+        Assert.Equal(ConnectionState.Reconnecting, vm.Connection);
         Assert.False(vm.CanConnect);
         Assert.True(vm.CanDisconnect);
         Assert.False(vm.ConnectCommand.CanExecute(null));
@@ -480,14 +480,43 @@ public class SessionViewModelConnectTests
         fake.RaiseConnection(ConnectionState.Reconnecting);
         fake.RaiseConnection(ConnectionState.Disconnected);
 
-        Assert.False(vm.IsReconnecting);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection);
         Assert.True(vm.CanConnect);
         Assert.False(vm.CanDisconnect);
     }
 
+    /// <summary>Spec 6.4's rule over every state an engine-driven reconnect actually passes through. The guards
+    /// used to derive from HasSocket, which is false for Resolving and TcpPending as well as Disconnected, so
+    /// both of those offered Connect and refused Disconnect. That was invisible while those states were
+    /// reachable only inside ConnectCommand, whose AsyncRelayCommand disables itself while it runs; auto-reconnect
+    /// (#28) made the engine cycle Reconnecting → TcpPending → Reconnecting unprompted against a host that stays
+    /// down, with no command running and ConnectPending false, so the two menu items flickered on that cycle.
+    /// Asserted as a table rather than one state at a time, since the bug was in exactly the two rows the
+    /// single-state tests above never covered.</summary>
+    [Theory]
+    [InlineData(ConnectionState.Disconnected, true, false)]
+    [InlineData(ConnectionState.Reconnecting, false, true)]
+    [InlineData(ConnectionState.Resolving, false, true)]
+    [InlineData(ConnectionState.TcpPending, false, true)]
+    [InlineData(ConnectionState.TelnetPending, false, true)]
+    [InlineData(ConnectionState.Connected3270, false, true)]
+    public void The_two_guards_follow_the_state_the_engine_reported(
+        ConnectionState state, bool canConnect, bool canDisconnect)
+    {
+        var fake = new FakeEmulatorSession();
+        var vm = new SessionViewModel(fake, a => a(), new FakeTextClipboard());
+
+        fake.RaiseConnection(state);
+
+        Assert.Equal(canConnect, vm.CanConnect);
+        Assert.Equal(canDisconnect, vm.CanDisconnect);
+        Assert.Equal(canConnect, vm.ConnectCommand.CanExecute(null));
+        Assert.Equal(canDisconnect, vm.DisconnectCommand.CanExecute(null));
+    }
+
     /// <summary>The two tests above prove the guard properties are correct, but IRelayCommand.CanExecute
     /// re-evaluates its predicate on every call regardless of whether CanExecuteChanged ever fired -- so they
-    /// pass whether or not IsReconnecting's [NotifyCanExecuteChangedFor] attributes are present. Those
+    /// pass whether or not Connection's [NotifyCanExecuteChangedFor] attributes are present. Those
     /// attributes are what make a bound menu item actually re-evaluate; without them the guard stays correct but
     /// the UI goes stale. This asserts the notification itself.</summary>
     [Fact]
