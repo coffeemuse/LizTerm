@@ -702,11 +702,29 @@ public sealed class B3270Session : IEmulatorSession
             // prompt, and what SessionViewModel's 30s timeout measures. `reconnect` armed after success touches
             // none of it (spec 6.1).
             //
-            // Not throwOnFailure: the connect has already succeeded, and turning a live session into a thrown
-            // exception and an error banner because a Set was refused would be a worse outcome than the
-            // auto-reconnect simply not happening.
+            // Not throwOnFailure, no caller token, and every failure swallowed: the connect has already
+            // succeeded, so nothing past this point may turn that success into a thrown exception and an error
+            // banner. throwOnFailure: false only covers a refused run-result; RunAsync writes the line before it
+            // ever looks at a token, so honouring the caller's cancellationToken here would arm a live engine and
+            // then still throw OperationCanceledException out of ConnectAsync if it fired mid-round-trip -- exactly
+            // the "leaves the session disconnected and reusable" contract on IEmulatorSession.ConnectAsync that a
+            // cancel is supposed to keep. So this run takes no token, is bounded by DisconnectTimeout instead so a
+            // wedged engine cannot hang an otherwise-successful connect, and the try/catch below swallows anything
+            // that still gets past that -- a dead engine (BackendUnavailableException), a closed stdin
+            // (IOException), or the bounded wait's own TimeoutException. Losing auto-reconnect is a far smaller
+            // loss than reporting a working connect as a failure, and a genuinely dead engine still corrects
+            // itself regardless: OnProcessEnded raises the fault and drops the connection state on its own.
             if (Profile.AutoReconnect)
-                await RunAsync([new B3270Action("Set", "reconnect", "true")], throwOnFailure: false, cancellationToken: cancellationToken);
+            {
+                try
+                {
+                    await RunAsync([new B3270Action("Set", "reconnect", "true")], throwOnFailure: false, timeout: DisconnectTimeout);
+                }
+                catch (Exception)
+                {
+                    // Swallow: see above.
+                }
+            }
         }
         finally
         {

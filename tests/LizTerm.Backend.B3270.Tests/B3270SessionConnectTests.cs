@@ -23,7 +23,12 @@ public class B3270SessionConnectTests
         "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n");
     private static readonly SessionProfile Pinned = Verifying with { PinnedCertificate = Pin };
 
-    private static string LastSetLine(FakeB3270Process fake) => fake.InputLines.Last(l => l.Contains("\"Set\""));
+    // Excludes the reconnect arm's own Set: for a profile with AutoReconnect true, "the last Set" would
+    // otherwise resolve to `Set reconnect true` rather than the TLS Set this helper exists to find (task 12
+    // review, finding 4). No current test enables both at once, but a future TLS test that also turns on
+    // auto-reconnect must not silently assert against the wrong line.
+    private static string LastSetLine(FakeB3270Process fake) =>
+        fake.InputLines.Last(l => l.Contains("\"Set\"") && !l.Contains("\"reconnect\""));
 
     /// <summary>One action argument as it appears on the wire, quotes included. A Windows pin path's backslashes
     /// are escaped there (<c>C:\\Users\\...</c>), so an assertion on the path has to escape them the same way.
@@ -813,5 +818,25 @@ public class B3270SessionConnectTests
             () => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"reconnect\""));
+    }
+
+    /// <summary>Task 12 review, finding 3: every other test on this arm uses the fake's auto-success responder, so
+    /// only the accepted path is covered. This refuses the reconnect line specifically -- every other run,
+    /// including Connect, still succeeds -- and checks that ConnectAsync completes anyway: throwOnFailure is false
+    /// and the arm's own catch swallows what that alone does not cover. Asserting the line was actually sent (not
+    /// just that the awaited call did not throw) is what stops this from passing vacuously if the responder match
+    /// were ever wrong.</summary>
+    [Fact]
+    public async Task A_refused_reconnect_arm_still_lets_the_connect_succeed()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"reconnect\"")
+            ? [Failed(Tag(line), "reconnect not supported")]
+            : [Ok(line)];
+        await using var session = new B3270Session(Reconnecting, () => fake);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(fake.InputLines, l => l.Contains("\"reconnect\""));
     }
 }
