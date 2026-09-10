@@ -99,10 +99,15 @@ run of identically-styled cells:
 <span style="color:#50FF50;background:#000000;font-weight:bold;text-decoration:underline">READY</span>
 ```
 
-- The run segmentation is the same rule the renderer uses (`SameStyle`, `:352`): equal foreground, background
-  and rendition. The formatter does not share the renderer's code — `RunVisual` holds shaped `FormattedText`
-  and Avalonia brushes, which HTML has no use for — but it must agree with it, and a test asserts that a
-  screen with adjacent differing styles produces the same number of runs both ways.
+- The run segmentation is the same rule the renderer uses: equal foreground, background and rendition. The
+  two **share the predicate** rather than each holding a copy — `Cell.SameStyleAs` lives in Core, and both
+  `TerminalScreen.EnsureRunPlan` and the formatter call it, so they cannot disagree about where a run ends.
+
+  (An earlier draft of this section had the formatter duplicate the renderer's private `SameStyle`, justified
+  by `RunVisual` holding shaped `FormattedText` and Avalonia brushes. That reasoning was wrong: the predicate
+  compares only `Foreground`, `Background` and `Rendition`, all Core types, and names no Avalonia type at all
+  — only what *consumes* its result differs. Corrected during Task 2's review, which also removes the need for
+  a test comparing run counts both ways: agreement is now true by construction.)
 - `Reverse` swaps foreground and background, `Highlight` becomes `font-weight:bold` (the renderer's own
   35%-toward-white blend is a display trick that would read as washed-out text in a browser), `Underline`
   becomes `text-decoration:underline`.
