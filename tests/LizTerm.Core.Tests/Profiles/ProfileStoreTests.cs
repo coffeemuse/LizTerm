@@ -57,13 +57,18 @@ public class ProfileStoreTests : IDisposable
     /// <summary>A file written before a field existed has no such field and reads as the declared default: erase
     /// for DestructiveBackspace, which is what every x3270-family default keymap does (spec 2), and above all
     /// verification on, which the CLR default would silently turn off. A file that says false keeps false: the
-    /// editor always writes the field, so a saved choice survives the default flip (spec 3.2).</summary>
+    /// editor always writes the field, so a saved choice survives the default flip (spec 3.2).
+    ///
+    /// The three tier-1 fields are here for a stronger reason than coverage. The keep-alive default is
+    /// retroactive by design — every profile already on disk gains a 60-second keep-alive the moment 0.4.0 runs,
+    /// with no migration and no rewrite — and this assertion IS that decision (tier-1 spec 2.2). Without it the
+    /// decision lives only in a constructor signature a later refactor could quietly change.</summary>
     [Fact]
     public void LoadAll_reads_a_file_missing_fields_with_every_declared_default_and_an_explicit_false_as_false()
     {
         Directory.CreateDirectory(_dir);
         File.WriteAllText(Path.Combine(_dir, "old.json"), """{"name":"old","host":"h"}""");
-        File.WriteAllText(Path.Combine(_dir, "off.json"), """{"name":"off","host":"h","port":23,"destructiveBackspace":false,"verifyCertificate":false}""");
+        File.WriteAllText(Path.Combine(_dir, "off.json"), """{"name":"off","host":"h","port":23,"destructiveBackspace":false,"verifyCertificate":false,"keepAliveSeconds":0,"autoReconnect":true,"oversize":"132x43"}""");
         var loaded = new ProfileStore(_dir).LoadAll();
         var old = loaded.Single(p => p.Name == "old");
         Assert.True(old.VerifyCertificate);
@@ -73,9 +78,17 @@ public class ProfileStoreTests : IDisposable
         Assert.True(old.Extended);
         Assert.Equal("cp037", old.CodePage);
         Assert.Null(old.PinnedCertificate);
+        Assert.Equal(60, old.KeepAliveSeconds);
+        Assert.False(old.AutoReconnect);
+        Assert.Null(old.Oversize);
         var off = loaded.Single(p => p.Name == "off");
         Assert.False(off.DestructiveBackspace);
         Assert.False(off.VerifyCertificate);
+        // A saved 0 must survive rather than reading back as the 60 default, or turning keep-alive off would
+        // be impossible.
+        Assert.Equal(0, off.KeepAliveSeconds);
+        Assert.True(off.AutoReconnect);
+        Assert.Equal("132x43", off.Oversize);
     }
 
     /// <summary>A pin without its PEM or fingerprint (a hand-edited or redacted file) is dropped on load rather
