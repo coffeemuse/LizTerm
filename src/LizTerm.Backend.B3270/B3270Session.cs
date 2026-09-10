@@ -696,6 +696,17 @@ public sealed class B3270Session : IEmulatorSession
                 await RunAsync([set], throwOnFailure: true, cancellationToken: cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             await ConnectCoreAsync(cancellationToken);
+            // Armed here and nowhere earlier. b3270's other toggle, `retry`, would keep retrying a connect that
+            // failed, and that is what collides with everything ConnectAsync is built on: a failed Connect run
+            // meaning the attempt is over is what raises ConnectionFailedException, what feeds the certificate
+            // prompt, and what SessionViewModel's 30s timeout measures. `reconnect` armed after success touches
+            // none of it (spec 6.1).
+            //
+            // Not throwOnFailure: the connect has already succeeded, and turning a live session into a thrown
+            // exception and an error banner because a Set was refused would be a worse outcome than the
+            // auto-reconnect simply not happening.
+            if (Profile.AutoReconnect)
+                await RunAsync([new B3270Action("Set", "reconnect", "true")], throwOnFailure: false, cancellationToken: cancellationToken);
         }
         finally
         {

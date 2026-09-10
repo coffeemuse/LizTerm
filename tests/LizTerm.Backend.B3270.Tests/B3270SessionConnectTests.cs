@@ -764,4 +764,54 @@ public class B3270SessionConnectTests
         Assert.Contains("\"caFile\",\"\"", LastSetLine(fake));
         Assert.Null(session.LastCaFile);
     }
+
+    private static readonly SessionProfile Reconnecting =
+        new() { Name = "t", Host = "h", Port = 23, AutoReconnect = true };
+
+    /// <summary>Only after the Connect run succeeded, which is the whole design: every failure path — the error,
+    /// the 30s timeout, the certificate prompt — reasons about an attempt that is over, and none of that holds
+    /// with an engine already retrying behind it. The ordering assertion is the point, not the presence one
+    /// (spec 6.1).</summary>
+    [Fact]
+    public async Task Reconnect_is_armed_only_after_the_connect_succeeds()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting, () => fake);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var lines = fake.InputLines.ToList();
+        var connect = lines.FindIndex(l => l.Contains("\"Connect\""));
+        var arm = lines.FindIndex(l => l.Contains("\"reconnect\"") && l.Contains("\"true\""));
+        Assert.True(connect >= 0, "no Connect was sent");
+        Assert.True(arm > connect, "reconnect must be armed after the Connect run, never before it");
+    }
+
+    [Fact]
+    public async Task Reconnect_is_not_armed_for_a_profile_that_did_not_ask_for_it()
+    {
+        var fake = new FakeB3270Process();
+        await using var session = new B3270Session(Reconnecting with { AutoReconnect = false }, () => fake);
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"reconnect\""));
+    }
+
+    /// <summary>A connect that failed leaves the engine alone: arming there is exactly the `retry` behaviour this
+    /// milestone excluded, reached by the back door.</summary>
+    [Fact]
+    public async Task A_failed_connect_arms_nothing()
+    {
+        var fake = new FakeB3270Process();
+        fake.RunResponder = line => line.Contains("\"Connect\"")
+            ? [Failed(Tag(line), "Connection failed"), """{"connection":{"state":"not-connected"}}"""]
+            : [Ok(line)];
+        await using var session = new B3270Session(Reconnecting, () => fake);
+
+        await Assert.ThrowsAsync<ConnectionFailedException>(
+            () => session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.DoesNotContain(fake.InputLines, l => l.Contains("\"reconnect\""));
+    }
 }
