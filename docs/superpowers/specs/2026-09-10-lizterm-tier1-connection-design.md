@@ -2,7 +2,8 @@
 
 Date: 2026-09-10. Parent spec: `2026-09-03-lizterm-v1-design.md`. Predecessor:
 `2026-09-09-lizterm-the-screen-design.md` (merged to `main` as aa89400 on 2026-09-09).
-Status: approved in discussion on 2026-09-10; awaiting review of this text.
+Status: approved in discussion on 2026-09-10; engine probes run and folded in the same day (§9.1);
+awaiting review of this text.
 
 ## 1. Purpose
 
@@ -96,7 +97,8 @@ exactly this kind of decision. §4 gives its rules.
 It gains two conditional pairs:
 
 - `-oversize <geometry>` when `Profile.Oversize` is non-empty;
-- `-set nopSeconds=<n>` when `Profile.KeepAliveSeconds` is greater than zero.
+- `-set nopSeconds=<n>` when `Profile.KeepAliveSeconds` is greater than zero. **`-set name=value` is the only
+  form**: `-nopSeconds 60` is rejected outright as `Unknown or incomplete option` (measured, §9.1).
 
 Both are **omitted at their defaults**, because argv is evaluated once per process and b3270's own defaults
 already match (`oversize` unset, `nopSeconds` 0). This is deliberately *not* the "send every toggle explicitly
@@ -234,43 +236,68 @@ renders `Reconnecting to {host}`.
 `Profile.AutoReconnect` itself. `IEmulatorSession` gains no member, `FakeEmulatorSession` gains nothing, and
 the App learns about a reconnect through the `ConnectionChanged` event it already handles.
 
-### 6.2 Trap 1: `DisconnectAsync`'s early-out undoes the user's Disconnect
+### 6.2 The real trap: `Disconnect` does not clear the reconnect intent
 
-`DisconnectAsync` opens with:
+Measured against b3270 4.5ga6 on 2026-09-10 (§9.1). This section originally described a different trap — that
+`DisconnectAsync`'s early-out on `Disconnected` would fire during the engine's two-second reconnect window.
+**That premise is false, and the truth is worse.**
 
-```csharp
-if (_process is null) return;
-if (ConnectionState == ConnectionState.Disconnected) return;
+**b3270 reconnects from the user's own `Disconnect` action.** On an established session with `reconnect` on,
+sending `Disconnect` moves the state straight to `reconnecting`, and the session is back up two seconds later:
+
+```
+t=1.42  SEND  Disconnect()
+t=1.42  STATE reconnecting
+t=3.44  STATE tcp-pending
+t=3.44  STATE telnet-pending
+t=3.46  STATE connected-3270      <- proxy records a second accept
 ```
 
-With `reconnect` armed, the engine sits at `Disconnected` for two seconds before bouncing. **A user who presses
-Disconnect inside that window returns having done nothing, the timer fires, and their Disconnect is silently
-undone.** The window comes back on its own.
+The same holds for a `Disconnect` sent during a countdown already running. So with `AutoReconnect` on and no
+disarm, **File > Disconnect does not work**: the session comes back two seconds later and the user is given no
+reason. That is the most ordinary path in the application, not an edge case.
 
-The fix is ordering: the disarm must come *before* the early-out, not after it. When `Profile.AutoReconnect` is
-on and a process exists, `DisconnectAsync` sends `Set(reconnect,false)` first, then performs its existing work
-unchanged. `TryDisconnectQuietlyAsync` — the cancel path — takes the same disarm, which covers a user pressing
-Connect again while a reconnect is churning.
+The fix is the one this spec already proposed, and it is now mandatory rather than defensive: **every path that
+disconnects sends `Set(reconnect,false)` before the `Disconnect`.** Confirmed in the same run:
 
-This is the one place this milestone changes existing, carefully reasoned behaviour, and it is a behaviour
-change rather than an addition. It is written as a failing test first (§9).
+```
+t=1.41  STATE reconnecting
+t=1.46  SEND  Set(reconnect,false)
+t=1.46  SEND  Disconnect()
+t=1.51  STATE not-connected       <- one accept only; stays down
+```
+
+This applies to `DisconnectAsync` and to `TryDisconnectQuietlyAsync`, the cancel path.
+
+**On the early-out itself.** `if (ConnectionState == ConnectionState.Disconnected) return;` turns out to be
+unreachable during a reconnect, because the engine never reports `not-connected` while armed (§6.3). Placing
+the disarm ahead of it is therefore no longer load-bearing for the reason first given — but it stays there
+anyway: it costs one action on a path the user is waiting on regardless, and the alternative would rest on an
+engine behaviour we have measured once and cannot enforce.
 
 `DisposeAsync` needs no disarm: the Quit exchange ends the process, and a dead engine reconnects to nothing.
 
-### 6.3 Trap 2: `_disconnected` is per connection, and a reconnect starts a new one
+### 6.3 An armed drop never reports `not-connected`
 
-`WaitForDisconnectedAsync` awaits `_disconnected`, which `SetConnectionState` completes when the state becomes
-`Disconnected` and **replaces with a fresh, uncompleted source** on the way back out of `Disconnected`. That
-design is correct and deliberate — it is what lets overlapping waiters share one source — but it assumes the
-connection does not come back up on the engine's own initiative.
+The same run answered a question this spec had listed as a probe: on a host-initiated drop with `reconnect`
+armed, **b3270 does not report `not-connected` at all.** It goes `connected-3270` -> `reconnecting` directly,
+and on to `tcp-pending` two seconds later.
 
-With `reconnect` armed, a waiter that arrives *after* the bounce to `Reconnecting` gets the fresh source and
-waits the full 5 s `DisconnectTimeout` before giving up. It does not hang — the `TimeoutException` is
-swallowed by design — but it is a five-second stall on a path the user is watching.
+Two consequences, in opposite directions.
 
-Trap 2 is fixed by trap 1's fix rather than separately: with the disarm ordered first, the engine never
-bounces, the state settles at `Disconnected`, and the wait completes normally. That is a claim about two
-interacting mechanisms, so it is proved by a test rather than by this paragraph.
+**Good for the UI.** The App never sees `Disconnected` during an auto-reconnect, so the status bar moves from
+the live session to `Reconnecting to <host>` without flickering through `✕ Not connected`. `StatusFormatter`
+needs nothing.
+
+**Bad for `_disconnected`.** `SetConnectionState` completes that source only on `Disconnected`, and installs a
+fresh one only when *leaving* `Disconnected`. An armed drop passes through neither, so the source stays as the
+uncompleted one installed by the original connect, and a `WaitForDisconnectedAsync` arriving mid-reconnect
+would wait out the full 5 s `DisconnectTimeout` before silently giving up.
+
+The disarm fixes this too, and for a measured reason rather than an inferred one: disarming produces the
+`not-connected` indication about 50 ms later (t=1.46 -> t=1.51 above), which completes the source and lets the
+wait return promptly. So `DisconnectAsync` keeps its existing shape — disarm, `Disconnect`, then wait — and the
+wait behaves as it does today.
 
 ### 6.4 The App bug this creates, and its fix
 
@@ -358,17 +385,31 @@ both places, on its own evidence, in its own change.
 
 ## 9. Testing and verification
 
-### 9.1 Three live probes, as the plan's first task
+### 9.1 The three live probes, answered 2026-09-10
 
-This project verifies engine claims rather than citing them, and §6.2's fix rests entirely on the first of
-these. All three run against b3270 4.5ga6 before any code is written:
+Run against b3270 4.5ga6 (Homebrew, the pinned version) before this spec was finalised, because §6.2's fix
+rested entirely on the first of them. All three are answered; the results are already folded into §3, §6.2 and
+§6.3, and are recorded here as the evidence behind them.
 
-1. **Does `Set(reconnect,false)` cancel a reconnect already counting down?** The issue cites
-   `reconnect_retry_touched`. If it does not, §6.2's disarm is insufficient and the design needs revisiting
-   before implementation rather than after.
-2. **On a host-initiated drop with `reconnect` on, does b3270 report `Disconnected` at all, or go straight to
-   `Reconnecting`?** This decides whether `_disconnected` ever completes on that path, which is §6.3.
-3. **Does `-set nopSeconds=60` on the command line take?** Read back with `Set(nopSeconds)` after startup.
+**Method, which is reusable.** A host-initiated drop needs a host that drops, so the probe put a TCP proxy in
+front of the live TN3270 host on `localhost:2323`, let b3270 establish a real 3270 session through it, then
+closed the proxy's connection — a genuine host drop from the engine's point of view, and repeatable without
+bouncing Hercules. The same harness serves the manual pass in §9.5.
+
+1. **Does `Set(reconnect,false)` cancel a reconnect already counting down? — Yes.** The control (armed, nothing
+   disarms it) went `reconnecting` -> `tcp-pending` -> `connected-3270` in 2 s with a second proxy accept. The
+   test, disarming the instant the drop was reported, produced `not-connected` 50 ms later, one accept, and no
+   return.
+2. **Does an armed drop report `not-connected`? — No.** `connected-3270` -> `reconnecting` directly. This
+   answered a question that was asked as an aside and changed §6.3; see there.
+3. **Does `-set nopSeconds=60` on the command line take? — Yes.** The `initialize` block reports
+   `nopSeconds: 60` and a runtime `Set(nopSeconds)` reads back `60`, against `0` for a control with no flag.
+   `-nopSeconds 60` is **not** a valid option (`Unknown or incomplete option`), so `-set name=value` is the
+   only form (§3).
+
+**A fourth question the probe raised and answered**, which no issue had asked and which is the most consequential
+result of the three runs: b3270 reconnects from the user's own `Disconnect` action, so without a disarm
+`AutoReconnect` silently breaks File > Disconnect. §6.2 carries the transcript.
 
 ### 9.2 Core
 
@@ -386,9 +427,12 @@ these. All three run against b3270 4.5ga6 before any code is written:
   - `reconnect` is armed only after a successful connect, and never on a failed one;
   - a host-initiated drop produces the reconnect state sequence (`gateway-login-tls.jsonl` already carries a
     host-initiated disconnect to trim from);
-  - **an explicit Disconnect issued while the engine sits in its reconnect window stays disconnected** — §6.2's
-    trap, written as a failing test before the disarm is reordered;
-  - a Disconnect on an armed session completes without a `DisconnectTimeout` stall — §6.3.
+  - **an explicit Disconnect on an armed, established session stays disconnected** — the §6.2 finding, written
+    as a failing test before the disarm exists, since without it the engine reconnects from the user's own
+    Disconnect;
+  - the same for a Disconnect issued during a countdown already running;
+  - a Disconnect on an armed session completes without a `DisconnectTimeout` stall, because the disarm is what
+    produces the `not-connected` the wait is waiting for — §6.3.
 - A trimmed replay fixture at an oversize geometry, asserting the resulting snapshot dimensions (§4.5), with
   its entry in the fixtures README.
 
