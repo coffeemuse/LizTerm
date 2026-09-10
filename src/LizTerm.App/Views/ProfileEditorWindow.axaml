@@ -48,6 +48,13 @@
         <ComboBox x:Name="ModelBox" ItemsSource="{Binding TerminalModels}" SelectedItem="{Binding SelectedModel}" Width="160" />
         <CheckBox Content="Extended data stream" IsChecked="{Binding Extended}" />
       </StackPanel>
+      <TextBlock Grid.Row="6" Text="Oversize" VerticalAlignment="Center" />
+      <!-- Columns first, which is b3270's order for -oversize and the opposite of the Model drop-down's
+           "2 — 24x80". Deliberately left disagreeing: 24x80 is the conventional way to name a model and is
+           asserted exactly by CatalogueTests, while cols x rows is what every x3270 document a user might copy
+           from uses. The placeholder is what resolves it (spec 4.3). -->
+      <TextBox x:Name="OversizeBox" Grid.Row="6" Grid.Column="1" Text="{Binding Oversize}" Width="200"
+               HorizontalAlignment="Left" PlaceholderText="columns x rows, e.g. 132x43" />
       <TextBlock Grid.Row="7" Text="Code page" VerticalAlignment="Center" />
       <ComboBox x:Name="CodePageBox" Grid.Row="7" Grid.Column="1" ItemsSource="{Binding CodePages}" SelectedItem="{Binding SelectedCodePage}" Width="280" HorizontalAlignment="Left" />
       <TextBlock Grid.Row="8" Text="LU name" VerticalAlignment="Center" />

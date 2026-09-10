@@ -355,4 +355,69 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Null(vm.TryBuild());
         Assert.Equal("Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).", vm.ValidationMessage);
     }
+
+    [Fact]
+    public void The_editor_round_trips_an_oversize_geometry()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Oversize = "132x43" });
+        Assert.Equal("132x43", vm.Oversize);
+        Assert.Equal("132x43", vm.TryBuild()!.Oversize);
+    }
+
+    /// <summary>Blank means the model's own geometry, and must save as null rather than "": the argv check is
+    /// IsNullOrWhiteSpace, but a "" in the file would still be a lie about what the user chose.</summary>
+    [Fact]
+    public void A_blank_oversize_saves_as_null()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "   " };
+        Assert.Null(vm.TryBuild()!.Oversize);
+    }
+
+    [Fact]
+    public void An_illegal_oversize_blocks_save_with_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
+        Assert.Null(vm.TryBuild());
+        Assert.StartsWith("200 columns by 200 rows is 40,000 cells", vm.ValidationMessage);
+    }
+
+    /// <summary>100x30 clears model 2's floor (80 columns, 24 rows) but falls short of model 5's floor (132
+    /// columns, 27 rows) on the column count, so switching the model has to re-run the check — otherwise the
+    /// editor shows a stale verdict about the geometry in the box.
+    ///
+    /// NOTE: the brief's own example for this test was "132x43", described there as clearing model 2 and
+    /// falling short of model 5's 27x132. That pair does not actually fail model 5's floor check: 132 columns
+    /// meets model 5's 132-column floor exactly, and 43 rows clears its 27-row floor, so
+    /// OversizeGeometry.TryParse legitimately returns valid for it (confirmed by running this test against the
+    /// already-committed OversizeGeometry and TerminalModel catalog before changing the numbers — the
+    /// implementation and wiring are correct; the brief's chosen numbers just do not demonstrate the failure
+    /// they were meant to). Swapped in 100x30, which fails only on the column dimension, to actually exercise
+    /// the re-validation path.</summary>
+    [Fact]
+    public void Changing_the_model_re_validates_the_oversize()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "100x30" };
+        Assert.NotNull(vm.TryBuild());
+
+        vm.SelectedModel = TerminalModel.Find(5)!;
+        Assert.Equal("Oversize must be at least 132 columns and 27 rows for model 5.", vm.ValidationMessage);
+        Assert.Null(vm.TryBuild());
+
+        vm.SelectedModel = TerminalModel.Find(2)!;
+        Assert.Null(vm.ValidationMessage);
+        Assert.NotNull(vm.TryBuild());
+    }
+
+    /// <summary>Only the oversize verdict moves with the model. A blank box has nothing to say about it, and
+    /// clearing an unrelated message would be a second, invisible behaviour.</summary>
+    [Fact]
+    public void Changing_the_model_leaves_an_unrelated_message_alone()
+    {
+        var vm = new ProfileEditorViewModel(null) { Host = "h" };
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+
+        vm.SelectedModel = TerminalModel.Find(4)!;
+        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
+    }
 }

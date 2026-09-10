@@ -23,6 +23,7 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private bool _destructiveBackspace = true;
     [ObservableProperty] private string _keepAliveText = "60";
     [ObservableProperty] private bool _autoReconnect;
+    [ObservableProperty] private string _oversize = "";
     [ObservableProperty] private string? _validationMessage;
 
     /// <summary>The pin the profile carries, shown read-only. Forget clears it and Save then writes the profile
@@ -94,6 +95,7 @@ public partial class ProfileEditorViewModel : ObservableObject
         _destructiveBackspace = existing.DestructiveBackspace;
         _keepAliveText = existing.KeepAliveSeconds.ToString(CultureInfo.InvariantCulture);
         _autoReconnect = existing.AutoReconnect;
+        _oversize = existing.Oversize ?? "";
         _pinnedCertificate = existing.PinnedCertificate;
         _pinnedFor = existing.PinnedCertificate;
         _pinnedHost = existing.Host;
@@ -104,6 +106,16 @@ public partial class ProfileEditorViewModel : ObservableObject
     {
         if (value && PortText == "23") PortText = "992";
         else if (!value && PortText == "992") PortText = "23";
+    }
+
+    /// <summary>An oversize legal under one model can be below another's floor — 132x43 clears model 2 and is
+    /// short of model 5's 27x132 — so a model change has to re-run the check rather than leave a stale verdict
+    /// beside the box. Scoped to a non-blank box on purpose: a blank one says nothing about the geometry, and
+    /// clearing an unrelated validation message here would be a second, invisible behaviour.</summary>
+    partial void OnModelChanged(int value)
+    {
+        if (string.IsNullOrWhiteSpace(Oversize)) return;
+        ValidationMessage = OversizeGeometry.TryParse(Oversize, SelectedModel, out _, out var error) ? null : error;
     }
 
     partial void OnHostChanged(string value) => RefreshPin();
@@ -145,6 +157,11 @@ public partial class ProfileEditorViewModel : ObservableObject
             ValidationMessage = "Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).";
             return null;
         }
+        if (!OversizeGeometry.TryParse(Oversize, SelectedModel, out var oversize, out var oversizeError))
+        {
+            ValidationMessage = oversizeError;
+            return null;
+        }
         ValidationMessage = null;
         return new SessionProfile
         {
@@ -161,6 +178,7 @@ public partial class ProfileEditorViewModel : ObservableObject
             DestructiveBackspace = DestructiveBackspace,
             KeepAliveSeconds = keepAlive,
             AutoReconnect = AutoReconnect,
+            Oversize = oversize?.ToString(),
         };
     }
 }
