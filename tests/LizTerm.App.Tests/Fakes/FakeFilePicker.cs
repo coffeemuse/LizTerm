@@ -23,9 +23,13 @@ public sealed class FakeFilePicker : IFilePicker
         return Exception is not null ? Task.FromException<string?>(Exception) : Task.FromResult(Result);
     }
 
-    public Task<string?> PickSaveLocationAsync(string suggestedFileName, string title)
+    /// <summary>The formats the last save dialog was offered, or null when the caller offered none.</summary>
+    public IReadOnlyList<SaveFormat>? LastSaveFormats { get; private set; }
+
+    public Task<string?> PickSaveLocationAsync(string suggestedFileName, string title, IReadOnlyList<SaveFormat>? formats = null)
     {
         Calls.Add("save:" + suggestedFileName);
+        LastSaveFormats = formats;
         return Exception is not null ? Task.FromException<string?>(Exception) : Task.FromResult(Result);
     }
 }

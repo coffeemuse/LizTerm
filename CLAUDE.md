@@ -679,7 +679,12 @@ the backend tests.
   assignments still run. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
   an argument, as `EngineRequirement.Decide` does, so every combination is testable anywhere. **No menu item
   anywhere outside Edit ever carries a `Gesture`** — the application menu included, since AppKit supplies its
-  own. The **View** menu (four crosshair modes, radio-checked) and **File → Save Screen As...** and
+  own. The **View** menu (whose one item is a **Crosshair** submenu holding the four modes, radio-checked —
+  nested rather than four bare items because "Horizontal" and "Vertical" sitting directly under View read as
+  window *tiling* to anyone who has not been told they are the crosshair's, which is what the first look at
+  that menu produced; and `ToggleType="Radio"` marks the chosen one with a **bullet** rather than a tick, which
+  is AppKit's own radio-group mark and not a bug, verified on a real GUI session 2026-09-10) and
+  **File → Save Screen As...** and
   **Edit → Copy Screen as HTML** all therefore carry none; **Edit → Find...** is the one new item this milestone
   gave a `Gesture`, precisely because Edit is the menu with the established safe route for one — `ShowPlatformGestures`
   builds it as `new KeyGesture(Key.F, hotkeys.CommandModifiers)`, since `PlatformHotkeyConfiguration` has no
@@ -761,9 +766,17 @@ the backend tests.
   OS Save dialog returned, case-insensitively (`.html`/`.htm` → HTML via `RenderDocument`, everything else →
   text), and writes the bytes itself rather than handing the path to anything else, because the dialog has just
   made a promise about overwriting that only the caller can keep; `CopyScreenAsHtmlAsync` (Edit → Copy Screen as
-  HTML) always uses `Render`, never `RenderDocument`. `IFilePicker.PickSaveLocationAsync` now takes a `title`,
+  HTML) always uses `Render`, never `RenderDocument`. `IFilePicker.PickSaveLocationAsync` takes a `title`,
   since its two callers — a received file transfer and a screen capture — save different things and the OS Save
-  dialog should say which.
+  dialog should say which, and an optional `IReadOnlyList<SaveFormat>` that fills the dialog's **own File Format
+  popup**. The extension still decides the format; the popup only makes that decision visible and gets the
+  extension appended, because typing `.html` by hand was otherwise the only route to an HTML capture and nothing
+  in the UI said so. `SaveFormat` (`Files/`) is deliberately ours rather than Avalonia's `FilePickerFileType`,
+  so `IFilePicker` stays Avalonia-free and `FakeFilePicker` stays trivial; `AvaloniaFilePicker` maps it and
+  leaves `FileTypeChoices` unset entirely when the list is null or empty, since the platforms disagree about
+  what an empty one means and "no popup" is what a received file — which can be anything — wants. The capture's
+  first format must match `ScreenFileName`'s own extension, since the dialog opens on the first entry and a
+  popup contradicting the filename beside it is worse than none.
 - Mouse selection is a `ScreenRegion` (Core; inclusive, zero-based, always normalized). `SelectionGesture`
   (`Mouse/`) is the pure press/move/release/double-click state machine; `TerminalScreen` feeds it from pointer
   events, exposes `Selection` (two-way styled property), paints `Palette.Selection` over the region after the

@@ -537,6 +537,17 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// moment it is most wanted is often a session the host has just dropped (spec 3.1).</summary>
     public bool CanCaptureScreen => Screen is not null;
 
+    /// <summary>What the Save dialog's own File Format popup offers. Text first, because it is what
+    /// <see cref="ScreenFileName"/> suggests and the dialog opens on its first entry — a popup contradicting
+    /// the filename beside it is worse than no popup. The extension still decides the format below; this only
+    /// makes that choice visible and gets the extension appended, which typing ".html" by hand used to be the
+    /// only route to.</summary>
+    private static readonly IReadOnlyList<SaveFormat> ScreenFormats =
+    [
+        new("Plain text", "txt"),
+        new("HTML", "html"),
+    ];
+
     /// <summary>File &gt; Save Screen As... The format follows the extension the OS dialog returned; we write
     /// the bytes rather than handing a path to anything else, because the dialog has just made a promise about
     /// overwriting and only we can keep it.</summary>
@@ -546,7 +557,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         try
         {
             var suggested = ScreenFileName(Profile.Name, DateTime.Now, "txt");
-            if (await picker.PickSaveLocationAsync(suggested, "Save screen as") is not { } path) return;
+            if (await picker.PickSaveLocationAsync(suggested, "Save screen as", ScreenFormats) is not { } path) return;
 
             var extension = Path.GetExtension(path);
             var html = extension.Equals(".html", StringComparison.OrdinalIgnoreCase)

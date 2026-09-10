@@ -123,6 +123,14 @@ extension: `.html`/`.htm` → HTML, anything else → text. We write the bytes o
 path to the engine, for the reason `FileTransferViewModel` already reasons about — the OS Save dialog has
 just made a promise about overwriting, and only we can keep it.
 
+The extension decides, but it must not be the only thing that *says so*: on first use it was not obvious the
+format could be changed at all, since nothing short of typing `.html` by hand selected HTML. So the picker
+also takes a `SaveFormat` list that fills the OS dialog's **own File Format popup** — the native control a
+user already looks for, on all three platforms, which also appends the extension for them. This adds no UI of
+ours and changes no behaviour: the extension still decides. Text is offered first, because the dialog opens on
+the first entry and it has to agree with the suggested filename beside it. A received file transfer passes no
+list, since it can be anything.
+
 The picker seam follows `CreateTransfer(IFilePicker)` (`SessionViewModel.cs:220`) exactly: the window
 constructs `new AvaloniaFilePicker(this)` and passes it in, so tests use `FakeFilePicker`.
 
@@ -169,7 +177,12 @@ how a preferences system gets built by accident.
 
 ### 4.3 Where the setting lives
 
-A **View** menu on the session window, per window, not persisted. Four items, one per mode.
+A **View** menu on the session window, per window, not persisted, holding a **Crosshair** submenu with four
+items, one per mode.
+
+The nesting is not decoration. Shipped flat, the menu read `None / Horizontal / Vertical / Both` directly under
+View, and the first person to open it took them for window *tiling* options — which is a fair reading of those
+four words in that position. Nesting states the noun once and costs one keystroke.
 
 The state itself is a `CrosshairMode` property on `SessionViewModel`, bound to `TerminalScreen.Crosshair` in
 XAML and to each menu item's `IsChecked`. Holding it in the window's code-behind instead would leave the
@@ -343,16 +356,13 @@ Three documented traps this has to clear:
    `Mode=OneWay` so it is the resulting property change, not the click, that writes every item's check mark back
    — the three corrections to unchecked included. Two other spec deviations on this branch were recorded this
    same way; this one was missed until the final review.)
-3. **`ToggleType="Radio"` on a `NativeMenuItem` is unverified.** `ToggleType` exists and `CheckBox` is proven
-   in this app; whether the macOS exporter renders `Radio` as a radio group is not. It cannot be checked
-   before a menu exists to check it on, so **the plan's View menu task carries the observation** — on a real
-   GUI session, at the point the four items first exist.
+3. **`ToggleType="Radio"` on a `NativeMenuItem` works — verified on a real GUI session, 2026-09-10.** It was
+   an open question here (`ToggleType` exists and `CheckBox` was proven, but nothing said the macOS exporter
+   rendered `Radio` as a group), with a `CheckBox` fallback decided in advance. The fallback was not needed.
 
-   The *fallback is decided here, in advance*, so the task is an observation rather than a decision: if
-   `Radio` does not render as a group, the items become `CheckBox` and the Click handlers keep exactly one
-   checked. That is behaviourally identical either way, because the handlers must set the checks themselves
-   regardless — trap 2 means a `NativeMenuItem` never toggles itself. `Radio` is therefore a presentation
-   preference, and nothing else in this milestone depends on which way it goes.
+   Worth writing down, because the observation looks like a failure if you expect a tick: macOS marks the
+   selected item of a radio group with a **bullet**, not a checkmark. That is AppKit's own radio mark, and it
+   is how a reader tells these apart from a checkbox item like Wire Log at a glance.
 
 `NativeMenuTests.The_window_menu_has_the_same_four_top_level_menus_as_the_classic_one` (`:74`) becomes five and
 is renamed.
@@ -378,8 +388,8 @@ Unit and headless coverage, all of which runs in the ordinary suite:
 
 Manual pass on macOS against a live TN3270 host, which is what CI cannot answer:
 
-- The crosshair renders legibly over real host text in all four modes, and `Radio` renders as intended in the
-  real macOS menu bar (§6, trap 3).
+- The crosshair renders legibly over real host text in all four modes. (`Radio`'s rendering is settled: §6
+  trap 3 — it marks with a bullet, verified 2026-09-10.)
 - Cmd+F opens the bar, Enter walks matches and moves the host cursor on a real ISPF panel, and Escape returns
   focus so the next keystroke reaches the terminal.
 - A captured `.html` opened in a browser matches the window it was taken from.

@@ -21,13 +21,23 @@ public sealed class AvaloniaFilePicker(TopLevel topLevel) : IFilePicker
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
-    public async Task<string?> PickSaveLocationAsync(string suggestedFileName, string title)
+    public async Task<string?> PickSaveLocationAsync(string suggestedFileName, string title, IReadOnlyList<SaveFormat>? formats = null)
     {
-        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        var options = new FilePickerSaveOptions
         {
             Title = title,
             SuggestedFileName = suggestedFileName,
-        });
+        };
+
+        // Left unset when the caller offers no formats, rather than set to an empty list: the platforms differ
+        // on what an empty FileTypeChoices means, and "no popup at all" is what a received file wants.
+        if (formats is { Count: > 0 })
+        {
+            options.FileTypeChoices = [.. formats.Select(f => new FilePickerFileType(f.Label) { Patterns = [$"*.{f.Extension}"] })];
+            options.DefaultExtension = formats[0].Extension;
+        }
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(options);
         return file?.TryGetLocalPath();
     }
 }

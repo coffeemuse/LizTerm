@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using LizTerm.App.Files;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Screen;
@@ -50,6 +51,47 @@ public class SessionViewModelCaptureTests
         Assert.Contains("READY", written);
         Assert.DoesNotContain("<span", written);
         File.Delete(path);
+    }
+
+    /// <summary>The format is still decided by the extension, but the OS dialog now carries its own File Format
+    /// popup so the choice is visible and the extension is appended for you. Before this, typing ".html" by
+    /// hand was the only route to an HTML capture and nothing in the UI said so.</summary>
+    [Fact]
+    public async Task The_save_dialog_offers_text_and_html_as_formats()
+    {
+        var (vm, _, _) = Build();
+        var picker = new FakeFilePicker { Result = null };
+
+        await vm.SaveScreenAsync(picker);
+
+        Assert.NotNull(picker.LastSaveFormats);
+        Assert.Equal(["txt", "html"], picker.LastSaveFormats!.Select(f => f.Extension));
+        Assert.All(picker.LastSaveFormats, f => Assert.False(string.IsNullOrWhiteSpace(f.Label)));
+    }
+
+    /// <summary>The first choice is what the dialog opens on, so it has to be the one the suggested file name
+    /// already ends in — otherwise the dialog contradicts its own filename the moment it opens.</summary>
+    [Fact]
+    public async Task The_first_offered_format_matches_the_suggested_file_name()
+    {
+        var (vm, _, _) = Build();
+        var picker = new FakeFilePicker { Result = null };
+
+        await vm.SaveScreenAsync(picker);
+
+        Assert.Equal("txt", picker.LastSaveFormats![0].Extension);
+        Assert.EndsWith(".txt", Assert.Single(picker.Calls));
+    }
+
+    /// <summary>A received file can be anything, so the transfer dialog offers no format list at all.</summary>
+    [Fact]
+    public async Task A_transfer_save_offers_no_formats()
+    {
+        var picker = new FakeFilePicker { Result = null };
+
+        await picker.PickSaveLocationAsync("REPORT.TXT", "Save received file as");
+
+        Assert.Null(picker.LastSaveFormats);
     }
 
     [Fact]
