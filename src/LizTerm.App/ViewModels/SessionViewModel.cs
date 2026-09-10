@@ -53,6 +53,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(CanCopy))]
     [NotifyPropertyChangedFor(nameof(CanSelectAll))]
     [NotifyPropertyChangedFor(nameof(CanCaptureScreen))]
+    [NotifyPropertyChangedFor(nameof(CanFind))]
     private ScreenSnapshot? _screen;
 
     /// <summary>Which crosshair lines follow the cursor, for this window only. Not a profile field: it is a
@@ -132,6 +133,8 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         session.Faulted += _onFaulted;
         session.HostMessage += _onHostMessage;
 
+        Find = new FindViewModel(MoveCursorAsync);
+
         ApplyScreen(session.CurrentScreen);
         ApplyStatus(session.KeyboardStatus);
         ApplyConnection(session.ConnectionState);
@@ -143,6 +146,13 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     public SessionProfile Profile => _session.Profile;
     public string Title => $"{Profile.Name} - {Profile.Host}";
     public EngineInfo Engine => _session.Engine;
+
+    /// <summary>Find state for this window. Its own view model: see FindViewModel's own summary.</summary>
+    public FindViewModel Find { get; }
+
+    /// <summary>There is a screen to search. Like CanCaptureScreen, deliberately not IsConnected — find reads
+    /// the snapshot and never needs an engine.</summary>
+    public bool CanFind => Screen is not null;
 
     /// <summary>Where new wire logs go; the app uses the per-OS logs folder, tests a temp directory.</summary>
     public string WireLogDirectory { get; set; } = AppPaths.LogsDirectory();
@@ -246,6 +256,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         if (_disposed) return;
         Screen = snapshot;
         CursorText = StatusFormatter.Cursor(snapshot.Cursor);
+        Find.OnScreen(snapshot);
     }
 
     private void ApplyStatus(KeyboardStatus status)

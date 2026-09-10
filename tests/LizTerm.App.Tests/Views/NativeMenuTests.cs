@@ -481,7 +481,7 @@ public class NativeMenuTests
 
     /// <summary>What this guards: with the native menu installed and its Edit gestures assigned (Task 6),
     /// Ctrl+V still reaches the host exactly once under both strategies, via
-    /// <c>TerminalScreen.TryHandleClipboardKey</c> alone. That is real coverage against two regressions — a
+    /// <c>TerminalScreen.TryHandlePlatformGesture</c> alone. That is real coverage against two regressions — a
     /// future change that starts wiring a menu gesture to actual dispatch (switching <c>Gesture</c> to
     /// <c>MenuItem.HotKey</c>, which Avalonia's <c>HotKeyManager</c> does dispatch), and a break in
     /// <c>TerminalScreen</c>'s own clipboard routing.
@@ -531,5 +531,68 @@ public class NativeMenuTests
 
         Assert.True(Item(window, "_File", "_Save Screen As...").IsEnabled);
         Assert.True(Item(window, "_Edit", "Copy Screen as _HTML").IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void The_edit_menu_offers_find()
+    {
+        var (window, _, _, _) = Show();
+
+        Assert.True(Item(window, "_Edit", "_Find...").IsEnabled);
+    }
+
+    /// <summary>Cmd+F on macOS, Ctrl+F elsewhere, built from the platform's CommandModifiers because
+    /// PlatformHotkeyConfiguration carries no Find of its own (spec 5.3).</summary>
+    [AvaloniaFact]
+    public void Find_carries_the_platform_gesture()
+    {
+        var (window, _, _, _) = Show();
+        // The same extension the production code uses; TopLevel.PlatformSettings is an explicit interface
+        // implementation in 12.1.2 and is not reachable as a plain property.
+        var expected = window.GetPlatformSettings()!.HotkeyConfiguration.CommandModifiers;
+
+        var gesture = Item(window, "_Edit", "_Find...").Gesture;
+
+        Assert.NotNull(gesture);
+        Assert.Equal(Key.F, gesture!.Key);
+        Assert.Equal(expected, gesture.KeyModifiers);
+    }
+
+    [AvaloniaFact]
+    public void The_find_bar_opens_from_the_menu_and_focuses_its_box()
+    {
+        var (window, vm, _, _) = Show();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+
+        Assert.True(vm.Find.IsOpen);
+        Assert.True(window.FindControl<TextBox>("FindBox")!.IsFocused);
+    }
+
+    /// <summary>Escape closes the bar and hands focus back, the same path the error bar's Dismiss uses.</summary>
+    [AvaloniaFact]
+    public void Escape_closes_the_find_bar_and_returns_focus_to_the_screen()
+    {
+        var (window, vm, _, _) = Show();
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Edit", "_Find...")).RaiseClicked();
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+
+        Assert.False(vm.Find.IsOpen);
+        Assert.True(window.FindControl<TerminalScreen>("Screen")!.IsFocused);
+    }
+
+    /// <summary>Matches reach the control, so the overlay has something to paint.</summary>
+    [AvaloniaFact]
+    public void Find_matches_reach_the_terminal_screen()
+    {
+        var (window, vm, _, _) = Show();
+        vm.Find.Open();
+
+        vm.Find.Term = "hello";
+
+        var screen = window.FindControl<TerminalScreen>("Screen")!;
+        Assert.Equal(vm.Find.Matches, screen.FindMatches);
+        Assert.Equal(vm.Find.CurrentMatch, screen.CurrentMatch);
     }
 }

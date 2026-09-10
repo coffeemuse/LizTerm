@@ -30,6 +30,7 @@ public partial class SessionWindow : Window
         Screen.CopyRequested += (_, _) => _ = ViewModel?.CopyAsync();
         Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteAsync();
         Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAll();
+        Screen.FindRequested += (_, _) => ShowFind();
         ApplyMenuStrategy(useNativeMenu);
         Opened += (_, _) =>
         {
@@ -112,6 +113,47 @@ public partial class SessionWindow : Window
     // command for the reason the Edit menu's other native items do — a command disables while it runs.
     private void OnCopyScreenClickNative(object? sender, EventArgs e) => _ = ViewModel?.CopyScreenAsHtmlAsync();
 
+    private void OnFindClick(object? sender, RoutedEventArgs e) => ShowFind();
+    private void OnFindClickNative(object? sender, EventArgs e) => ShowFind();
+
+    /// <summary>Opens the bar and puts the caret in it. Focus is the whole point of a docked bar over a modal
+    /// dialog: the screen being searched stays visible behind it.</summary>
+    private void ShowFind()
+    {
+        if (ViewModel is not { } vm) return;
+        vm.Find.Open();
+        FindBox.Focus();
+        FindBox.SelectAll();
+    }
+
+    private void CloseFind()
+    {
+        ViewModel?.Find.Close();
+        Screen.Focus();
+    }
+
+    private void OnFindCloseClick(object? sender, RoutedEventArgs e) => CloseFind();
+    private void OnFindNextClick(object? sender, RoutedEventArgs e) => _ = ViewModel?.Find.NextAsync();
+    private void OnFindPreviousClick(object? sender, RoutedEventArgs e) => _ = ViewModel?.Find.PreviousAsync();
+
+    /// <summary>Enter walks forward, Shift+Enter back, Escape closes. Handled on the box rather than on the
+    /// window so a keystroke meant for the terminal is never taken while the bar is shut.</summary>
+    private void OnFindBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        switch (e.Key)
+        {
+            case Key.Escape:
+                CloseFind();
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                _ = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? vm.Find.PreviousAsync() : vm.Find.NextAsync();
+                e.Handled = true;
+                break;
+        }
+    }
+
     /// <summary>The native Wire Log item needs this handler for two independent reasons, and the classic item
     /// needs it for neither — which is why it is the one place the two menus' bindings differ (OneWay here,
     /// TwoWay there).
@@ -153,11 +195,11 @@ public partial class SessionWindow : Window
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
     /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these
-    /// three, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
+    /// four, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
     /// carries one.
     ///
-    /// Under the classic strategy ApplyMenuStrategy has detached the native menu, so the three classic
-    /// InputGesture assignments still run and the three native ones find no item and do nothing — no key
+    /// Under the classic strategy ApplyMenuStrategy has detached the native menu, so the four classic
+    /// InputGesture assignments still run and the four native ones find no item and do nothing — no key
     /// equivalent is installed for a menu that is not exported.</summary>
     private void ShowPlatformGestures()
     {
@@ -169,11 +211,17 @@ public partial class SessionWindow : Window
 
         // Null under the classic strategy, where the menu is detached and there is nothing to install a key
         // equivalent on. Required draws the line the plain lookup could not: null here means only that, and a
-        // menu missing one of these three items throws rather than dropping its gesture silently.
+        // menu missing one of these four items throws rather than dropping its gesture silently.
         var menu = NativeMenu.GetMenu(this);
         Gesture(menu, "_Copy", hotkeys.Copy.FirstOrDefault());
         Gesture(menu, "_Paste", hotkeys.Paste.FirstOrDefault());
         Gesture(menu, "Select _All", hotkeys.SelectAll.FirstOrDefault());
+
+        // Built rather than read: PlatformHotkeyConfiguration has no Find. CommandModifiers still gives Cmd on
+        // macOS and Ctrl elsewhere.
+        var find = new KeyGesture(Key.F, hotkeys.CommandModifiers);
+        FindMenuItem.InputGesture = find;
+        Gesture(menu, "_Find...", find);
 
         static void Gesture(NativeMenu? menu, string child, KeyGesture? gesture)
         {

@@ -170,13 +170,17 @@ public sealed class TerminalScreen : Control
     public event EventHandler? PasteRequested;
     public event EventHandler? SelectAllRequested;
 
+    /// <summary>Raised for the platform's Find gesture. Checked here, ahead of Keymap.TryMap, for the same
+    /// reason copy and paste are: the window owns what happens, the control owns only the keystroke.</summary>
+    public event EventHandler? FindRequested;
+
     /// <summary>Spec 6.2 ordering: the platform's copy, paste, and select-all hotkeys first (they are not in the
     /// table), then the key table, then the text table, then Avalonia's text input for everything else so dead
     /// keys and IMEs keep working.</summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         _taps.KeyDown(e.Key);
-        if (TryHandleClipboardKey(e))
+        if (TryHandlePlatformGesture(e))
         {
             e.Handled = true;
             return;
@@ -226,12 +230,20 @@ public sealed class TerminalScreen : Control
 
     private void OnWindowDeactivated(object? sender, EventArgs e) => _taps.Reset();
 
-    private bool TryHandleClipboardKey(KeyEventArgs e)
+    private bool TryHandlePlatformGesture(KeyEventArgs e)
     {
         var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
         if (Matches(hotkeys?.Copy, e, Key.C)) { CopyRequested?.Invoke(this, EventArgs.Empty); return true; }
         if (Matches(hotkeys?.Paste, e, Key.V)) { PasteRequested?.Invoke(this, EventArgs.Empty); return true; }
         if (Matches(hotkeys?.SelectAll, e, Key.A)) { SelectAllRequested?.Invoke(this, EventArgs.Empty); return true; }
+
+        // PlatformHotkeyConfiguration carries no Find, so this one is built rather than read. CommandModifiers
+        // still supplies Cmd on macOS and Ctrl elsewhere, so nothing here is hardcoded per platform.
+        if (e.Key == Key.F && e.KeyModifiers == (hotkeys?.CommandModifiers ?? KeyModifiers.Control))
+        {
+            FindRequested?.Invoke(this, EventArgs.Empty);
+            return true;
+        }
         return false;
     }
 

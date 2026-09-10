@@ -45,6 +45,8 @@
             <NativeMenuItem Header="Select _All" Click="OnSelectAllClickNative" IsEnabled="{Binding CanSelectAll}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="Copy Screen as _HTML" Click="OnCopyScreenClickNative" IsEnabled="{Binding CanCaptureScreen}" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="_Find..." Click="OnFindClickNative" IsEnabled="{Binding CanFind}" />
           </NativeMenu>
         </NativeMenuItem.Menu>
       </NativeMenuItem>
@@ -131,6 +133,8 @@
         <MenuItem x:Name="SelectAllMenuItem" Header="Select _All" Command="{Binding SelectAllCommand}" />
         <Separator />
         <MenuItem Header="Copy Screen as _HTML" Command="{Binding CopyScreenAsHtmlCommand}" />
+        <Separator />
+        <MenuItem x:Name="FindMenuItem" Header="_Find..." Click="OnFindClick" IsEnabled="{Binding CanFind}" />
       </MenuItem>
       <MenuItem Header="_View">
         <MenuItem Header="_None" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairNoneClick"
@@ -197,10 +201,25 @@
       </DockPanel>
     </Border>
 
+    <Border DockPanel.Dock="Bottom" Background="#202020" Padding="10,6"
+            IsVisible="{Binding Find.IsOpen}">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="Close" Click="OnFindCloseClick" Margin="4,0,0,0" />
+        <Button DockPanel.Dock="Right" Content="Next" Click="OnFindNextClick" Margin="4,0,0,0" />
+        <Button DockPanel.Dock="Right" Content="Previous" Click="OnFindPreviousClick" Margin="4,0,0,0" />
+        <TextBlock DockPanel.Dock="Right" Text="{Binding Find.CountText}" Foreground="#C0C0C0"
+                   VerticalAlignment="Center" Margin="10,0" MinWidth="80" />
+        <TextBox x:Name="FindBox" Text="{Binding Find.Term, Mode=TwoWay}" KeyDown="OnFindBoxKeyDown"
+                 PlaceholderText="Find on screen" />
+      </DockPanel>
+    </Border>
+
     <controls:TerminalScreen x:Name="Screen"
                              Snapshot="{Binding Screen}"
                              Selection="{Binding Selection, Mode=TwoWay}"
                              Crosshair="{Binding Crosshair}"
+                             FindMatches="{Binding Find.Matches}"
+                             CurrentMatch="{Binding Find.CurrentMatch}"
                              DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />
   </DockPanel>
 </Window>
