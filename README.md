@@ -10,6 +10,11 @@ consistent app on every platform, with nothing else to install.
 LizTerm's emulation comes from `b3270`, part of the long-established x3270 suite, which every build bundles.
 LizTerm is the modern client around it.
 
+## The name
+
+LizTerm is named after Liz, a beloved cat who passed away in December 2021. She liked to sit on my desk beside the
+keyboard while I worked. She was my mainframe cat.
+
 ## Features
 
 - **One app, six builds**: macOS (Apple Silicon and Intel), Linux (x64 and ARM64) and Windows (x64 and ARM64), each
