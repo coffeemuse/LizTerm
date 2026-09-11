@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LizTerm.App.Bell;
 using LizTerm.App.Capture;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
@@ -13,6 +14,7 @@ using LizTerm.Core.Profiles;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Security;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.ViewModels;
 
@@ -26,6 +28,8 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly IFolderOpener? _folderOpener;
     private readonly ICertificateFetcher? _certificateFetcher;
     private readonly Func<SessionProfile, Task>? _saveAsProfile;
+    private readonly IBellRinger? _bellRinger;
+    private readonly BellThrottle _bellThrottle = new(BellInterval);
     /// <summary>The pin chosen in this window. The session's profile is fixed at construction, so a pin made after
     /// the window opened travels as a one-shot option on every later connect from here (spec 5.3).</summary>
     private CertificatePin? _pinOverride;
@@ -34,6 +38,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly EventHandler<ConnectionState> _onConnectionChanged;
     private readonly EventHandler<BackendFault> _onFaulted;
     private readonly EventHandler<string> _onHostMessage;
+    private readonly EventHandler _onBellRang;
     private readonly EventHandler<string> _onSettingsSaveFailed;
     private bool _disposed;
 
@@ -43,10 +48,18 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// shorten it without racing each other on a static.</summary>
     public TimeSpan ConnectTimeout { get; set; } = DefaultConnectTimeout;
 
+    /// <summary>Minimum time between bells, one gate in front of both the flash and the sound (bell spec §3.4).
+    /// 500 ms caps the flash at two per second, under WCAG 2.3.1's three; never take it below that.</summary>
+    public static readonly TimeSpan BellInterval = TimeSpan.FromMilliseconds(500);
+
     /// <summary>The app-wide settings, shared with every other window and with Preferences (spec §4.2). The
     /// crosshair used to be a field here, per window; it is display preference, and now lives where the
     /// screen spec said it eventually would.</summary>
     public SettingsViewModel Settings { get; }
+
+    /// <summary>The host rang the bell, the throttle admitted it, and the visual bell is on: the window flashes the
+    /// screen. Raised on the UI thread. Sound is not the window's business; the view model calls the ringer itself.</summary>
+    public event EventHandler? BellRang;
 
     private CancellationTokenSource? _connectCts;
     private bool _connectCancelledByUser;
@@ -108,10 +121,13 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// pre-filled and writes the result; null disables the menu item.</param>
     /// <param name="settings">The process's settings object; null builds an in-memory one, which is what tests
     /// want and what keeps them off the settings file.</param>
+    /// <param name="bellRinger">Makes the bell audible when Settings.BellSound asks for it; null (tests, or a
+    /// platform with nothing to ring) means the flash is the whole bell.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
         ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
         IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null,
-        Func<SessionProfile, Task>? saveAsProfile = null, SettingsViewModel? settings = null)
+        Func<SessionProfile, Task>? saveAsProfile = null, SettingsViewModel? settings = null,
+        IBellRinger? bellRinger = null)
     {
         _session = session;
         _dispatch = dispatch;
@@ -121,6 +137,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _folderOpener = folderOpener;
         _certificateFetcher = certificateFetcher;
         _saveAsProfile = saveAsProfile;
+        _bellRinger = bellRinger;
         Settings = settings ?? new SettingsViewModel();
 
         // Already on the UI thread: the settings are only ever set from a menu or the Preferences window.
@@ -143,12 +160,14 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             if (_disposed) return;
             ErrorMessage = m;
         });
+        _onBellRang = (_, _) => _dispatch(OnBell);
 
         session.ScreenUpdated += _onScreenUpdated;
         session.StatusChanged += _onStatusChanged;
         session.ConnectionChanged += _onConnectionChanged;
         session.Faulted += _onFaulted;
         session.HostMessage += _onHostMessage;
+        session.BellRang += _onBellRang;
 
         Find = new FindViewModel(MoveCursorAsync);
 
@@ -502,6 +521,24 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand]
     private void DismissError() => ErrorMessage = null;
 
+    /// <summary>On the UI thread. Disposed first, throttle second, settings third, each output independently: the
+    /// flash has nothing that can throw, and a ringer that does must not take the dispatcher down with it.</summary>
+    private void OnBell()
+    {
+        if (_disposed) return;
+        if (!_bellThrottle.TryAdmit()) return;
+        if (Settings.VisualBell) BellRang?.Invoke(this, EventArgs.Empty);
+        if (Settings.BellSound == BellSound.None || _bellRinger is null) return;
+        try
+        {
+            _bellRinger.Ring(Settings.BellSound);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not play the bell: " + ex.Message;
+        }
+    }
+
     public Task TypeTextAsync(string text)
     {
         Selection = null;
@@ -674,6 +711,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _session.ConnectionChanged -= _onConnectionChanged;
         _session.Faulted -= _onFaulted;
         _session.HostMessage -= _onHostMessage;
+        _session.BellRang -= _onBellRang;
         Settings.SaveFailed -= _onSettingsSaveFailed;
         await _session.DisposeAsync();
     }
