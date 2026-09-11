@@ -154,7 +154,7 @@ jobs:
       # packaged *app* actually launching. A packaged macOS build once passed every gate in this pipeline,
       # including codesign --verify --deep --strict, and then failed to launch for every user, because
       # Parcel's ad-hoc signing left the hardened runtime's library validation refusing to dlopen the bundled
-      # dylibs -- see CLAUDE.md's release paragraph and its Entitlements.plist passage. Same osx-x64 skip and
+      # dylibs -- see docs/ci-and-release.md, "macOS signing and Entitlements.plist". Same osx-x64 skip and
       # the same reason as the engine-start step above: this runner cannot execute an x86_64 binary without
       # Rosetta.
       - name: The packaged app launches
@@ -250,7 +250,7 @@ jobs:
           native/build/shared-verify-tls.sh "$bin"
 
       # The check the engine-start step above cannot cover: the packaged *app* actually launching, an Avalonia
-      # window and all -- see CLAUDE.md's release paragraph and its Entitlements.plist passage for the macOS
+      # window and all -- see docs/ci-and-release.md, "macOS signing and Entitlements.plist", for the macOS
       # incident this class of gate exists to catch. Avalonia needs a real X11 display to get through Skia
       # initialisation even to fail cleanly, so xvfb-run gives it a virtual one; this runner is linux-x64, so
       # unlike linux-arm64 below there is no reason it cannot start its own binary.
@@ -390,7 +390,7 @@ jobs:
           native/build/shared-verify-tls.sh "$bin" "Windows Schannel"
 
       # The check the engine-start step above cannot cover: the packaged *app* actually launching -- see
-      # CLAUDE.md's release paragraph and its Entitlements.plist passage for the macOS incident this class of
+      # docs/ci-and-release.md, "macOS signing and Entitlements.plist", for the macOS incident this class of
       # gate exists to catch, a failure mode this script is generic over rather than specific to. win-arm64 is
       # skipped for the same reason the engine-start step above skips it: this runner is x64 and the app in
       # that archive is arm64.

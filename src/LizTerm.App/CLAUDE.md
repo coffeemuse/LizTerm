@@ -1,0 +1,373 @@
+# LizTerm.App
+
+Notes for working in this project, the Avalonia UI. It names `LizTerm.Backend.B3270` only in `SessionFactory.cs`;
+everything else talks to `IEmulatorSession` (see `src/LizTerm.Core/CLAUDE.md`). The csproj's engine-copy rules
+(`LizTermTargetRid`, `LizTermEngineRid`) are documented in `docs/engines.md`; read it before touching them.
+
+**Never rename the assembly.** Avalonia resource URIs are keyed on it (`avares://LizTerm.App/...` for the terminal
+font, the window icons and the licence text), and a rename breaks every one of them at run time, not build time.
+The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.PackageName` instead.
+
+## Startup and shutdown
+
+- `App` shows `SplashWindow` first: at least 1 s, at most 2.5 s, dismissed by a click or key, and timed on a
+  `Stopwatch` started at `Opened` so a slow cold start or a clock step cannot skip it. Meanwhile it checks the engine
+  through `SessionFactory.CheckBackend` and runs a `StartupPlan` through `StartupGate`: `StartupErrorWindow` when the
+  engine is missing, else the session for a resolved argument, else the picker. The gate fires once the splash has
+  closed *and* the plan is known, in either order. A splash already past its maximum closes from inside `Show()`, so
+  `Closed` is subscribed before `Show()` is called; a missed signal would strand the process with no window.
+- `StartupArguments.Parse` records the argument as typed in `Argument` and, when it also reads as a host, the ad hoc
+  `[L:][Y:][lu@]host[:port]` fields beside it. It does not choose between the two: the ad hoc forms overlap legal
+  profile names (`CONS01@tk5`, `a:b`), and only `Resolve` has the saved list, where an exact name match always wins —
+  even for an argument that is a usage error as a host. A `<letter>:` head counts as a prefix only when what follows
+  could be a host, so `l:3270` is host `l` on port 3270. A port must be plain digits in 1..65535 (no sign, no
+  surrounding space), so `mvs.local:abc` and `mvs.local:99999` are usage errors rather than hostnames containing a
+  colon. A syntax error prints the usage line and opens the picker.
+- `App.OpenSession` creates the `SessionWindow` first (the clipboard adapter needs it), then a `SessionViewModel`
+  around `SessionFactory.Create(profile)`, shows the window, and starts `ConnectCommand`.
+- `ShutdownMode` is `OnExplicitShutdown`: closing the last session window reopens the picker, and closing the picker
+  with no sessions open quits. **Both are gated on `ShutdownPolicy`** (`Startup/`), because neither may happen while
+  the app is on its way out. `ClassicDesktopStyleApplicationLifetime.DoShutdown` closes every owner-less window and
+  then cancels the shutdown if any window remains, so a picker opened from inside that close *cancels the shutdown
+  that caused it*, and the app refuses to quit. `App.Quit()` sets `_quitting` for its own path, but the paths
+  Avalonia drives bypass that flag: the macOS application menu's Quit calls `TryShutdown(0)`, and so does an OS
+  shutdown. So each window's `Closing` records `ShutdownPolicy.IsShutdown(e.CloseReason)` (`ApplicationShutdown` or
+  `OSShutdown` — both, never just one), and `Closed` asks `UserClosedLastWindow` before acting. It is read in
+  `Closing` because `Closed` carries no reason. A close that the owned File Transfer dialog refuses never reaches
+  `Closing` at all (`ShouldCancelClose` asks the children first), and the next attempt overwrites the flag, so it
+  always describes the close that is actually finishing. The picker uses the same test for the mirror-image failure:
+  a shutdown that closed it would otherwise answer with `Quit()` → `Shutdown()`, a second `DoShutdown` re-entered
+  inside the first.
+
+## Session view model
+
+- `SessionViewModel` takes an `Action<Action> dispatch` to marshal backend events onto the UI thread; the app passes
+  `Dispatcher.UIThread.Post`, tests pass `a => a()`. Clipboard, file dialogs, the certificate prompt and folder
+  opening are injected the same way: `ITextClipboard` (`AvaloniaTextClipboard(window)`), `IFilePicker`,
+  `ICertificatePrompt`, `IFolderOpener`.
+- Rejected actions (`EmulatorActionException`) are deliberately swallowed, because b3270 already explains them
+  through the keyboard lock. Only unexpected and backend-unavailable errors set `ErrorMessage`. `SessionWindow`
+  refocuses the screen after the error bar's Dismiss.
+- A connect times out after `ConnectTimeout` (30 s), and the Disconnect item cancels a pending one. The timeout
+  message states only what was observed — an open socket with no 3270 session — and offers TLS as a *possibility*:
+  b3270 reports nothing that tells a TLS listener apart from a host that accepted the socket and went quiet, and
+  confident TLS advice to someone whose host does not speak it makes things worse.
+
+### Certificate prompt
+
+- A certificate failure offers connect-anyway through `ICertificatePrompt` (`Dialogs/`), asked with a
+  `CertificatePromptRequest`: the reason lines; what the host presented, read by the injected `ICertificateFetcher`
+  for TLS profiles only, under a fresh `ConnectTimeout` source; the previous pin; `CanPin`; and `CannotPinReason`.
+- `CanPin` needs a TLS profile, an engine that can pin (`CanPinCertificates`), a pinnable certificate, and a
+  fingerprint that differs from the pin in force — which is what stops a rejected pin from being offered again.
+- `CanPin` is deliberately **not** gated on the profile being a saved one. A pin lives in `_pinOverride` for the
+  window's life whether or not a file stands behind the session. Gating on a saved profile made Quick Connect's
+  headline case (#29, an ad hoc connection as the start of a profile) impossible: an ad hoc TLS session got no pin
+  option and no `CannotPinReason`, so File > Save as Profile produced a profile that failed verification on every
+  later connect. What a saved profile changes is only whether the accepted pin is *also* written back:
+  `_saveProfile` is null for an ad hoc session, and the write-back is `?.Invoke`.
+- "Trust this certificate for this profile" pins: the profile is saved with the pin and verification on, and
+  `_pinOverride` carries the pin for the window's life because the session's profile is fixed. Connect Anyway
+  without it is one attempt with verification off. A changed certificate reopens the same window titled
+  "Certificate changed", with both fingerprints. The profile editor shows a pinned profile's fingerprint with a
+  Forget button, the only way back to default trust.
+- The prompt and the save run *after* the connect's catch clauses, never inside one, so their own failures reach the
+  error banner instead of faulting the command.
+
+### Wire log, About and the engine
+
+- The view model owns the Help menu's wire log toggle. Logs go to `<config>/logs/wire-<profile>-<timestamp>.log`,
+  and names gain `-2`, `-3` when two starts land in the same second (`UniquePath`). `StatusFormatter`'s fault text
+  points users at Help > Wire Log. When `IsWireLogging` cannot start a log, it marshals its own correction back to false
+  through `dispatch` rather than assigning inline: a value corrected from inside its own change notification is
+  invisible to the menu item's two-way binding, which is still writing target to source, so the item would keep a
+  check mark for a log that never started and swallow the next click. `ShowWireLogsCommand` opens the folder through
+  `IFolderOpener`.
+- `App.ShowAboutAsync` is the one route to About, for a session's Help item and the macOS application menu alike. It
+  holds one dialog at a time in `_about`; a second request activates it instead of stacking, because the macOS menu
+  bar stays live over a modal dialog and a second About would be owned by the first.
+- Which engine About names is `App.AboutEngine`, not "whatever window is in front": the owner's session if it has
+  one, else the last session the user was in (`_lastActiveSession`, tracked on `Activated`), and only then the
+  located binary. Resolving from the owner alone would show no version whenever a dialog or the picker was on top of
+  a running session. `ActiveWindow` skips `SplashWindow`, which closes itself on a timer and would take an owned
+  About with it.
+- `SessionFactory.Refused` uses `B3270Locator.Candidates` to tell a missing engine from one that is present but not
+  executable, so a file that exists keeps its own path and source, and About and the status bar name the file to
+  `chmod` instead of calling it missing. `CheckBackendOrUnknown` and `Create` both go through it, so they cannot
+  disagree about the same binary.
+
+## Terminal screen (`Controls/TerminalScreen.cs`)
+
+- A custom `Control` that draws each row as runs of identical style, segmented by `Cell.SameStyleAs` — each run a
+  rectangle, brushes and shaped `FormattedText` — scaled to fit via `CellGeometry.Fit` (pure math, unit tested).
+- The run list is cached for as long as the snapshot instance and the `CellGeometry` are unchanged, so a blink phase
+  flip (a full `InvalidateVisual` twice a second, for as long as anything blinks) redraws prepared runs instead of
+  re-segmenting and re-shaping every cell. A new snapshot or geometry rebuilds it; `RunPlanBuilds` is the test seam.
+- Blink uses a 750 ms phase, never below 500 ms, and asks `ScreenSnapshot.HasBlink` rather than rescanning the grid.
+- **Overlays are painted, never folded into the run plan.** `Selection`, `Crosshair`, and `FindMatches` with
+  `CurrentMatch` are styled properties painted in `Render` after `EnsureRunPlan`'s cached runs. A crosshair mode or a
+  match list is recomputed on every host repaint and must not cost a re-segmentation each time;
+  `TerminalScreenCrosshairTests` and `TerminalScreenFindTests` assert that changing them leaves `RunPlanBuilds`
+  unchanged. `CrosshairGeometry.Rects` and `FindMatchGeometry.Rect` are pure helpers, asserted on rectangles rather
+  than pixels.
+- The crosshair is per window and deliberately does not use b3270's own `CROSSHAIR` toggle: the engine has no
+  display, and routing a display preference through a child process would only make the crosshair unavailable while
+  disconnected.
+- It raises `KeyRequested`, `TextEntered` and `CellClicked`, which `SessionWindow` wires to the view model.
+
+### Keyboard
+
+- Key events go through `TryHandlePlatformGesture` first, then `Keymap.TryMap`, then `Keymap.TryText` (Ctrl+[ types
+  `¬`, Ctrl+6 `¢`), then fall through to Avalonia's text input, so dead keys and IMEs work.
+- `TryHandlePlatformGesture` checks the platform's copy, paste, select-all **and Find** hotkeys, ahead of the keymap.
+  Do not add a Ctrl+F chord to `DefaultKeymap`: it would silently shadow Find on Windows and Linux, where the classic
+  menu makes this control the only dispatch path for it.
+- `Keymap` (`Keyboard/`) is an immutable table of `KeyChord(Key, Modifiers, Tap)` to `TerminalKey`, built by
+  `DefaultKeymap.Create(destructiveBackspace)` (two cached instances) from Vista TN3270's defaults, cross-checked
+  against wc3270 in the M2 hardening spec, section 6.2. `docs/user-guide.md` has the full table; keep it in step.
+  `Keymap.With` is the seam for future user remapping, and nothing else about remapping exists. The control's
+  `DestructiveBackspace` property (default true, bound to the profile) picks the table.
+- Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's `PlatformHotkeyConfiguration` puts Ctrl+Insert into
+  Copy on every platform, the Meta-based macOS table included, and platform gestures are checked first. PA1 is
+  reached through Alt+1 or the Keys menu.
+- A Left Ctrl tap is Reset and a Right Ctrl tap is Enter. `ModifierTapDetector` sees a Ctrl key go down and the same
+  key come up with nothing between (`OnKeyUp` looks up `KeyChord.TapOf`); another key, a pointer press, a wheel turn,
+  focus loss and the window deactivating all reset it.
+- The screen's key, copy, paste and select-all events call the view model's public methods (`SendKeyAsync`,
+  `CopyAsync`, `PasteAsync`, `SelectAll`) directly, as `TextEntered` and `CellClicked` do. Each method carries its own
+  guard, and a keystroke is never dropped for arriving while the previous one's round trip is still open. The
+  `[RelayCommand]`s on the same methods serve the menus, which keep CommunityToolkit's default of disabling an async
+  command while it runs.
+
+### Mouse and clipboard
+
+- `SelectionGesture` (`Mouse/`) is the pure press/move/release/double-click state machine. `TerminalScreen` feeds it
+  pointer events, exposes `Selection` (two-way), paints `Palette.Selection` after the text and before the cursor, and
+  clears the selection when the screen size changes. It writes its own `Selection` with `SetCurrentValue` so a
+  binding survives, and `OnPointerCaptureLost` ends a drag.
+- A plain click moves the cursor on release; a double-click selects the run of non-space cells.
+- `CopyRequested`, `PasteRequested` and `SelectAllRequested` come from `GetPlatformSettings().HotkeyConfiguration`
+  (Cmd on macOS, Ctrl elsewhere, Ctrl as the fallback).
+- The view model owns Copy (trimmed rows joined by `\n`), Paste (CRLF normalized, one `PasteTextAsync`) and Select
+  All, and nulls `Selection` on every path that sends input to the host.
+
+## Menus
+
+One `NativeMenu` per window, plus an application-level one in `App.axaml` holding **About and nothing else**, which
+is what gives the picker a menu bar on macOS. Each window's menu is rendered either natively or by the classic
+in-window `<Menu>`, which still exists.
+
+### Strategy
+
+- `MenuStrategy` (`Menus/`) picks the renderer: `LIZTERM_MENU=native|classic`, else native on macOS and classic
+  elsewhere, because `NativeMenuBar`'s in-window rendering has never been reviewed on Windows or Linux.
+  `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as an argument, so every combination is
+  testable anywhere.
+- In the pinned Avalonia 12.1.2, the in-window rendering binds `NativeMenuItem.Gesture` only to
+  `MenuItem.InputGesture`, which is display-only; `MenuItem.OnKeyDown` and `MenuBase.OnKeyDown` are empty, and only
+  `MenuItem.HotKey` dispatches. So the fallback bar shows a shortcut but never fires it, and double dispatch is
+  impossible on Windows and Linux by construction. What is still unreviewed there is mnemonics and appearance.
+- **The classic strategy empties the declared `NativeMenu`**, removing its items from the end one at a time. Hiding
+  `NativeMenuBar` detaches nothing: the window's own `ITopLevelNativeMenuExporter` exports `NativeMenu.Menu`
+  directly, and `NativeMenuBar` only consumes the same property. Left populated, classic on macOS would still install
+  the AppKit key equivalents and draw the system bar beside the in-window one, and on Linux the default strategy
+  would still hand the menu to a global-menu registrar (Plasma's Application Menu applet, Unity).
+- **Never detach it** with `NativeMenu.SetMenu(this, null)`, and never replace it with a new empty `NativeMenu`
+  (#60). Avalonia 12.1.2's macOS `AvaloniaNativeMenuExporter` binds its native proxy to the first `NativeMenu`
+  instance a window is given, and `Update` throws "The menu being updated does not match" for any other instance, so
+  every macOS launch with `LIZTERM_MENU=classic` fell to `StartupErrorWindow`. Emptying the same instance removes and
+  disposes every native item, and an item-less NSMenu installs no key equivalent. Linux's `DBusMenuExporter` sees the
+  same thing either way, and Win32 has no exporter.
+- `SessionWindow.ExportedMenu` is the strategy-aware accessor every native lookup goes through: null under classic,
+  since the emptied menu is still attached and `MenuLookup.Required` would throw for a present menu lacking an item.
+  `ShowPlatformGestures` therefore finds no native Edit item and no-ops there, while the classic `InputGesture`
+  assignments still run.
+- Headless tests cannot tell emptying from replacing, since both pass the attached-property check, so the other half
+  of that guard is launching with `LIZTERM_MENU=classic` on a Mac: a window opens, and a bare F1 reaches the host as
+  `PF(1)`. That was last checked with a key injected through the DevTools MCP, which enters downstream of
+  `NSApplication.sendEvent:`, so a real keyboard press is still the proof that no key equivalent survives.
+
+### The application menu
+
+It declares no Quit, on purpose. `AvaloniaNativeMenuExporter.SetMenu` appends AppKit's standard block (Services,
+Hide, Hide Others, Show All, and Quit with Cmd+Q) unless `MacOSPlatformOptions.DisableDefaultApplicationMenuItems` is
+set, which `Program.cs` does not do. A declared Quit shipped a second Cmd+Q item, and Avalonia's is the one this app
+wants: it calls `TryShutdown(0)`, which a running IND$FILE transfer correctly refuses, where ours forced `Shutdown()`.
+Do not set `DisableDefaultApplicationMenuItems` to "own" the block; that means re-implementing Services, Hide, Hide
+Others and Show All to get back what is already free.
+
+macOS also appends Start Dictation and Emoji & Symbols to any menu titled **Edit**. Both are harmless — they reach
+the host through the text input `TerminalScreen` already handles, and Ctrl+Cmd+Space collides with nothing in
+`DefaultKeymap` — but, like the application menu's block, they are invisible to the parity guard, which walks the
+*declared* menu. Expect macOS to show more Edit items than any test asserts.
+
+### Gestures
+
+**No menu item outside Edit ever carries a `Gesture`**, the application menu included (AppKit supplies its own). On
+macOS a `NativeMenuItem` gesture becomes an AppKit key equivalent that `NSApplication.sendEvent:` dispatches before
+the key window's responder chain, so `Gesture="F1"` would silently swallow PF1 — `TerminalScreen` would never see the
+key. So View, File > Save Screen As... and Edit > Copy Screen as HTML carry none.
+
+- Edit's Cmd/Ctrl+C, V and A come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`,
+  `PasteAsync` and `SelectAll` directly, never the `[RelayCommand]`s, which disable while running.
+- Edit > Find... is the one other item with a gesture, because Edit is the menu with an established safe route for
+  one: `ShowPlatformGestures` builds it as `new KeyGesture(Key.F, hotkeys.CommandModifiers)`, since
+  `PlatformHotkeyConfiguration` has no Find to read.
+- View > **Crosshair** is a submenu of four radio items rather than four items directly under View, because
+  "Horizontal" and "Vertical" sitting under View read as window tiling. On macOS `ToggleType="Radio"` marks the chosen
+  item with a bullet, not a tick; that is AppKit's own radio mark, not a bug.
+
+### Wiring rules
+
+- **Every native item needs a `Command` or a `Click` handler**, whatever else it carries. The macOS exporter enables
+  an `NSMenuItem` only when `(Command != null || HasClickHandlers) && IsEnabled`
+  (`__MicroComIAvnMenuItemProxy.UpdateAction`), and the in-window fallback gates `RaiseClicked` on `HasClickHandlers`
+  alone, so an item carrying only a binding is greyed out on macOS and inert everywhere.
+  `NativeMenuTests.Every_native_item_can_actually_be_activated` guards this; the parity test cannot, since a classic
+  `MenuItem` with the same null `Command` works fine.
+- `MenuItem.Click` and `NativeMenuItem.Click` have different delegate shapes, so each shared action is two one-line
+  handlers over one method.
+- A Click-driven native item must bind its own `IsEnabled`, since it gets none of the greying a command's
+  `CanExecute` gives the classic item. Edit binds `CanCopy`, `IsConnected`, `CanSelectAll` and `CanFind`, all public on
+  `SessionViewModel` for exactly this. The first three are also the classic commands' `CanExecute`; `CanFind` gates a
+  Click-based item on *both* menus, since opening the bar means focusing `FindBox`, a window-level concern no
+  `[RelayCommand]` can reach. Either way both menus read one property and cannot drift. It matters because on macOS
+  these items are key equivalents, and an enabled one is an offer the app cannot honour. Binding it is safe:
+  `NativeMenuItem` overwrites `IsEnabled` only when its `Command` changes, and these carry none.
+- **Wire Log is the one item whose two menus differ on purpose.** A `NativeMenuItem` never toggles itself
+  (`RaiseClicked` raises Click and executes Command, and never touches `IsChecked`), so the native item is
+  `Mode=OneWay` plus `OnWireLogClickNative`, which flips `IsWireLogging` and lets the binding carry the new state back
+  to the check mark — including a correction to false. The classic item stays `TwoWay` with no handler, because
+  `DefaultMenuInteractionHandler.Click` toggles a `MenuItem`'s `IsChecked` *before* raising Click. That ordering is
+  also why OneWay is required rather than tidy: the in-window fallback runs the same handler over a `MenuItem` bound
+  two-way to the `NativeMenuItem`, so with a TwoWay binding to the view model there would be two toggles and the
+  click would do nothing.
+- In tests, drive native items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`, the one
+  entry point both real renderers use. Assigning `IsChecked` instead only proves a binding round-trips.
+- `MenuLookup` (`Menus/`) is how code-behind and tests find a `NativeMenuItem`, which `FindControl` cannot reach.
+  `NativeMenuItemSeparator` derives from `NativeMenuItem`, so an `OfType` walk sees the dividers too. `x:Name` does
+  not compile on a `NativeMenuItem` (AVLN2000: it is not a `StyledElement`), which is why lookups are by header
+  string.
+- Code-behind uses `MenuLookup.Required`, not `Item`: it returns null when the *menu* is absent (the deliberate state
+  under classic) and throws when a present menu lacks the item. A header renamed in both menus at once keeps the
+  parity guard green, so a silent null would leave About duplicated on macOS or the Edit key equivalents quietly
+  gone.
+- Hiding an item at the end of a menu means hiding its separator too (`MenuLookup.SeparatorAbove`, and
+  `AboutSeparator` in the classic menu): nothing collapses a trailing divider, and the exporter honours `IsVisible`
+  on a separator because `NativeMenuItemSeparator` derives from `NativeMenuItem`.
+
+## Find
+
+- `FindViewModel` (`ViewModels/`) is separate from `SessionViewModel`, which already owns the session, connection
+  lifecycle, certificate prompt, clipboard, wire log and transfer factory. Find has its own lifetime (it opens, holds
+  a term and a match list, and closes) and names no Avalonia type, so every rule on it is a plain `[Fact]`. The scan
+  itself is `ScreenSearch.Find` in Core.
+- `OnScreen` re-runs the search against every new snapshot rather than clearing the matches the way `Selection`
+  clears: a 3270 screen repaints on every keystroke echo, and clearing would make the highlight vanish and read as
+  broken. It re-anchors the current match by position (the match now starting where the old one did, else the first,
+  else none), so a repaint that leaves your place alone does not move you.
+- `_visited` tracks whether the cursor has actually been moved to the highlighted match, so typing highlights match
+  1 without a `MoveCursor` per keystroke, and the first Enter lands on it rather than skipping past it. A reset to the
+  first match — from opening, from a changed term, or from a re-anchor that fell back — always counts as unvisited;
+  miss one of those and the skip-a-match bug comes back.
+- The find bar is a docked `Border`, not a modal dialog, so the screen being searched stays visible behind it. Its
+  `TextBox` (`FindBox`) binds `Find.Term` two-way, and its own `OnFindBoxKeyDown` routes Enter to `NextAsync`,
+  Shift+Enter to `PreviousAsync`, and Escape to closing the bar and refocusing the screen. **Typing in the box must
+  never reach `Keymap` or the host** — the highest-consequence invariant of the feature.
+
+## Screen capture
+
+- Two formats over one `ScreenSnapshot`: plain text via `ScreenSnapshot.ToText()` (Core), and `ScreenHtml.Render`
+  (`Capture/`). HTML lives in App because it renders in `Palette`'s colours, and `Palette` is Avalonia-typed. It
+  deliberately does not use b3270's `PrintText(html)`: that would add a member to `IEmulatorSession` for a feature
+  that needs no engine, would only work while connected, and would emit the engine's colours rather than the ones
+  the user is looking at.
+- `Render` emits one `<pre>` of `<span>` runs segmented by `Cell.SameStyleAs`, the renderer's own predicate.
+  `RenderDocument` wraps the same fragment with `<meta charset="utf-8">`, for files only: a saved `.html` has nothing
+  else to declare its encoding, and the keymap types non-ASCII characters (`¬`, `¢`) that would come back as
+  mojibake. Copy Screen as HTML always uses the bare `Render` fragment, since it is pasted into a document that has
+  its own encoding.
+- `CanCaptureScreen` (a screen exists) gates both capture items, deliberately not `IsConnected`: the moment a capture
+  is most wanted is often just after the host dropped the session.
+- `SaveScreenAsync` (File > Save Screen As...) picks the format from the extension the Save dialog returned,
+  case-insensitively (`.html`/`.htm` → HTML via `RenderDocument`, anything else → text), and writes the bytes
+  itself, because the dialog has just made a promise about overwriting that only the caller can keep.
+- `IFilePicker.PickSaveLocationAsync` takes a `title`, since its two callers (a received transfer and a screen
+  capture) save different things, and an optional `IReadOnlyList<SaveFormat>` that fills the dialog's own File Format
+  popup. The extension still decides the format; the popup makes that decision visible and gets the extension
+  appended. `SaveFormat` (`Files/`) is ours rather than Avalonia's `FilePickerFileType`, so `IFilePicker` stays
+  Avalonia-free and `FakeFilePicker` stays trivial. `AvaloniaFilePicker` leaves `FileTypeChoices` unset when the list
+  is null or empty, since the platforms disagree about what an empty one means, and "no popup" is what a received
+  file (which can be anything) wants. The capture's first format must match `ScreenFileName`'s extension: the dialog
+  opens on the first entry, and a popup contradicting the filename beside it is worse than none.
+
+## File transfer
+
+- File > IND$FILE Transfer... (enabled while connected) opens `FileTransferWindow` modally, with a
+  `FileTransferViewModel` from `SessionViewModel.CreateTransfer(IFilePicker)`, pre-filled from `LastTransferRequest`
+  (the last request started from that window; nothing goes to the profile).
+- One window, three phases: Form, Running, Done. Start validates through `TryBuildRequest`, then refuses a receive
+  into an existing local file unless Append is on or the path is the one the Save dialog last returned (that dialog
+  asked about overwriting; a typed or remembered path never did). Progress is marshalled through `dispatch`; Cancel
+  cancels the token.
+- The window's `Closing` defers to `FileTransferViewModel.TryClose`. The first close of a running transfer cancels
+  it and keeps the window, so the outcome shows; a second close while the engine still has not answered lets the
+  window go, because b3270 only aborts a running transfer on the host's next turn, and a stalled host must not pin the
+  dialog, the session window, and Quit behind it.
+- Escape closes the dialog in every phase through the window's `OnKeyDown`, so it goes through `Closing` and
+  `TryClose` like the Close button. The Running panel has no Close button, which is why none is an `IsCancel` button.
+- Avalonia propagates an owned dialog's `Closing` cancel to its owner, so closing the session window, or quitting,
+  while a transfer runs is refused the same way. A forced shutdown's `DisposeAsync` sends Quit, and the pending run
+  faults into the dialog's catch.
+- `LocalFileNames` suggests the save name (member or last qualifier; VM `FN.FT`); `TransferLabels` labels the combo
+  boxes.
+
+## Everything else
+
+- `ProfileStore` keeps one JSON file per profile under `AppPaths`' profiles directory and silently skips unreadable
+  files.
+- The IBM 3270 font is embedded (`avares://LizTerm.App/Assets/Fonts#IBM 3270`) and used for the status bar too, so it
+  reads as one instrument. Status text comes from `StatusFormatter`; the padlock glyph is U+E0A2 because the font's
+  true OIA glyphs are unencoded. Assertions on status strings are exact, so change `StatusFormatter` and its tests
+  together.
+- `Assets/Icons/` holds the app icon in the three shapes packaging needs (`lizterm.icns`, `lizterm.ico`,
+  `lizterm.png`, referenced from `LizTerm.parcel`). The csproj's `<AvaloniaResource Include="Assets\**" />` already
+  covers a new or replaced one.
+- `AppLicense` is the one spelling of LizTerm's licence. `Notice` is the one-line credit on the splash and in About,
+  deliberately ASCII (`Copyright 2026 by CoffeeMuse - BSD-3-Clause`) because the splash renders it in the 3270 font,
+  whose coverage is not general. `All` is `LICENSE` followed by `THIRD-PARTY-NOTICES.txt` — both `AvaloniaResource`
+  entries pointing up at the repository root — shown in About under the heading **Licenses**. Embedding `LICENSE` is
+  what satisfies BSD-3-Clause clause 2 for a binary distribution: no archive or installer the release produces
+  carries a licence file beside the binary, so About is the only place LizTerm's terms reach a user. `All` is read on
+  first use rather than in a static initializer, so touching `Notice` during startup never pulls in the asset loader.
+  The M2 polish spec (§6.3) predates the licence decision and says About shows third-party notices only; that is
+  superseded, so do not restore the old `AboutWindowTests` `DoesNotContain` assertion.
+
+## Driving the app with the Avalonia DevTools MCP
+
+`.mcp.json` declares the `avalonia_devtools` server (`avdt mcp`, from the global dotnet tool
+`AvaloniaUI.DeveloperTools`). Debug builds reference `AvaloniaUI.DiagnosticsSupport` and call `WithDeveloperTools()`
+in `Program.BuildAvaloniaApp`; Release builds carry none of it, and the headless test builder never calls it.
+
+- Every tool call is refused until `AVALONIA_TOOLS_LICENSE_KEY` is in the MCP server's environment. Put it in
+  `.claude/settings.local.json` under `env` (gitignored; confirm a new worktree has its own copy), never in
+  `.mcp.json`: settings `env` is inherited by MCP child processes, but `${VAR}` placeholders in `.mcp.json` expand
+  only from Claude Code's startup environment (the desktop app does not source `~/.zshrc`), so an `env` entry for the
+  key there overrides the inherited value with an empty string. Stdio MCP servers are never restarted mid-session,
+  so a new key takes effect in the next session.
+- To start the app: `dotnet build src/LizTerm.App`, then
+  `LIZTERM_B3270_PATH=/opt/homebrew/bin/b3270 nohup dotnet run --project src/LizTerm.App --no-build &` (a fresh
+  worktree has no `native/out`, so the override is required). Call `attach-to-app` with no arguments to list apps,
+  then again with `id` set to the pid. The splash is a root for up to 2.5 s; wait for it to close before `tree`.
+- `tree` with no node returns the window roots. A dialog opened by `input` Click appears there as a new root, but
+  `search` does not find windows opened after its first query, so re-list the roots instead. Menu popups never appear
+  as roots, but an item can still be reached: `input` Click on the top-level menu header, then Click on the item.
+- To reach the picker and the profile editor, launch a second instance with no profile argument.
+- `props` returns `bindingExpression` beside each value, the quickest check that a control reached the view model.
+  `IsEnabled` on a command-bound button reads `True` even while the tree shows `:disabled`, so check
+  `IsEffectivelyEnabled`.
+- The app writes real profiles to the per-OS config directory, so Cancel any editor dialog you drove rather than
+  Save, and kill the `dotnet run` pid when done. To connect to a real host without touching real profiles, seed a
+  profile JSON (camelCase fields) under `<scratch>/Library/Application Support/LizTerm/profiles/` and launch the
+  built apphost `src/LizTerm.App/bin/Debug/net10.0/LizTerm.App <profile-name>` with `HOME=<scratch>` — the apphost
+  rather than `dotnet run`, so the HOME override does not disturb the dotnet CLI.

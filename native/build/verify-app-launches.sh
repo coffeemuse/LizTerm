@@ -14,15 +14,15 @@
 # Avalonia dies during Skia initialisation before a window ever opens. It was found by launching the app by
 # hand. This script is that manual check, automated: it starts the real, shipped executable -- no headless
 # platform, no self-test flag, because either one would skip past Skia initialisation, the exact place the
-# bug was -- and proves it is still running a few seconds later. See CLAUDE.md's release paragraph and its
-# Entitlements.plist passage for the full incident.
+# bug was -- and proves it is still running a few seconds later. See docs/ci-and-release.md, "macOS signing
+# and Entitlements.plist", for the full incident.
 set -euo pipefail
 DIR=${1:?usage: verify-app-launches.sh <extracted-package-dir> <rid>}
 RID=${2:?usage: verify-app-launches.sh <extracted-package-dir> <rid>}
 
 # The app's assembly name is LizTerm.App -- LizTerm.App.csproj sets no AssemblyName -- and PublishSingleFile
-# means one file with no extra platform stem. Parcel's GeneralSettings.PackageName (CLAUDE.md's release
-# paragraph) renames the outer .app bundle, the Dock icon and the DMG, never the executable nested inside
+# means one file with no extra platform stem. Parcel's GeneralSettings.PackageName (docs/ci-and-release.md,
+# "Packaging with Parcel") renames the outer .app bundle, the Dock icon and the DMG, never the executable nested inside
 # Contents/MacOS; measured by unzipping a packed bundle and reading it directly, so this stays LizTerm.App on
 # every platform except the one where Windows itself demands the extension.
 case "$RID" in
