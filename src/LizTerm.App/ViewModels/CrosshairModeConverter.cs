@@ -4,7 +4,7 @@
 
 using System.Globalization;
 using Avalonia.Data.Converters;
-using LizTerm.App.Rendering;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.ViewModels;
 
@@ -13,12 +13,12 @@ namespace LizTerm.App.ViewModels;
 /// other three true as well. The Click handlers write the enum; these bindings render it.
 ///
 /// The parameter is programmer input, not user data — it comes from a hand-written ConverterParameter in
-/// SessionWindow.axaml, never from anything a host or a user types — so the same rule MenuLookup.Required
-/// applies to a header lookup applies here: something present but wrong throws, because a typo (say
-/// "Horizantal") would otherwise build clean and pass every test while quietly leaving that item unable to ever
-/// show a check mark, indistinguishable from "correctly not selected". A missing parameter still answers false
-/// rather than throwing: XAML always supplies one here, so a null only shows up from a test or a future binding
-/// that has none to give, and that is the legitimate "not this mode" case, not a typo.</summary>
+/// SessionWindow.axaml and PreferencesWindow.axaml, never from anything a host or a user types — so the same rule
+/// MenuLookup.Required applies to a header lookup applies here: something present but wrong throws, because a typo
+/// (say "Horizantal") would otherwise build clean and pass every test while quietly leaving that item unable to
+/// ever show a check mark, indistinguishable from "correctly not selected". A missing parameter still answers
+/// false rather than throwing: XAML always supplies one here, so a null only shows up from a test or a future
+/// binding that has none to give, and that is the legitimate "not this mode" case, not a typo.</summary>
 public sealed class CrosshairModeConverter : IValueConverter
 {
     public static readonly CrosshairModeConverter Instance = new();

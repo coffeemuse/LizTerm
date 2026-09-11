@@ -8,7 +8,6 @@ using LizTerm.App.Capture;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
-using LizTerm.App.Rendering;
 using LizTerm.App.Status;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Screen;
@@ -35,6 +34,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly EventHandler<ConnectionState> _onConnectionChanged;
     private readonly EventHandler<BackendFault> _onFaulted;
     private readonly EventHandler<string> _onHostMessage;
+    private readonly EventHandler<string> _onSettingsSaveFailed;
     private bool _disposed;
 
     public static readonly TimeSpan DefaultConnectTimeout = TimeSpan.FromSeconds(30);
@@ -42,6 +42,11 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// <summary>How long one connect attempt may take before it is cancelled. An instance property so tests can
     /// shorten it without racing each other on a static.</summary>
     public TimeSpan ConnectTimeout { get; set; } = DefaultConnectTimeout;
+
+    /// <summary>The app-wide settings, shared with every other window and with Preferences (spec §4.2). The
+    /// crosshair used to be a field here, per window; it is display preference, and now lives where the
+    /// screen spec said it eventually would.</summary>
+    public SettingsViewModel Settings { get; }
 
     private CancellationTokenSource? _connectCts;
     private bool _connectCancelledByUser;
@@ -56,11 +61,6 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(CanCaptureScreen))]
     [NotifyPropertyChangedFor(nameof(CanFind))]
     private ScreenSnapshot? _screen;
-
-    /// <summary>Which crosshair lines follow the cursor, for this window only. Not a profile field: it is a
-    /// display preference, and a home for those is #19's job rather than something to invent here (spec 4.3).
-    /// </summary>
-    [ObservableProperty] private CrosshairMode _crosshair;
 
     [ObservableProperty] private string _connectionText = "";
     [ObservableProperty] private string _tlsText = "";
@@ -106,10 +106,12 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// <param name="certificateFetcher">Reads what a TLS host presented so the prompt can show and pin it; null shows the prompt without a fingerprint.</param>
     /// <param name="saveAsProfile">Turns this session into a saved profile — the app opens the profile editor
     /// pre-filled and writes the result; null disables the menu item.</param>
+    /// <param name="settings">The process's settings object; null builds an in-memory one, which is what tests
+    /// want and what keeps them off the settings file.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
         ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
         IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null,
-        Func<SessionProfile, Task>? saveAsProfile = null)
+        Func<SessionProfile, Task>? saveAsProfile = null, SettingsViewModel? settings = null)
     {
         _session = session;
         _dispatch = dispatch;
@@ -119,6 +121,14 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _folderOpener = folderOpener;
         _certificateFetcher = certificateFetcher;
         _saveAsProfile = saveAsProfile;
+        Settings = settings ?? new SettingsViewModel();
+
+        // Already on the UI thread: the settings are only ever set from a menu or the Preferences window.
+        _onSettingsSaveFailed = (_, message) =>
+        {
+            if (!_disposed) ErrorMessage = message;
+        };
+        Settings.SaveFailed += _onSettingsSaveFailed;
 
         _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
         _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
@@ -664,6 +674,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _session.ConnectionChanged -= _onConnectionChanged;
         _session.Faulted -= _onFaulted;
         _session.HostMessage -= _onHostMessage;
+        Settings.SaveFailed -= _onSettingsSaveFailed;
         await _session.DisposeAsync();
     }
 }

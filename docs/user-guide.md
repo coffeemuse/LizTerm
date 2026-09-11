@@ -68,7 +68,7 @@ If a connection attempt has not finished within 30 seconds, LizTerm gives up and
 cancels an attempt that is still in progress.
 
 **View > Crosshair** draws a horizontal line, a vertical line, or both through the cursor, for lining up columns.
-It is set per window.
+The choice is remembered, and applies to every session window; it is also in Preferences.
 
 ## Keyboard
 
@@ -188,13 +188,21 @@ the part of the session after you have logged on.
 
 ## Menus
 
-On macOS, LizTerm uses the system menu bar, and About is in the LizTerm application menu. On Windows and Linux, the
-menu is drawn inside each window.
+On macOS, LizTerm uses the system menu bar, and About and Preferences are in the LizTerm application menu. On
+Windows and Linux, the menu is drawn inside each window.
 
 To force one style, set the `LIZTERM_MENU` environment variable to `native` or `classic` before starting LizTerm;
 any other value is ignored. `classic` also takes the session window's menu out of the system menu bar, so no menu
-shortcut can intercept a key the mainframe needs. The macOS LizTerm application menu (About, and Apple's standard
-items) stays either way.
+shortcut can intercept a key the mainframe needs. The macOS LizTerm application menu (About, Preferences, and
+Apple's standard items) stays either way.
+
+## Preferences
+
+**Preferences...** is in the LizTerm application menu on macOS (Cmd-comma), and at the bottom of a session
+window's **Edit** menu on Windows and Linux. Changes apply as you make them, to every open session window:
+
+- **Crosshair** — the same choice as View > Crosshair.
+- **Blink** — whether text the host marks as blinking actually blinks. Off draws it steady.
 
 ## Where LizTerm keeps its files
 
@@ -205,7 +213,8 @@ items) stays either way.
 | Linux | `$XDG_CONFIG_HOME/LizTerm`, or `~/.config/LizTerm` |
 
 Profiles are in `profiles/`, one JSON file each, and wire logs in `logs/`, named
-`wire-<profile>-<date>-<time>.log`.
+`wire-<profile>-<date>-<time>.log`. `settings.json` holds your preferences — only the ones you have changed, so
+deleting it puts everything back to the defaults.
 
 ## Known limitations
 

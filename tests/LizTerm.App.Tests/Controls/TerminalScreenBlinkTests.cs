@@ -97,4 +97,31 @@ public class TerminalScreenBlinkTests
 
         Assert.Equal(2, screen.RunPlanBuilds);
     }
+
+    [AvaloniaFact]
+    public void It_blinks_by_default()
+    {
+        Assert.True(new TerminalScreen().BlinkEnabled);
+    }
+
+    /// <summary>Off means steady: the timer never runs, so the hidden phase never comes, and a new blinking
+    /// screen while disabled starts nothing. Re-enabling picks the current screen up again.</summary>
+    [AvaloniaFact]
+    public void Disabling_blink_stops_the_timer_and_shows_the_text_steady()
+    {
+        var screen = new TerminalScreen { Snapshot = WithBlink() };
+        var window = new Window { Width = 800, Height = 600, Content = screen };
+        window.Show();
+        Assert.True(screen.BlinkTimerRunning);
+
+        screen.BlinkEnabled = false;
+        Assert.False(screen.BlinkTimerRunning);
+        Assert.False(screen.BlinkHidden);
+
+        screen.Snapshot = WithBlink();
+        Assert.False(screen.BlinkTimerRunning);
+
+        screen.BlinkEnabled = true;
+        Assert.True(screen.BlinkTimerRunning);
+    }
 }

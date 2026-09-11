@@ -5,6 +5,7 @@
 using Avalonia;
 using LizTerm.App.Rendering;
 using LizTerm.Core.Screen;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.Rendering;
 

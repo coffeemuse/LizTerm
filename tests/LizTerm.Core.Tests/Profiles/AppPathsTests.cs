@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using LizTerm.Core.Profiles;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.Core.Tests.Profiles;
 
@@ -16,6 +17,8 @@ public class AppPathsTests
         Assert.Equal(Path.Combine(root, "profiles"), AppPaths.ProfilesDirectory());
         Assert.Equal(Path.Combine(root, "logs"), AppPaths.LogsDirectory());
         Assert.Equal(AppPaths.ProfilesDirectory(), ProfileStore.DefaultDirectory());
+        Assert.Equal(Path.Combine(root, "settings.json"), AppPaths.SettingsFile());
+        Assert.Equal(AppPaths.SettingsFile(), SettingsStore.DefaultFile());
     }
 
     [Fact]

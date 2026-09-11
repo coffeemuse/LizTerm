@@ -48,6 +48,9 @@
             <NativeMenuItem Header="Copy Screen as _HTML" Click="OnCopyScreenClickNative" IsEnabled="{Binding CanCaptureScreen}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="_Find..." Click="OnFindClickNative" IsEnabled="{Binding CanFind}" />
+            <!-- Hidden with its separator on macOS, where Preferences lives in the application menu. -->
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="P_references..." Click="OnPreferencesClickNative" />
           </NativeMenu>
         </NativeMenuItem.Menu>
       </NativeMenuItem>
@@ -67,13 +70,13 @@
                        key from the terminal. Radio renders as a bullet rather than a tick on macOS, which is
                        AppKit's own radio-group mark (verified on a real GUI session 2026-09-10). -->
                   <NativeMenuItem Header="_None" ToggleType="Radio" Click="OnCrosshairNoneClickNative"
-                                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
+                                  IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
                   <NativeMenuItem Header="_Horizontal" ToggleType="Radio" Click="OnCrosshairHorizontalClickNative"
-                                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
+                                  IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
                   <NativeMenuItem Header="_Vertical" ToggleType="Radio" Click="OnCrosshairVerticalClickNative"
-                                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
+                                  IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
                   <NativeMenuItem Header="_Both" ToggleType="Radio" Click="OnCrosshairBothClickNative"
-                                  IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+                                  IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
                 </NativeMenu>
               </NativeMenuItem.Menu>
             </NativeMenuItem>
@@ -148,17 +151,20 @@
         <MenuItem Header="Copy Screen as _HTML" Command="{Binding CopyScreenAsHtmlCommand}" />
         <Separator />
         <MenuItem x:Name="FindMenuItem" Header="_Find..." Click="OnFindClick" IsEnabled="{Binding CanFind}" />
+        <!-- Hidden with the item below it on macOS, as AboutSeparator is. -->
+        <Separator x:Name="PreferencesSeparator" />
+        <MenuItem x:Name="PreferencesMenuItem" Header="P_references..." Click="OnPreferencesClick" />
       </MenuItem>
       <MenuItem Header="_View">
         <MenuItem Header="_Crosshair">
           <MenuItem Header="_None" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairNoneClick"
-                    IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
+                    IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
           <MenuItem Header="_Horizontal" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairHorizontalClick"
-                    IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
+                    IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
           <MenuItem Header="_Vertical" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairVerticalClick"
-                    IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
+                    IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
           <MenuItem Header="_Both" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairBothClick"
-                    IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+                    IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
         </MenuItem>
       </MenuItem>
       <MenuItem Header="_Keys">
@@ -232,7 +238,8 @@
     <controls:TerminalScreen x:Name="Screen"
                              Snapshot="{Binding Screen}"
                              Selection="{Binding Selection, Mode=TwoWay}"
-                             Crosshair="{Binding Crosshair}"
+                             Crosshair="{Binding Settings.Crosshair}"
+                             BlinkEnabled="{Binding Settings.Blink}"
                              FindMatches="{Binding Find.Matches}"
                              CurrentMatch="{Binding Find.CurrentMatch}"
                              DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />

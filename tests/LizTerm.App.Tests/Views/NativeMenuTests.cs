@@ -12,12 +12,12 @@ using Avalonia.Input.Platform;
 using Avalonia.VisualTree;
 using LizTerm.App.Controls;
 using LizTerm.App.Menus;
-using LizTerm.App.Rendering;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.Views;
 
@@ -37,24 +37,29 @@ public class NativeMenuTests
     /// Avalonia's calls TryShutdown(0), which a running IND$FILE transfer correctly refuses. The non-forcing one
     /// is the semantic this app wants.</summary>
     [AvaloniaFact]
-    public void The_application_menu_declares_about_and_no_quit_of_its_own()
+    public void The_application_menu_declares_about_and_preferences_and_no_quit_of_its_own()
     {
         var menu = NativeMenu.GetMenu(Application.Current!);
 
         Assert.NotNull(menu);
-        var headers = menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header!).ToArray();
-        Assert.Equal(["About LizTerm"], headers);
+        var headers = menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator).Select(i => i.Header!).ToArray();
+        Assert.Equal(["About LizTerm", "Preferences..."], headers);
     }
 
-    /// <summary>Not one gesture outside the Edit menu, the application menu included. Cmd+Q was ours until the
-    /// measurement recorded above; AppKit's own Quit item carries it now, and a second declaration of the same
-    /// chord would be a second key equivalent for it.</summary>
+    /// <summary>The one gesture outside Edit, deliberately (settings spec §5.4): Cmd-comma is where every macOS
+    /// user looks for Preferences, the application menu exists only on macOS, and DefaultKeymap binds no Cmd
+    /// chord, so nothing is taken from the host. About stays bare, and so does everything AppKit appends.</summary>
     [AvaloniaFact]
-    public void The_application_menu_carries_no_gesture()
+    public void The_application_menu_carries_cmd_comma_on_preferences_and_nothing_else()
     {
         var menu = NativeMenu.GetMenu(Application.Current!)!;
+        var about = MenuLookup.Item(menu, "About LizTerm")!;
+        var preferences = MenuLookup.Item(menu, "Preferences...")!;
 
-        Assert.All(menu.Items.OfType<NativeMenuItem>(), item => Assert.Null(item.Gesture));
+        Assert.Null(about.Gesture);
+        Assert.Equal(new KeyGesture(Key.OemComma, KeyModifiers.Meta), preferences.Gesture);
+        Assert.True(preferences.HasClickHandlers);
+        Assert.True(about.HasClickHandlers);
     }
 
     private static (SessionWindow Window, SessionViewModel Vm, FakeEmulatorSession Session, FakeTextClipboard Clipboard) Show(bool useNativeMenu = true)
@@ -111,7 +116,7 @@ public class NativeMenuTests
         {
             ((INativeMenuItemExporterEventsImplBridge)items[chosen]).RaiseClicked();
 
-            Assert.Equal(modes[chosen], vm.Crosshair);
+            Assert.Equal(modes[chosen], vm.Settings.Crosshair);
             Assert.Equal(
                 Enumerable.Range(0, modes.Length).Select(i => i == chosen),
                 items.Select(i => i.IsChecked));
@@ -123,9 +128,21 @@ public class NativeMenuTests
     {
         var (window, vm, _, _) = Show();
 
-        vm.Crosshair = CrosshairMode.Both;
+        vm.Settings.Crosshair = CrosshairMode.Both;
 
         Assert.Equal(CrosshairMode.Both, window.FindControl<TerminalScreen>("Screen")!.Crosshair);
+    }
+
+    [AvaloniaFact]
+    public void The_blink_setting_reaches_the_terminal_screen()
+    {
+        var (window, vm, _, _) = Show();
+        var screen = window.FindControl<TerminalScreen>("Screen")!;
+        Assert.True(screen.BlinkEnabled);
+
+        vm.Settings.Blink = false;
+
+        Assert.False(screen.BlinkEnabled);
     }
 
     /// <summary>The four modes are grouped under a Crosshair submenu rather than sitting bare under View,
@@ -318,6 +335,40 @@ public class NativeMenuTests
         Assert.NotNull(separator);
         Assert.Equal(expected, separator!.IsVisible);
         Assert.Equal(expected, window.FindControl<Separator>("AboutSeparator")!.IsVisible);
+    }
+
+    /// <summary>The same shape as About in Help: on a CI machine this covers the visible-in-Edit branch only,
+    /// and the macOS branch is covered by running the app on the Mac.</summary>
+    [AvaloniaFact]
+    public void Preferences_is_in_the_edit_menu_on_this_platform_exactly_when_the_strategy_says_so()
+    {
+        var (window, _, _, _) = Show();
+        var expected = MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS());
+
+        Assert.Equal(expected, Item(window, "_Edit", "P_references...").IsVisible);
+        Assert.Equal(expected, window.FindControl<MenuItem>("PreferencesMenuItem")!.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void The_separator_above_preferences_is_hidden_with_it()
+    {
+        var (window, _, _, _) = Show();
+        var expected = MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS());
+
+        var separator = MenuLookup.SeparatorAbove(Item(window, "_Edit", "P_references..."));
+        Assert.NotNull(separator);
+        Assert.Equal(expected, separator!.IsVisible);
+        Assert.Equal(expected, window.FindControl<Separator>("PreferencesSeparator")!.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void Preferences_is_the_last_edit_item_in_both_menus()
+    {
+        var (window, _, _, _) = Show();
+
+        Assert.Equal("P_references...", Item(window, "_Edit", "P_references...").Parent!.Items.OfType<NativeMenuItem>().Last().Header);
+        var classicEdit = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>().Single(m => (string)m.Header! == "_Edit");
+        Assert.Equal("P_references...", (string)classicEdit.Items.OfType<MenuItem>().Last().Header!);
     }
 
     /// <summary>The native Edit items are driven by Click handlers, so they get none of the greying a command's

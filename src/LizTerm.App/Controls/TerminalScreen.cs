@@ -15,6 +15,7 @@ using LizTerm.App.Mouse;
 using LizTerm.App.Rendering;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Controls;
 
@@ -49,6 +50,12 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<ScreenRegion?> CurrentMatchProperty =
         AvaloniaProperty.Register<TerminalScreen, ScreenRegion?>(nameof(CurrentMatch));
 
+    /// <summary>Whether text the host marks as blinking actually blinks. Off draws it steady: the timer never
+    /// runs, so the hidden phase never comes. A preference (SettingsViewModel.Blink), not a snapshot property —
+    /// the snapshot says what the host asked for, this says whether the user wants to see it.</summary>
+    public static readonly StyledProperty<bool> BlinkEnabledProperty =
+        AvaloniaProperty.Register<TerminalScreen, bool>(nameof(BlinkEnabled), defaultValue: true);
+
     public static readonly FontFamily TerminalFont = FontFamily.Parse("avares://LizTerm.App/Assets/Fonts#IBM 3270");
 
     private readonly Typeface _typeface = new(TerminalFont);
@@ -62,7 +69,7 @@ public sealed class TerminalScreen : Control
     static TerminalScreen()
     {
         AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty, CrosshairProperty,
-            FindMatchesProperty, CurrentMatchProperty);
+            FindMatchesProperty, CurrentMatchProperty, BlinkEnabledProperty);
         AffectsArrange<TerminalScreen>(SnapshotProperty);
         FocusableProperty.OverrideDefaultValue<TerminalScreen>(true);
     }
@@ -109,7 +116,7 @@ public sealed class TerminalScreen : Control
 
     private void UpdateBlinkTimer(ScreenSnapshot? snapshot)
     {
-        var wanted = _attached && snapshot is { HasBlink: true };
+        var wanted = _attached && BlinkEnabled && snapshot is { HasBlink: true };
         if (wanted == _blinkTimer.IsEnabled) return;
         if (wanted)
         {
@@ -145,6 +152,12 @@ public sealed class TerminalScreen : Control
     {
         get => GetValue(CrosshairProperty);
         set => SetValue(CrosshairProperty, value);
+    }
+
+    public bool BlinkEnabled
+    {
+        get => GetValue(BlinkEnabledProperty);
+        set => SetValue(BlinkEnabledProperty, value);
     }
 
     public IReadOnlyList<ScreenRegion>? FindMatches
@@ -333,10 +346,17 @@ public sealed class TerminalScreen : Control
         _gesture.Release();
     }
 
-    /// <summary>A screen of a different size makes the old coordinates meaningless; same size keeps them.</summary>
+    /// <summary>A screen of a different size makes the old coordinates meaningless; same size keeps them. A
+    /// BlinkEnabled change re-evaluates the blink timer against the current snapshot.</summary>
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == BlinkEnabledProperty)
+        {
+            // AffectsRender repaints; this decides whether the timer runs against the screen already showing.
+            UpdateBlinkTimer(Snapshot);
+            return;
+        }
         if (change.Property != SnapshotProperty) return;
         var (oldValue, newValue) = change.GetOldAndNewValue<ScreenSnapshot?>();
         UpdateBlinkTimer(newValue);

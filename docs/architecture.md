@@ -10,7 +10,7 @@ LizTerm is the client experience around it. The reasoning, and the alternatives 
 
 | Project | Role | Depends on |
 |---|---|---|
-| `src/LizTerm.Core` | The domain model: screen snapshots, connection and keyboard state, profiles, the `IEmulatorSession` interface, certificate utilities. | The BCL only |
+| `src/LizTerm.Core` | The domain model: screen snapshots, connection and keyboard state, profiles and settings, the `IEmulatorSession` interface, certificate utilities. | The BCL only |
 | `src/LizTerm.Backend.B3270` | `B3270Session`, the implementation of `IEmulatorSession`: process host, JSON protocol, engine locator, wire log. | Core |
 | `src/LizTerm.App` | The Avalonia UI: splash, profile picker and editor, session window, terminal control, dialogs, menus. | Core, and the backend in one file only |
 

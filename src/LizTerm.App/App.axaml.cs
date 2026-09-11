@@ -16,6 +16,7 @@ using LizTerm.App.Views;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Security;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App;
 
@@ -27,6 +28,11 @@ public partial class App : Application
     private SessionWindow? _lastActiveSession;
     private ProfilePickerWindow? _picker;
     private ProfileStore? _store;
+    private SettingsViewModel? _settings;
+
+    /// <summary>The process's one settings object, for every session window and for Preferences. Lazy with ??=
+    /// for the same reason _store is: the headless test lifetime never runs OnFrameworkInitializationCompleted.</summary>
+    internal SettingsViewModel Settings => _settings ??= new SettingsViewModel(new SettingsStore(AppPaths.SettingsFile()));
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -48,6 +54,7 @@ public partial class App : Application
             splash.Activate();
 
             _store = new ProfileStore(AppPaths.ProfilesDirectory());
+            _settings = new SettingsViewModel(new SettingsStore(AppPaths.SettingsFile()));
             string? backendError = null;
             try
             {
@@ -128,7 +135,8 @@ public partial class App : Application
                 {
                     PinnedCertificate = PinMerge.Resolve(edit.Profile, store.Load(edit.Profile.Name), edit.PinCleared),
                 });
-            });
+            },
+            settings: Settings);
         window.DataContext = viewModel;
         _sessions.Add(window);
         _lastActiveSession ??= window;
@@ -218,6 +226,31 @@ public partial class App : Application
         about.Closed += (_, _) => { if (ReferenceEquals(_about, about)) _about = null; };
         if (owner is null) about.Show();
         else await about.ShowDialog(owner);
+    }
+
+    private void OnPreferencesClick(object? sender, EventArgs e) => ShowPreferences();
+
+    private PreferencesWindow? _preferences;
+
+    /// <summary>The one route to Preferences, for the macOS application menu and a session's Edit item alike.
+    /// Modeless and unowned so the user keeps working while it is open, and one at a time: a second request
+    /// activates the first. Works with only the picker open, since the settings live on the app.</summary>
+    public void ShowPreferences() => ShowPreferences(Settings);
+
+    /// <summary>The rule with the settings object as an argument, so a test can exercise it without the real
+    /// settings file.</summary>
+    internal PreferencesWindow ShowPreferences(SettingsViewModel settings)
+    {
+        if (_preferences is { } showing)
+        {
+            showing.Activate();
+            return showing;
+        }
+        var window = new PreferencesWindow(settings);
+        _preferences = window;
+        window.Closed += (_, _) => { if (ReferenceEquals(_preferences, window)) _preferences = null; };
+        window.Show();
+        return window;
     }
 
     /// <summary>Which engine About describes. Deliberately not "whatever the owner window happens to be": the

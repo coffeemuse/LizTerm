@@ -6,6 +6,7 @@ using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.ViewModels;
 
@@ -186,5 +187,80 @@ public class SessionViewModelTests
         await vm.SaveAsProfileAsync();
 
         Assert.Equal("Could not save the profile: disk full", vm.ErrorMessage);
+    }
+
+    [Fact]
+    public void Without_a_settings_object_the_view_model_makes_an_in_memory_one()
+    {
+        var (vm, _) = Create();
+
+        Assert.Equal(new AppSettings(), vm.Settings.Current);
+        vm.Settings.Crosshair = CrosshairMode.Both; // nothing on disk anywhere; must not throw
+        Assert.Equal(CrosshairMode.Both, vm.Settings.Crosshair);
+    }
+
+    /// <summary>Every window's view model holds the one SettingsViewModel; property change notification on it
+    /// is the whole of the live-propagation mechanism.</summary>
+    [Fact]
+    public void Two_view_models_on_one_settings_object_see_each_others_crosshair()
+    {
+        var settings = new SettingsViewModel();
+        var a = new SessionViewModel(new FakeEmulatorSession(), x => x(), new FakeTextClipboard(), settings: settings);
+        var b = new SessionViewModel(new FakeEmulatorSession(), x => x(), new FakeTextClipboard(), settings: settings);
+        var raised = 0;
+        b.Settings.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.Crosshair)) raised++; };
+
+        a.Settings.Crosshair = CrosshairMode.Horizontal;
+
+        Assert.Equal(CrosshairMode.Horizontal, b.Settings.Crosshair);
+        Assert.Equal(1, raised);
+    }
+
+    private static (string Dir, SettingsViewModel Settings) FailingSettings()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "lizterm-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var file = Path.Combine(dir, "settings.json");
+        File.WriteAllText(file, "not json");
+        return (dir, new SettingsViewModel(new SettingsStore(file)));
+    }
+
+    [Fact]
+    public void A_failed_settings_save_reaches_the_error_banner_and_the_change_still_shows()
+    {
+        var (dir, settings) = FailingSettings();
+        try
+        {
+            var vm = new SessionViewModel(new FakeEmulatorSession(), a => a(), new FakeTextClipboard(), settings: settings);
+
+            settings.Crosshair = CrosshairMode.Both;
+
+            Assert.StartsWith("Could not save settings: ", vm.ErrorMessage);
+            Assert.Contains("settings.json", vm.ErrorMessage);
+            Assert.Equal(CrosshairMode.Both, vm.Settings.Crosshair);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task A_disposed_view_model_no_longer_reports_failed_saves()
+    {
+        var (dir, settings) = FailingSettings();
+        try
+        {
+            var vm = new SessionViewModel(new FakeEmulatorSession(), a => a(), new FakeTextClipboard(), settings: settings);
+            await vm.DisposeAsync();
+
+            settings.Blink = false;
+
+            Assert.Null(vm.ErrorMessage);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }
