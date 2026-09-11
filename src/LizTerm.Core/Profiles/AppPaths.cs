@@ -4,7 +4,7 @@
 
 namespace LizTerm.Core.Profiles;
 
-/// <summary>Per-OS locations of LizTerm's own files: profiles and wire logs live side by side under one root.</summary>
+/// <summary>Per-OS locations of LizTerm's own files: profiles, wire logs and the settings file live side by side under one root.</summary>
 public static class AppPaths
 {
     public static string ConfigRoot()
@@ -23,4 +23,8 @@ public static class AppPaths
     public static string ProfilesDirectory() => Path.Combine(ConfigRoot(), "profiles");
 
     public static string LogsDirectory() => Path.Combine(ConfigRoot(), "logs");
+
+    /// <summary>App-wide settings, one file beside profiles/ and logs/. Holds only the keys the user has set
+    /// (see LizTerm.Core.Settings.SettingsLayers), so deleting it restores every default.</summary>
+    public static string SettingsFile() => Path.Combine(ConfigRoot(), "settings.json");
 }
