@@ -134,13 +134,18 @@ public class SettingsStoreTests : IDisposable
 
     /// <summary>The catch in Write: a failed rename must not strand settings.json.tmp beside the file. A
     /// directory at the file's own path makes File.Move throw, while File.Exists stays false so the re-read
-    /// passes.</summary>
+    /// passes. Which exception depends on the platform — macOS and Linux answer "Is a directory" as an
+    /// IOException, Windows maps MoveFileEx's ERROR_ACCESS_DENIED to UnauthorizedAccessException — and both are
+    /// the store's documented propagations (SettingsViewModel catches both), so the assertion is on the contract,
+    /// not on one platform's choice.</summary>
     [Fact]
     public void A_failed_write_leaves_no_temp_file_behind()
     {
         Directory.CreateDirectory(FilePath);
 
-        Assert.Throws<IOException>(() => Store.Update(s => s with { Blink = false }));
+        var ex = Record.Exception(() => Store.Update(s => s with { Blink = false }));
+
+        Assert.True(ex is IOException or UnauthorizedAccessException, $"expected an IO or access exception, got {ex?.GetType().Name ?? "none"}");
 
         Assert.DoesNotContain("settings.json.tmp", Directory.GetFiles(_dir).Select(Path.GetFileName));
     }
