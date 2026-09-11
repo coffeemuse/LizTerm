@@ -208,6 +208,14 @@ the native path off when a gesture is swallowing a 3270 key, so it has to turn i
 so the detach is safe. `ShowPlatformGestures` then finds no native Edit item — `MenuLookup` answers null for
 every lookup and each native assignment no-ops — while the three classic `InputGesture` assignments still run.
 
+**Amended again (2026-09-10, #60).** The detach was not safe on macOS: `AvaloniaNativeMenuExporter` initialises
+its native proxy with the first `NativeMenu` instance the window is given, and the proxy's `Update` throws "The
+menu being updated does not match" for any other instance — including the fresh empty one that null becomes —
+so `LIZTERM_MENU=classic` threw from `SessionWindow`'s constructor on every macOS launch and fell to
+`StartupErrorWindow`. The classic strategy now keeps the declared instance attached and removes its items
+instead; `SessionWindow.ExportedMenu` answers null for it so the lookups below behave as this section says.
+CLAUDE.md carries the full account.
+
 ### 4.5 Gestures
 
 Only the Edit menu, and only Copy, Paste and Select All. They are assigned in code from
@@ -416,7 +424,10 @@ Rulings made during code review and execution, recorded here rather than edited 
    halves, `The_classic_strategy_detaches_the_window_native_menu` and
    `The_classic_menu_keeps_its_gestures_when_the_native_menu_is_detached`. The first asserts the attached
    property rather than `GetIsNativeMenuExported`, because headless offers no `ITopLevelNativeMenuExporter` and
-   so reports `false` either way; the attached property is the input every exporter reads.
+   so reports `false` either way; the attached property is the input every exporter reads. (Superseded by #60
+   on 2026-09-10: the null detach threw on macOS, the strategy now empties the declared instance, and the two
+   tests became `The_classic_strategy_empties_the_window_native_menu_without_replacing_it` and
+   `The_classic_menu_keeps_its_gestures_when_the_native_menu_is_emptied`; see section 4.4's second amendment.)
 5. **The parity guard never compared `Command`.** `The_native_menu_matches_the_classic_menu_item_for_item`
    compared headers, separator positions and the Keys menu's `CommandParameter`, so `_Connect` bound to
    `DisconnectCommand` on one side would have passed every assertion in it. A reference-equality comparison of

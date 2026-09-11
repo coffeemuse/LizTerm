@@ -28,8 +28,8 @@ Environment variables:
 - `LIZTERM_WIRE_LOG`: append every protocol line in both directions to this file (attach to bug reports).
 - `LIZTERM_MENU`: `native` or `classic`, overriding which menu renderer this platform uses. The default is
   native on macOS (a real system menu bar and application menu) and classic in-window elsewhere. Anything else
-  falls back to the default. `classic` detaches the session window's native menu as well as drawing the
-  in-window one, so nothing is exported to a system or global menu bar and no keyboard shortcut of its own is
+  falls back to the default. `classic` empties the session window's native menu as well as drawing the
+  in-window one, so nothing reaches a system or global menu bar and no keyboard shortcut of its own is
   installed — which is the point, if a menu shortcut is swallowing a key the mainframe needed. The macOS
   application menu (About, and the standard Apple items) is not affected by this variable.
 - `LIZTERM_TEST_HOST`: `host[:port]` for the opt-in integration tests. Add `LIZTERM_TEST_TLS=1` for a TLS host
