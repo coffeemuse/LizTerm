@@ -15,7 +15,10 @@
   "MacOsSettings": {
     "CreateBundle": true,
     "BundleIdentifier": "dev.coffeemuse.lizterm",
-    "AppIcon": "src/LizTerm.App/Assets/Icons/lizterm.icns"
+    "AppIcon": "src/LizTerm.App/Assets/Icons/lizterm.icns",
+    "TeamId": "Z9G64Y4827",
+    "SigningCredentialsType": "P12Certificate",
+    "NotaryCredentialsType": "AppleAccount"
   },
   "LinuxSettings": {
     "AppIcon": "src/LizTerm.App/Assets/Icons/lizterm.png"

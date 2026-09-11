@@ -75,12 +75,37 @@ jobs:
   publish-macos:
     needs: [engines, version]
     runs-on: macos-15
-    timeout-minutes: 20
+    # 45, from 20: each leg now waits on Apple's notary service for the app and the disk image, and a
+    # submission can queue. One submission took about three minutes when this was measured.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         rid: [osx-arm64, osx-x64]
     steps:
+      # Signing is mandatory: there is no Entitlements.plist any more, so an ad hoc package would not even
+      # launch, and nothing below falls back to one (docs/ci-and-release.md, "macOS signing and
+      # notarization"). Fail here, naming what is missing, before publishing or packaging. The secrets reach
+      # only the steps that need them -- never the job or the workflow -- so ci.yml and platforms.yml stay
+      # secret-free and a fork's pull request still runs both in full.
+      - name: The signing secrets are present
+        env:
+          MACOS_SIGNING_P12_BASE64: ${{ secrets.MACOS_SIGNING_P12_BASE64 }}
+          MACOS_SIGNING_P12_PASSWORD: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
+        run: |
+          missing=""
+          for name in MACOS_SIGNING_P12_BASE64 MACOS_SIGNING_P12_PASSWORD MACOS_NOTARY_APPLE_ID \
+                      MACOS_NOTARY_APP_PASSWORD; do
+            [ -n "${!name:-}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing. Every macOS package is signed and notarized; see docs/ci-and-release.md, \"macOS signing and notarization\"."
+            exit 1
+          fi
+          echo "All four signing secrets are present."
+
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
@@ -116,16 +141,28 @@ jobs:
       # the coupling to a proprietary tool is at the artifact boundary and nowhere else.
       # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
       # System.ArgumentException: Provided output directory doesn't exist if the path is missing.
+      # Signing and notarization: LizTerm.parcel sets the Team ID and both credential types and leaves the
+      # credentials undefined, because Parcel reads an automatic PARCEL_* variable only for a setting the
+      # .parcel file does not define. The P12 has to be a file, so it is decoded into the runner's temp
+      # directory and removed when the step exits.
       - name: Package
         env:
           AVALONIA_TOOLS_LICENSE_KEY: ${{ secrets.AVALONIA_TOOLS_LICENSE_KEY }}
+          MACOS_SIGNING_P12_BASE64: ${{ secrets.MACOS_SIGNING_P12_BASE64 }}
+          PARCEL_MACOS_SIGNING_P12_PASSWORD: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
+          PARCEL_MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          PARCEL_MACOS_NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
         run: |
+          set -euo pipefail
+          export PARCEL_MACOS_SIGNING_P12_CERTIFICATE="$RUNNER_TEMP/signing.p12"
+          trap 'rm -f "$PARCEL_MACOS_SIGNING_P12_CERTIFICATE"' EXIT
+          printf '%s' "$MACOS_SIGNING_P12_BASE64" | base64 --decode > "$PARCEL_MACOS_SIGNING_P12_CERTIFICATE"
           mkdir -p packages/${{ matrix.rid }}
           parcel pack ./LizTerm.parcel --no-build \
             -r ${{ matrix.rid }} -p zip -p dmg -o packages/${{ matrix.rid }}
 
       # One step, three claims: the archive round trip preserved the executable bit, the binary still starts,
-      # and the .app and ZIP round trip did not invalidate the ad hoc signature the SDK and the linker applied.
+      # and the .app and ZIP round trip did not invalidate its signature.
       # osx-x64 is skipped because this runner is arm64 and cannot start an x86_64 binary without Rosetta,
       # whose presence on these images is not guaranteed -- the spec records that RID as proven by the
       # machine-type assertion alone.
@@ -154,12 +191,74 @@ jobs:
       # packaged *app* actually launching. A packaged macOS build once passed every gate in this pipeline,
       # including codesign --verify --deep --strict, and then failed to launch for every user, because
       # Parcel's ad-hoc signing left the hardened runtime's library validation refusing to dlopen the bundled
-      # dylibs -- see docs/ci-and-release.md, "macOS signing and Entitlements.plist". Same osx-x64 skip and
-      # the same reason as the engine-start step above: this runner cannot execute an x86_64 binary without
-      # Rosetta.
+      # dylibs -- see docs/ci-and-release.md, "macOS signing and notarization". Signed with the Developer ID,
+      # the app no longer needs the entitlement that fixed it, and this step is what proves that. Same osx-x64
+      # skip and the same reason as the engine-start step above: this runner cannot execute an x86_64 binary
+      # without Rosetta.
       - name: The packaged app launches
         if: matrix.rid == 'osx-arm64'
         run: native/build/verify-app-launches.sh /tmp/roundtrip ${{ matrix.rid }}
+
+      # Every package this job ships, on both RIDs: verify-notarized.sh executes nothing, so unlike the two
+      # steps above it covers osx-x64 too. The Team ID comes from LizTerm.parcel, the one place it is written.
+      - name: The shipped app and disk image are notarized
+        run: |
+          set -euo pipefail
+          team=$(python3 -c "import json; print(json.load(open('LizTerm.parcel'))['MacOsSettings']['TeamId'])")
+          app=$(find /tmp/roundtrip -maxdepth 1 -name '*.app' -type d)
+          dmg=$(find packages/${{ matrix.rid }} -name '*.dmg')
+          [ "$(printf '%s' "$app" | grep -c . || true)" -eq 1 ] \
+            || { echo "expected one .app at the top of the ZIP, found: '$app'" >&2; exit 1; }
+          [ "$(printf '%s' "$dmg" | grep -c . || true)" -eq 1 ] \
+            || { echo "expected one .dmg, found: '$dmg'" >&2; exit 1; }
+          # Both run before the step fails, so one log carries the verdict on the app and on the disk image.
+          status=0
+          native/build/verify-notarized.sh "$app" "$team" || status=1
+          native/build/verify-notarized.sh "$dmg" "$team" || status=1
+          exit "$status"
+
+      # A guard that cannot fail is not a guard. Two copies of the shipped app, each broken one way, must each
+      # be rejected BY THE CHECK THAT EXISTS FOR IT -- matched on that check's own message, because the script
+      # also exits non-zero when spctl cannot reach Apple, and that must not pass as proof. An ad hoc copy must
+      # fail the Team ID and notarization checks; an unstapled copy (Contents/CodeResources, the ticket, sits
+      # outside the code seal, so deleting it leaves the signature valid) must fail the stapling check.
+      # Nothing else is asserted about the unstapled copy: spctl looks its ticket up online, so its verdict
+      # there moves with the network. The signed-but-unnotarized case cannot be built here without handing the
+      # signing key to this step too; verify-notarized.sh's own comment records why it matches the exact
+      # source= line rather than "accepted".
+      - name: The notarization gate can fail
+        run: |
+          set -euo pipefail
+          team=$(python3 -c "import json; print(json.load(open('LizTerm.parcel'))['MacOsSettings']['TeamId'])")
+          app=$(find /tmp/roundtrip -maxdepth 1 -name '*.app' -type d)
+          rm -rf /tmp/gate-proof && mkdir -p /tmp/gate-proof/adhoc /tmp/gate-proof/unstapled
+          ditto "$app" /tmp/gate-proof/adhoc/LizTerm.app
+          codesign --force --deep --sign - /tmp/gate-proof/adhoc/LizTerm.app
+          ditto "$app" /tmp/gate-proof/unstapled/LizTerm.app
+          # No -f: the step above has just proved the shipped app is stapled, so a missing ticket here means
+          # the proof is no longer testing what it claims to.
+          rm /tmp/gate-proof/unstapled/LizTerm.app/Contents/CodeResources
+
+          # Capture and match; do not pipe. grep -q exits on its first match and SIGPIPEs the writer, which
+          # under pipefail becomes 141 -- the trap engines.yml's gate proofs record.
+          reject() {
+            echo "--- the gate must reject $2 by its $1"
+            if output=$(native/build/verify-notarized.sh "$2" "$team" 2>&1); then
+              printf "%s\n" "$output"
+              echo "FAILED: verify-notarized.sh accepted $2; its $1 is not working" >&2
+              exit 1
+            fi
+            printf "%s\n" "$output"
+            case "$output" in
+              *"$3"*) echo "OK: rejected by the $1" ;;
+              *) echo "FAILED: verify-notarized.sh rejected $2, but not by its $1 (nothing matched: $3)" >&2
+                 exit 1 ;;
+            esac
+          }
+
+          reject "Team ID check"      /tmp/gate-proof/adhoc/LizTerm.app     "Team ID check:"
+          reject "notarization check" /tmp/gate-proof/adhoc/LizTerm.app     "notarization check:"
+          reject "stapling check"     /tmp/gate-proof/unstapled/LizTerm.app "stapling check:"
 
       # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
       - name: Rename for the release namespace
