@@ -41,6 +41,10 @@ public partial class SessionWindow : Window
 
     private bool _useNativeMenu;
 
+    /// <summary>The view model whose BellRang this window is subscribed to, so a data-context swap can unsubscribe
+    /// from the old one before a bell from it flashes a screen it no longer owns.</summary>
+    private SessionViewModel? _bellSource;
+
     /// <summary>The window's native menu when the native strategy is live, else null. Under the classic strategy
     /// the declared menu is still attached — the exporter accepts no other instance, see ApplyMenuStrategy — but
     /// holds no items, and MenuLookup.Required throws for a menu that is there and lacks the item asked for; so
@@ -307,6 +311,18 @@ public partial class SessionWindow : Window
     }
 
     private SessionViewModel? ViewModel => DataContext as SessionViewModel;
+
+    /// <summary>Follows the data context for the one view-model event the window handles itself. Every other
+    /// binding is XAML; the flash is a method call on the screen, which XAML cannot express.</summary>
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (_bellSource is not null) _bellSource.BellRang -= OnBellRang;
+        _bellSource = ViewModel;
+        if (_bellSource is not null) _bellSource.BellRang += OnBellRang;
+    }
+
+    private void OnBellRang(object? sender, EventArgs e) => Screen.Flash();
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 

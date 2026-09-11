@@ -48,6 +48,33 @@ public class SessionWindowTests
         return screen.TranslatePoint(local, window) ?? local;
     }
 
+    /// <summary>The window's half of the bell: the view model's BellRang reaches Screen.Flash(). The sound never
+    /// passes through the window (bell spec §4).</summary>
+    [AvaloniaFact]
+    public void A_bell_from_the_view_model_flashes_the_screen()
+    {
+        var (_, screen, _, session, _) = Show();
+        Assert.False(screen.BellFlashing);
+
+        session.RaiseBell();
+
+        Assert.True(screen.BellFlashing);
+    }
+
+    /// <summary>A view model that outlives its window must not flash a control that is gone: swapping the data
+    /// context unsubscribes from the old one.</summary>
+    [AvaloniaFact]
+    public void A_replaced_view_model_no_longer_reaches_the_screen()
+    {
+        var (window, screen, _, oldSession, _) = Show();
+        var newVm = new SessionViewModel(new FakeEmulatorSession(), action => action(), new FakeTextClipboard());
+
+        window.DataContext = newVm;
+        oldSession.RaiseBell();
+
+        Assert.False(screen.BellFlashing);
+    }
+
     private static void Drag(SessionWindow window, TerminalScreen screen)
     {
         window.MouseDown(Center(window, screen, 2, 3), MouseButton.Left);

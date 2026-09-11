@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using LizTerm.App.Bell;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
@@ -136,7 +137,8 @@ public partial class App : Application
                     PinnedCertificate = PinMerge.Resolve(edit.Profile, store.Load(edit.Profile.Name), edit.PinCleared),
                 });
             },
-            settings: Settings);
+            settings: Settings,
+            bellRinger: new SystemBellRinger());
         window.DataContext = viewModel;
         _sessions.Add(window);
         _lastActiveSession ??= window;
