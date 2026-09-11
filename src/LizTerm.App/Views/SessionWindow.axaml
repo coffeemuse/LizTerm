@@ -233,6 +233,7 @@
                              Snapshot="{Binding Screen}"
                              Selection="{Binding Selection, Mode=TwoWay}"
                              Crosshair="{Binding Settings.Crosshair}"
+                             BlinkEnabled="{Binding Settings.Blink}"
                              FindMatches="{Binding Find.Matches}"
                              CurrentMatch="{Binding Find.CurrentMatch}"
                              DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />

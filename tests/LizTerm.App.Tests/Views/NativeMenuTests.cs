@@ -128,6 +128,18 @@ public class NativeMenuTests
         Assert.Equal(CrosshairMode.Both, window.FindControl<TerminalScreen>("Screen")!.Crosshair);
     }
 
+    [AvaloniaFact]
+    public void The_blink_setting_reaches_the_terminal_screen()
+    {
+        var (window, vm, _, _) = Show();
+        var screen = window.FindControl<TerminalScreen>("Screen")!;
+        Assert.True(screen.BlinkEnabled);
+
+        vm.Settings.Blink = false;
+
+        Assert.False(screen.BlinkEnabled);
+    }
+
     /// <summary>The four modes are grouped under a Crosshair submenu rather than sitting bare under View,
     /// where "Horizontal" and "Vertical" read as window tiling to anyone who has not been told otherwise —
     /// which is exactly what a first look at this menu produced. Asserted on both menus, because the parity
