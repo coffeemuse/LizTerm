@@ -25,6 +25,10 @@ public static class Palette
     public static readonly IBrush FindMatch = new ImmutableSolidColorBrush(Color.FromArgb(0x66, 0xE0, 0xA0, 0x20));
     public static readonly IBrush FindCurrent = new ImmutableSolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xD0, 0x40));
 
+    /// <summary>The visual bell: painted over the whole screen for TerminalScreen.BellFlashDuration. White at about
+    /// 35% so the screen visibly lights up without inverting to a white slab (bell spec §4).</summary>
+    public static readonly IBrush BellFlash = new ImmutableSolidColorBrush(Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF));
+
     /// <summary>Which of the two find brushes paints one match: <see cref="FindCurrent"/> for the match the user
     /// is on, else <see cref="FindMatch"/>. Extracted out of TerminalScreen.DrawFindMatches's ternary as a pure
     /// predicate: this project asserts overlay painting through geometry helpers (CrosshairGeometry,
