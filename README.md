@@ -51,22 +51,10 @@ itself is native ARM64.
 
 ## First run
 
-These builds are not yet signed or notarized, so macOS and Windows both refuse to open them the first time.
-
-**macOS** blocks the file, and the dialog offers only **Move to Trash** or **Done**. Choose **Done**, then:
-
-1. Open **System Settings**, go to **Privacy & Security**, and scroll to the **Security** section.
-2. Beside *"... was blocked to protect your Mac"*, click **Open Anyway**.
-3. Click **Open Anyway** again to confirm, then authenticate with Touch ID or an administrator password.
-
-The button only appears for a while after a blocked attempt; if it is not there, open the file again and go
-straight back to Settings. macOS blocks *the file you opened*, by name, which is why the ZIP is easier: you do this
-once, for LizTerm itself. With the DMG you do it twice — once to open the disk image, and again for LizTerm after you
-drag it to Applications.
+**macOS** builds are signed and notarized by Apple, so LizTerm opens like any other app you download. The first
+time, macOS may ask you to confirm that you want to open something downloaded from the internet.
 
 **Windows**: SmartScreen warns that the publisher is unknown. Choose **More info**, then **Run anyway**.
-
-Signing and notarization are next on the list ([#36](https://github.com/coffeemuse/LizTerm/issues/36)).
 
 ## Getting started
 

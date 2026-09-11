@@ -29,8 +29,9 @@ The nested `CLAUDE.md` files load automatically when you read a file in their fo
 `docs/engines.md`, and `.github/CLAUDE.md` imports `docs/ci-and-release.md` and `docs/engines.md`, so those arrive
 the same way. Files at the repository root trigger no such load, so:
 
-- Before touching `LizTerm.parcel` or `Entitlements.plist`, read `docs/ci-and-release.md`. `Entitlements.plist` is
-  load-bearing: without its one entry, no packaged macOS build launches.
+- Before touching `LizTerm.parcel` or the signing steps of `release.yml`'s macOS job, read `docs/ci-and-release.md`,
+  "macOS signing and notarization". Signing is mandatory: without its four secrets the release fails by design, and
+  an ad hoc macOS package would not launch.
 - Before touching `global.json`, `Directory.Build.props` or `Directory.Packages.props`, read the conventions in
   `docs/development.md`.
 - Before touching `.mcp.json` or `.claude/settings.local.json`, or driving the app through the Avalonia DevTools MCP,
