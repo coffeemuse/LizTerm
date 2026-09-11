@@ -45,6 +45,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `Dispatcher.UIThread.Post`, tests pass `a => a()`. Clipboard, file dialogs, the certificate prompt and folder
   opening are injected the same way: `ITextClipboard` (`AvaloniaTextClipboard(window)`), `IFilePicker`,
   `ICertificatePrompt`, `IFolderOpener`.
+  The process's `SettingsViewModel` is injected the same way, last, and defaults to an in-memory one, so no
+  view-model test touches the settings file; its `SaveFailed` lands in `ErrorMessage`.
 - Rejected actions (`EmulatorActionException`) are deliberately swallowed, because b3270 already explains them
   through the keyboard lock. Only unexpected and backend-unavailable errors set `ErrorMessage`. `SessionWindow`
   refocuses the screen after the error bar's Dismiss.
@@ -96,6 +98,21 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `chmod` instead of calling it missing. `CheckBackendOrUnknown` and `Create` both go through it, so they cannot
   disagree about the same binary.
 
+### Settings and Preferences
+
+- `SettingsViewModel` is the app-wide settings as one live object, created once by `App` (`App.Settings`, lazy
+  with `??=` like `_store`) and shared by every session window and the Preferences window; property change
+  notification on it is the whole live-propagation mechanism. A setter applies the change in memory, raises
+  the change, then writes through `SettingsStore.Update` with the same change function — the in-memory value
+  always wins. A failed save sets `LastSaveError` (the window shows it) and raises `SaveFailed` (every session
+  banner shows it; the event fires on every failure, where an unchanged property text would not re-notify a
+  dismissed banner).
+- `TerminalScreen.BlinkEnabled` (bound to `Settings.Blink`) stops the blink timer and clears the hidden phase;
+  the snapshot still says what the host asked for.
+- `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
+  `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
+  The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.
+
 ## Terminal screen (`Controls/TerminalScreen.cs`)
 
 - A custom `Control` that draws each row as runs of identical style, segmented by `Cell.SameStyleAs` — each run a
@@ -110,9 +127,9 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `TerminalScreenCrosshairTests` and `TerminalScreenFindTests` assert that changing them leaves `RunPlanBuilds`
   unchanged. `CrosshairGeometry.Rects` and `FindMatchGeometry.Rect` are pure helpers, asserted on rectangles rather
   than pixels.
-- The crosshair is per window and deliberately does not use b3270's own `CROSSHAIR` toggle: the engine has no
-  display, and routing a display preference through a child process would only make the crosshair unavailable while
-  disconnected.
+- The crosshair is an app-wide setting (`SettingsViewModel.Crosshair`, remembered across sessions) and deliberately
+  does not use b3270's own `CROSSHAIR` toggle: the engine has no display, and routing a display preference through a
+  child process would only make the crosshair unavailable while disconnected.
 - It raises `KeyRequested`, `TextEntered` and `CellClicked`, which `SessionWindow` wires to the view model.
 
 ### Keyboard
@@ -153,7 +170,7 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 
 ## Menus
 
-One `NativeMenu` per window, plus an application-level one in `App.axaml` holding **About and nothing else**, which
+One `NativeMenu` per window, plus an application-level one in `App.axaml` holding **About and Preferences**, which
 is what gives the picker a menu bar on macOS. Each window's menu is rendered either natively or by the classic
 in-window `<Menu>`, which still exists.
 
@@ -161,8 +178,8 @@ in-window `<Menu>`, which still exists.
 
 - `MenuStrategy` (`Menus/`) picks the renderer: `LIZTERM_MENU=native|classic`, else native on macOS and classic
   elsewhere, because `NativeMenuBar`'s in-window rendering has never been reviewed on Windows or Linux.
-  `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as an argument, so every combination is
-  testable anywhere.
+  `MenuStrategy.Decide`, `AboutInHelpMenu` and `PreferencesInEditMenu` are pure and take the platform as an argument,
+  so every combination is testable anywhere.
 - In the pinned Avalonia 12.1.2, the in-window rendering binds `NativeMenuItem.Gesture` only to
   `MenuItem.InputGesture`, which is display-only; `MenuItem.OnKeyDown` and `MenuBase.OnKeyDown` are empty, and only
   `MenuItem.HotKey` dispatches. So the fallback bar shows a shortcut but never fires it, and double dispatch is
@@ -189,10 +206,11 @@ in-window `<Menu>`, which still exists.
 
 ### The application menu
 
-It declares no Quit, on purpose. `AvaloniaNativeMenuExporter.SetMenu` appends AppKit's standard block (Services,
-Hide, Hide Others, Show All, and Quit with Cmd+Q) unless `MacOSPlatformOptions.DisableDefaultApplicationMenuItems` is
-set, which `Program.cs` does not do. A declared Quit shipped a second Cmd+Q item, and Avalonia's is the one this app
-wants: it calls `TryShutdown(0)`, which a running IND$FILE transfer correctly refuses, where ours forced `Shutdown()`.
+It declares About and Preferences, and no Quit, on purpose. `AvaloniaNativeMenuExporter.SetMenu` appends AppKit's
+standard block (Services, Hide, Hide Others, Show All, and Quit with Cmd+Q) unless
+`MacOSPlatformOptions.DisableDefaultApplicationMenuItems` is set, which `Program.cs` does not do. A declared Quit
+shipped a second Cmd+Q item, and Avalonia's is the one this app wants: it calls `TryShutdown(0)`, which a running
+IND$FILE transfer correctly refuses, where ours forced `Shutdown()`.
 Do not set `DisableDefaultApplicationMenuItems` to "own" the block; that means re-implementing Services, Hide, Hide
 Others and Show All to get back what is already free.
 
@@ -203,10 +221,13 @@ the host through the text input `TerminalScreen` already handles, and Ctrl+Cmd+S
 
 ### Gestures
 
-**No menu item outside Edit ever carries a `Gesture`**, the application menu included (AppKit supplies its own). On
-macOS a `NativeMenuItem` gesture becomes an AppKit key equivalent that `NSApplication.sendEvent:` dispatches before
-the key window's responder chain, so `Gesture="F1"` would silently swallow PF1 — `TerminalScreen` would never see the
-key. So View, File > Save Screen As... and Edit > Copy Screen as HTML carry none.
+**No window menu item outside Edit ever carries a `Gesture`.** On macOS a `NativeMenuItem` gesture becomes an
+AppKit key equivalent that `NSApplication.sendEvent:` dispatches before the key window's responder chain, so
+`Gesture="F1"` would silently swallow PF1 — `TerminalScreen` would never see the key. So View, File > Save Screen
+As... and Edit > Copy Screen as HTML carry none. **The one exception is Preferences... on the application menu**,
+with Cmd-comma (settings spec §5.4): the application menu exists only on macOS, `DefaultKeymap` binds no Cmd
+chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly this class.
+`NativeMenuTests.The_application_menu_carries_cmd_comma_on_preferences_and_nothing_else` holds it to that one.
 
 - Edit's Cmd/Ctrl+C, V and A come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`,
   `PasteAsync` and `SelectAll` directly, never the `[RelayCommand]`s, which disable while running.

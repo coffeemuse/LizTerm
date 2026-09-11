@@ -374,3 +374,21 @@ A system settings directory and the permission audit #54 asks for. An environmen
 import bundles (#55). The bell (#47) and keypad (#31) fields. A picker entry off macOS. Any per-profile display
 setting. Window geometry, which is state rather than preference and would need its own file (#55 excludes it
 from any bundle). Native managed-preferences mechanisms (macOS configuration profiles, Group Policy).
+
+## 9. As built (2026-09-11)
+
+Three refinements, decided while planning; the plan is `docs/superpowers/plans/2026-09-11-lizterm-settings-store.md`.
+
+- **`SettingsStore.Update(Func<AppSettings, AppSettings>)` replaces `Save(AppSettings)`** (§3.4). A whole-record
+  save re-reading the file could preserve only *which* keys were pinned; this process's stale value would still
+  overwrite a key another process had just written. `Update` applies the change to what is on disk now, as
+  `ProfileStore.Update` does, so only the key the user touched changes. `SettingsViewModel` keeps its own
+  in-memory record as the view.
+- **`SettingsLayers.Read` drops a bad key alone** (§3.3). Defaults for the whole run would also make the next save
+  rewrite every other key from defaults. `Read` probes each top-level key on its own; the offending key falls to
+  its default and the next save repairs it.
+- **The App class is `SettingsViewModel` in `ViewModels/`**, not `Settings` in a `Settings/` folder (§4.1): a class
+  named for a namespace it sits in cannot be named from `namespace LizTerm.App` unqualified, and it is an
+  `ObservableObject` a window binds to.
+- The one-window rule is tested after all (§6.2): the headless application is the real `App`, and an internal
+  `ShowPreferences(SettingsViewModel)` overload keeps the test off the real settings file.

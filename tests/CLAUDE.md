@@ -34,7 +34,10 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 - They run on Avalonia's headless platform: `TestAppBuilder` is registered with
   `[assembly: AvaloniaTestApplication]`. Control tests use `[AvaloniaFact]` and `KeyPressQwerty`, drive drags with
   the headless `MouseDown`/`MouseMove`/`MouseUp` helpers, and read `TerminalScreen.Selection` directly. View-model
-  tests use plain `[Fact]` with `FakeEmulatorSession`.
+  tests use plain `[Fact]` with `FakeEmulatorSession`. A view model built without a `SettingsViewModel` gets an
+  in-memory one; a test that needs a failing save points a `SettingsStore` at a temp file holding `not json`.
+- Drive the Preferences radios by raising `Button.ClickEvent`; assigning `IsChecked` only proves the one-way
+  binding renders.
 - `FakeEmulatorSession` records calls as strings: `key:PF3`, `move:3,9`, `connect:noverify`, `connect:pin:<sha256>`,
   `wirelog:start:<path>`, `wirelog:stop`, `transfer:<Direction>:<HostFile>`. It also exposes `ConnectCompletion`,
   `ConnectToken`, `WireLogException`, `Engine`, `LastTransferRequest`, `TransferProgress`, `TransferToken`, and
@@ -71,6 +74,7 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   compile-time path, so it resolves from `bin/` and on a runner alike, and it throws rather than skipping when it
   cannot. `LicenseHeaderTests` needs its real header for a second reason: its fixtures put an SPDX line inside the
   eight-line window, and without a real header the file would pass on its own test data.
+- `SettingsStoreTests` uses a temp directory per test like `ProfileStoreTests`; `SettingsLayersTests` needs no disk.
 
 ## Integration tests
 

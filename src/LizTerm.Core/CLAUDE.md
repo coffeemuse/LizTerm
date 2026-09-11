@@ -22,7 +22,7 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - `ScreenSearch.Find` is the Find scan: case-insensitive, in reading order, over one entry per *character* rather
   than per cell so a DBCS match cannot begin or end mid-character. It runs against one immutable snapshot, so it
   needs no locking and keeps nothing between calls.
-- `AppPaths` owns the per-OS config root, with `profiles` and `logs` beneath it.
+- `AppPaths` owns the per-OS config root, with `profiles`, `logs` and `settings.json` beneath it.
 
 ## `IEmulatorSession`
 
@@ -62,6 +62,23 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - `DestructiveBackspace` defaults to true. Every x3270-family default keymap erases; the old belief that x3270
   defaults to cursor-left came from the name of its `BackSpace()` action.
 - The profile JSON writes every field, so a saved `false` survives a change of default.
+
+## Settings (`LizTerm.Core.Settings`)
+
+- `AppSettings` is the app-wide record: positional, a default on every parameter, and **flat by policy**, because
+  `SettingsLayers.Merge` overlays top-level keys and would replace a nested object whole. `CrosshairMode` lives
+  here because the record names it. The enum is written by name.
+- The user file is a **sparse overlay**. `SettingsStore.Update(change)` applies the change to what is on disk
+  *now* (re-read first, as `ProfileStore.Update` does) and writes exactly the keys the file already held plus the
+  keys that now differ from the layers beneath (`SettingsLayers.UserDocument`). A key never touched stays absent
+  and follows the default; one set once stays pinned, even set back to the default. Known keys are rewritten
+  from the record, so a bad value heals on the first save; unknown keys are copied verbatim, so a newer build's
+  key survives an older build saving.
+- `SettingsLayers.Read` drops a key whose value will not deserialise and keeps the rest, so a hand-edited typo
+  costs that key alone. `Load` never throws. `Update` throws `InvalidDataException` naming the file when the
+  file is not a JSON object, rather than overwrite something the user may be editing.
+- `SettingsLayers` is pure; every merge and pinning case is a plain unit test. Only the user file is wired: a
+  system layer is one more entry in `Merge`'s list, and an environment variable would be the topmost layer.
 
 ## Security (`LizTerm.Core.Security`)
 
