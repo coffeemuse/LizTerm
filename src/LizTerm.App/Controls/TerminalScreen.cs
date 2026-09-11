@@ -346,7 +346,8 @@ public sealed class TerminalScreen : Control
         _gesture.Release();
     }
 
-    /// <summary>A screen of a different size makes the old coordinates meaningless; same size keeps them.</summary>
+    /// <summary>A screen of a different size makes the old coordinates meaningless; same size keeps them. A
+    /// BlinkEnabled change re-evaluates the blink timer against the current snapshot.</summary>
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);

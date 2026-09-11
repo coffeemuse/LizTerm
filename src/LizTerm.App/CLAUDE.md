@@ -231,7 +231,7 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
 
 - Edit's Cmd/Ctrl+C, V and A come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`,
   `PasteAsync` and `SelectAll` directly, never the `[RelayCommand]`s, which disable while running.
-- Edit > Find... is the one other item with a gesture, because Edit is the menu with an established safe route for
+- Edit > Find... is the one other Edit item with a gesture, because Edit is the menu with an established safe route for
   one: `ShowPlatformGestures` builds it as `new KeyGesture(Key.F, hotkeys.CommandModifiers)`, since
   `PlatformHotkeyConfiguration` has no Find to read.
 - View > **Crosshair** is a submenu of four radio items rather than four items directly under View, because

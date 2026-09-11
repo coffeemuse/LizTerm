@@ -62,12 +62,13 @@ public sealed class SettingsStore(string filePath)
                ?? throw new InvalidDataException($"{Path.GetFileName(FilePath)} is not valid JSON; fix or delete it: {FilePath}");
     }
 
-    /// <summary>The text as a JSON object, or null for anything else: not JSON, or JSON that is not an object.</summary>
+    /// <summary>The text as a JSON object, or null for anything else: not JSON, JSON that is not an object, or an
+    /// object with a duplicated key.</summary>
     private static JsonObject? Parse(string text)
     {
         try
         {
-            return JsonNode.Parse(text) as JsonObject;
+            return JsonNode.Parse(text, documentOptions: new() { AllowDuplicateProperties = false }) as JsonObject;
         }
         catch (JsonException)
         {

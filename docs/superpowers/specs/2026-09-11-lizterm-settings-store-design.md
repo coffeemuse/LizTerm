@@ -377,7 +377,8 @@ from any bundle). Native managed-preferences mechanisms (macOS configuration pro
 
 ## 9. As built (2026-09-11)
 
-Three refinements, decided while planning; the plan is `docs/superpowers/plans/2026-09-11-lizterm-settings-store.md`.
+Three refinements and one test-plan change, decided while planning; the plan is
+`docs/superpowers/plans/2026-09-11-lizterm-settings-store.md`.
 
 - **`SettingsStore.Update(Func<AppSettings, AppSettings>)` replaces `Save(AppSettings)`** (§3.4). A whole-record
   save re-reading the file could preserve only *which* keys were pinned; this process's stale value would still

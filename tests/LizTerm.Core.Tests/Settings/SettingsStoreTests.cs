@@ -74,6 +74,7 @@ public class SettingsStoreTests : IDisposable
     [InlineData("not json at all")]
     [InlineData("")]
     [InlineData("[1, 2, 3]")]
+    [InlineData("""{"blink":false,"blink":true}""")]
     public void A_file_that_is_not_a_json_object_loads_defaults_and_refuses_to_be_overwritten(string content)
     {
         WriteFile(content);
@@ -129,5 +130,18 @@ public class SettingsStoreTests : IDisposable
         Store.Update(s => s with { Blink = false });
 
         Assert.Contains("\n", File.ReadAllText(FilePath));
+    }
+
+    /// <summary>The catch in Write: a failed rename must not strand settings.json.tmp beside the file. A
+    /// directory at the file's own path makes File.Move throw, while File.Exists stays false so the re-read
+    /// passes.</summary>
+    [Fact]
+    public void A_failed_write_leaves_no_temp_file_behind()
+    {
+        Directory.CreateDirectory(FilePath);
+
+        Assert.Throws<IOException>(() => Store.Update(s => s with { Blink = false }));
+
+        Assert.DoesNotContain("settings.json.tmp", Directory.GetFiles(_dir).Select(Path.GetFileName));
     }
 }
