@@ -166,8 +166,10 @@ jobs:
       # docs/ci-and-release.md, "macOS signing and notarization"). A ticket is keyed by code-directory hash, so
       # Apple's stapler attaches the existing tickets without a second submission. The ZIP is rebuilt with ditto,
       # the tool Apple documents for zipping a bundle, before any gate below extracts it, so every gate sees the
-      # ZIP that ships. Exactly one ZIP and one DMG are required first: signing and notarization must not leave a
-      # second one behind for the gates' `find` to pick up, or for the rename step to collide with.
+      # ZIP that ships. --norsrc keeps the runner's extended attributes out of the public download: nothing a
+      # signed bundle needs lives in one (the stapled ticket is the file Contents/CodeResources). Exactly one ZIP
+      # and one DMG are required first: signing and notarization must not leave a second one behind for the
+      # gates' `find` to pick up, or for the rename step to collide with.
       - name: The ZIP's app and the disk image are stapled
         run: |
           set -euo pipefail
@@ -185,7 +187,7 @@ jobs:
             || { echo "expected one .app at the top of the ZIP, found: '$app'" >&2; exit 1; }
           xcrun stapler staple "$app"
           rm "$zip"
-          ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
+          ditto -c -k --norsrc --keepParent "$app" "$zip"
 
       # One step, three claims: the archive round trip preserved the executable bit, the binary still starts,
       # and the .app and ZIP round trip did not invalidate its signature.
