@@ -34,6 +34,22 @@ public class SettingsLayersTests
         Assert.Equal(new AppSettings(CrosshairMode.Both), SettingsLayers.Read(Doc("""{"crosshair":"Both","blink":"yes"}""")));
     }
 
+    /// <summary>The bell's sound is an enum so a later build can add a sound-file member (bell spec §2.1). This is
+    /// the test that makes that safe: a name this build does not know costs that key alone.</summary>
+    [Fact]
+    public void A_bell_sound_this_build_does_not_know_falls_to_None_and_the_rest_are_kept()
+    {
+        Assert.Equal(new AppSettings(VisualBell: false), SettingsLayers.Read(Doc("""{"visualBell":false,"bellSound":"SoundFile"}""")));
+    }
+
+    [Fact]
+    public void The_bell_fields_read_by_name_and_default_on()
+    {
+        Assert.Equal(new AppSettings(VisualBell: false, BellSound: BellSound.SystemAlert),
+            SettingsLayers.Read(Doc("""{"visualBell":false,"bellSound":"SystemAlert"}""")));
+        Assert.Equal(new AppSettings(), SettingsLayers.Read(Doc("""{}""")));
+    }
+
     [Fact]
     public void An_unknown_key_is_ignored_on_read()
     {
