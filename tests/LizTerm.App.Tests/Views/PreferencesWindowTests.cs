@@ -70,6 +70,79 @@ public class PreferencesWindowTests
     }
 
     [AvaloniaFact]
+    public void The_visual_bell_box_writes_through_and_follows_the_settings()
+    {
+        var (window, settings) = Show();
+        var box = window.FindControl<CheckBox>("VisualBellBox")!;
+        Assert.True(box.IsChecked);
+
+        box.IsChecked = false;
+        Assert.False(settings.VisualBell);
+
+        settings.VisualBell = true;
+        Assert.True(box.IsChecked);
+    }
+
+    [AvaloniaFact]
+    public void Clicking_a_sound_radio_sets_the_shared_settings_and_checks_exactly_that_radio()
+    {
+        var (window, settings) = Show();
+        var none = window.FindControl<RadioButton>("BellSoundNone")!;
+        var alert = window.FindControl<RadioButton>("BellSoundSystemAlert")!;
+        Assert.True(none.IsChecked);
+        Assert.False(alert.IsChecked);
+
+        Click(alert);
+        Assert.Equal(BellSound.SystemAlert, settings.BellSound);
+        Assert.False(none.IsChecked);
+        Assert.True(alert.IsChecked);
+
+        Click(none);
+        Assert.Equal(BellSound.None, settings.BellSound);
+        Assert.True(none.IsChecked);
+        Assert.False(alert.IsChecked);
+    }
+
+    [AvaloniaFact]
+    public void The_sound_radios_follow_a_change_made_elsewhere()
+    {
+        var (window, settings) = Show();
+
+        settings.BellSound = BellSound.SystemAlert;
+
+        Assert.True(window.FindControl<RadioButton>("BellSoundSystemAlert")!.IsChecked);
+        Assert.False(window.FindControl<RadioButton>("BellSoundNone")!.IsChecked);
+    }
+
+    /// <summary>Linux: the radio is disabled and says why, but a saved SystemAlert (a file exported from a Mac, one
+    /// day) still shows as the value it is and is not rewritten (bell spec §5).</summary>
+    [AvaloniaFact]
+    public void Where_the_system_alert_is_unavailable_the_radio_is_disabled_with_a_note_and_a_saved_value_stays()
+    {
+        var settings = new SettingsViewModel { BellSound = BellSound.SystemAlert };
+        var window = new PreferencesWindow(settings, systemAlertAvailable: false);
+        window.Show();
+        var alert = window.FindControl<RadioButton>("BellSoundSystemAlert")!;
+        var note = window.FindControl<TextBlock>("BellSoundNote")!;
+
+        Assert.False(alert.IsEnabled);
+        Assert.True(alert.IsChecked);
+        Assert.True(note.IsVisible);
+        Assert.Equal("The system alert sound is not available on Linux.", note.Text);
+        Assert.Equal(BellSound.SystemAlert, settings.BellSound);
+    }
+
+    [AvaloniaFact]
+    public void Where_the_system_alert_is_available_the_radio_is_enabled_and_the_note_hidden()
+    {
+        var window = new PreferencesWindow(new SettingsViewModel(), systemAlertAvailable: true);
+        window.Show();
+
+        Assert.True(window.FindControl<RadioButton>("BellSoundSystemAlert")!.IsEnabled);
+        Assert.False(window.FindControl<TextBlock>("BellSoundNote")!.IsVisible);
+    }
+
+    [AvaloniaFact]
     public void A_failed_save_shows_its_message_in_the_window()
     {
         var dir = Path.Combine(Path.GetTempPath(), "lizterm-tests-" + Guid.NewGuid().ToString("N"));
