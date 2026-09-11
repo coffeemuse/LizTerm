@@ -39,29 +39,54 @@ public partial class SessionWindow : Window
         };
     }
 
+    private bool _useNativeMenu;
+
+    /// <summary>The window's native menu when the native strategy is live, else null. Under the classic strategy
+    /// the declared menu is still attached — the exporter accepts no other instance, see ApplyMenuStrategy — but
+    /// holds no items, and MenuLookup.Required throws for a menu that is there and lacks the item asked for; so
+    /// every native lookup goes through this, where null keeps its meaning of "nothing is exported".</summary>
+    private NativeMenu? ExportedMenu => _useNativeMenu ? NativeMenu.GetMenu(this) : null;
+
     /// <summary>One definition, two renderers, exactly one of them live. Hiding the classic menu under the
     /// native strategy is required rather than tidy: measured on macOS, a NativeMenu installed while the classic
     /// Menu was still visible drew both — an in-window bar beneath the system bar.</summary>
     private void ApplyMenuStrategy(bool useNativeMenu)
     {
+        _useNativeMenu = useNativeMenu;
         ClassicMenu.IsVisible = !useNativeMenu;
         NativeBar.IsVisible = useNativeMenu;
 
         // Hiding NativeMenuBar is not enough to turn the native path off, because NativeMenuBar is not what
         // exports the menu. A window's NativeMenu goes out through the window's own
         // ITopLevelNativeMenuExporter — NativeMenu.MenuProperty's own change handler calls SetNativeMenu on it —
-        // and NativeMenuBar only *consumes* the same property to draw an in-window fallback. Left attached under
+        // and NativeMenuBar only *consumes* the same property to draw an in-window fallback. Left populated under
         // the classic strategy, the definition would still install AppKit key equivalents and draw a system menu
         // bar on macOS beside the in-window one, and would still be handed to a Linux global-menu registrar
         // (Plasma's Application Menu applet, Unity) while the classic bar drew it in-window too. LIZTERM_MENU
         // exists so that a native gesture swallowing a 3270 key can be turned off; it has to actually turn it
-        // off. Detaching is safe on both backends: each treats a null menu as an empty one.
-        if (!useNativeMenu) NativeMenu.SetMenu(this, null);
+        // off.
+        //
+        // Emptied rather than detached (#60). This used to be NativeMenu.SetMenu(this, null), on the belief that
+        // both backends treat a null menu as an empty one. They do — and that is the problem. Avalonia 12.1.2's
+        // AvaloniaNativeMenuExporter (macOS) initialises its native proxy with the first NativeMenu instance a
+        // window is given, and the proxy's Update throws "The menu being updated does not match" for any other
+        // instance; SetNativeMenu(null) normalises null to a *fresh* NativeMenu, so the detach threw from this
+        // constructor on every macOS launch with LIZTERM_MENU=classic, and the app fell to StartupErrorWindow.
+        // Setting a new empty NativeMenu would throw for the same reason. The one instance the exporter will
+        // accept is the declared one, so it stays attached and loses its items: Update on the same instance
+        // with none removes and disposes every native item, and an NSMenu with no items installs no key
+        // equivalent. Removed from the end one at a time rather than Clear(): AvaloniaList's Clear raises a
+        // Reset that names no OldItems, so NativeMenu never nulls the removed items' Parent.
+        if (!useNativeMenu)
+        {
+            var declared = NativeMenu.GetMenu(this)!;
+            while (declared.Items.Count > 0) declared.Items.RemoveAt(declared.Items.Count - 1);
+        }
 
         // macOS puts About in the application menu, so neither renderer's Help item may also carry one. Both get
         // the rule: LIZTERM_MENU=classic on macOS is reachable, and there the classic bar renders in-window while
-        // the application menu still supplies its own About. Under that strategy the lookup answers null,
-        // because the line above detached the menu — which is the point, not an omission. MenuLookup.Required
+        // the application menu still supplies its own About. Under that strategy ExportedMenu answers null,
+        // because the block above emptied the menu — which is the point, not an omission. MenuLookup.Required
         // answers null for that and only that: a menu that is there and does not declare the item throws.
         //
         // The separator above About goes with it, in both menus. Nothing collapses a trailing divider, so an
@@ -69,7 +94,7 @@ public partial class SessionWindow : Window
         var aboutInHelp = MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS());
         AboutMenuItem.IsVisible = aboutInHelp;
         AboutSeparator.IsVisible = aboutInHelp;
-        if (MenuLookup.Required(NativeMenu.GetMenu(this), "_Help", "_About LizTerm...") is { } nativeAbout)
+        if (MenuLookup.Required(ExportedMenu, "_Help", "_About LizTerm...") is { } nativeAbout)
         {
             nativeAbout.IsVisible = aboutInHelp;
             if (MenuLookup.SeparatorAbove(nativeAbout) is { } separator) separator.IsVisible = aboutInHelp;
@@ -234,9 +259,9 @@ public partial class SessionWindow : Window
     /// four, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
     /// carries one.
     ///
-    /// Under the classic strategy ApplyMenuStrategy has detached the native menu, so the four classic
-    /// InputGesture assignments still run and the four native ones find no item and do nothing — no key
-    /// equivalent is installed for a menu that is not exported.</summary>
+    /// Under the classic strategy ApplyMenuStrategy has emptied the native menu and ExportedMenu answers null,
+    /// so the four classic InputGesture assignments still run and the four native ones find no item and do
+    /// nothing — no key equivalent is installed for a menu with nothing in it.</summary>
     private void ShowPlatformGestures()
     {
         var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
@@ -245,10 +270,10 @@ public partial class SessionWindow : Window
         PasteMenuItem.InputGesture = hotkeys.Paste.FirstOrDefault();
         SelectAllMenuItem.InputGesture = hotkeys.SelectAll.FirstOrDefault();
 
-        // Null under the classic strategy, where the menu is detached and there is nothing to install a key
+        // Null under the classic strategy, where the menu is emptied and there is nothing to install a key
         // equivalent on. Required draws the line the plain lookup could not: null here means only that, and a
         // menu missing one of these four items throws rather than dropping its gesture silently.
-        var menu = NativeMenu.GetMenu(this);
+        var menu = ExportedMenu;
         Gesture(menu, "_Copy", hotkeys.Copy.FirstOrDefault());
         Gesture(menu, "_Paste", hotkeys.Paste.FirstOrDefault());
         Gesture(menu, "Select _All", hotkeys.SelectAll.FirstOrDefault());

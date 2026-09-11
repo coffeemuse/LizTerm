@@ -346,7 +346,8 @@ public class NativeMenuTests
     }
 
     /// <summary>MenuLookup.Required is what stops a renamed header from being swallowed. Null means one thing
-    /// only — the classic strategy detached the menu — and a menu that is there without the item is a typo the
+    /// only — the classic strategy emptied the menu, and the window asks through ExportedMenu, which answers
+    /// null for it — and a menu that is there without the item is a typo the
     /// code-behind would otherwise answer by silently skipping, leaving About duplicated on macOS or the Edit
     /// key equivalents quietly gone. Renaming a header in both menus at once keeps the parity guard green, so
     /// nothing else would notice.</summary>
@@ -385,25 +386,39 @@ public class NativeMenuTests
     /// still leaves AppKit key equivalents installed and a system menu bar drawn beside the classic one on
     /// macOS, and still hands the menu to a Linux global-menu registrar (Plasma's Application Menu applet,
     /// Unity) while the classic bar draws it in-window. LIZTERM_MENU=classic is the escape hatch for exactly the
-    /// case where a native gesture is swallowing a 3270 key, so it has to detach the definition, not just hide a
-    /// control. The attached property is the assertion because it is the input to every exporter; headless
-    /// offers no ITopLevelNativeMenuExporter, so NativeMenu.GetIsNativeMenuExported is false either way here and
-    /// would prove nothing.</summary>
+    /// case where a native gesture is swallowing a 3270 key, so it has to empty the definition, not just hide a
+    /// control.
+    ///
+    /// Emptied, not replaced (#60). Avalonia 12.1.2's macOS exporter initialises its native proxy with the
+    /// first NativeMenu instance the window is given and its Update throws "The menu being updated does not
+    /// match" for any other instance — and SetNativeMenu(null) normalises null to a *fresh* NativeMenu, so the
+    /// old detach (SetMenu(this, null)) threw from the window's constructor on every macOS launch with
+    /// LIZTERM_MENU=classic. The one instance the exporter will accept is the declared one, so the classic
+    /// strategy keeps it attached and removes its items: Update on the same instance with no items removes and
+    /// disposes every native item, leaving no key equivalent installed. The attached property is the assertion
+    /// because it is the input to every exporter; headless offers no ITopLevelNativeMenuExporter, so
+    /// NativeMenu.GetIsNativeMenuExported is false either way here and would prove nothing — and nothing
+    /// headless can tell this apart from SetMenu(this, new NativeMenu()), which passes here and throws on
+    /// macOS. The launch with LIZTERM_MENU=classic on a Mac is the other half of this guard.</summary>
     [AvaloniaFact]
-    public void The_classic_strategy_detaches_the_window_native_menu()
+    public void The_classic_strategy_empties_the_window_native_menu_without_replacing_it()
     {
         var (native, _, _, _) = Show(useNativeMenu: true);
-        Assert.NotNull(NativeMenu.GetMenu(native));
+        Assert.NotEmpty(NativeMenu.GetMenu(native)!.Items);
 
         var (classic, _, _, _) = Show(useNativeMenu: false);
-        Assert.Null(NativeMenu.GetMenu(classic));
+        var menu = NativeMenu.GetMenu(classic);
+        Assert.NotNull(menu);
+        Assert.Empty(menu.Items);
     }
 
     /// <summary>The detach must not cost the classic menu its shortcut hints: ShowPlatformGestures sets the
-    /// three classic InputGestures and then looks the three native Edit items up through NativeMenu.GetMenu,
-    /// which is null under this strategy. Every native lookup finding nothing has to be a no-op, not a throw.</summary>
+    /// three classic InputGestures and then looks the three native Edit items up, and under this strategy the
+    /// declared menu is still attached but empty. Every native lookup finding nothing has to be a no-op, not a
+    /// throw — MenuLookup.Required throws for a menu that is there and lacks the item, so the window has to
+    /// know not to ask.</summary>
     [AvaloniaFact]
-    public void The_classic_menu_keeps_its_gestures_when_the_native_menu_is_detached()
+    public void The_classic_menu_keeps_its_gestures_when_the_native_menu_is_emptied()
     {
         var (window, _, _, _) = Show(useNativeMenu: false);
         var hotkeys = window.GetPlatformSettings()!.HotkeyConfiguration;
@@ -650,7 +665,7 @@ public class NativeMenuTests
 
     /// <summary>What none of the tests above cover: every one of them reaches the find bar through
     /// <c>RaiseClicked</c> or by poking the view model directly, never through the control. That matters because
-    /// under the classic menu strategy — the default on Windows and Linux — the native menu is detached and
+    /// under the classic menu strategy — the default on Windows and Linux — the native menu is emptied and
     /// <c>MenuItem.InputGesture</c> is display only (see the decompilation note on
     /// <see cref="The_paste_hotkey_reaches_the_host_exactly_once_via_TerminalScreen_under_headless"/>), so
     /// <c>TerminalScreen.TryHandlePlatformGesture</c> → <c>FindRequested</c> → <c>ShowFind</c> is the *only*

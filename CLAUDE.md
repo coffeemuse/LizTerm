@@ -330,8 +330,8 @@ Environment variables: `LIZTERM_B3270_PATH` (override binary), `LIZTERM_WIRE_LOG
 line in both directions to this file; the fault message points users at Help > Wire Log). The same log can
 be started from Help > Wire Log in a session window; files go to `<config>/logs/wire-<profile>-<timestamp>.log`,
 and Show Wire Logs opens that folder. `LIZTERM_MENU` (`native` or `classic`, overriding `MenuStrategy`'s
-platform default; anything else falls back to the default; `classic` detaches the window's `NativeMenu` as well
-as drawing the in-window one, so nothing is exported and no key equivalent of its own is installed).
+platform default; anything else falls back to the default; `classic` empties the window's `NativeMenu` as well
+as drawing the in-window one, so nothing reaches a system bar and no key equivalent of its own is installed).
 `LIZTERM_TEST_HOST`
 (`host[:port]`, enables `tests/LizTerm.Integration.Tests`, whose five live tests otherwise skip; add
 `LIZTERM_TEST_TLS=1` and `LIZTERM_TEST_VERIFY_CERT=0` for a TLS host with a self-signed certificate);
@@ -675,15 +675,32 @@ the backend tests.
   — and `MenuItem.OnKeyDown`/`MenuBase.OnKeyDown` are both empty bodies; only `MenuItem.HotKey` (via
   `HotKeyManager`) dispatches, so the fallback bar shows a shortcut but never fires it, which closes the
   double-dispatch worry by construction on Windows and Linux — what is still open there is mnemonics and
-  appearance, not dispatch. The classic strategy also calls `NativeMenu.SetMenu(this, null)`: hiding
-  `NativeMenuBar` detaches nothing, because a window's `NativeMenu` is exported by the window's own
-  `ITopLevelNativeMenuExporter` (`NativeMenu.MenuProperty`'s change handler calls `SetNativeMenu` on it) while
-  `NativeMenuBar` only *consumes* the same property to draw the fallback bar. Left attached, `LIZTERM_MENU=classic`
-  on macOS would still install the AppKit key equivalents and draw the system bar beside the in-window one, and
-  on Linux the *default* strategy would still hand the menu to a global-menu registrar (Plasma's Application Menu
-  applet, Unity). Both backends normalise a null menu to an empty one, so the detach is safe;
-  `ShowPlatformGestures` then finds no native Edit item and no-ops there while the classic `InputGesture`
-  assignments still run. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
+  appearance, not dispatch. The classic strategy also **empties** the window's declared `NativeMenu`, removing
+  its items from the end one at a time: hiding `NativeMenuBar` detaches nothing, because a window's `NativeMenu`
+  is exported by the window's own `ITopLevelNativeMenuExporter` (`NativeMenu.MenuProperty`'s change handler
+  calls `SetNativeMenu` on it) while `NativeMenuBar` only *consumes* the same property to draw the fallback bar.
+  Left populated, `LIZTERM_MENU=classic` on macOS would still install the AppKit key equivalents and draw the
+  system bar beside the in-window one, and on Linux the *default* strategy would still hand the menu to a
+  global-menu registrar (Plasma's Application Menu applet, Unity). It used to *detach* instead, with
+  `NativeMenu.SetMenu(this, null)`, on the reasoning that both backends normalise a null menu to an empty one.
+  They do, and that was the bug (#60): Avalonia 12.1.2's macOS `AvaloniaNativeMenuExporter` initialises its
+  native proxy with the first `NativeMenu` instance the window is given, and the proxy's `Update` throws "The
+  menu being updated does not match" for any *other* instance — the fresh empty one null becomes included — so
+  every macOS launch with `LIZTERM_MENU=classic` threw from `SessionWindow`'s constructor and fell to
+  `StartupErrorWindow`. Setting a new empty `NativeMenu` would throw for the same reason. The one instance the
+  exporter accepts is the declared one, so it stays attached and loses its items; `Update` on the same instance
+  with none removes and disposes every native item, and an item-less NSMenu installs no key equivalent. Linux's
+  `DBusMenuExporter` re-lays out on any items change and exported an empty substitute for null anyway, so it
+  sees the same thing either way, and Win32 has no exporter at all. `SessionWindow.ExportedMenu` is the
+  strategy-aware accessor every native lookup goes through: null under classic, since the emptied menu is still
+  there and `MenuLookup.Required` throws for a menu that is present and lacks the item. `ShowPlatformGestures`
+  therefore finds no native Edit item and no-ops there while the classic `InputGesture` assignments still run.
+  Headless cannot tell emptying from replacing — both pass the attached-property test — so the launch with
+  `LIZTERM_MENU=classic` on a Mac is the other half of that guard: a window opens and a bare F1 reaches the host
+  as PF1. Checked 2026-09-10 with the window opening and F1 arriving on the wire as `PF(1)` — but that press was
+  injected through the DevTools MCP, downstream of `NSApplication.sendEvent:`, so a real keyboard press is still
+  the check that no key equivalent survives; the argument that none can is that an item-less NSMenu has nothing
+  to carry one. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
   an argument, as `EngineRequirement.Decide` does, so every combination is testable anywhere. **No menu item
   anywhere outside Edit ever carries a `Gesture`** — the application menu included, since AppKit supplies its
   own. The **View** menu (whose one item is a **Crosshair** submenu holding the four modes, radio-checked —
