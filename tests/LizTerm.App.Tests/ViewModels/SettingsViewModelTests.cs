@@ -1,0 +1,116 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
+using System.ComponentModel;
+using LizTerm.App.ViewModels;
+using LizTerm.Core.Settings;
+
+namespace LizTerm.App.Tests.ViewModels;
+
+public class SettingsViewModelTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "lizterm-tests-" + Guid.NewGuid().ToString("N"));
+    private string FilePath => Path.Combine(_dir, "settings.json");
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_dir)) Directory.Delete(_dir, recursive: true);
+    }
+
+    private static List<string> Changes(INotifyPropertyChanged source)
+    {
+        var names = new List<string>();
+        source.PropertyChanged += (_, e) => names.Add(e.PropertyName!);
+        return names;
+    }
+
+    [Fact]
+    public void An_in_memory_instance_starts_at_every_default_and_raises_changes()
+    {
+        var settings = new SettingsViewModel();
+        var changes = Changes(settings);
+        Assert.Equal(new AppSettings(), settings.Current);
+
+        settings.Crosshair = CrosshairMode.Both;
+        settings.Blink = false;
+
+        Assert.Equal(new AppSettings(CrosshairMode.Both, Blink: false), settings.Current);
+        Assert.Equal(["Crosshair", "Blink"], changes);
+        Assert.Null(settings.LastSaveError);
+    }
+
+    [Fact]
+    public void The_same_value_again_raises_nothing_and_writes_nothing()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.Blink = true;
+        settings.Crosshair = CrosshairMode.None;
+
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+    }
+
+    [Fact]
+    public void A_store_backed_instance_writes_through_and_a_fresh_one_reads_it_back()
+    {
+        _ = new SettingsViewModel(new SettingsStore(FilePath)) { Crosshair = CrosshairMode.Vertical, Blink = false };
+
+        var reloaded = new SettingsViewModel(new SettingsStore(FilePath));
+
+        Assert.Equal(CrosshairMode.Vertical, reloaded.Crosshair);
+        Assert.False(reloaded.Blink);
+    }
+
+    /// <summary>The in-memory change always wins: the UI must show what the user chose even when the disk
+    /// refuses it. The failure is reported twice over — an event for banners that need every failure, a
+    /// property for the window that shows the latest.</summary>
+    [Fact]
+    public void A_failed_save_keeps_the_change_and_reports_it()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        string? reported = null;
+        settings.SaveFailed += (_, message) => reported = message;
+
+        settings.Blink = false;
+
+        Assert.False(settings.Blink);
+        Assert.StartsWith("Could not save settings: ", reported);
+        Assert.Contains(FilePath, reported);
+        Assert.Equal(reported, settings.LastSaveError);
+    }
+
+    [Fact]
+    public void The_next_successful_save_clears_the_error()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        settings.Blink = false;
+        Assert.NotNull(settings.LastSaveError);
+        var changes = Changes(settings);
+
+        File.Delete(FilePath);
+        settings.Crosshair = CrosshairMode.Both;
+
+        Assert.Null(settings.LastSaveError);
+        Assert.Equal(["Crosshair", "LastSaveError"], changes);
+    }
+
+    [Fact]
+    public void A_failed_save_raises_the_error_property_change_after_the_value_change()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.Blink = false;
+
+        Assert.Equal(["Blink", "LastSaveError"], changes);
+    }
+}
