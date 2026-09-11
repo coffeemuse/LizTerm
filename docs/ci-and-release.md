@@ -208,13 +208,13 @@ when any of the four secrets below is missing, and nothing falls back to an ad h
 entitlement described at the end of this section, would not launch.
 
 **Configuration.** `LizTerm.parcel`'s `MacOsSettings` names the team (`TeamId`) and the two credential types,
-`"SigningCredentialsType": "P12Certificate"` and `"NotaryCredentialsType": "AppleAccount"`, and leaves the
-credentials themselves undefined. Parcel reads an automatic environment variable only for a setting the `.parcel`
-file does not define, so the Package step supplies them: `PARCEL_MACOS_SIGNING_P12_CERTIFICATE` (a path — the step
-decodes the P12 into `$RUNNER_TEMP` and deletes it on exit), `PARCEL_MACOS_SIGNING_P12_PASSWORD`,
-`PARCEL_MACOS_NOTARY_APPLE_ID` and `PARCEL_MACOS_NOTARY_APP_PASSWORD`. Parcel offers no App Store Connect API key
-for notarization; besides a local keychain profile, an Apple ID with an app-specific password is its only route. The
-Team ID is written only in `LizTerm.parcel`, and the gate reads it from there.
+`"SigningCredentialsType": "P12Certificate"` and `"NotaryCredentialsType": "AppleAccount"`, and leaves the credentials
+themselves undefined. Parcel reads an automatic environment variable only for a setting the `.parcel` file does not
+define, so the Package step supplies them: `PARCEL_MACOS_SIGNING_P12_CERTIFICATE` (a path — the step decodes the P12
+into `$RUNNER_TEMP` and deletes it on exit), `PARCEL_MACOS_SIGNING_P12_PASSWORD`, `PARCEL_MACOS_NOTARY_APPLE_ID` and
+`PARCEL_MACOS_NOTARY_APP_PASSWORD`. Parcel notarizes with a local keychain profile or an Apple ID and app-specific
+password; it offers no App Store Connect API key. The Team ID is written only in `LizTerm.parcel`, and the gate reads it
+from there.
 
 **Secrets.** Set by the account owner, and reaching only the steps that need them:
 
@@ -257,9 +257,10 @@ it executes nothing, so `osx-x64` is covered on the arm64 runner. Each of its th
 A failure prints team IDs, and only spctl's verdict and source lines: spctl's `origin=` line names the certificate's
 holder, and CI logs are public.
 
-The next step, "The notarization gate can fail", proves each check still bites: an ad hoc copy of the shipped app
-must fail the Team ID and notarization checks, and a copy with its ticket deleted must fail the stapling check, each
-matched on the check's own message rather than on a non-zero exit.
+The next step, "The notarization gate can fail", proves each check still bites: an ad hoc copy of the shipped app must
+fail the Team ID and notarization checks, a copy with its ticket deleted must fail the stapling check, and an ad hoc
+copy of the DMG must fail the Team ID and notarization checks, each matched on the check's own message rather than on a
+non-zero exit.
 
 **Why there is no `Entitlements.plist`.** Until v0.4.1 packages were ad hoc signed: Parcel signed the executable
 with the hardened runtime (`flags=0x10002(adhoc,runtime)`) and the bundled `libSkiaSharp.dylib`,

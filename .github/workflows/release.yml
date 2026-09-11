@@ -75,8 +75,9 @@ jobs:
   publish-macos:
     needs: [engines, version]
     runs-on: macos-15
-    # 45, from 20: each leg now waits on Apple's notary service for the app and the disk image, and a
-    # submission can queue. One submission took about three minutes when this was measured.
+    # 45, from 20: each leg now waits on Apple's notary service for one submission (Parcel submits the disk
+    # image, and its ticket covers the app inside), and a submission can queue. One took about three minutes
+    # when this was measured.
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -156,7 +157,11 @@ jobs:
           set -euo pipefail
           export PARCEL_MACOS_SIGNING_P12_CERTIFICATE="$RUNNER_TEMP/signing.p12"
           trap 'rm -f "$PARCEL_MACOS_SIGNING_P12_CERTIFICATE"' EXIT
-          printf '%s' "$MACOS_SIGNING_P12_BASE64" | base64 --decode > "$PARCEL_MACOS_SIGNING_P12_CERTIFICATE"
+          # Owner-only from the moment it exists -- the umask stays inside the subshell, because Parcel's outputs,
+          # and the files inside the shipped ZIP and DMG, must keep ordinary permissions -- and once decoded the
+          # base64 copy leaves the environment, so nothing Parcel starts inherits the key material.
+          ( umask 077; printf '%s' "$MACOS_SIGNING_P12_BASE64" | base64 --decode > "$PARCEL_MACOS_SIGNING_P12_CERTIFICATE" )
+          unset MACOS_SIGNING_P12_BASE64
           mkdir -p packages/${{ matrix.rid }}
           parcel pack ./LizTerm.parcel --no-build \
             -r ${{ matrix.rid }} -p zip -p dmg -o packages/${{ matrix.rid }}
@@ -245,15 +250,16 @@ jobs:
           native/build/verify-notarized.sh "$dmg" "$team" || status=1
           exit "$status"
 
-      # A guard that cannot fail is not a guard. Two copies of the shipped app, each broken one way, must each
-      # be rejected BY THE CHECK THAT EXISTS FOR IT -- matched on that check's own message, because the script
-      # also exits non-zero when spctl cannot reach Apple, and that must not pass as proof. An ad hoc copy must
+      # A guard that cannot fail is not a guard. Broken copies of what this job ships must each be rejected BY
+      # THE CHECK THAT EXISTS FOR IT -- matched on that check's own message, because the script also exits
+      # non-zero when spctl cannot reach Apple, and that must not pass as proof. An ad hoc copy of the app must
       # fail the Team ID and notarization checks; an unstapled copy (Contents/CodeResources, the ticket, sits
-      # outside the code seal, so deleting it leaves the signature valid) must fail the stapling check.
-      # Nothing else is asserted about the unstapled copy: spctl looks its ticket up online, so its verdict
-      # there moves with the network. The signed-but-unnotarized case cannot be built here without handing the
-      # signing key to this step too; verify-notarized.sh's own comment records why it matches the exact
-      # source= line rather than "accepted".
+      # outside the code seal, so deleting it leaves the signature valid) must fail the stapling check; and an
+      # ad hoc copy of the DMG must fail the Team ID and notarization checks, which is the only proof in CI that
+      # the gate's disk-image branch can reject. Nothing else is asserted about the unstapled copy: spctl looks
+      # its ticket up online, so its verdict there moves with the network. The signed-but-unnotarized case
+      # cannot be built here without handing the signing key to this step too; verify-notarized.sh's own
+      # comment records why it matches the exact source= line rather than "accepted".
       - name: The notarization gate can fail
         run: |
           set -euo pipefail
@@ -266,6 +272,11 @@ jobs:
           # No -f: the step above has just proved the shipped app is stapled, so a missing ticket here means
           # the proof is no longer testing what it claims to.
           rm /tmp/gate-proof/unstapled/LizTerm.app/Contents/CodeResources
+          dmg=$(find packages/${{ matrix.rid }} -name '*.dmg')
+          [ "$(printf '%s' "$dmg" | grep -c . || true)" -eq 1 ] \
+            || { echo "expected one .dmg, found: '$dmg'" >&2; exit 1; }
+          cp "$dmg" /tmp/gate-proof/adhoc.dmg
+          codesign --force --sign - /tmp/gate-proof/adhoc.dmg
 
           # Capture and match; do not pipe. grep -q exits on its first match and SIGPIPEs the writer, which
           # under pipefail becomes 141 -- the trap engines.yml's gate proofs record.
@@ -287,6 +298,8 @@ jobs:
           reject "Team ID check"      /tmp/gate-proof/adhoc/LizTerm.app     "Team ID check:"
           reject "notarization check" /tmp/gate-proof/adhoc/LizTerm.app     "notarization check:"
           reject "stapling check"     /tmp/gate-proof/unstapled/LizTerm.app "stapling check:"
+          reject "Team ID check"      /tmp/gate-proof/adhoc.dmg             "Team ID check:"
+          reject "notarization check" /tmp/gate-proof/adhoc.dmg             "notarization check:"
 
       # R7: three platforms produce identically-named ZIPs, and a Release has one flat asset namespace.
       - name: Rename for the release namespace

@@ -268,6 +268,9 @@ after the ZIP rebuild switched to `--norsrc`.
   TeamIdentifier, which `rcodesign` does set.
 - **The gate prints less (§3.5).** On failure it prints team IDs, and only spctl's verdict and `source=` lines:
   spctl's `origin=` line names the certificate's holder, and CI logs are public.
+- **The proof also covers the DMG (§3.6).** An ad hoc copy of the shipped DMG must fail the Team ID and notarization
+  checks too: the gate's disk-image branch was rewritten after the first rehearsal, and §3.6's copies of the app
+  cannot reach it.
 - **The ZIP is rebuilt with `ditto -c -k --norsrc --keepParent`, not `--sequesterRsrc` (§3.4).** `--sequesterRsrc`
   can add `__MACOSX` entries of the runner's metadata to the public ZIP; Parcel's own ZIP has none, and nothing a
   signed bundle needs lives in an extended attribute.

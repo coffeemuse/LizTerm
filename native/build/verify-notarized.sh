@@ -28,8 +28,13 @@
 # a package is wrong -- and so release.yml's "The notarization gate can fail" step can require each check to
 # fire by its own message. Exit 1 means a check failed; exit 2 means the arguments were wrong.
 set -uo pipefail
-TARGET=${1:?usage: verify-notarized.sh <app-or-dmg> <team-id>}
-TEAM=${2:?usage: verify-notarized.sh <app-or-dmg> <team-id>}
+if [ "$#" -ne 2 ]; then
+  echo "usage: verify-notarized.sh <app-or-dmg> <team-id>" >&2
+  exit 2
+fi
+# A bundle path typed with a trailing slash is still the bundle.
+TARGET=${1%/}
+TEAM=$2
 
 case "$TARGET" in
   *.app) KIND=app ;;
@@ -87,7 +92,10 @@ fi
 
 # 2. Stapled
 if ! stapled=$(xcrun stapler validate "$TARGET" 2>&1); then
-  fail "stapling check: xcrun stapler validate rejects $TARGET: $(printf '%s\n' "$stapled" | tail -n 1)"
+  # stapler's last line can be its "Processing: <path>" banner rather than the reason (an ad hoc copy of a
+  # stapled app prints nothing else), so the banner is skipped.
+  reason=$(printf '%s\n' "$stapled" | grep -v '^Processing:' | tail -n 1)
+  fail "stapling check: xcrun stapler validate rejects $TARGET: ${reason:-no reason given}"
 fi
 
 # 3. Notarized
