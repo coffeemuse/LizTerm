@@ -249,5 +249,28 @@ Moving b3270 to `Contents/Helpers` or anywhere else: §2.2 shows notarization do
 
 ## 6. As built
 
-Nothing yet. Implementation records here what the rehearsal found for §3.4, and every place this text turned out
-to be wrong.
+**§3.4 outcome.** Outcome (b), and the DMG as well. Rehearsal run 34614456892 failed on both RIDs: the app from the
+ZIP failed only the stapling check, with spctl already reporting it notarized, and the DMG failed the stapling and
+Team ID checks while spctl accepted it as notarized. Apple's notary log for each submission shows Parcel submits only
+the DMG, and its ticket covers the DMG and every file inside it, the app included. Run 34616272784, with the step
+"The ZIP's app and the disk image are stapled", passed everything on both RIDs, and run 34617469436 passed again
+after the ZIP rebuild switched to `--norsrc`.
+
+**Deviations from this text.**
+
+- **Parcel does not staple what it notarizes (§2.4, §3.4).** Parcel notarizes only the DMG and logs "Stapling
+  notarization ticket to DMG file", but the DMG it leaves in the output folder carries no stapled ticket, and neither
+  does the app inside the ZIP. The step "The ZIP's app and the disk image are stapled" staples both with Apple's
+  `stapler`, using the tickets Apple already issued, and first requires exactly one ZIP and one DMG.
+- **A disk image's team comes from its certificate (§3.5).** Parcel signs with `rcodesign`, which leaves a disk
+  image's TeamIdentifier unset although it signs the DMG with the team's certificate. `verify-notarized.sh` reads a
+  `.dmg`'s team from the leaf certificate its signature names instead. A Mach-O file's team still comes from its
+  TeamIdentifier, which `rcodesign` does set.
+- **The gate prints less (§3.5).** On failure it prints team IDs, and only spctl's verdict and `source=` lines:
+  spctl's `origin=` line names the certificate's holder, and CI logs are public.
+- **The ZIP is rebuilt with `ditto -c -k --norsrc --keepParent`, not `--sequesterRsrc` (§3.4).** `--sequesterRsrc`
+  can add `__MACOSX` entries of the runner's metadata to the public ZIP; Parcel's own ZIP has none, and nothing a
+  signed bundle needs lives in an extended attribute.
+- **Four comments in `release.yml` changed, not three (§3.7):** the comment above "The shipped archive carries the
+  right engine" also described ad hoc signing as current.
+- **The rehearsal of §4 step 3 took three runs, not one.**
