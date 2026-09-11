@@ -36,21 +36,35 @@ triggered only by `workflow_call` and never on its own, whose jobs both `platfor
 as their one job, always named `engines` — so there is exactly one definition anywhere of "an engine proven to
 start", and a job inside a called reusable workflow renders as a GitHub check named `<calling job>/<called job>
 (<matrix values>)`, `engines /` first, for every job below (the branch-protection paragraph past the end of this
-one records the exact strings); and `platforms.yml` itself (pushes to `main`, dispatch, and PRs touching the
-workflow, `engines.yml`, `native/**`, `src/**`, `tests/**`, `global.json`, or the `Directory.*.props` files).
-Inside `engines.yml`: `engine-macos` is a two-leg matrix, `osx-arm64` and `osx-x64`, both on the same arm64
+one records the exact strings); and `platforms.yml` itself (dispatch; PRs touching the workflow, `engines.yml`,
+`native/**`, `src/**`, `tests/**`, `global.json`, or the `Directory.*.props` files; and pushes to `main` only when
+the workflow, `engines.yml`, or `native/**` changed — the cache paragraph below says why that filter is narrower
+than the PR one). The repository is private, so Actions minutes are billed: macOS at ten times Linux, Windows at
+twice, and every job rounded up to a whole minute, which is why the shape of `engines.yml` is what it is — a warm
+Platforms run was measured at about 55 billed minutes, 40 of them the two macOS jobs it used to have, and the
+2026-09-10 trim (one macOS job, the push-to-main filter, a tighter macOS timeout) took that to about 35.
+Inside `engines.yml`: `engine-macos` is **one job** that builds both `osx-arm64` and `osx-x64` on one arm64
 `macos-15` runner — `osx-x64` cross-builds, because `macos-13` is retired and `macos-15-intel` is the last
-x86_64 image GitHub will offer, ending August 2027, and a native leg would inherit that expiry as its own. Only
-the `osx-x64` leg installs Rosetta first (idempotent, a no-op if the image already has it): `verify-macos.sh`'s
-TLS arm executes the finished x86_64 binary to read its banner, so without Rosetta on this arm64 runner the
-*build itself* cannot finish gating, not only the suite (ruling R11). Each leg runs `build-macos.sh <rid>`,
-gates it with `verify-macos.sh` — which now also asserts machine type, the arm that catches a `--host`-only
-cross build whose `configure` sanity check can silently fall back to cross defaults instead of running the
-binary it cannot execute — and only then uploads it as `b3270-osx-arm64` or `b3270-osx-x64`, so a binary that
-links but cannot be spawned is never published; only `osx-arm64` runs the suite with `LIZTERM_REQUIRE_ENGINE=1`,
-since this runner cannot start the `osx-x64` binary itself — the architecture assertion is what proves that one
-instead, the same trade the release pipeline makes for `osx-x64`, `win-arm64` and `linux-arm64` (see the release
-paragraph below). `engine-linux` does the same on a two-leg matrix, `ubuntu-24.04` and `ubuntu-24.04-arm` — pinned
+x86_64 image GitHub will offer, ending August 2027, and a native leg would inherit that expiry as its own. It
+was a two-leg matrix until 2026-09-10; both legs already ran on this same runner, each 60–90 s warm and so each
+billed as two macOS minutes, and the `osx-x64` leg spent 41 of its 66 s on a `setup-dotnet` and solution build
+that proved nothing the other leg's did not (same OS, SDK and tree, and a RID-less build does not even copy the
+x64 engine). One job restores both engine caches, installs Rosetta first (idempotent, a no-op if the image
+already has it): `verify-macos.sh`'s TLS arm executes the finished x86_64 binary to read its banner, so without
+Rosetta on this arm64 runner the *build itself* cannot finish gating, not only the suite (ruling R11). It then
+runs `build-macos.sh <rid>` for whichever engine missed its cache — sequentially, since both fetch into the one
+source-tarball directory — gates each with `verify-macos.sh` — which now also asserts machine type, the arm that
+catches a `--host`-only cross build whose `configure` sanity check can silently fall back to cross defaults
+instead of running the binary it cannot execute — builds and tests the solution once with
+`LIZTERM_REQUIRE_ENGINE=1` (the host RID is `osx-arm64`, so that is the engine the suite spawns; this runner
+cannot start the `osx-x64` binary itself, and the architecture assertion is what proves that one instead, the
+same trade the release pipeline makes for `osx-x64`, `win-arm64` and `linux-arm64` — see the release paragraph
+below), and only then uploads `b3270-osx-arm64` and `b3270-osx-x64`, so a binary that links but cannot be spawned
+is never published. What the merge gave up: a cold run builds the two engines one after the other, and one
+engine's failure now costs the other's upload too, where `fail-fast: false` used to keep them apart. Its
+`timeout-minutes` is 20, from the worst cold legs seen while they were separate jobs (225 s and 311 s, each
+including the ~45 s of .NET work now done once), about 8 minutes sequential, so 20 is ~2.5x that; at ten billed
+minutes per wall minute a wedged macOS job is exactly where a generous timeout costs the most. `engine-linux` does the same on a two-leg matrix, `ubuntu-24.04` and `ubuntu-24.04-arm` — pinned
 rather than `ubuntu-latest` so the legs differ only in architecture — uploading `b3270-linux-x64` and
 `b3270-linux-arm64`, with `fail-fast: false`, because one
 architecture failing is information about that architecture and cancelling the other leg throws it away; `engine-windows`
@@ -61,8 +75,8 @@ imports — the one half of the gate a Linux runner can check about a binary it 
 `Windows Schannel` (the half of the gate that needed a real Windows machine), runs the suite with
 `LIZTERM_REQUIRE_ENGINE=1`, and republishes the same bytes as `b3270-win-x64` — two names for one binary, so an
 `-unverified` download can never be mistaken for one a Windows machine has actually started, matching by a second hop
-the same publish-only-after-a-spawn rule `engine-macos` and `engine-linux` each satisfy in one job. `engine-macos`'s
-`osx-arm64` leg, `test-windows` and `engine-linux`'s arm64 leg run the whole solution, which is why
+the same publish-only-after-a-spawn rule `engine-macos` and `engine-linux` each satisfy in one job. `engine-macos`,
+`test-windows` and `engine-linux`'s arm64 leg run the whole solution, which is why
 `platforms.yml`'s path filter covers all of `src/` and `tests/` rather than the native build alone. `engine-linux`'s **x64** leg is the
 exception: `ci.yml`'s `test` already runs that same solution, in the same configuration, on the same OS and
 architecture, so this leg runs only `tests/LizTerm.Integration.Tests` — the engine smoke test is the one claim it adds.
@@ -71,13 +85,23 @@ one of those in the check name and a new one would rewrite the two `engine-linux
 `test-results-<os>`: `.trx`, plus `*.dmp` (a blame-hang kill writes a hang dump, not a sequence file) and any
 `*Sequence*.xml`. `timeout-minutes` and `cancel-in-progress` both *cancel*, so those uploads are
 `if: ${{ failure() || cancelled() }}` — plain `failure()` would drop the evidence on exactly those runs. `engine-macos`
-caches the built engine per leg (`native/out/<rid>`, keyed on the RID rather than `runner.os`/`runner.arch` since
-both legs now share one arm64 runner and would otherwise collide on one entry, each able to restore the other's
-engine) as well as one source-tarball entry shared by both legs, and dumps
+caches each built engine on its own (`native/out/<rid>`, keyed on the RID, since one job restores both and each
+must be able to hit or miss independently) as well as one source-tarball entry shared by both, and dumps
 `native/build-tmp/*/{openssl,configure,make}.log` — `openssl.log` joins the dump because macOS now builds its
 own OpenSSL too, the same as Linux, rather than staging it from Homebrew.
 `engine-linux` caches the same two things per leg (`native/out/<rid>`; one shared `native/cache` entry
 for both legs, since source tarballs are architecture-independent) and dumps `{openssl,expat,configure,make}.log`.
+Those caches are what `platforms.yml`'s push-to-`main` trigger exists for, and why it is path-filtered to
+`native/**` and the two workflows rather than firing on every merge: `actions/cache` scopes an entry to the branch
+that saved it plus the default branch, so a PR run restores what `main` saved but `main` never restores what a PR
+saved, and the run on `main` is what turns a PR's cold engine build into the warm cache every later PR hits. That
+is needed only when the cache key inputs changed; on every other merge the PR run had already exercised the same
+tree on every platform (`pull_request` runs against the merge with `main`), so the second run on `main` was ~55
+billed minutes per merge for a result already in hand. `ci.yml`'s `test` still runs on every push to `main`, and
+`release.yml` calls `engines.yml` itself, so a tag is gated on every platform regardless. The one thing to know: an
+entry unused for seven days is evicted, so after an idle stretch the first PR builds cold in its own scope and
+`main` stays cold until a `native/` change lands or someone dispatches `platforms.yml` on `main` by hand — the
+cheap way to re-warm it.
 Both log dumps are `failure() || cancelled()` for the reason the test-results uploads are: a build wedged past
 `timeout-minutes` is *cancelled*, and those logs never leave `native/build-tmp`, so plain `failure()` would lose them
 on exactly the run that needs them. Each engine cache key hashes only the scripts that feed **that** platform —
@@ -118,8 +142,7 @@ spell the check exactly as GitHub renders it — the calling job's name, then th
 waits forever. Observed verbatim on run 34299183015:
 
 ```
-engines / engine-macos (osx-arm64, arm64)
-engines / engine-macos (osx-x64, x86_64)
+engines / engine-macos
 engines / engine-linux (ubuntu-24.04, linux-x64)
 engines / engine-linux (ubuntu-24.04-arm, linux-arm64)
 engines / engine-windows
@@ -145,7 +168,7 @@ format error`, not a packaging failure), so `linux-arm64` is packaged sequential
 same `ubuntu-24.04` runner in one job — sequential because `LizTerm.App.csproj` declares no
 `<RuntimeIdentifiers>`, so each single-RID restore overwrites `project.assets.json`'s target and packing both
 after publishing both would fail the first with NETSDK1047; and `osx-x64` and `win-arm64` are cross-packaged the
-same way `engine-macos`'s `osx-x64` leg is cross-built, on a runner that cannot execute the binary it just
+same way `engine-macos`'s `osx-x64` engine is cross-built, on a runner that cannot execute the binary it just
 produced. Packaging itself always runs on a native runner for its target OS — macOS on `macos-15`, Linux on
 `ubuntu-24.04`, Windows on `windows-latest` — even for those three RIDs, since Parcel's installer formats
 (`.dmg`, `.deb`/`.rpm`, `.nsis`) are that OS's own native tooling regardless of which CPU architecture the
