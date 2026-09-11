@@ -39,11 +39,12 @@ start", and a job inside a called reusable workflow renders as a GitHub check na
 one records the exact strings); and `platforms.yml` itself (dispatch; PRs touching the workflow, `engines.yml`,
 `native/**`, `src/**`, `tests/**`, `global.json`, or the `Directory.*.props` files; and pushes to `main` only when
 the workflow, `engines.yml`, or `native/**` changed — the cache paragraph below says why that filter is narrower
-than the PR one). The repository is private, so Actions minutes are billed: macOS at ten times Linux, Windows at
-twice, and every job rounded up to a whole minute, which is why the shape of `engines.yml` is what it is — a warm
-Platforms run was measured at about 55 billed minutes, 40 of them the two macOS jobs it used to have, and the
-2026-09-10 trim (one macOS job, the push-to-main filter, a tighter macOS timeout) took that to 23 on its first
-warm run (34553801730): the one macOS job finished in 55 s, so it bills as a single macOS minute.
+than the PR one). The shape of `engines.yml` was set while the repository was still private and Actions minutes
+were billed — macOS at ten times Linux, Windows at twice, every job rounded up to a whole minute — and it holds
+regardless of visibility (the repository went public on 2026-09-11, which makes standard-runner minutes free, not
+wasteful): a warm Platforms run was measured at about 55 billed minutes, 40 of them the two macOS jobs it used to
+have, and the 2026-09-10 trim (one macOS job, the push-to-main filter, a tighter macOS timeout) took that to 23 on
+its first warm run (34553801730): the one macOS job finished in 55 s, so it bills as a single macOS minute.
 Inside `engines.yml`: `engine-macos` is **one job** that builds both `osx-arm64` and `osx-x64` on one arm64
 `macos-15` runner — `osx-x64` cross-builds, because `macos-13` is retired and `macos-15-intel` is the last
 x86_64 image GitHub will offer, ending August 2027, and a native leg would inherit that expiry as its own. It
