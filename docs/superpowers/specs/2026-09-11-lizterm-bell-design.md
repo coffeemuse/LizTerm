@@ -322,3 +322,13 @@ Each fact in its home:
 
 The work tracks as #47 and closes it. The WAV option becomes a comment on #19. The version stays 0.4.1 in the
 PR; the bump happens at release time.
+
+## 10. As built (2026-09-11)
+
+Built as specified; the plan is `docs/superpowers/plans/2026-09-11-lizterm-bell.md`. Two details decided while
+planning:
+
+- **`BellThrottle` measures from the last admitted bell**, not the last attempt, so a host ringing every 100 ms
+  still gets one bell through every 500 ms. A throttle that restarted on every refusal would silence it entirely.
+- **`PreferencesWindow` gained an internal constructor taking the platform rule's answer**, the shape
+  `SessionWindow(bool useNativeMenu)` already has, so the Linux form of the window is tested on macOS.

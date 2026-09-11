@@ -47,6 +47,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `ICertificatePrompt`, `IFolderOpener`.
   The process's `SettingsViewModel` is injected the same way, last, and defaults to an in-memory one, so no
   view-model test touches the settings file; its `SaveFailed` lands in `ErrorMessage`.
+  `IBellRinger` (`Bell/`; `SystemBellRinger` in the app, `FakeBellRinger` in tests) is injected after it, and is
+  null when nothing should sound.
 - Rejected actions (`EmulatorActionException`) are deliberately swallowed, because b3270 already explains them
   through the keyboard lock. Only unexpected and backend-unavailable errors set `ErrorMessage`. `SessionWindow`
   refocuses the screen after the error bar's Dismiss.
@@ -109,6 +111,15 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   dismissed banner).
 - `TerminalScreen.BlinkEnabled` (bound to `Settings.Blink`) stops the blink timer and clears the hidden phase;
   the snapshot still says what the host asked for.
+- **The bell.** `IEmulatorSession.BellRang` is marshalled like the other events, then `SessionViewModel.OnBell`
+  runs: disposed check, one `BellThrottle` (`BellInterval`, 500 ms, one gate for both outputs, refused bells are
+  dropped not queued), then `Settings.VisualBell` raises the view model's own `BellRang` (the window calls
+  `TerminalScreen.Flash()`, a 120 ms `Palette.BellFlash` overlay on the control's one-shot timer) and
+  `Settings.BellSound` other than `None` calls the ringer. "None means silence" is the view model's rule; the
+  ringer only knows how to make sounds. `SystemBellRinger` is the App's only P/Invoke (`NSBeep`, `MessageBeep`)
+  and does nothing on Linux; `BellSupport.SystemAlertAvailable` is the pure platform rule that disables the
+  Preferences radio there. The bell's sound radios are one-way check marks plus Click handlers over
+  `BellSoundConverter`, the Crosshair shape.
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.

@@ -35,7 +35,8 @@ in `src/LizTerm.Core/CLAUDE.md`; how the engine binary is built and located is i
 - A background thread named `b3270-reader` reads stdout line by line and runs each line through
   `IndicationParser.TryParse`, which never throws: malformed lines are skipped, and unknown message types become
   `UnknownIndication`. `screen-mode`, `erase` and `screen` mutate the buffer and publish a snapshot; `oia` updates
-  `KeyboardStatus`; `connection` and `tls` update state; `popup` and `ui-error` surface as `HostMessage`.
+  `KeyboardStatus`; `connection` and `tls` update state; `popup` and `ui-error` surface as `HostMessage`; `bell`
+  raises `BellRang`, which carries nothing.
 - Rows and columns arrive one-based and are converted to zero-based only in `ApplyScreen`. b3270's `MoveCursor`
   action is already zero-origin, so `MoveCursorAsync` passes coordinates through unchanged.
 - Outbound, `RunOperation.Serialize(tag, actions)` writes a `{"run":{"r-tag":..,"actions":[..]}}` line under a write

@@ -70,6 +70,9 @@ cancels an attempt that is still in progress.
 **View > Crosshair** draws a horizontal line, a vertical line, or both through the cursor, for lining up columns.
 The choice is remembered, and applies to every session window; it is also in Preferences.
 
+When the host rings the terminal bell, the screen flashes briefly. A sound can be turned on in Preferences; by
+default the bell is silent. A host that rings repeatedly is limited to two bells a second.
+
 ## Keyboard
 
 The default layout follows Vista TN3270, cross-checked against wc3270. It cannot be changed yet.
@@ -203,6 +206,9 @@ window's **Edit** menu on Windows and Linux. Changes apply as you make them, to 
 
 - **Crosshair** — the same choice as View > Crosshair.
 - **Blink** — whether text the host marks as blinking actually blinks. Off draws it steady.
+- **Bell** — whether the screen flashes when the host rings the bell (on by default), and what sound plays: none, or
+  the system alert sound, at the volume your system uses for alerts. The system alert sound is not available on
+  Linux.
 
 ## Where LizTerm keeps its files
 
