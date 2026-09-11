@@ -4,7 +4,7 @@
 
 using System.Globalization;
 using Avalonia.Data.Converters;
-using LizTerm.App.Rendering;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.ViewModels;
 

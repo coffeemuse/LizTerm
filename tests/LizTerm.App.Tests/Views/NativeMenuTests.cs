@@ -12,12 +12,12 @@ using Avalonia.Input.Platform;
 using Avalonia.VisualTree;
 using LizTerm.App.Controls;
 using LizTerm.App.Menus;
-using LizTerm.App.Rendering;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.Views;
 

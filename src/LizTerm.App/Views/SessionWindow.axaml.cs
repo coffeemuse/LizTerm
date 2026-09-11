@@ -8,8 +8,8 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
-using LizTerm.App.Rendering;
 using LizTerm.App.ViewModels;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Views;
 

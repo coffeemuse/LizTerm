@@ -8,12 +8,12 @@ using LizTerm.App.Capture;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
-using LizTerm.App.Rendering;
 using LizTerm.App.Status;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Security;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.ViewModels;
 

@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Globalization;
-using LizTerm.App.Rendering;
 using LizTerm.App.ViewModels;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.ViewModels;
 

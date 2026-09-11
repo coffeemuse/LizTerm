@@ -6,8 +6,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using LizTerm.App.Controls;
-using LizTerm.App.Rendering;
 using LizTerm.Core.Screen;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.Controls;
 

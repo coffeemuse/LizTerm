@@ -15,6 +15,7 @@ using LizTerm.App.Mouse;
 using LizTerm.App.Rendering;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Controls;
 
