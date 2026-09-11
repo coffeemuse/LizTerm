@@ -12,14 +12,17 @@
 #
 # 1. Team ID. Every Mach-O file in the bundle carries the team's identifier. codesign --verify --deep --strict
 #    passes a bundle with an ad hoc sibling library, and an ad hoc sibling is exactly what once stopped every
-#    packaged build from launching.
+#    packaged build from launching. A disk image is checked by the certificate its signature names instead:
+#    Parcel's signer leaves a disk image's TeamIdentifier unset (measured on the v0.4.1 rehearsal), so for a
+#    .dmg the team is the one in parentheses at the end of the signing certificate's name.
 # 2. Stapled. xcrun stapler validate. Without a stapled ticket a first launch needs Apple's servers, and a user
 #    who is offline is refused. spctl cannot see this: it looks the ticket up online, and reports
 #    source=Notarized Developer ID for a bundle whose ticket has been deleted.
 # 3. Notarized. spctl must report "accepted" AND source=Notarized Developer ID. A file with no quarantine flag
 #    -- which is every file on a CI runner -- is "accepted" with source=Developer ID when it is signed but was
 #    never notarized, so a check for "accepted" alone cannot fail on the likeliest regression: Parcel skipping
-#    notarization because a credential is missing or misnamed.
+#    notarization because a credential is missing or misnamed. A failure prints only spctl's verdict and
+#    source lines: its origin= line names the certificate's holder, and CI logs are public.
 #
 # Every check runs and every failure is reported, rather than stopping at the first, so one run shows each way
 # a package is wrong -- and so release.yml's "The notarization gate can fail" step can require each check to
@@ -71,9 +74,14 @@ if [ "$KIND" = app ]; then
     fail "Team ID check: no Mach-O file under $TARGET"
   fi
 else
-  team=$(team_of "$TARGET")
-  if [ "$team" != "$TEAM" ]; then
-    fail "Team ID check: $TARGET is signed by team '${team:-none}', not $TEAM"
+  # The leaf certificate is the first Authority line, and its name ends in "(<team id>)". Only the team ID is
+  # ever printed: the rest of the name identifies the certificate's holder.
+  details=$(codesign -dvv "$TARGET" 2>&1)
+  leaf=$(printf '%s\n' "$details" | sed -n 's/^Authority=//p' | sed -n 1p)
+  if [ -z "$leaf" ]; then
+    fail "Team ID check: $TARGET carries no signing certificate (ad hoc or unsigned)"
+  elif [ "$leaf" = "${leaf%"($TEAM)"}" ]; then
+    fail "Team ID check: $TARGET is signed by a certificate that does not name team $TEAM"
   fi
 fi
 
@@ -90,7 +98,10 @@ else
 fi
 case "$assessment" in
   *": accepted"*"source=Notarized Developer ID"*) ;;
-  *) fail "notarization check: spctl does not report an accepted, notarized $KIND: $(printf '%s' "$assessment" | tr '\n' ' ')" ;;
+  *)
+    verdict=$(printf '%s\n' "$assessment" | grep -E ': (accepted|rejected)|^source=' | tr '\n' ' ')
+    fail "notarization check: spctl does not report an accepted, notarized $KIND: ${verdict:-no verdict}"
+    ;;
 esac
 
 if [ "$FAILED" -ne 0 ]; then

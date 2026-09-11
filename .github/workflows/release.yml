@@ -161,6 +161,32 @@ jobs:
           parcel pack ./LizTerm.parcel --no-build \
             -r ${{ matrix.rid }} -p zip -p dmg -o packages/${{ matrix.rid }}
 
+      # Parcel notarizes the DMG -- Apple's ticket covers the DMG and every file inside it, the app included -- but
+      # leaves both the DMG and the app inside the ZIP unstapled (measured on the v0.4.1 rehearsal;
+      # docs/ci-and-release.md, "macOS signing and notarization"). A ticket is keyed by code-directory hash, so
+      # Apple's stapler attaches the existing tickets without a second submission. The ZIP is rebuilt with ditto,
+      # the tool Apple documents for zipping a bundle, before any gate below extracts it, so every gate sees the
+      # ZIP that ships. Exactly one ZIP and one DMG are required first: signing and notarization must not leave a
+      # second one behind for the gates' `find` to pick up, or for the rename step to collide with.
+      - name: The ZIP's app and the disk image are stapled
+        run: |
+          set -euo pipefail
+          zip=$(find packages/${{ matrix.rid }} -name '*.zip')
+          dmg=$(find packages/${{ matrix.rid }} -name '*.dmg')
+          [ "$(printf '%s' "$zip" | grep -c . || true)" -eq 1 ] \
+            || { echo "expected one .zip, found: '$zip'" >&2; exit 1; }
+          [ "$(printf '%s' "$dmg" | grep -c . || true)" -eq 1 ] \
+            || { echo "expected one .dmg, found: '$dmg'" >&2; exit 1; }
+          xcrun stapler staple "$dmg"
+          rm -rf /tmp/staple && mkdir -p /tmp/staple
+          ditto -x -k "$zip" /tmp/staple
+          app=$(find /tmp/staple -maxdepth 1 -name '*.app' -type d)
+          [ "$(printf '%s' "$app" | grep -c . || true)" -eq 1 ] \
+            || { echo "expected one .app at the top of the ZIP, found: '$app'" >&2; exit 1; }
+          xcrun stapler staple "$app"
+          rm "$zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
+
       # One step, three claims: the archive round trip preserved the executable bit, the binary still starts,
       # and the .app and ZIP round trip did not invalidate its signature.
       # osx-x64 is skipped because this runner is arm64 and cannot start an x86_64 binary without Rosetta,
