@@ -42,7 +42,8 @@ the workflow, `engines.yml`, or `native/**` changed — the cache paragraph belo
 than the PR one). The repository is private, so Actions minutes are billed: macOS at ten times Linux, Windows at
 twice, and every job rounded up to a whole minute, which is why the shape of `engines.yml` is what it is — a warm
 Platforms run was measured at about 55 billed minutes, 40 of them the two macOS jobs it used to have, and the
-2026-09-10 trim (one macOS job, the push-to-main filter, a tighter macOS timeout) took that to about 35.
+2026-09-10 trim (one macOS job, the push-to-main filter, a tighter macOS timeout) took that to 23 on its first
+warm run (34553801730): the one macOS job finished in 55 s, so it bills as a single macOS minute.
 Inside `engines.yml`: `engine-macos` is **one job** that builds both `osx-arm64` and `osx-x64` on one arm64
 `macos-15` runner — `osx-x64` cross-builds, because `macos-13` is retired and `macos-15-intel` is the last
 x86_64 image GitHub will offer, ending August 2027, and a native leg would inherit that expiry as its own. It
@@ -139,7 +140,8 @@ skipped by the path filter — one dependency, not four, because a job cannot `n
 reusable workflow it calls, only the call itself). A rule naming one of `engines.yml`'s own jobs directly has to
 spell the check exactly as GitHub renders it — the calling job's name, then the called job's, then every
 `matrix.include` property, not just the one that varies meaningfully — or the short form matches nothing and
-waits forever. Observed verbatim on run 34299183015:
+waits forever. Observed verbatim on run 34299183015, and `engines / engine-macos` — the name the single macOS
+job took when the matrix was folded on 2026-09-10 — on run 34553801730:
 
 ```
 engines / engine-macos

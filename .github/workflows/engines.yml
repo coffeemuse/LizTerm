@@ -9,7 +9,8 @@ permissions:
 jobs:
   # One job for both macOS engines rather than a two-leg matrix, and deliberately so: macOS minutes bill at
   # ten times Linux and every job is rounded up to a whole minute, so two warm legs of 60-90 s each cost four
-  # billed macOS minutes (40 Linux-equivalent) where one job of ~75 s costs two. Both legs ran on this same
+  # billed macOS minutes (40 Linux-equivalent); the one job measured 55 s warm on its first run (34553801730),
+  # so it costs one (10). Both legs ran on this same
   # arm64 runner anyway -- osx-x64 is a cross build, because macos-13 is retired and macos-15-intel is the
   # last x86_64 image GitHub will offer, ending August 2027, and a native leg would inherit that date as its
   # own expiry -- so nothing about the machine changes, only how many times it is spun up. The old osx-x64
