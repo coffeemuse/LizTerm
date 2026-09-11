@@ -59,4 +59,12 @@ public class MenuStrategyTests
         Assert.False(MenuStrategy.AboutInHelpMenu(isMacOS: true));
         Assert.True(MenuStrategy.AboutInHelpMenu(isMacOS: false));
     }
+
+    /// <summary>macOS has Preferences in the application menu, with Cmd-comma; Edit carries one everywhere else.</summary>
+    [Fact]
+    public void Preferences_belongs_in_the_edit_menu_everywhere_except_macOS()
+    {
+        Assert.False(MenuStrategy.PreferencesInEditMenu(isMacOS: true));
+        Assert.True(MenuStrategy.PreferencesInEditMenu(isMacOS: false));
+    }
 }

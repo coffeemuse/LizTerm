@@ -99,6 +99,17 @@ public partial class SessionWindow : Window
             nativeAbout.IsVisible = aboutInHelp;
             if (MenuLookup.SeparatorAbove(nativeAbout) is { } separator) separator.IsVisible = aboutInHelp;
         }
+
+        // macOS puts Preferences in the application menu, with Cmd-comma, so Edit carries one only elsewhere.
+        // The same shape as About above: both renderers, the separator included.
+        var preferencesInEdit = MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS());
+        PreferencesMenuItem.IsVisible = preferencesInEdit;
+        PreferencesSeparator.IsVisible = preferencesInEdit;
+        if (MenuLookup.Required(ExportedMenu, "_Edit", "P_references...") is { } nativePreferences)
+        {
+            nativePreferences.IsVisible = preferencesInEdit;
+            if (MenuLookup.SeparatorAbove(nativePreferences) is { } separator) separator.IsVisible = preferencesInEdit;
+        }
     }
 
     // MenuItem.Click is EventHandler<RoutedEventArgs> and NativeMenuItem.Click is EventHandler<EventArgs>, so
@@ -112,6 +123,11 @@ public partial class SessionWindow : Window
     private async void OnFileTransferClickNative(object? sender, EventArgs e) => await ShowFileTransferAsync();
 
     private async void OnAboutClickNative(object? sender, EventArgs e) => await ShowAboutAsync();
+
+    private void OnPreferencesClick(object? sender, RoutedEventArgs e) => ShowPreferences();
+    private void OnPreferencesClickNative(object? sender, EventArgs e) => ShowPreferences();
+
+    private static void ShowPreferences() => (Avalonia.Application.Current as App)?.ShowPreferences();
 
     // Deliberately the view model's methods, never the [RelayCommand]s. Each method carries its own guard; the
     // commands keep CommunityToolkit's default of disabling while running, which is fine for a click and wrong

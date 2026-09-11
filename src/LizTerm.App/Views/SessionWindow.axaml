@@ -48,6 +48,9 @@
             <NativeMenuItem Header="Copy Screen as _HTML" Click="OnCopyScreenClickNative" IsEnabled="{Binding CanCaptureScreen}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="_Find..." Click="OnFindClickNative" IsEnabled="{Binding CanFind}" />
+            <!-- Hidden with its separator on macOS, where Preferences lives in the application menu. -->
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="P_references..." Click="OnPreferencesClickNative" />
           </NativeMenu>
         </NativeMenuItem.Menu>
       </NativeMenuItem>
@@ -148,6 +151,9 @@
         <MenuItem Header="Copy Screen as _HTML" Command="{Binding CopyScreenAsHtmlCommand}" />
         <Separator />
         <MenuItem x:Name="FindMenuItem" Header="_Find..." Click="OnFindClick" IsEnabled="{Binding CanFind}" />
+        <!-- Hidden with the item below it on macOS, as AboutSeparator is. -->
+        <Separator x:Name="PreferencesSeparator" />
+        <MenuItem x:Name="PreferencesMenuItem" Header="P_references..." Click="OnPreferencesClick" />
       </MenuItem>
       <MenuItem Header="_View">
         <MenuItem Header="_Crosshair">

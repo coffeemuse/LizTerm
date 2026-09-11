@@ -32,4 +32,8 @@ internal static class MenuStrategy
 
     /// <summary>macOS puts About in the application menu, so the Help item must not also carry one.</summary>
     public static bool AboutInHelpMenu(bool isMacOS) => !isMacOS;
+
+    /// <summary>macOS puts Preferences in the application menu, with Cmd-comma, so the Edit menu carries one
+    /// only elsewhere — the same shape as About in Help.</summary>
+    public static bool PreferencesInEditMenu(bool isMacOS) => !isMacOS;
 }

@@ -337,6 +337,40 @@ public class NativeMenuTests
         Assert.Equal(expected, window.FindControl<Separator>("AboutSeparator")!.IsVisible);
     }
 
+    /// <summary>The same shape as About in Help: on a CI machine this covers the visible-in-Edit branch only,
+    /// and the macOS branch is covered by running the app on the Mac.</summary>
+    [AvaloniaFact]
+    public void Preferences_is_in_the_edit_menu_on_this_platform_exactly_when_the_strategy_says_so()
+    {
+        var (window, _, _, _) = Show();
+        var expected = MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS());
+
+        Assert.Equal(expected, Item(window, "_Edit", "P_references...").IsVisible);
+        Assert.Equal(expected, window.FindControl<MenuItem>("PreferencesMenuItem")!.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void The_separator_above_preferences_is_hidden_with_it()
+    {
+        var (window, _, _, _) = Show();
+        var expected = MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS());
+
+        var separator = MenuLookup.SeparatorAbove(Item(window, "_Edit", "P_references..."));
+        Assert.NotNull(separator);
+        Assert.Equal(expected, separator!.IsVisible);
+        Assert.Equal(expected, window.FindControl<Separator>("PreferencesSeparator")!.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void Preferences_is_the_last_edit_item_in_both_menus()
+    {
+        var (window, _, _, _) = Show();
+
+        Assert.Equal("P_references...", Item(window, "_Edit", "P_references...").Parent!.Items.OfType<NativeMenuItem>().Last().Header);
+        var classicEdit = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>().Single(m => (string)m.Header! == "_Edit");
+        Assert.Equal("P_references...", (string)classicEdit.Items.OfType<MenuItem>().Last().Header!);
+    }
+
     /// <summary>The native Edit items are driven by Click handlers, so they get none of the greying a command's
     /// CanExecute gives the classic ones — and on macOS they are also key equivalents, so an enabled item is an
     /// offer the app cannot honour. They bind the same predicates instead.</summary>
