@@ -139,6 +139,7 @@ public sealed class B3270Session : IEmulatorSession
     public event EventHandler<ConnectionState>? ConnectionChanged;
     public event EventHandler<BackendFault>? Faulted;
     public event EventHandler<string>? HostMessage;
+    public event EventHandler? BellRang;
 
     /// <summary>The engine's command line. Oversize and the keep-alive ride here rather than as runtime Set
     /// actions: it needs no new protocol handling, and it sidesteps the unverified question of whether a runtime
@@ -570,6 +571,9 @@ public sealed class B3270Session : IEmulatorSession
                 break;
             case PopupIndication popup:
                 HostMessage?.Invoke(this, popup.Text);
+                break;
+            case BellIndication:
+                BellRang?.Invoke(this, EventArgs.Empty);
                 break;
         }
     }

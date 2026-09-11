@@ -23,8 +23,10 @@ public class ReplayTests
         var session = new B3270Session(new SessionProfile { Name = "replay", Host = "127.0.0.1" }, () => fake);
         var states = new List<ConnectionState>();
         var screens = 0;
+        var bells = 0;
         session.ConnectionChanged += (_, s) => states.Add(s);
         session.ScreenUpdated += (_, _) => screens++;
+        session.BellRang += (_, _) => bells++;
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         session.Faulted += (_, _) => ended.TrySetResult();
 
@@ -46,6 +48,9 @@ public class ReplayTests
         Assert.Contains(ConnectionState.ConnectedTn3270E, states);
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
         Assert.True(screens > 0);
+        // Line 30 of the fixture is {"bell":{}}: a real host rang it, and this is the end-to-end proof it reaches
+        // the session's subscribers (#47).
+        Assert.Equal(1, bells);
     }
 
     [Fact]

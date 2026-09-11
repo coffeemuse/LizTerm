@@ -44,6 +44,7 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public event EventHandler<ConnectionState>? ConnectionChanged;
     public event EventHandler<BackendFault>? Faulted;
     public event EventHandler<string>? HostMessage;
+    public event EventHandler? BellRang;
 
     public async Task ConnectAsync(ConnectOptions? options = null, CancellationToken cancellationToken = default)
     {
@@ -114,6 +115,7 @@ public sealed class FakeEmulatorSession : IEmulatorSession
     public void RaiseConnection(ConnectionState state, TlsInfo? tls = null) { ConnectionState = state; Tls = tls; ConnectionChanged?.Invoke(this, state); }
     public void RaiseFault(BackendFault fault) => Faulted?.Invoke(this, fault);
     public void RaiseHostMessage(string message) => HostMessage?.Invoke(this, message);
+    public void RaiseBell() => BellRang?.Invoke(this, EventArgs.Empty);
 
     private Task Record(string call)
     {

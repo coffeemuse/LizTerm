@@ -70,4 +70,7 @@ public interface IEmulatorSession : IAsyncDisposable
     event EventHandler<BackendFault>? Faulted;
     /// <summary>Informational or error text from the emulator or host, for display.</summary>
     event EventHandler<string>? HostMessage;
+    /// <summary>The host rang the 3270 alarm. Carries nothing: the bell has no text and no state, which is why it
+    /// is not a HostMessage.</summary>
+    event EventHandler? BellRang;
 }
