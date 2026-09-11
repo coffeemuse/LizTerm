@@ -16,6 +16,7 @@ using LizTerm.App.Views;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Security;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App;
 
@@ -27,6 +28,11 @@ public partial class App : Application
     private SessionWindow? _lastActiveSession;
     private ProfilePickerWindow? _picker;
     private ProfileStore? _store;
+    private SettingsViewModel? _settings;
+
+    /// <summary>The process's one settings object, for every session window and for Preferences. Lazy with ??=
+    /// for the same reason _store is: the headless test lifetime never runs OnFrameworkInitializationCompleted.</summary>
+    internal SettingsViewModel Settings => _settings ??= new SettingsViewModel(new SettingsStore(AppPaths.SettingsFile()));
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -48,6 +54,7 @@ public partial class App : Application
             splash.Activate();
 
             _store = new ProfileStore(AppPaths.ProfilesDirectory());
+            _settings = new SettingsViewModel(new SettingsStore(AppPaths.SettingsFile()));
             string? backendError = null;
             try
             {
@@ -128,7 +135,8 @@ public partial class App : Application
                 {
                     PinnedCertificate = PinMerge.Resolve(edit.Profile, store.Load(edit.Profile.Name), edit.PinCleared),
                 });
-            });
+            },
+            settings: Settings);
         window.DataContext = viewModel;
         _sessions.Add(window);
         _lastActiveSession ??= window;

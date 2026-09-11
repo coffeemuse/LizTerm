@@ -111,7 +111,7 @@ public class NativeMenuTests
         {
             ((INativeMenuItemExporterEventsImplBridge)items[chosen]).RaiseClicked();
 
-            Assert.Equal(modes[chosen], vm.Crosshair);
+            Assert.Equal(modes[chosen], vm.Settings.Crosshair);
             Assert.Equal(
                 Enumerable.Range(0, modes.Length).Select(i => i == chosen),
                 items.Select(i => i.IsChecked));
@@ -123,7 +123,7 @@ public class NativeMenuTests
     {
         var (window, vm, _, _) = Show();
 
-        vm.Crosshair = CrosshairMode.Both;
+        vm.Settings.Crosshair = CrosshairMode.Both;
 
         Assert.Equal(CrosshairMode.Both, window.FindControl<TerminalScreen>("Screen")!.Crosshair);
     }

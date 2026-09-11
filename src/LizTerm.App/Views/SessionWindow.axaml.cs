@@ -250,7 +250,7 @@ public partial class SessionWindow : Window
 
     private void SetCrosshair(CrosshairMode mode)
     {
-        if (ViewModel is { } vm) vm.Crosshair = mode;
+        if (ViewModel is { } vm) vm.Settings.Crosshair = mode;
     }
 
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
