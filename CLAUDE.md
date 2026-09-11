@@ -696,8 +696,11 @@ the backend tests.
   there and `MenuLookup.Required` throws for a menu that is present and lacks the item. `ShowPlatformGestures`
   therefore finds no native Edit item and no-ops there while the classic `InputGesture` assignments still run.
   Headless cannot tell emptying from replacing — both pass the attached-property test — so the launch with
-  `LIZTERM_MENU=classic` on a Mac (a window opens, F1 reaches the host as PF1, verified 2026-09-10) is the
-  other half of that guard. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
+  `LIZTERM_MENU=classic` on a Mac is the other half of that guard: a window opens and a bare F1 reaches the host
+  as PF1. Checked 2026-09-10 with the window opening and F1 arriving on the wire as `PF(1)` — but that press was
+  injected through the DevTools MCP, downstream of `NSApplication.sendEvent:`, so a real keyboard press is still
+  the check that no key equivalent survives; the argument that none can is that an item-less NSMenu has nothing
+  to carry one. `MenuStrategy.Decide` and `AboutInHelpMenu` are pure and take the platform as
   an argument, as `EngineRequirement.Decide` does, so every combination is testable anywhere. **No menu item
   anywhere outside Edit ever carries a `Gesture`** — the application menu included, since AppKit supplies its
   own. The **View** menu (whose one item is a **Crosshair** submenu holding the four modes, radio-checked —
