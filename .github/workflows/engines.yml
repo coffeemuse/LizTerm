@@ -7,57 +7,76 @@ permissions:
   contents: read
 
 jobs:
+  # One job for both macOS engines rather than a two-leg matrix, and deliberately so: macOS minutes bill at
+  # ten times Linux and every job is rounded up to a whole minute, so two warm legs of 60-90 s each cost four
+  # billed macOS minutes (40 Linux-equivalent); the one job measured 55 s warm on its first run (34553801730),
+  # so it costs one (10). Both legs ran on this same
+  # arm64 runner anyway -- osx-x64 is a cross build, because macos-13 is retired and macos-15-intel is the
+  # last x86_64 image GitHub will offer, ending August 2027, and a native leg would inherit that date as its
+  # own expiry -- so nothing about the machine changes, only how many times it is spun up. The old osx-x64
+  # leg also ran its own setup-dotnet and solution build; on the same OS, SDK and tree as the osx-arm64 leg
+  # that was 41 s of its 66 s proving nothing the other leg did not, and it did not even copy the x64 engine,
+  # since a RID-less build keys the copy on the host RID. What the x64 half uniquely proves is its engine's
+  # gate, and that is all it does here.
+  # The price is that a cold run builds the two engines one after the other rather than side by side (the
+  # source tarball cache is one directory both builds fetch into, so they are not run concurrently), and that
+  # one leg's failure now fails the other's upload too, where fail-fast: false used to keep them apart.
   engine-macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Both legs run on the same arm64 runner: osx-x64 is a cross build, because macos-13 is retired and
-          # macos-15-intel is the last x86_64 image GitHub will offer, ending August 2027. A native leg would
-          # inherit that date as its own expiry.
-          - { rid: osx-arm64, arch: arm64 }
-          - { rid: osx-x64,   arch: x86_64 }
     runs-on: macos-15
-    timeout-minutes: 30
+    # 20, from the worst cold legs seen while they were separate jobs: 225 s for osx-arm64 and 311 s for
+    # osx-x64, each including the ~45 s of setup-dotnet and solution build that now happens once. Sequential,
+    # that is about 8 minutes cold; 20 is ~2.5x that. The old 30 was set when each leg was its own job, and
+    # at ten billed minutes per wall minute a wedged job is exactly where a generous timeout costs the most.
+    timeout-minutes: 20
     env:
       LIZTERM_REQUIRE_ENGINE: "1"
     steps:
       - uses: actions/checkout@v7
 
-      # macOS's own key, not the x3270-src- one engine-windows uses: this job now fetches OpenSSL as well as
+      # macOS's own key, not the x3270-src- one engine-windows uses: this job fetches OpenSSL as well as
       # x3270, and that expression hashes the same one script whichever job evaluates it. Sharing it would let
       # engine-windows -- which fetches only x3270 -- save a one-tarball cache under a key this job also
       # resolves to, giving this job an exact hit on a subset and a re-download of OpenSSL on every run until
       # a fetcher edit rotates the key. A subset saved under a shared key cannot be repaired by the job that
-      # needs the rest. Both legs share this entry: source tarballs are architecture-independent.
+      # needs the rest. Both engines share this entry: source tarballs are architecture-independent.
       - name: Cache the pinned source tarballs
         uses: actions/cache@v6
         with:
           path: native/cache
           key: sources-macos-${{ hashFiles('native/build/fetch-source.sh', 'native/build/fetch-openssl.sh') }}
 
-      # Keyed on the RID, not runner.os/runner.arch: both legs run on the same arm64 runner now, so that
-      # expression is identical for the two and they would collide on one entry, each able to restore the
-      # other's engine. fetch-openssl.sh is in the key because macOS links OpenSSL from that pin -- without
-      # it, a bumped OpenSSL rebuilds Linux and silently reuses a cached Mac engine linking the old one.
-      - name: Cache the built engine
-        id: engine
+      # One cache entry per engine, keyed on the RID: the two are different binaries built from the same
+      # scripts, and one job restoring both is what lets each hit or miss on its own. fetch-openssl.sh is in
+      # the key because macOS links OpenSSL from that pin -- without it, a bumped OpenSSL rebuilds Linux and
+      # silently reuses a cached Mac engine linking the old one.
+      - name: Cache the built osx-arm64 engine
+        id: arm64
         uses: actions/cache@v6
         with:
-          path: native/out/${{ matrix.rid }}
-          key: b3270-${{ matrix.rid }}-${{ hashFiles('native/build/*macos*.sh', 'native/build/fetch-source.sh', 'native/build/fetch-openssl.sh', 'native/build/shared-*.sh') }}
+          path: native/out/osx-arm64
+          key: b3270-osx-arm64-${{ hashFiles('native/build/*macos*.sh', 'native/build/fetch-source.sh', 'native/build/fetch-openssl.sh', 'native/build/shared-*.sh') }}
 
-      # verify-macos.sh's TLS arm runs the binary to read its banner, and on this leg that binary is x86_64
-      # on an arm64 runner. Idempotent: a no-op if the image already ships Rosetta.
+      - name: Cache the built osx-x64 engine
+        id: x64
+        uses: actions/cache@v6
+        with:
+          path: native/out/osx-x64
+          key: b3270-osx-x64-${{ hashFiles('native/build/*macos*.sh', 'native/build/fetch-source.sh', 'native/build/fetch-openssl.sh', 'native/build/shared-*.sh') }}
+
+      # verify-macos.sh's TLS arm runs the binary to read its banner, and the osx-x64 binary is x86_64 on this
+      # arm64 runner. Idempotent: a no-op if the image already ships Rosetta (2 s when it does).
       - name: Rosetta, so the x86_64 gate can run its binary
-        if: matrix.rid == 'osx-x64'
         run: softwareupdate --install-rosetta --agree-to-license
 
-      - name: Build b3270 (verify-macos.sh is the gate)
-        if: steps.engine.outputs.cache-hit != 'true'
-        run: native/build/build-macos.sh ${{ matrix.rid }}
+      - name: Build b3270 for osx-arm64 (verify-macos.sh is the gate)
+        if: steps.arm64.outputs.cache-hit != 'true'
+        run: native/build/build-macos.sh osx-arm64
 
-      # build-macos.sh redirects configure and make into native/build-tmp/, which is gitignored and never
+      - name: Build b3270 for osx-x64 (verify-macos.sh is the gate)
+        if: steps.x64.outputs.cache-hit != 'true'
+        run: native/build/build-macos.sh osx-x64
+
+      # build-macos.sh redirects configure and make into native/build-tmp/<rid>/, which is gitignored and never
       # uploaded, so without this a build failure leaves nothing in the job log but the exit code.
       # cancelled() as well as failure(), for the reason the test-results upload below gives: timeout-minutes
       # and cancel-in-progress both cancel rather than fail, and a build wedged past the job timeout is exactly
@@ -72,9 +91,9 @@ jobs:
             echo "::endgroup::"
           done
 
-      # Runs whether or not the engine came from the cache. On a cache hit the build step never executes, so
-      # this is the only thing between a stale cached binary and an artifact upload -- the reason engine-linux
-      # and engine-windows each run their gate unconditionally too.
+      # Runs for both engines whether or not each came from the cache. On a cache hit the build step never
+      # executes, so this is the only thing between a stale cached binary and an artifact upload -- the reason
+      # engine-linux and engine-windows each run their gate unconditionally too.
       #
       # Both fixtures are compiled here rather than picked off the disk. #13 proposed /opt/homebrew/bin/openssl
       # for the dependency arm, on the grounds that build-macos.sh requires Homebrew openssl@3 -- that stopped
@@ -84,35 +103,9 @@ jobs:
       # That is not specific to echo: every macOS platform binary is universal with an arm64e slice, so none
       # can serve here. cc is guaranteed instead, because Xcode CLT is already a hard requirement of
       # build-macos.sh -- and engine-windows builds its own import fixture the same way.
-      - name: The gate accepts the engine and rejects both fixtures
+      - name: The gate accepts each engine and rejects both fixtures for each architecture
         run: |
           set -euo pipefail
-          ARCH='${{ matrix.arch }}'
-          FIX=native/build-tmp/fixtures
-          mkdir -p "$FIX"
-
-          # Built for the leg's own architecture so both fixtures clear the machine-type arm and reach the arm
-          # each is meant to prove. On osx-x64 these are x86_64 binaries on an arm64 runner; the Rosetta step
-          # above is what lets the TLS arm execute one.
-          cat > "$FIX/clean.c" <<'EOF'
-          int main(void) { return 0; }
-          EOF
-          cat > "$FIX/lib.c" <<'EOF'
-          int fixture(void) { return 0; }
-          EOF
-          cat > "$FIX/uses-lib.c" <<'EOF'
-          int fixture(void);
-          int main(void) { return fixture(); }
-          EOF
-
-          # clean: links only libSystem and exits 0 with no banner -- clears architecture and dependency, dies at TLS.
-          cc -arch "$ARCH" -o "$FIX/clean" "$FIX/clean.c"
-          # dirty: an install_name outside /usr/lib and /System/Library -- clears architecture, dies at dependency.
-          cc -arch "$ARCH" -dynamiclib -install_name "@executable_path/libfixture.dylib" -o "$FIX/libfixture.dylib" "$FIX/lib.c"
-          cc -arch "$ARCH" -o "$FIX/dirty" "$FIX/uses-lib.c" -L"$FIX" -lfixture
-
-          echo "--- the gate must accept the engine it is gating"
-          native/build/verify-macos.sh native/out/${{ matrix.rid }}/b3270 "$ARCH"
 
           # Capture and match; do not pipe. grep -q exits on its first match and SIGPIPEs the writer, which
           # under pipefail becomes 141 -- the trap this script family has already paid for once.
@@ -131,8 +124,39 @@ jobs:
             esac
           }
 
-          reject "dependency allowlist" "$FIX/dirty" "non-system dynamic dependencies"
-          reject "TLS provider check"   "$FIX/clean" "does not report the expected TLS provider"
+          for leg in "osx-arm64 arm64" "osx-x64 x86_64"; do
+            read -r RID ARCH <<<"$leg"
+            echo "::group::$RID ($ARCH)"
+
+            # Fixtures built for the engine's own architecture, in their own directory per architecture, so
+            # both clear the machine-type arm and reach the arm each is meant to prove. For osx-x64 these are
+            # x86_64 binaries on an arm64 runner; the Rosetta step above is what lets the TLS arm execute one.
+            FIX=native/build-tmp/fixtures/$ARCH
+            mkdir -p "$FIX"
+            cat > "$FIX/clean.c" <<'EOF'
+          int main(void) { return 0; }
+          EOF
+            cat > "$FIX/lib.c" <<'EOF'
+          int fixture(void) { return 0; }
+          EOF
+            cat > "$FIX/uses-lib.c" <<'EOF'
+          int fixture(void);
+          int main(void) { return fixture(); }
+          EOF
+
+            # clean: links only libSystem and exits 0 with no banner -- clears architecture and dependency, dies at TLS.
+            cc -arch "$ARCH" -o "$FIX/clean" "$FIX/clean.c"
+            # dirty: an install_name outside /usr/lib and /System/Library -- clears architecture, dies at dependency.
+            cc -arch "$ARCH" -dynamiclib -install_name "@executable_path/libfixture.dylib" -o "$FIX/libfixture.dylib" "$FIX/lib.c"
+            cc -arch "$ARCH" -o "$FIX/dirty" "$FIX/uses-lib.c" -L"$FIX" -lfixture
+
+            echo "--- the gate must accept the engine it is gating"
+            native/build/verify-macos.sh "native/out/$RID/b3270" "$ARCH"
+
+            reject "dependency allowlist" "$FIX/dirty" "non-system dynamic dependencies"
+            reject "TLS provider check"   "$FIX/clean" "does not report the expected TLS provider"
+            echo "::endgroup::"
+          done
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -141,19 +165,26 @@ jobs:
       - name: Build (warnings are errors)
         run: dotnet build LizTerm.slnx --configuration Release -warnaserror
 
-      # osx-arm64 runs the whole solution; osx-x64 cannot run its own engine on this arm64 runner, so it
-      # builds only -- the architecture assertion in the gate step above is what proves that binary, and the
-      # spec records it as proven by one check rather than two.
+      # The whole solution, once. A RID-less build copies the host RID's engine -- osx-arm64 on this runner --
+      # so this is the arm64 engine being spawned; osx-x64 cannot be run through the suite here at all, and
+      # the architecture assertion in the gate step above is what proves that binary, as the spec records.
       - name: Test (the engine smoke test must run, not skip)
-        if: matrix.rid == 'osx-arm64'
         run: dotnet test LizTerm.slnx --configuration Release --no-build --blame-hang-timeout 5m --logger trx --results-directory TestResults
 
       # After the smoke test, so a binary that links cleanly but cannot be spawned is never published.
-      - name: Upload b3270
+      - name: Upload b3270 (osx-arm64)
         uses: actions/upload-artifact@v7
         with:
-          name: b3270-${{ matrix.rid }}
-          path: native/out/${{ matrix.rid }}/b3270
+          name: b3270-osx-arm64
+          path: native/out/osx-arm64/b3270
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload b3270 (osx-x64)
+        uses: actions/upload-artifact@v7
+        with:
+          name: b3270-osx-x64
+          path: native/out/osx-x64/b3270
           if-no-files-found: error
           retention-days: 14
 
@@ -161,7 +192,7 @@ jobs:
         if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-results-${{ matrix.rid }}
+          name: test-results-macos
           path: |
             TestResults/**/*.trx
             TestResults/**/*.dmp
