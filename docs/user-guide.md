@@ -209,7 +209,7 @@ Profiles are in `profiles/`, one JSON file each, and wire logs in `logs/`, named
 
 ## Known limitations
 
-- **Unsigned builds.** macOS and Windows warn about the app the first time you open it; the
+- **Unsigned Windows builds.** Windows SmartScreen warns about the app the first time you open it; the
   [README](../README.md#first-run) explains how to allow it.
 - **No certificate pinning on Windows.** The Windows emulation engine verifies against the Windows certificate
   store and cannot pin a certificate. A profile carrying a pin refuses to connect on Windows rather than ignoring

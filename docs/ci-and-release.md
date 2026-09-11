@@ -161,8 +161,9 @@ names (`Win32Settings.InstallerIcon`, `MacOsSettings.AppIcon`, `LinuxSettings.Ap
   job, **sequentially**: `LizTerm.App.csproj` declares no `<RuntimeIdentifiers>`, so each single-RID restore
   overwrites `project.assets.json`'s target, and packing both after publishing both fails the first with NETSDK1047.
 - `AVALONIA_TOOLS_LICENSE_KEY`, the repository secret Parcel needs to run at all, is scoped to the `parcel pack`
-  steps alone, by `env:` on each step rather than job- or workflow-wide. `ci.yml` and `platforms.yml` carry no
-  secret, so a fork's pull request still runs both in full.
+  steps alone, by `env:` on each step rather than job- or workflow-wide. The four macOS signing secrets follow the
+  same rule (see "macOS signing and notarization" below). `ci.yml` and `platforms.yml` carry no secret, so a fork's
+  pull request still runs both in full.
 - Parcel names its output `{App}.{arch}.{Version}.{ext}`, with no OS token, so every package is renamed to
   `LizTerm-<rid>-<version>.<ext>` before upload. A GitHub Release has one flat asset namespace, and three platforms
   would otherwise each produce an identically named ZIP.
@@ -186,40 +187,99 @@ Each publish job extracts its archive and runs, against that extracted tree:
    would pass a process still mid-death), checks the process is still alive, then kills it so the job does not hang
    on a GUI event loop, printing the captured stderr if it had already died. Linux runs it under `xvfb-run`, because
    Avalonia needs a display to get through Skia initialisation at all.
+4. **`verify-notarized.sh`**, macOS only and on both RIDs: the app inside the ZIP and the DMG are signed by the
+   project's team, notarized, and stapled (see "macOS signing and notarization" below). The step after it proves
+   each of its checks can still fail.
 
 Steps 2 and 3 run only for `osx-arm64`, `linux-x64` and `win-x64`. The other three are cross-packaged on runners
 that cannot execute them: `osx-x64` would need Rosetta on the publish runner, `linux-arm64` is packaged on an x64
 runner, and `win-arm64`'s app is arm64 on an x64 runner. That limit is structural, and adding Rosetta to a publish
-job is deliberately not done. For those three, `verify-bundled-engine.sh` is the only CI gate, and launching them is
-left to the manual pass before a release: each headline archive, downloaded from a rehearsal run, extracted on the
-platform it targets and used to connect to a real host
+job is deliberately not done. For those three, `verify-bundled-engine.sh` is the only CI gate that looks at the
+engine — `osx-x64` also gets step 4, which executes nothing — and launching them is left to the manual pass before
+a release: each headline archive, downloaded from a rehearsal run, extracted on the platform it targets and used to
+connect to a real host
 ([packaging spec, section 8](superpowers/specs/2026-09-08-lizterm-m3e-packaging-design.md#8-testing-and-verification)).
 
-### macOS signing and `Entitlements.plist`
+### macOS signing and notarization
 
-Builds ship unsigned for now, by decision; notarization is named as the first post-v1 item. Parcel ad-hoc signs the
-packaged executable with the hardened runtime (`codesign -dvvv` reports `flags=0x10002(adhoc,runtime)`) but signs
-the bundled `libSkiaSharp.dylib`, `libHarfBuzzSharp.dylib` and `libAvaloniaNative.dylib` plain ad-hoc
-(`flags=0x2(adhoc)`). An ad-hoc signature carries no Team ID, and the hardened runtime's library validation refuses
-to `dlopen` any sibling library whose Team ID does not match the process's. With none on either side, every load of
-a bundled dylib fails and Avalonia dies before it can open a window (`DllNotFoundException: libSkiaSharp`, "different
-Team IDs"). A packaged build like that once passed every gate and launched clean in every rehearsal — until someone
-actually ran it.
+Every macOS package is signed with the project's Developer ID, notarized by Apple and stapled, so it opens like any
+other download. Signing is mandatory: the macOS job's first step, "The signing secrets are present", fails the run
+when any of the four secrets below is missing, and nothing falls back to an ad hoc build — which, without the
+entitlement described at the end of this section, would not launch.
 
-`Entitlements.plist`, at the repository root, fixes it with one entry: `com.apple.security.cs.disable-library-validation`.
-Parcel discovers the file by convention next to `LizTerm.parcel` and merges it with the default entitlements it
-always synthesizes (`network.client`, `network.server`, `files.user-selected.read-write`,
-`files.bookmarks.document-scope`, `cs.allow-jit`) rather than replacing them; `codesign -d --entitlements -` on a
-packed bundle shows all five beside it. **Treat it as load-bearing, not unexplained cruft.**
+**Configuration.** `LizTerm.parcel`'s `MacOsSettings` names the team (`TeamId`) and the two credential types,
+`"SigningCredentialsType": "P12Certificate"` and `"NotaryCredentialsType": "AppleAccount"`, and leaves the
+credentials themselves undefined. Parcel reads an automatic environment variable only for a setting the `.parcel`
+file does not define, so the Package step supplies them: `PARCEL_MACOS_SIGNING_P12_CERTIFICATE` (a path — the step
+decodes the P12 into `$RUNNER_TEMP` and deletes it on exit), `PARCEL_MACOS_SIGNING_P12_PASSWORD`,
+`PARCEL_MACOS_NOTARY_APPLE_ID` and `PARCEL_MACOS_NOTARY_APP_PASSWORD`. Parcel offers no App Store Connect API key
+for notarization; besides a local keychain profile, an Apple ID with an app-specific password is its only route. The
+Team ID is written only in `LizTerm.parcel`, and the gate reads it from there.
 
-- Dropping the hardened runtime would also fix the crash and looks like the smaller change, but it is the wrong one:
-  notarization requires the hardened runtime, so that path would have to be undone. The entitlement disables only
-  the one check that was rejecting ad-hoc siblings and leaves the rest of hardened-runtime validation in place.
-- `codesign --verify --deep --strict` passes on the broken bundle, because the failure is a runtime
-  library-validation refusal, not a signature-integrity one. That gap is why `verify-app-launches.sh` exists.
-- The bundled b3270 is signed `(adhoc,runtime)` like the executable, not like the dylibs. It escapes this failure not
-  by being signed differently but by being a child process rather than something the app loads — which is also why
-  none of the engine gates could have caught it.
+**Secrets.** Set by the account owner, and reaching only the steps that need them:
+
+| Secret | Holds |
+| --- | --- |
+| `MACOS_SIGNING_P12_BASE64` | The Developer ID Application certificate and its private key, exported from Keychain Access as a password-protected `.p12`, base64-encoded |
+| `MACOS_SIGNING_P12_PASSWORD` | That export password |
+| `MACOS_NOTARY_APPLE_ID` | The developer account's Apple ID |
+| `MACOS_NOTARY_APP_PASSWORD` | An app-specific password for that Apple ID |
+
+The certificate expires on **2027-02-01**. Packages signed before then keep launching after it, because each
+signature carries a secure timestamp; the first release after that date needs a renewed certificate and a new
+`MACOS_SIGNING_P12_BASE64`.
+
+**The ZIP's app and the DMG.** Parcel notarizes the DMG, and Apple's ticket covers the DMG and every file inside it,
+the app included, but Parcel staples neither the DMG nor the app inside the ZIP (measured on the v0.4.1 rehearsals).
+A ticket is keyed by code-directory hash, so the step "The ZIP's app and the disk image are stapled" attaches the
+existing tickets with Apple's `stapler`, without a second submission, and rebuilds the ZIP with
+`ditto -c -k --norsrc --keepParent` before any gate extracts it. `--norsrc` keeps the runner's extended attributes
+out of the public download; nothing a signed bundle needs lives in one. It first requires exactly one ZIP and one
+DMG, so nothing signing leaves behind can be picked up by a later `find` or collide in the rename step.
+
+**The gate.** `native/build/verify-notarized.sh` checks the app inside every macOS ZIP and every DMG, on both RIDs;
+it executes nothing, so `osx-x64` is covered on the arm64 runner. Each of its three checks was measured on macOS
+26.6 to be independent of the others:
+
+- **Team ID** — every Mach-O file in the bundle carries the team's identifier. Strict verification passes a bundle
+  with an ad hoc sibling library, which is the incident below. A disk image is checked by the certificate its
+  signature names instead: Parcel's signer leaves a disk image's TeamIdentifier unset, so for a DMG the team is the
+  one in parentheses at the end of the signing certificate's name.
+- **Stapled** — `xcrun stapler validate`. `spctl` cannot stand in for it: with the ticket (`Contents/CodeResources`,
+  outside the code seal) deleted, the signature stays valid and `spctl` still reports
+  `source=Notarized Developer ID`, having looked the ticket up online. A user whose first launch is offline is
+  refused.
+- **Notarized** — `spctl` must report `accepted` *and* `source=Notarized Developer ID`. A file with no quarantine
+  flag, which is every file on a CI runner, is `accepted` with `source=Developer ID` when it is signed but was never
+  notarized. So a check for "accepted" cannot fail on the likeliest regression: a missing or misnamed notary
+  variable, which makes Parcel log "Notarization credentials are not set — skipping" and carry on.
+
+A failure prints team IDs, and only spctl's verdict and source lines: spctl's `origin=` line names the certificate's
+holder, and CI logs are public.
+
+The next step, "The notarization gate can fail", proves each check still bites: an ad hoc copy of the shipped app
+must fail the Team ID and notarization checks, and a copy with its ticket deleted must fail the stapling check, each
+matched on the check's own message rather than on a non-zero exit.
+
+**Why there is no `Entitlements.plist`.** Until v0.4.1 packages were ad hoc signed: Parcel signed the executable
+with the hardened runtime (`flags=0x10002(adhoc,runtime)`) and the bundled `libSkiaSharp.dylib`,
+`libHarfBuzzSharp.dylib` and `libAvaloniaNative.dylib` plain ad hoc (`flags=0x2(adhoc)`). An ad hoc signature
+carries no Team ID, and the hardened runtime's library validation refuses to `dlopen` a sibling whose Team ID does
+not match the process's, so every bundled dylib failed to load and Avalonia died before it could open a window
+(`DllNotFoundException: libSkiaSharp`, "different Team IDs"). A packaged build like that once passed every gate and
+launched clean in every rehearsal — until someone actually ran it. The fix then was an `Entitlements.plist` at the
+repository root carrying `com.apple.security.cs.disable-library-validation`, which Parcel merged with the five
+entitlements it always synthesizes (`network.client`, `network.server`, `files.user-selected.read-write`,
+`files.bookmarks.document-scope`, `cs.allow-jit`). With every Mach-O now signed under one Team ID, library
+validation has nothing to refuse, so the file is gone and the protection it switched off is back on. Both halves
+were reproduced before it was deleted: the v0.4.0 bundle, left ad hoc without the entitlement, dies exactly as
+above; re-signed with the Developer ID and still without it, it launches and notarizes.
+
+- Dropping the hardened runtime would also have fixed the crash, but notarization requires the hardened runtime.
+- `codesign --verify --deep --strict` passes on a bundle that cannot launch, because library validation is a
+  runtime refusal, not a signature-integrity failure. That gap is why `verify-app-launches.sh` exists.
+- b3270 escaped the failure not by being signed differently but by being a child process rather than something the
+  app loads — which is also why none of the engine gates could have caught it.
 
 ### Publishing
 

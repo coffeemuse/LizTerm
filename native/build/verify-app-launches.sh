@@ -8,14 +8,14 @@
 # verify-bundled-engine.sh and shared-verify-tls.sh both prove the *engine* is right and starts, but b3270 is
 # a child process LizTerm spawns, never something it dlopen's, so it is immune to an entire class of failure.
 # A packaged macOS build once passed codesign --verify --deep --strict and every other gate in this pipeline,
-# then refused to launch for every user: Parcel ad-hoc signs the packaged executable with the hardened
+# then refused to launch for every user: Parcel ad-hoc signed the packaged executable with the hardened
 # runtime while signing the bundled libSkiaSharp/libHarfBuzzSharp/libAvaloniaNative dylibs plain ad-hoc, the
-# hardened runtime's library validation then refuses to dlopen a sibling with no matching Team ID, and
-# Avalonia dies during Skia initialisation before a window ever opens. It was found by launching the app by
+# hardened runtime's library validation then refused to dlopen a sibling with no matching Team ID, and
+# Avalonia died during Skia initialisation before a window ever opened. It was found by launching the app by
 # hand. This script is that manual check, automated: it starts the real, shipped executable -- no headless
 # platform, no self-test flag, because either one would skip past Skia initialisation, the exact place the
 # bug was -- and proves it is still running a few seconds later. See docs/ci-and-release.md, "macOS signing
-# and Entitlements.plist", for the full incident.
+# and notarization", for the full incident.
 set -euo pipefail
 DIR=${1:?usage: verify-app-launches.sh <extracted-package-dir> <rid>}
 RID=${2:?usage: verify-app-launches.sh <extracted-package-dir> <rid>}

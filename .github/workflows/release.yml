@@ -377,7 +377,7 @@ jobs:
           native/build/shared-verify-tls.sh "$bin"
 
       # The check the engine-start step above cannot cover: the packaged *app* actually launching, an Avalonia
-      # window and all -- see docs/ci-and-release.md, "macOS signing and Entitlements.plist", for the macOS
+      # window and all -- see docs/ci-and-release.md, "macOS signing and notarization", for the macOS
       # incident this class of gate exists to catch. Avalonia needs a real X11 display to get through Skia
       # initialisation even to fail cleanly, so xvfb-run gives it a virtual one; this runner is linux-x64, so
       # unlike linux-arm64 below there is no reason it cannot start its own binary.
@@ -517,7 +517,7 @@ jobs:
           native/build/shared-verify-tls.sh "$bin" "Windows Schannel"
 
       # The check the engine-start step above cannot cover: the packaged *app* actually launching -- see
-      # docs/ci-and-release.md, "macOS signing and Entitlements.plist", for the macOS incident this class of
+      # docs/ci-and-release.md, "macOS signing and notarization", for the macOS incident this class of
       # gate exists to catch, a failure mode this script is generic over rather than specific to. win-arm64 is
       # skipped for the same reason the engine-start step above skips it: this runner is x64 and the app in
       # that archive is arm64.
@@ -581,27 +581,12 @@ jobs:
 
           ## First run
 
-          This build is not signed or notarized yet, so macOS and Windows both refuse it the first time.
-
-          **macOS** -- the file is blocked, and the dialog offers only **Move to Trash** or **Done**. Done is
-          the safe one. To allow it:
-
-          1. Open **System Settings**, go to **Privacy & Security**, and scroll to the **Security** section.
-          2. Beside *"... was blocked to protect your Mac"*, click **Open Anyway**.
-          3. Click **Open Anyway** again to confirm, then authenticate with Touch ID or an administrator
-             password.
-
-          That button only appears for a while after a blocked attempt; if it is not there, open the file
-          again and go straight back to Settings.
-
-          macOS blocks **the file you just opened**, by name -- which is why the ZIP is the easier download.
-          Unpack the ZIP and you do the above once, for LizTerm itself. With the DMG you do it twice: once to
-          mount the disk image, and again for LizTerm after you drag it to Applications.
+          **macOS** builds are signed and notarized by Apple, so LizTerm opens like any other app you
+          download. The first time, macOS may ask you to confirm that you want to open something downloaded
+          from the internet.
 
           **Windows** -- SmartScreen will warn that the publisher is unknown. Choose **More info**, then
           **Run anyway**.
-
-          Signing and notarization are the next thing on the list.
 
           ## Which file do I want?
 
