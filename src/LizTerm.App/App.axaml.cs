@@ -228,6 +228,31 @@ public partial class App : Application
         else await about.ShowDialog(owner);
     }
 
+    private void OnPreferencesClick(object? sender, EventArgs e) => ShowPreferences();
+
+    private PreferencesWindow? _preferences;
+
+    /// <summary>The one route to Preferences, for the macOS application menu and a session's Edit item alike.
+    /// Modeless and unowned so the user keeps working while it is open, and one at a time: a second request
+    /// activates the first. Works with only the picker open, since the settings live on the app.</summary>
+    public void ShowPreferences() => ShowPreferences(Settings);
+
+    /// <summary>The rule with the settings object as an argument, so a test can exercise it without the real
+    /// settings file.</summary>
+    internal PreferencesWindow ShowPreferences(SettingsViewModel settings)
+    {
+        if (_preferences is { } showing)
+        {
+            showing.Activate();
+            return showing;
+        }
+        var window = new PreferencesWindow(settings);
+        _preferences = window;
+        window.Closed += (_, _) => { if (ReferenceEquals(_preferences, window)) _preferences = null; };
+        window.Show();
+        return window;
+    }
+
     /// <summary>Which engine About describes. Deliberately not "whatever the owner window happens to be": the
     /// application menu's owner is only the window in front, and a File Transfer dialog, the picker or the
     /// splash would each answer with no session and send About back to the located binary — reporting no

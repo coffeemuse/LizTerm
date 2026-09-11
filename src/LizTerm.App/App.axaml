@@ -16,7 +16,7 @@
        profile picker a menu bar: the picker is the app's startup state and the state it returns to when the
        last session closes, and until now macOS showed nothing there. Other platforms render none of this.
 
-       About is the whole of what we declare, deliberately. Avalonia.Native's AvaloniaNativeMenuExporter.SetMenu
+       About and Preferences are the whole of what we declare, deliberately. Avalonia.Native's AvaloniaNativeMenuExporter.SetMenu
        appends AppKit's standard block — Services, Hide, Hide Others, Show All and Quit — to this very menu
        unless MacOSPlatformOptions.DisableDefaultApplicationMenuItems is set, and Program.cs sets no
        MacOSPlatformOptions. Measured on macOS 15 / Avalonia 12.1.2: our own "Quit LizTerm Cmd+Q" shipped
@@ -28,6 +28,10 @@
   <NativeMenu.Menu>
     <NativeMenu>
       <NativeMenuItem Header="About LizTerm" Click="OnAboutClick" />
+      <NativeMenuItemSeparator />
+      <!-- The one gesture outside Edit, on purpose, and the one item AppKit does not supply: see "Gestures" in
+           CLAUDE.md. Cmd-comma cannot be a 3270 keystroke (DefaultKeymap binds no Cmd chord). -->
+      <NativeMenuItem Header="Preferences..." Gesture="Cmd+OemComma" Click="OnPreferencesClick" />
     </NativeMenu>
   </NativeMenu.Menu>
 </Application>

@@ -37,24 +37,29 @@ public class NativeMenuTests
     /// Avalonia's calls TryShutdown(0), which a running IND$FILE transfer correctly refuses. The non-forcing one
     /// is the semantic this app wants.</summary>
     [AvaloniaFact]
-    public void The_application_menu_declares_about_and_no_quit_of_its_own()
+    public void The_application_menu_declares_about_and_preferences_and_no_quit_of_its_own()
     {
         var menu = NativeMenu.GetMenu(Application.Current!);
 
         Assert.NotNull(menu);
-        var headers = menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header!).ToArray();
-        Assert.Equal(["About LizTerm"], headers);
+        var headers = menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator).Select(i => i.Header!).ToArray();
+        Assert.Equal(["About LizTerm", "Preferences..."], headers);
     }
 
-    /// <summary>Not one gesture outside the Edit menu, the application menu included. Cmd+Q was ours until the
-    /// measurement recorded above; AppKit's own Quit item carries it now, and a second declaration of the same
-    /// chord would be a second key equivalent for it.</summary>
+    /// <summary>The one gesture outside Edit, deliberately (settings spec §5.4): Cmd-comma is where every macOS
+    /// user looks for Preferences, the application menu exists only on macOS, and DefaultKeymap binds no Cmd
+    /// chord, so nothing is taken from the host. About stays bare, and so does everything AppKit appends.</summary>
     [AvaloniaFact]
-    public void The_application_menu_carries_no_gesture()
+    public void The_application_menu_carries_cmd_comma_on_preferences_and_nothing_else()
     {
         var menu = NativeMenu.GetMenu(Application.Current!)!;
+        var about = MenuLookup.Item(menu, "About LizTerm")!;
+        var preferences = MenuLookup.Item(menu, "Preferences...")!;
 
-        Assert.All(menu.Items.OfType<NativeMenuItem>(), item => Assert.Null(item.Gesture));
+        Assert.Null(about.Gesture);
+        Assert.Equal(new KeyGesture(Key.OemComma, KeyModifiers.Meta), preferences.Gesture);
+        Assert.True(preferences.HasClickHandlers);
+        Assert.True(about.HasClickHandlers);
     }
 
     private static (SessionWindow Window, SessionViewModel Vm, FakeEmulatorSession Session, FakeTextClipboard Clipboard) Show(bool useNativeMenu = true)
