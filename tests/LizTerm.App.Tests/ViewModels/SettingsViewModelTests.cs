@@ -113,4 +113,24 @@ public class SettingsViewModelTests : IDisposable
 
         Assert.Equal(["Blink", "LastSaveError"], changes);
     }
+
+    [Fact]
+    public void The_bell_settings_write_through_raise_their_own_names_and_skip_unchanged_values()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.VisualBell = true;                 // already the default: nothing
+        settings.BellSound = BellSound.None;        // already the default: nothing
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.VisualBell = false;
+        settings.BellSound = BellSound.SystemAlert;
+
+        Assert.Equal(["VisualBell", "BellSound"], changes);
+        var reloaded = new SettingsViewModel(new SettingsStore(FilePath));
+        Assert.False(reloaded.VisualBell);
+        Assert.Equal(BellSound.SystemAlert, reloaded.BellSound);
+    }
 }
