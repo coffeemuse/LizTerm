@@ -75,6 +75,17 @@ public class SessionWindowTests
         Assert.False(screen.BellFlashing);
     }
 
+    [AvaloniaFact]
+    public void A_closed_window_no_longer_flashes_on_a_bell()
+    {
+        var (window, screen, _, session, _) = Show();
+
+        window.Close();
+        session.RaiseBell();
+
+        Assert.False(screen.BellFlashing);
+    }
+
     private static void Drag(SessionWindow window, TerminalScreen screen)
     {
         window.MouseDown(Center(window, screen, 2, 3), MouseButton.Left);

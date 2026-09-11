@@ -158,7 +158,6 @@ public sealed class TerminalScreen : Control
         InvalidateVisual();
     }
 
-
     public ScreenSnapshot? Snapshot
     {
         get => GetValue(SnapshotProperty);

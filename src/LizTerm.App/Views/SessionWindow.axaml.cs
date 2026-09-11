@@ -324,6 +324,15 @@ public partial class SessionWindow : Window
 
     private void OnBellRang(object? sender, EventArgs e) => Screen.Flash();
 
+    /// <summary>The other half of the subscription's lifetime (bell spec §4): a view model that outlives its window
+    /// must not flash a screen that is gone.</summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_bellSource is not null) _bellSource.BellRang -= OnBellRang;
+        _bellSource = null;
+        base.OnClosed(e);
+    }
+
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 
     /// <summary>The command clears the message; this puts the keyboard back on the screen, where the next keystroke

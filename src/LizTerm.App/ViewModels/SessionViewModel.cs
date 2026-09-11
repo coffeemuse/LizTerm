@@ -30,6 +30,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly Func<SessionProfile, Task>? _saveAsProfile;
     private readonly IBellRinger? _bellRinger;
     private readonly BellThrottle _bellThrottle = new(BellInterval);
+    private bool _bellRingerFailed;
     /// <summary>The pin chosen in this window. The session's profile is fixed at construction, so a pin made after
     /// the window opened travels as a one-shot option on every later connect from here (spec 5.3).</summary>
     private CertificatePin? _pinOverride;
@@ -522,19 +523,23 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private void DismissError() => ErrorMessage = null;
 
     /// <summary>On the UI thread. Disposed first, throttle second, settings third, each output independently: the
-    /// flash has nothing that can throw, and a ringer that does must not take the dispatcher down with it.</summary>
+    /// flash has nothing that can throw, and a ringer that does must not take the dispatcher down with it. A
+    /// ringer that has already failed once is never asked again, and its banner is posted only that once
+    /// (bell spec §3.4): a P/Invoke that failed will fail again, and a host ringing in a loop must not re-post a
+    /// banner the user has dismissed every 500 ms.</summary>
     private void OnBell()
     {
         if (_disposed) return;
         if (!_bellThrottle.TryAdmit()) return;
         if (Settings.VisualBell) BellRang?.Invoke(this, EventArgs.Empty);
-        if (Settings.BellSound == BellSound.None || _bellRinger is null) return;
+        if (Settings.BellSound == BellSound.None || _bellRinger is null || _bellRingerFailed) return;
         try
         {
             _bellRinger.Ring(Settings.BellSound);
         }
         catch (Exception ex)
         {
+            _bellRingerFailed = true;
             ErrorMessage = "Could not play the bell: " + ex.Message;
         }
     }

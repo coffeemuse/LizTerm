@@ -106,6 +106,26 @@ public class SessionViewModelBellTests
         Assert.Equal("Could not play the bell: no speaker", vm.ErrorMessage);
     }
 
+    /// <summary>A P/Invoke that failed will fail again: the message is posted once, the ringer is not asked again,
+    /// and the flash keeps working. Two bells here are separated by more than BellInterval so the throttle admits
+    /// both; the second is what proves the latch.</summary>
+    [Fact]
+    public async Task A_failing_ringer_is_reported_once_and_not_called_again()
+    {
+        var (vm, session, ringer, settings, flashes) = Create();
+        settings.BellSound = BellSound.SystemAlert;
+        ringer.Exception = new InvalidOperationException("no speaker");
+
+        session.RaiseBell();
+        vm.ErrorMessage = null;
+        await Task.Delay(SessionViewModel.BellInterval + TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        session.RaiseBell();
+
+        Assert.Equal(2, flashes.Count);
+        Assert.Single(ringer.Rings);
+        Assert.Null(vm.ErrorMessage);
+    }
+
     [Fact]
     public void Without_a_ringer_the_sound_setting_is_ignored_and_the_flash_still_happens()
     {
