@@ -361,6 +361,11 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   menu writes the same `SettingsViewModel` properties Preferences does, so the dock is saved to `settings.json`
   whichever door changed it; the menu holds no state of its own (#71). The headers are shorter than Preferences'
   ("At the Bottom" against "At the bottom of the window") because the submenu's own name is the missing context.
+- **No top-level Keypad check box survives beside the submenu**, and that was the open question in #71 rather than
+  an oversight: show/hide costs a hover it did not cost before. Robert chose the single submenu on 2026-09-12 over
+  keeping the toggle in View with a separate dock submenu. Two check boxes for one setting in the same menu is the
+  worse trade — Preferences already keeps a second door open for it — and the keypad is a thing you leave on rather
+  than flick. If the extra step ever grates, the answer is a `Gesture`-free reachability fix, not a duplicate item.
 - In tests, drive native items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`, the one
   entry point both real renderers use. Assigning `IsChecked` instead only proves a binding round-trips.
 - `MenuLookup` (`Menus/`) is how code-behind and tests find a `NativeMenuItem`, which `FindControl` cannot reach.

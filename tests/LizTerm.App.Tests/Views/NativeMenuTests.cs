@@ -152,7 +152,7 @@ public class NativeMenuTests
     {
         var (window, vm, _, _) = Show();
         var native = KeypadItem(window, "_Show the Keypad");
-        var classic = window.FindControl<MenuItem>("KeypadMenuItem")!;
+        var classic = window.FindControl<MenuItem>("KeypadShowMenuItem")!;
         Assert.Equal(MenuItemToggleType.CheckBox, native.ToggleType);
         Assert.Null(native.Gesture);
         Assert.False(native.IsChecked);
@@ -170,37 +170,47 @@ public class NativeMenuTests
     }
 
     /// <summary>The dock radios in the same submenu, in the Crosshair radios' shape (#71). Both docks are
-    /// exercised rather than one: KeypadDockConverter.Convert throws on a parameter that does not parse, but
-    /// Avalonia swallows a converter's exception, so a mistyped ConverterParameter would surface only as a wrong
-    /// IsChecked on that one item's own click. Driven from the native side and asserted on both, because the two
-    /// renderers bind the same converter and a one-sided edit is the failure worth catching. Nothing here writes
-    /// the settings file: SettingsViewModel.KeypadDock does that, and the menu is a second door onto it.</summary>
+    /// exercised on each menu rather than one anywhere: KeypadDockConverter.Convert throws on a parameter that
+    /// does not parse, but Avalonia swallows a converter's exception, so a mistyped ConverterParameter would
+    /// surface only as a wrong IsChecked on that one item's own click. Each of the four items is clicked and each
+    /// check mark is asserted on both menus, because the two renderers bind the same converter through four
+    /// separate handlers and any one of them can be miswired on its own. Nothing here writes the settings file:
+    /// SettingsViewModel.KeypadDock does that, and the menu is a second door onto it.</summary>
     [AvaloniaFact]
     public void Choosing_a_keypad_dock_checks_exactly_that_item_on_both_menus()
     {
         var (window, vm, _, _) = Show();
-        // Bottom first, which is the default and so proves the unclicked state renders right, then Right, which
-        // is the one that proves a click writes. The classic click below then has somewhere to move it back to.
-        var docks = new[] { KeypadDock.Bottom, KeypadDock.Right };
+        const int bottom = 0, right = 1;
         var native = new[] { "At the _Bottom", "On the _Right" }.Select(h => KeypadItem(window, h)).ToArray();
         var classic = new[] { "KeypadDockBottomMenuItem", "KeypadDockRightMenuItem" }
             .Select(name => window.FindControl<MenuItem>(name)!).ToArray();
         Assert.All(native, item => Assert.Equal(MenuItemToggleType.Radio, item.ToggleType));
         Assert.All(native, item => Assert.Null(item.Gesture));
-
-        foreach (var dock in docks)
-        {
-            var chosen = dock == KeypadDock.Bottom ? 0 : 1;
-            ((INativeMenuItemExporterEventsImplBridge)native[chosen]).RaiseClicked();
-
-            Assert.Equal(dock, vm.Settings.KeypadDock);
-            Assert.Equal([chosen == 0, chosen == 1], native.Select(i => i.IsChecked));
-            Assert.Equal([chosen == 0, chosen == 1], classic.Select(i => i.IsChecked));
-        }
-
-        classic[0].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        // The classic side needs both, and neither is compared by the parity walk: a radio left as a CheckBox
+        // with no group would tick independently of its sibling on Windows and Linux, where this is the only bar.
+        Assert.All(classic, item => Assert.Equal(MenuItemToggleType.Radio, item.ToggleType));
+        Assert.All(classic, item => Assert.Equal("KeypadDock", item.GroupName));
         Assert.Equal(KeypadDock.Bottom, vm.Settings.KeypadDock);
-        Assert.Equal([true, false], native.Select(i => i.IsChecked));
+        Assert.False(vm.Settings.Keypad);
+
+        // Away from the default and back, on each menu in turn, so every click has to *change* the dock to pass.
+        // Starting on Bottom and clicking Bottom would assert the state it began in, and an item wired to the
+        // other dock's handler — or to ToggleKeypad — would sail through it.
+        foreach (var (item, chosen) in new (Action, int)[]
+                 {
+                     (() => ((INativeMenuItemExporterEventsImplBridge)native[right]).RaiseClicked(), right),
+                     (() => ((INativeMenuItemExporterEventsImplBridge)native[bottom]).RaiseClicked(), bottom),
+                     (() => classic[right].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)), right),
+                     (() => classic[bottom].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)), bottom),
+                 })
+        {
+            item();
+
+            Assert.Equal(chosen == bottom ? KeypadDock.Bottom : KeypadDock.Right, vm.Settings.KeypadDock);
+            Assert.Equal([chosen == bottom, chosen == right], native.Select(i => i.IsChecked));
+            Assert.Equal([chosen == bottom, chosen == right], classic.Select(i => i.IsChecked));
+            Assert.False(vm.Settings.Keypad); // A dock item wired to ToggleKeypad would show up here.
+        }
     }
 
     /// <summary>The submenu's shape, asserted on both renderers because the parity walk compares structure and

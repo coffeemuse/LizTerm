@@ -193,7 +193,7 @@
              Wire Log stays the one item whose two menus differ. GroupName on the radios is the classic side's
              own requirement; the native items have no group to name. -->
         <MenuItem Header="_Keypad">
-          <MenuItem x:Name="KeypadMenuItem" Header="_Show the Keypad" ToggleType="CheckBox" Click="OnKeypadClick"
+          <MenuItem x:Name="KeypadShowMenuItem" Header="_Show the Keypad" ToggleType="CheckBox" Click="OnKeypadClick"
                     IsChecked="{Binding Settings.Keypad, Mode=OneWay}" />
           <Separator />
           <MenuItem x:Name="KeypadDockBottomMenuItem" Header="At the _Bottom" ToggleType="Radio" GroupName="KeypadDock" Click="OnKeypadBottomClick"
