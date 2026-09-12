@@ -4,6 +4,7 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -15,6 +16,7 @@ using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.Views;
 
@@ -235,6 +237,110 @@ public class SessionWindowTests
         dismiss.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
         Assert.True(screen.IsFocused);
+    }
+
+    private static Keypad KeypadOf(SessionWindow window) => window.FindControl<Keypad>("KeypadPanel")!;
+
+    private static Button KeypadButton(SessionWindow window, TerminalKey key) =>
+        KeypadOf(window).FindControl<UniformGrid>("ButtonGrid")!.Children.Cast<Button>().Single(b => (TerminalKey)b.Tag! == key);
+
+    /// <summary>The whole route, by a real pointer press: the button's key reaches the host through SendKeyAsync,
+    /// and the screen still has the keyboard afterwards — the buttons take no focus and the handler refocuses
+    /// regardless (keypad spec §4.1, §6.2).</summary>
+    [AvaloniaFact]
+    public void A_keypad_click_reaches_the_host_and_leaves_the_screen_focused()
+    {
+        var (window, screen, vm, session, _) = Show();
+        session.RaiseConnection(ConnectionState.Connected3270);
+        vm.Settings.Keypad = true;
+        window.UpdateLayout();
+        var button = KeypadButton(window, TerminalKey.PF3);
+        var centre = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)!.Value;
+
+        window.MouseDown(centre, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(centre, MouseButton.Left, RawInputModifiers.None);
+
+        Assert.Equal(["key:PF3"], session.Calls);
+        Assert.True(screen.IsFocused);
+    }
+
+    /// <summary>Right Ctrl held across a keypad click: the key goes, and the release is not a tap. Without
+    /// CancelTap the detector would see Ctrl down, nothing, Ctrl up, and send Enter (keypad spec §6.2).</summary>
+    [AvaloniaFact]
+    public void Right_ctrl_held_across_a_keypad_click_sends_the_key_and_no_enter()
+    {
+        var (window, _, vm, session, _) = Show();
+        session.RaiseConnection(ConnectionState.Connected3270);
+        vm.Settings.Keypad = true;
+
+        window.KeyPressQwerty(PhysicalKey.ControlRight, RawInputModifiers.Control);
+        KeypadButton(window, TerminalKey.PF3).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        window.KeyReleaseQwerty(PhysicalKey.ControlRight, RawInputModifiers.None);
+
+        Assert.Equal(["key:PF3"], session.Calls);
+    }
+
+    [AvaloniaFact]
+    public void The_keypad_is_hidden_by_default_and_follows_the_setting()
+    {
+        var (window, _, vm, _, _) = Show();
+        var keypad = KeypadOf(window);
+        Assert.False(keypad.IsVisible);
+
+        vm.Settings.Keypad = true;
+        Assert.True(keypad.IsVisible);
+
+        vm.Settings.Keypad = false;
+        Assert.False(keypad.IsVisible);
+    }
+
+    /// <summary>Two bindings to one setting: the panel's edge of the window and the control's own grid shape.</summary>
+    [AvaloniaFact]
+    public void The_keypad_docks_where_the_setting_says()
+    {
+        var (window, _, vm, _, _) = Show();
+        var keypad = KeypadOf(window);
+        Assert.Equal(Dock.Bottom, DockPanel.GetDock(keypad));
+        Assert.Equal(KeypadDock.Bottom, keypad.Dock);
+
+        vm.Settings.KeypadDock = KeypadDock.Right;
+
+        Assert.Equal(Dock.Right, DockPanel.GetDock(keypad));
+        Assert.Equal(KeypadDock.Right, keypad.Dock);
+    }
+
+    /// <summary>Greyed rather than silently inert: the keyboard and the Keys menu send nothing visible while
+    /// disconnected (the engine's action error is swallowed), and the keypad invites more clicking than either.</summary>
+    [AvaloniaFact]
+    public void The_keypad_is_enabled_only_while_connected()
+    {
+        var (window, _, _, session, _) = Show();
+        var keypad = KeypadOf(window);
+        Assert.False(keypad.IsEnabled);
+
+        session.RaiseConnection(ConnectionState.Connected3270);
+        Assert.True(keypad.IsEnabled);
+
+        session.RaiseConnection(ConnectionState.Disconnected);
+        Assert.False(keypad.IsEnabled);
+    }
+
+    /// <summary>The keypad form of A_key_pressed_while_the_previous_one_is_in_flight_still_reaches_the_host: the
+    /// method, not the command, so a second click while the first round trip is open still reaches the host.</summary>
+    [AvaloniaFact]
+    public async Task A_keypad_click_while_the_previous_key_is_in_flight_still_reaches_the_host()
+    {
+        var (window, _, vm, session, _) = Show();
+        session.RaiseConnection(ConnectionState.Connected3270);
+        vm.Settings.Keypad = true;
+        session.SendKeyCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        KeypadButton(window, TerminalKey.PF1).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        KeypadButton(window, TerminalKey.PF2).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.Equal(["key:PF1", "key:PF2"], session.Calls);
+        session.SendKeyCompletion.SetResult();
+        await Task.Yield();
     }
 
     [AvaloniaFact]

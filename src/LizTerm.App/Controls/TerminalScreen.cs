@@ -269,6 +269,11 @@ public sealed class TerminalScreen : Control
 
     private void OnWindowDeactivated(object? sender, EventArgs e) => _taps.Reset();
 
+    /// <summary>Ends a modifier tap in progress, for a pointer press this control does not see: a keypad button is
+    /// clicked elsewhere in the window, and Right Ctrl held across that click must not become Enter on its release
+    /// (keypad spec §6.2). The same rule OnPointerPressed applies to presses on the screen itself.</summary>
+    public void CancelTap() => _taps.Reset();
+
     private bool TryHandlePlatformGesture(KeyEventArgs e)
     {
         var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;

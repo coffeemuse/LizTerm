@@ -31,6 +31,15 @@ public partial class SessionWindow : Window
         Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteAsync();
         Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAll();
         Screen.FindRequested += (_, _) => ShowFind();
+        // The keypad's keys take the screen's route: the method, never the command. CancelTap first, because a
+        // click here is a pointer press the screen does not see (keypad spec §6.2); Focus last, a no-op while the
+        // non-focusable buttons leave the keyboard alone, and the guarantee when something else (the find box) had it.
+        KeypadPanel.KeyRequested += (_, key) =>
+        {
+            Screen.CancelTap();
+            _ = ViewModel?.SendKeyAsync(key);
+            Screen.Focus();
+        };
         ApplyMenuStrategy(useNativeMenu);
         Opened += (_, _) =>
         {
