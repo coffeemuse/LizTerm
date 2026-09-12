@@ -73,6 +73,12 @@ The choice is remembered, and applies to every session window; it is also in Pre
 When the host rings the terminal bell, the screen flashes briefly. A sound can be turned on in Preferences; by
 default the bell is silent. A host that rings repeatedly is limited to two bells a second.
 
+**View > Keypad** shows a panel of buttons for PF1 to PF24, PA1 to PA3, Enter, Clear, Reset, Attn, SysReq, Erase
+EOF, Erase Input, Dup and Field Mark, for the keys a keyboard cannot reach. It is off by default, remembered, and
+applies to every session window; Preferences chooses whether it sits below the screen or to its right. Hold the
+pointer over a button to see its keyboard shortcut. The buttons never take the keyboard away from the screen, and
+they are greyed out while the session is disconnected.
+
 ## Keyboard
 
 The default layout follows Vista TN3270, cross-checked against wc3270. It cannot be changed yet.
@@ -108,7 +114,8 @@ Copy, Paste, Select All and Find use the platform's own shortcuts — Cmd+C, Cmd
 elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.
 
 The **Keys** menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, PA1 to
-PA3, and PF13 to PF24.
+PA3, and PF13 to PF24. The on-screen keypad (**View > Keypad**) offers all of those as buttons, plus PF1 to PF12,
+Enter, Erase EOF and Erase Input.
 
 ## Mouse, selection and clipboard
 
@@ -209,6 +216,8 @@ window's **Edit** menu on Windows and Linux. Changes apply as you make them, to 
 - **Bell** — whether the screen flashes when the host rings the bell (on by default), and what sound plays: none, or
   the system alert sound, at the volume your system uses for alerts. The system alert sound is not available on
   Linux.
+- **Keypad** — whether the on-screen keypad is shown (the same as View > Keypad), and whether it docks below the
+  screen or to its right.
 
 ## Where LizTerm keeps its files
 

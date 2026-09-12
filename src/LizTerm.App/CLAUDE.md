@@ -128,6 +128,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.
+- The Preferences **Keypad** group is a two-way `KeypadBox` for `Settings.Keypad` (also View > Keypad) plus the two
+  dock radios over `KeypadDockConverter`, the Crosshair shape.
 
 ## Terminal screen (`Controls/TerminalScreen.cs`)
 
@@ -184,6 +186,26 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - The view model owns Copy (trimmed rows joined by `\n`), Paste (CRLF normalized, one `PasteTextAsync`) and Select
   All, and nulls `Selection` on every path that sends input to the host.
 
+## Keypad (`Controls/Keypad.axaml`)
+
+- A `UserControl` that mirrors `TerminalScreen`'s contract: it raises `KeyRequested` and knows nothing about view
+  models. Its buttons are built in the constructor from `KeypadLayout.Banks` (three banks of twelve; `KeypadKey` is
+  a label plus a `TerminalKey`), so no button is written by hand. `Dock` (`KeypadDock`) lays the same `UniformGrid`
+  out bank-per-row at the bottom or bank-per-column on the right; `Keypad.DockPanelDock` is the converter the
+  window's `DockPanel.Dock` binding uses, two bindings to one setting because the grid's shape is the control's and
+  its edge of the window is the window's. The window binds `IsVisible` to `Settings.Keypad` and `IsEnabled` to
+  `IsConnected`. `NativeMenuTests.Every_key_on_the_Keys_menu_is_on_the_keypad` holds the menu to a subset of the
+  table.
+- **Every button is `Focusable = false`**, so a click never moves the keyboard off the screen; the window still calls
+  `Screen.Focus()` after each key as the guarantee. A click goes to `SendKeyAsync`, never the command (see Keyboard
+  above for why), and first to `TerminalScreen.CancelTap()`: a keypad click is a pointer press the screen does not
+  see, and Right Ctrl held across it must not become Enter on release.
+- Tooltips come from `KeymapHints.Describe(keymap, key, format)` (`Keyboard/`), the reverse of a `Keymap`: chords
+  ordered unmodified first, then by modifier, function keys ahead within a group, taps last; ordinary chords through
+  Avalonia's `KeyGesture.ToString("p", format)`, taps worded by hand. The control passes a null format, the
+  platform's registration (glyphs on macOS, words elsewhere); tests pass an explicit `KeyGestureFormatInfo`. The
+  control's `Keymap` property is the #18 hook, and nothing binds it yet.
+
 ## Menus
 
 One `NativeMenu` per window, plus an application-level one in `App.axaml` holding **About and Preferences**, which
@@ -239,8 +261,9 @@ the host through the text input `TerminalScreen` already handles, and Ctrl+Cmd+S
 
 **No window menu item outside Edit ever carries a `Gesture`.** On macOS a `NativeMenuItem` gesture becomes an
 AppKit key equivalent that `NSApplication.sendEvent:` dispatches before the key window's responder chain, so
-`Gesture="F1"` would silently swallow PF1 — `TerminalScreen` would never see the key. So View, File > Save Screen
-As... and Edit > Copy Screen as HTML carry none. **The one exception is Preferences... on the application menu**,
+`Gesture="F1"` would silently swallow PF1 — `TerminalScreen` would never see the key. So View (Crosshair and Keypad),
+File > Save Screen As... and Edit > Copy Screen as HTML carry none. **The one exception is Preferences... on the
+application menu**,
 with Cmd-comma (settings spec §5.4): the application menu exists only on macOS, `DefaultKeymap` binds no Cmd
 chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly this class.
 `NativeMenuTests.The_application_menu_carries_cmd_comma_on_preferences_and_nothing_else` holds it to that one.
@@ -279,6 +302,8 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   also why OneWay is required rather than tidy: the in-window fallback runs the same handler over a `MenuItem` bound
   two-way to the `NativeMenuItem`, so with a TwoWay binding to the view model there would be two toggles and the
   click would do nothing.
+- View > Keypad is a check box in the Crosshair items' shape on *both* menus: a one-way `IsChecked` plus a Click
+  handler (`ToggleKeypad`) that flips `Settings.Keypad`, so Wire Log stays the only item whose two menus differ.
 - In tests, drive native items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`, the one
   entry point both real renderers use. Assigning `IsChecked` instead only proves a binding round-trips.
 - `MenuLookup` (`Menus/`) is how code-behind and tests find a `NativeMenuItem`, which `FindControl` cannot reach.

@@ -366,3 +366,9 @@ Each fact in its home:
 
 The work tracks as #31 and closes it. #23 gets a comment naming `KeymapHints`. The version stays 0.4.1 in the PR;
 the bump to 0.5.0 happens at release time, as the settings and bell specs said.
+
+## 12. As built (2026-09-12)
+
+Built as specified; the plan is `docs/superpowers/plans/2026-09-11-lizterm-keypad.md`. Two details were measured
+before the plan was written and are already in §5: Avalonia's name for the Enter key is "Return", and function keys
+sort ahead of other keys within a group so PF7 reads "F7 or PageUp".
