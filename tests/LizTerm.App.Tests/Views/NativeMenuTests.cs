@@ -121,8 +121,12 @@ public class NativeMenuTests
         var modes = new[] { CrosshairMode.None, CrosshairMode.Horizontal, CrosshairMode.Vertical, CrosshairMode.Both };
         var items = new[] { "_None", "_Horizontal", "_Vertical", "_Both" }
             .Select(header => CrosshairItem(window, header)).ToArray();
+        Assert.Equal(CrosshairMode.None, vm.Settings.Crosshair);
 
-        for (var chosen = 0; chosen < modes.Length; chosen++)
+        // None last, not first. It is the default, so clicking it first would assert the state the test began in
+        // and an item wired to the wrong handler would pass on it. In this order every click has to change the
+        // mode. (#71 found the same hole in the keypad dock's test, which this one was the template for.)
+        foreach (var chosen in new[] { 1, 2, 3, 0 })
         {
             ((INativeMenuItemExporterEventsImplBridge)items[chosen]).RaiseClicked();
 
