@@ -27,6 +27,15 @@ public class TagPaletteTests
         Assert.Same(TagPalette.Brush(TagColor.Red), TagPalette.Brush(TagColor.Red));
     }
 
+    /// <summary>A render pass must not throw for a value outside the enum. TagRegistryStore.Load now refuses to
+    /// produce one, but this is the backstop: the cost of being wrong here is a window that will not open.</summary>
+    [Fact]
+    public void A_colour_outside_the_enum_falls_back_rather_than_throwing()
+    {
+        Assert.Equal(TagPalette.ColorOf(TagColor.Grey), TagPalette.ColorOf((TagColor)99));
+        Assert.NotNull(TagPalette.Brush((TagColor)99));
+    }
+
     /// <summary>The spec claims white chip text clears 4.5:1 on every chip, and an accessibility claim nothing
     /// checks is a claim that rots — especially once #78 adds a light theme and someone retunes these values.
     /// WCAG 2.1 relative luminance and contrast ratio.</summary>

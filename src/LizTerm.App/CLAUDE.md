@@ -401,6 +401,28 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   Shift+Enter to `PreviousAsync`, and Escape to closing the bar and refocusing the screen. **Typing in the box must
   never reach `Keymap` or the host** — the highest-consequence invariant of the feature.
 
+## The session picker's tags
+
+- `ProfileRow` (`ViewModels/`) is what the picker's `ListBox` binds, not `SessionProfile`: a chip needs a
+  colour, and a profile carries only tag *names* — `TagRegistry` owns the colours. Resolving that inside a
+  `DataTemplate` would mean a multi-binding against the registry or static mutable state. `Profiles` still holds
+  the store's own `SessionProfile` instances and is still what `QuickConnect` resolves against, because its
+  `ReferenceEquals` check decides whether an accepted certificate pin may be written back to a file; `VisibleRows`
+  is the filtered projection and nothing else reads it.
+- **Clearing an `ObservableCollection` bound to a `SelectingItemsControl`'s `SelectedItem` nulls the source
+  property, whatever its declared type says.** `RebuildScopes` clears `Scopes`, the bound `ComboBox` nulls its own
+  selection, and the two-way binding writes that `null` straight into `SelectedScope` — which then fires
+  `OnSelectedScopeChanged` and runs the whole filter against a null scope. It cost two separate crashes: one
+  unprotected read in `RebuildScopes`, and one in `InScope` that Avalonia's own `TwoWay` exception handling
+  swallowed into a transient `DataValidationErrors` state on the control, so every test stayed green while an
+  exception was thrown on every window activation. Read what you need *before* the `Clear`, and guard a reader
+  with a property pattern (`is not { TagName: { } tag }`) rather than `?.`, which warns under `-warnaserror` on a
+  field the generator declares non-nullable.
+- Reconciliation — registering a tag name the registry does not know — lives in `ProfilePickerViewModel.Reload`,
+  never in `ProfileStore.LoadAll`, because a load must not write. It is what gives a profile copied from another
+  machine local colours, and it saves `tags.json` only when `TagRegistry.Register` reports something changed:
+  `Reload` runs on every window activation, so an unconditional save would rewrite the file constantly.
+
 ## Screen capture
 
 - Two formats over one `ScreenSnapshot`: plain text via `ScreenSnapshot.ToText()` (Core), and `ScreenHtml.Render`

@@ -47,7 +47,12 @@ public static class TagPalette
     /// <summary>The "+n" chip, which stands for tags of several colours and so belongs to none of them.</summary>
     public static IBrush Overflow { get; } = new ImmutableSolidColorBrush(Color.FromRgb(0x4A, 0x4A, 0x4A));
 
-    public static Color ColorOf(TagColor color) => Colors[color];
+    /// <summary>The chip fill for a colour. Total on purpose: a value outside the enum — which a hand-edited
+    /// tags.json can still produce if a future reader is less careful than TagRegistryStore.Load — falls back to
+    /// Grey rather than throwing out of a render pass, the same "quiet colour, not a throw" rule
+    /// TagRegistry.UnregisteredColor follows.</summary>
+    public static Color ColorOf(TagColor color) =>
+        Colors.TryGetValue(color, out var value) ? value : Colors[TagColor.Grey];
 
     public static IBrush Brush(TagColor color)
     {

@@ -35,8 +35,11 @@ public sealed class TagRegistryStore(string filePath)
         foreach (var entry in file.Tags)
         {
             if (entry is null) continue;
-            // Per entry, not per file: see TagEntry's remarks.
-            if (!Enum.TryParse<TagColor>(entry.Color, ignoreCase: true, out var color)) continue;
+            // Per entry, not per file: see TagEntry's remarks. IsDefined as well as TryParse, because TryParse
+            // accepts any NUMBER in range of the enum's underlying type — "8" parses as the undefined
+            // (TagColor)8 rather than failing — and an undefined member reaches TagPalette's dictionary while
+            // rendering, where it is a KeyNotFoundException rather than a wrong colour.
+            if (!Enum.TryParse<TagColor>(entry.Color, ignoreCase: true, out var color) || !Enum.IsDefined(color)) continue;
             definitions.Add(new TagDefinition(entry.Name, color));
         }
         return new TagRegistry(definitions);

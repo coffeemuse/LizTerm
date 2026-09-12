@@ -64,6 +64,26 @@ public class TagRegistryStoreTests : IDisposable
         Assert.Equal(TagColor.Blue, loaded.ColorOf("MVS"));
     }
 
+    /// <summary>Enum.TryParse accepts any number in range of the underlying type, so "8" parses as the undefined
+    /// (TagColor)8 rather than failing. Left in, it reached TagPalette's dictionary during rendering and made the
+    /// picker unopenable with a KeyNotFoundException naming neither the tag nor this file (spec 4.3, which asks
+    /// for per-entry repair).</summary>
+    [Theory]
+    [InlineData("8")]
+    [InlineData("99")]
+    [InlineData("-1")]
+    public void An_out_of_range_numeric_colour_drops_that_entry_alone(string colour)
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(File_, $$"""
+            { "tags": [ { "name": "PROD", "color": "{{colour}}" }, { "name": "MVS", "color": "Blue" } ] }
+            """);
+
+        var loaded = new TagRegistryStore(File_).Load();
+        Assert.Equal(["MVS"], loaded.Stored.Select(d => d.Name));
+        Assert.All(loaded.Stored, d => Assert.True(Enum.IsDefined(d.Color)));
+    }
+
     [Fact]
     public void A_colour_name_reads_back_whatever_its_casing()
     {

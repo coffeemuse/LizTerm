@@ -22,6 +22,7 @@ public partial class ProfilePickerViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(EditCommand), nameof(DeleteCommand))]
+    [NotifyPropertyChangedFor(nameof(SelectedProfile), nameof(HasSelection))]
     private ProfileRow? _selectedRow;
 
     /// <summary>The selected profile, which is the row's. Derived rather than stored so the list's selection
@@ -42,11 +43,11 @@ public partial class ProfilePickerViewModel : ObservableObject
     /// the same option object back.</summary>
     public static readonly ScopeOption AllSessions = new("All sessions", null);
 
-    [ObservableProperty] private ScopeOption _selectedScope = AllSessions;
+    [ObservableProperty] private ScopeOption? _selectedScope = AllSessions;
 
     [ObservableProperty] private string _filterText = "";
 
-    partial void OnSelectedScopeChanged(ScopeOption value) => Refilter();
+    partial void OnSelectedScopeChanged(ScopeOption? value) => Refilter();
 
     partial void OnFilterTextChanged(string value) => Refilter();
 
@@ -100,14 +101,19 @@ public partial class ProfilePickerViewModel : ObservableObject
         // Read before Clear(), not after: ScopeBox's SelectedItem is two-way bound to SelectedScope, and
         // Avalonia's SelectingItemsControl reacts to the Reset below by nulling its own selection, which the
         // two-way binding writes straight back into SelectedScope. Re-reading the property afterwards would see
-        // that transient null instead of what the user actually had selected.
-        var previousTagName = SelectedScope.TagName;
+        // that transient null instead of what the user actually had selected. The field is declared nullable
+        // because the binding really does write null into it, so this read cannot be an ordering invariant that
+        // a later edit could silently break.
+        var previousTagName = SelectedScope?.TagName;
 
+        // Tags some profile actually carries, not every registered tag (spec 5.3 says registered). Deliberate:
+        // Manage Tags is a later issue, so nothing can delete a definition yet, and a scope whose tag no longer
+        // exists anywhere filters to nothing with no way to clear it from the list.
         var wanted = _registry.All
             .Where(definition => Profiles.Any(p => p.Tags.Contains(definition.Name)) || TagRegistry.IsReserved(definition.Name))
             .Select(definition => TagRegistry.IsReserved(definition.Name)
                 ? new ScopeOption(definition.Name, definition.Name)
-                : new ScopeOption($"#{definition.Name}", definition.Name))
+                : new ScopeOption($"#{definition.Name.ToUpperInvariant()}", definition.Name))
             .ToList();
 
         Scopes.Clear();

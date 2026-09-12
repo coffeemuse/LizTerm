@@ -687,7 +687,7 @@ public class ProfileViewModelsTests : IDisposable
 
         var vm = Picker();
         Assert.Equal(["alpha", "zeta"], vm.VisibleRows.Select(r => r.Name));
-        Assert.Null(vm.SelectedScope.TagName);
+        Assert.Null(vm.SelectedScope!.TagName);
         Assert.Equal("All sessions", vm.SelectedScope.Label);
     }
 
@@ -777,7 +777,26 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["zeta", "MVS"]) });
 
         var vm = Picker();
-        Assert.Equal(["All sessions", "FAVORITE", "#MVS", "#zeta"], vm.Scopes.Select(s => s.Label));
+        Assert.Equal(["All sessions", "FAVORITE", "#MVS", "#ZETA"], vm.Scopes.Select(s => s.Label));
+    }
+
+    /// <summary>A scope whose tag has vanished would otherwise filter the list to nothing with no way back —
+    /// there is no Manage Tags window in this phase to remove the definition.</summary>
+    [Fact]
+    public void A_scope_whose_tag_no_longer_exists_falls_back_to_all_sessions()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        _store.Save(new SessionProfile { Name = "b", Host = "h" });
+
+        var vm = Picker();
+        vm.SelectedScope = vm.Scopes.Single(s => s.TagName == "PROD");
+        Assert.Equal(["a"], vm.VisibleRows.Select(r => r.Name));
+
+        _store.Save(new SessionProfile { Name = "a", Host = "h" });
+        vm.Reload();
+
+        Assert.Null(vm.SelectedScope!.TagName);
+        Assert.Equal(["a", "b"], vm.VisibleRows.Select(r => r.Name));
     }
 
     /// <summary>Reconciliation: a tag name seen on a profile but absent from the registry registers itself, so
@@ -813,7 +832,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "b", Host = "h" });
 
         var vm = Picker();
-        vm.SelectedScope = null!;
+        vm.SelectedScope = null;
 
         // Refilter runs on the assignment above and again here; neither may throw, and a null scope admits
         // everything, exactly as "All sessions" does.
