@@ -154,4 +154,52 @@ public static partial class UserGuideHtml
         "../README.md#first-run" => $"{Repo}/blob/v{version}/README.md#first-run",
         _ => target,
     };
+
+    private const string Guide = Repo + "/blob/main/docs/user-guide.md";
+
+    /// <summary>The whole document: one file, an inline stylesheet, no scripts, no web fonts, no external
+    /// references of any kind. It is read offline, and anything it would have to fetch is a blank space.</summary>
+    public static string Page(string markdown, string version) =>
+        $$"""
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>LizTerm user guide</title>
+          <style>
+          :root { color-scheme: light dark; }
+          body { margin: 0 auto; max-width: 46rem; padding: 2rem 1.25rem 4rem;
+                 font: 16px/1.6 -apple-system, "Segoe UI", system-ui, sans-serif;
+                 color: #1c1c1c; background: #fff; }
+          h1, h2, h3 { line-height: 1.25; margin: 2rem 0 0.75rem; }
+          h2 { border-bottom: 1px solid #d8d8d8; padding-bottom: 0.3rem; }
+          code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em;
+                 background: #f2f2f2; padding: 0.1em 0.3em; border-radius: 3px; }
+          pre { background: #f2f2f2; padding: 0.9rem; overflow-x: auto; border-radius: 4px; }
+          pre code { background: none; padding: 0; }
+          table { border-collapse: collapse; width: 100%; margin: 1rem 0; display: block; overflow-x: auto; }
+          th, td { border: 1px solid #d8d8d8; padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
+          th { background: #f6f6f6; }
+          a { color: #0b5cab; }
+          .offline { font-size: 0.9em; color: #4a4a4a; background: #f6f6f6;
+                     border: 1px solid #e0e0e0; border-radius: 4px; padding: 0.6rem 0.8rem; }
+          @media (prefers-color-scheme: dark) {
+            body { color: #e4e4e4; background: #1b1b1b; }
+            h2 { border-bottom-color: #3a3a3a; }
+            code, pre { background: #262626; }
+            th, td { border-color: #3a3a3a; }
+            th { background: #242424; }
+            a { color: #6fb3ff; }
+            .offline { color: #b6b6b6; background: #242424; border-color: #3a3a3a; }
+          }
+          </style>
+          </head>
+          <body>
+          <p class="offline">Offline copy, shipped with LizTerm {{version}}. The manual may have been updated
+          since this release — <a href="{{Guide}}">the current version is on GitHub</a>.</p>
+          {{Convert(markdown, version)}}</body>
+          </html>
+
+          """;
 }

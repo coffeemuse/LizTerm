@@ -8,6 +8,41 @@ public class UserGuideHtmlTests
 {
     private static string Body(string markdown) => UserGuideHtml.Convert(markdown, "9.9.9");
 
+    private static string Page(string markdown) => UserGuideHtml.Page(markdown, "9.9.9");
+
+    [Fact]
+    public void The_page_is_one_self_contained_document()
+    {
+        var html = Page("# LizTerm user guide\n");
+
+        Assert.StartsWith("<!doctype html>", html);
+        Assert.Contains("<style>", html);
+        Assert.Contains("prefers-color-scheme: dark", html);
+        Assert.DoesNotContain("<script", html);
+        Assert.DoesNotContain("<link", html);
+        Assert.EndsWith("</html>\n", html);
+    }
+
+    /// <summary>Spec §6: the banner exists only here. docs/user-guide.md is the live copy, and a note telling
+    /// its reader to go and find the live copy would be false there.</summary>
+    [Fact]
+    public void The_banner_names_the_version_and_links_to_main()
+    {
+        var html = Page("# LizTerm user guide\n");
+
+        Assert.Contains("Offline copy, shipped with LizTerm 9.9.9.", html);
+        Assert.Contains("https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md", html);
+    }
+
+    [Fact]
+    public void The_banner_sits_above_the_title()
+    {
+        var html = Page("# LizTerm user guide\n");
+
+        Assert.True(html.IndexOf("Offline copy", StringComparison.Ordinal)
+                    < html.IndexOf("<h1", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Headings_carry_the_id_their_anchors_use()
     {
