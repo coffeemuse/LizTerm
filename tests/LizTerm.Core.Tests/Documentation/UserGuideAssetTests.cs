@@ -94,6 +94,20 @@ public class UserGuideAssetTests
         }
     }
 
+    /// <summary>Every bullet in the source must become a list item. This is a count rather than a pattern
+    /// because the failure it guards against was not a construct the converter refused — it was a wrapped
+    /// bullet's continuation falling into the paragraph branch, which consumes to the next blank line and so
+    /// swallowed the bullets after it too. Sixteen of forty-five bullets rendered as prose before this was
+    /// found, and no construct-shaped guard noticed.</summary>
+    [Fact]
+    public void Every_bullet_in_the_source_becomes_a_list_item()
+    {
+        var bullets = Markdown().Split('\n').Count(l => l.StartsWith("- ", StringComparison.Ordinal));
+        var items = Regex.Matches(File.ReadAllText(HtmlPath).ReplaceLineEndings("\n"), "<li>").Count;
+
+        Assert.Equal(bullets, items);
+    }
+
     [Fact]
     public void The_banner_names_the_version_the_release_will_carry() =>
         Assert.Contains($"Offline copy, shipped with LizTerm {Version()}.",
