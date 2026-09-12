@@ -305,16 +305,19 @@ public class FileTransferViewModelTests
             vm.LocalPath = path;
             vm.HostFile = "A.B";
             session.TransferCompletion = Pending();
-            var callsWhenLengthArrived = -1;
+            // The count is taken in the handler and handed over through the completion source, because the
+            // property is readable before the notification goes out: the generated setter assigns the field and
+            // only then raises PropertyChanged. Waiting on `vm.TotalBytes is not null` would let this thread run
+            // on in that gap and read a count the handler had not written yet.
+            var callsWhenLengthArrived = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
             vm.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(vm.TotalBytes) && vm.TotalBytes is not null) callsWhenLengthArrived = session.Calls.Count;
+                if (e.PropertyName == nameof(vm.TotalBytes) && vm.TotalBytes is not null) callsWhenLengthArrived.TrySetResult(session.Calls.Count);
             };
 
             var run = vm.StartCommand.ExecuteAsync(null);
-            await Wait.UntilAsync(() => vm.TotalBytes is not null, "the file length");
 
-            Assert.Equal(1, callsWhenLengthArrived);
+            Assert.Equal(1, await callsWhenLengthArrived.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
             session.TransferCompletion.SetResult();
             await run;
         }
