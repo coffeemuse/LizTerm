@@ -9,6 +9,7 @@ using LizTerm.App.Bell;
 using LizTerm.App.Capture;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
+using LizTerm.App.Documentation;
 using LizTerm.App.Files;
 using LizTerm.App.Status;
 using LizTerm.Core.Profiles;
@@ -300,6 +301,24 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             // Fall through to naming the URL.
         }
         ErrorMessage = $"Could not open a browser. The page is at {url}.";
+    }
+
+    /// <summary>Help &gt; User Guide. Writes the bundled copy out and hands it to the platform. When that
+    /// fails, the banner names the page on GitHub rather than the temp path: the URL is what a person can act
+    /// on, where the path is an artifact of how we shipped it.</summary>
+    [RelayCommand]
+    private async Task ShowUserGuideAsync()
+    {
+        try
+        {
+            var path = UserGuide.Extract(AppVersion.Current, Path.GetTempPath());
+            if (_uriOpener is not null && await _uriOpener.OpenFileAsync(path)) return;
+        }
+        catch (Exception)
+        {
+            // Fall through to naming the page.
+        }
+        ErrorMessage = $"Could not open the user guide. It is also at {ProjectLinks.UserGuide}.";
     }
 
     /// <summary>The last request a File Transfer dialog started from this window, so the next dialog opens as the

@@ -18,4 +18,8 @@ public static class ProjectLinks
     public const string NewIssue = Repo + "/issues/new/choose";
 
     public const string Releases = Repo + "/releases";
+
+    /// <summary>Where the guide lives when the bundled copy cannot be opened. `main`, not the tag: a reader who
+    /// could not open the offline copy wants the manual, and the current one is the best answer available.</summary>
+    public const string UserGuide = Repo + "/blob/main/docs/user-guide.md";
 }

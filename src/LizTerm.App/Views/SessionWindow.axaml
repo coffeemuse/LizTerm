@@ -141,6 +141,7 @@
           <NativeMenu>
             <!-- OneWay plus a Click handler, unlike the classic item's TwoWay: a NativeMenuItem never toggles
                  itself. See OnWireLogClickNative. -->
+            <NativeMenuItem Header="_User Guide" Command="{Binding ShowUserGuideCommand}" />
             <NativeMenuItem Header="Project on _GitHub" Command="{Binding OpenLinkCommand}"
                             CommandParameter="{x:Static app:ProjectLinks.Repository}" />
             <NativeMenuItem Header="_Report an Issue..." Command="{Binding OpenLinkCommand}"
@@ -236,6 +237,7 @@
         <MenuItem Header="PF24" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF24}" />
       </MenuItem>
       <MenuItem Header="_Help">
+        <MenuItem Header="_User Guide" Command="{Binding ShowUserGuideCommand}" />
         <MenuItem Header="Project on _GitHub" Command="{Binding OpenLinkCommand}"
                   CommandParameter="{x:Static app:ProjectLinks.Repository}" />
         <MenuItem Header="_Report an Issue..." Command="{Binding OpenLinkCommand}"

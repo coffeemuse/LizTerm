@@ -1045,4 +1045,46 @@ public class NativeMenuTests
 
         Assert.Equal([ProjectLinks.NewIssue], opener.Opened);
     }
+
+    [AvaloniaFact]
+    public void Help_offers_the_user_guide_above_the_links_on_both_menus()
+    {
+        var (window, _, _, _) = Show();
+        var classic = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>()
+            .Single(m => (string)m.Header! == "_Help");
+
+        Assert.Equal("_User Guide", (string)classic.Items.OfType<MenuItem>().First().Header!);
+        Assert.NotNull(Item(window, "_Help", "_User Guide").Command);
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_the_user_guide_opens_the_extracted_file()
+    {
+        var opener = new FakeUriOpener();
+        var vm = new SessionViewModel(new FakeEmulatorSession(), action => action(), new FakeTextClipboard(),
+            uriOpener: opener);
+        var window = new SessionWindow(MenuStyle.Native, isMacOS: true) { DataContext = vm };
+        window.Show();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Help", "_User Guide")).RaiseClicked();
+        await Wait.UntilAsync(() => opener.Opened.Count == 1, "the guide to be opened");
+
+        Assert.EndsWith($"lizterm-user-guide-{AppVersion.Current}.html", opener.Opened[0]);
+        Assert.True(File.Exists(opener.Opened[0]));
+    }
+
+    [AvaloniaFact]
+    public async Task A_platform_that_cannot_open_the_guide_names_the_page_on_GitHub()
+    {
+        var opener = new FakeUriOpener { Result = false };
+        var vm = new SessionViewModel(new FakeEmulatorSession(), action => action(), new FakeTextClipboard(),
+            uriOpener: opener);
+        var window = new SessionWindow(MenuStyle.Native, isMacOS: true) { DataContext = vm };
+        window.Show();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Help", "_User Guide")).RaiseClicked();
+        await Wait.UntilAsync(() => vm.ErrorMessage is not null, "the banner");
+
+        Assert.Contains(ProjectLinks.UserGuide, vm.ErrorMessage!);
+    }
 }
