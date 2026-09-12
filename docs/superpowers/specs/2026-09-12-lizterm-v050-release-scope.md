@@ -293,6 +293,15 @@ all six RIDs and every installer, creates no release, and needs no tag.
 - The in-window menu carrying View > Keypad and its submenu. 4.2 landed, so this is no longer conditional:
   check that **Show the Keypad**, **At the Bottom** and **On the Right** all work from the in-window menu,
   which off macOS is the only menu there is.
+- **Help > User Guide** — 4.1, the newest item in the release and the one no platform but macOS has run.
+  The guide is an embedded resource written out as `lizterm-user-guide-0.5.0.html` and handed to the
+  platform's default browser, which is three different mechanisms behind one `Launcher` call. Check that it
+  opens, that the banner names 0.5.0, that the tables and internal anchors work, and that a platform which
+  cannot open it shows the error naming the guide's GitHub URL rather than failing silently.
+- **Help's other links** — Project on GitHub, Report an Issue..., Releases — reach the browser, and
+  Show Wire Logs... still opens the folder from the same menu.
+- **About** — 4.3 removed the engine path, so check the window still sizes to its content without the line
+  `SizeToContent.Height` used to be justified by, and that the status bar still reports engine provenance.
 - `settings.json` written to the right per-OS path, and surviving a restart.
 - The `.deb`, `.rpm` and `.exe` installers themselves, which are packaged on every release and installed by
   nobody so far.
