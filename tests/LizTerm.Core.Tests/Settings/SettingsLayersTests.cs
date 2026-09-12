@@ -68,6 +68,22 @@ public class SettingsLayersTests
         Assert.Equal(KeypadDock.Bottom, new AppSettings().KeypadDock);
     }
 
+    /// <summary>A style this build does not know (a later build's name, say) costs that key alone, the same
+    /// guarantee the bell's sound and the keypad's dock rely on.</summary>
+    [Fact]
+    public void A_menu_style_this_build_does_not_know_falls_to_Auto_and_the_rest_are_kept()
+    {
+        Assert.Equal(new AppSettings(Blink: false), SettingsLayers.Read(Doc("""{"blink":false,"menuStyle":"Sideways"}""")));
+    }
+
+    [Fact]
+    public void The_menu_style_reads_by_name_and_defaults_to_letting_the_platform_decide()
+    {
+        Assert.Equal(new AppSettings(MenuStyle: MenuStyle.Both), SettingsLayers.Read(Doc("""{"menuStyle":"Both"}""")));
+        Assert.Equal(new AppSettings(), SettingsLayers.Read(Doc("""{}""")));
+        Assert.Equal(MenuStyle.Auto, new AppSettings().MenuStyle);
+    }
+
     [Fact]
     public void An_unknown_key_is_ignored_on_read()
     {

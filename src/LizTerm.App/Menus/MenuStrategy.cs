@@ -2,33 +2,69 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using LizTerm.Core.Settings;
+
 namespace LizTerm.App.Menus;
 
-/// <summary>Which menu renderer a platform gets, and where About belongs on it.
+/// <summary>Which renderers a platform gets, and where About belongs on them.
 ///
-/// The classic in-window menu and the NativeMenuBar both render the same definition, and this picks between
-/// them. The default is native on macOS and classic on Windows and Linux, because NativeMenuBar's in-window
-/// rendering has not been looked at on either of those platforms — this project has no Windows or Linux GUI,
-/// and CI has no GUI at all — and replacing a menu that works with one nobody has seen is the wrong default.
-/// LIZTERM_MENU=native is how that gets looked at, without a rebuild. This whole class is a staging device;
-/// see section 8 of the spec for what has to be true before the classic menu is deleted.</summary>
+/// The classic in-window menu and the NativeMenuBar both render the same definition. **The native menu is a macOS
+/// feature and nothing else**, because of how Avalonia is built rather than anything this project has yet to get
+/// round to: macOS is the only platform with a native menu exporter at all. Win32 has none, and Linux's
+/// DBusMenuExporter hands the menu to whatever global-menu registrar the desktop happens to run — so off macOS
+/// "native" means either an in-window NativeMenuBar, which is a second in-window menu beside the one that already
+/// works, or a bar that moves somewhere the user's desktop chose. Neither is a menu worth offering, so Resolve
+/// answers InWindow for every style off macOS and Preferences shows no choice there. Should Avalonia's support
+/// grow, #22 is where that gets revisited; until then this is scope, not a staging device.
+///
+/// Both renderers are permanent (#70): the in-window one is the only menu anything driving the visual tree can
+/// reach, because a NativeMenuItem is not a Control.
+///
+/// The style a window actually gets is the user's preference, seeded at launch by LIZTERM_MENU and resolved
+/// here; SettingsViewModel.MenuStyle holds it and SessionWindow.ApplyMenuStyle acts on it.</summary>
 internal static class MenuStrategy
 {
     public const string Variable = "LIZTERM_MENU";
 
-    public static bool UseNativeMenu =>
-        Decide(Environment.GetEnvironmentVariable(Variable), OperatingSystem.IsMacOS());
+    /// <summary>A stored style as the style the platform actually gets. Kept pure, taking the platform rather
+    /// than reading it, so every combination is testable on every machine: the shape EngineRequirement.Decide
+    /// uses for the same reason. Never answers Auto.
+    ///
+    /// Off macOS the answer is always InWindow, whatever the file says, because the native menu is macOS-only —
+    /// see the class summary. Both would draw two bars stacked there (NativeMenuBar renders in-window where there
+    /// is no exporter, and both are docked Top), and Native either that same second bar or a global-menu handoff;
+    /// MenuStyleChoosable gives no control to leave either, so they must not be reachable at all. A settings file
+    /// carried between platforms, or hand-edited, is exactly how they otherwise would be.
+    ///
+    /// This is also the one place an out-of-range value is normalised. A settings file is text a user can edit
+    /// and JsonStringEnumConverter accepts integers, so `"menuStyle": 9` reads back as (MenuStyle)9 rather than
+    /// falling to Auto the way an unknown *name* does; left alone it names no renderer at all.</summary>
+    public static MenuStyle Resolve(MenuStyle style, bool isMacOS) => isMacOS
+        ? style switch
+        {
+            MenuStyle.Native or MenuStyle.InWindow or MenuStyle.Both => style,
+            _ => MenuStyle.Native,
+        }
+        : MenuStyle.InWindow;
 
-    /// <summary>Kept pure, taking the platform rather than reading it, so every combination is testable on
-    /// every machine — the shape EngineRequirement.Decide uses for the same reason.</summary>
-    public static bool Decide(string? variable, bool isMacOS) => variable?.Trim().ToLowerInvariant() switch
+    /// <summary>The style LIZTERM_MENU names, or null for a variable that names none — unset, blank, or a typo.
+    /// Null means "no seed", leaving the saved preference to decide, because a value that left the app with no
+    /// menu bar would be a worse outcome than one that quietly draws the usual one. "auto" names none either:
+    /// Auto is the absence of a choice, so seeding it would seed nothing.</summary>
+    public static MenuStyle? FromVariable(string? variable) => variable?.Trim().ToLowerInvariant() switch
     {
-        "native" => true,
-        "classic" => false,
-        // Anything else, blank included: the platform default. A typo that left the app with no menu bar
-        // would be a worse outcome than one that quietly draws the usual one.
-        _ => isMacOS,
+        "native" => MenuStyle.Native,
+        // The name this variable has used for the in-window menu since it existed, kept working.
+        "classic" => MenuStyle.InWindow,
+        "both" => MenuStyle.Both,
+        _ => null,
     };
+
+    /// <summary>Whether the menu style is a choice worth offering here, and so whether Preferences shows the
+    /// group. Only macOS draws the two renderers in different places; elsewhere Resolve answers InWindow for
+    /// every style, so there is nothing to choose. The two answers are the same rule and belong in the same
+    /// file — a group offered where Resolve ignores it, or ignored where it is offered, is the bug.</summary>
+    public static bool MenuStyleChoosable(bool isMacOS) => isMacOS;
 
     /// <summary>macOS puts About in the application menu, so the Help item must not also carry one.</summary>
     public static bool AboutInHelpMenu(bool isMacOS) => !isMacOS;

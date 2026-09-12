@@ -17,4 +17,5 @@ public sealed record AppSettings(
     bool VisualBell = true,
     [property: JsonConverter(typeof(JsonStringEnumConverter<BellSound>))] BellSound BellSound = BellSound.None,
     bool Keypad = false,
-    [property: JsonConverter(typeof(JsonStringEnumConverter<KeypadDock>))] KeypadDock KeypadDock = KeypadDock.Bottom);
+    [property: JsonConverter(typeof(JsonStringEnumConverter<KeypadDock>))] KeypadDock KeypadDock = KeypadDock.Bottom,
+    [property: JsonConverter(typeof(JsonStringEnumConverter<MenuStyle>))] MenuStyle MenuStyle = MenuStyle.Auto);

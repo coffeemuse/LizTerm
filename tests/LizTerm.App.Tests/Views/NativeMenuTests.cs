@@ -63,7 +63,10 @@ public class NativeMenuTests
         Assert.True(about.HasClickHandlers);
     }
 
-    private static (SessionWindow Window, SessionViewModel Vm, FakeEmulatorSession Session, FakeTextClipboard Clipboard) Show(bool useNativeMenu = true)
+    /// <summary>macOS by default, because that is the only platform where the three styles differ: Resolve
+    /// answers InWindow for every one of them elsewhere, so a window built with the runner's own platform
+    /// would ignore the style a test names. Ask for the other shape by name where it is what is under test.</summary>
+    private static (SessionWindow Window, SessionViewModel Vm, FakeEmulatorSession Session, FakeTextClipboard Clipboard) Show(MenuStyle style = MenuStyle.Native, bool isMacOS = true)
     {
         var session = new FakeEmulatorSession();
         var buffer = new ScreenBuffer(24, 80);
@@ -71,7 +74,7 @@ public class NativeMenuTests
         session.CurrentScreen = buffer.Snapshot();
         var clipboard = new FakeTextClipboard();
         var vm = new SessionViewModel(session, action => action(), clipboard);
-        var window = new SessionWindow(useNativeMenu) { DataContext = vm };
+        var window = new SessionWindow(style, isMacOS) { DataContext = vm };
         window.Show();
         return (window, vm, session, clipboard);
     }
@@ -460,15 +463,89 @@ public class NativeMenuTests
     /// <summary>Measured: with a NativeMenu installed and the classic Menu still visible, macOS drew both — an
     /// in-window bar beneath a system bar. Hiding the classic one under the native strategy is required, not tidy.</summary>
     [AvaloniaFact]
-    public void Exactly_one_renderer_is_visible_under_each_strategy()
+    public void Each_style_shows_the_renderers_it_names()
     {
-        var (native, _, _, _) = Show(useNativeMenu: true);
+        var (native, _, _, _) = Show(MenuStyle.Native);
         Assert.False(native.FindControl<Menu>("ClassicMenu")!.IsVisible);
         Assert.True(native.FindControl<NativeMenuBar>("NativeBar")!.IsVisible);
 
-        var (classic, _, _, _) = Show(useNativeMenu: false);
+        var (classic, _, _, _) = Show(MenuStyle.InWindow);
         Assert.True(classic.FindControl<Menu>("ClassicMenu")!.IsVisible);
         Assert.False(classic.FindControl<NativeMenuBar>("NativeBar")!.IsVisible);
+
+        var (both, _, _, _) = Show(MenuStyle.Both);
+        Assert.True(both.FindControl<Menu>("ClassicMenu")!.IsVisible);
+        Assert.True(both.FindControl<NativeMenuBar>("NativeBar")!.IsVisible);
+    }
+
+    /// <summary>Both is reached by not suppressing it: the classic bar stays visible and the declared NativeMenu
+    /// stays populated, which is the state ApplyMenuStyle goes out of its way to prevent under Native and
+    /// InWindow. Measured on macOS, that draws an in-window bar beneath the system one.</summary>
+    [AvaloniaFact]
+    public void Both_keeps_the_native_menu_populated_alongside_the_classic_bar()
+    {
+        var (window, _, _, _) = Show(MenuStyle.Both);
+
+        Assert.NotEmpty(NativeMenu.GetMenu(window)!.Items);
+        Assert.True(window.FindControl<Menu>("ClassicMenu")!.IsVisible);
+    }
+
+    /// <summary>The preference applies to open windows, so InWindow has to be a state the window can leave as
+    /// well as enter. Emptying the declared menu is destructive — the items are removed and their Parent nulled —
+    /// so ApplyMenuStyle stashes them and adds the same objects back to the same instance. The same instance is
+    /// the part that matters (#60): Avalonia's macOS exporter binds its native proxy to the first NativeMenu a
+    /// window is given and throws for any other, so a refill that built a new menu would pass here and throw on
+    /// a Mac. Assert.Same is what says it did not.</summary>
+    [AvaloniaFact]
+    public void A_style_change_on_an_open_window_empties_and_refills_the_same_native_menu()
+    {
+        var (window, vm, _, _) = Show(MenuStyle.Native);
+        var declared = NativeMenu.GetMenu(window)!;
+        var headers = declared.Items.OfType<NativeMenuItem>().Select(i => i.Header).ToList();
+        Assert.NotEmpty(headers);
+
+        vm.Settings.MenuStyle = MenuStyle.InWindow;
+        Assert.Empty(declared.Items);
+        Assert.True(window.FindControl<Menu>("ClassicMenu")!.IsVisible);
+
+        vm.Settings.MenuStyle = MenuStyle.Both;
+        Assert.Equal(headers, declared.Items.OfType<NativeMenuItem>().Select(i => i.Header));
+        Assert.True(window.FindControl<Menu>("ClassicMenu")!.IsVisible);
+
+        vm.Settings.MenuStyle = MenuStyle.Native;
+        Assert.Equal(headers, declared.Items.OfType<NativeMenuItem>().Select(i => i.Header));
+        Assert.False(window.FindControl<Menu>("ClassicMenu")!.IsVisible);
+        Assert.Same(declared, NativeMenu.GetMenu(window));
+    }
+
+    /// <summary>The direction that needs ApplyMenuStyle's re-run of ApplyPlatformMenuRules and
+    /// ShowPlatformGestures, and the one the test above cannot see: a window that *opened* under InWindow had its
+    /// menu emptied before either ever ran against it, so the items come back never having been given a gesture
+    /// or had the About/Preferences rule applied. Headers survive a refill whatever those two calls do — they are
+    /// XAML literals — so this asserts the state a refill has to restore rather than the state it cannot
+    /// lose. Delete either call from ApplyMenuStyle and this is what fails.</summary>
+    [AvaloniaFact]
+    public void A_window_opened_in_window_gets_its_gestures_and_platform_rules_when_it_switches_to_native()
+    {
+        var (window, vm, _, _) = Show(MenuStyle.InWindow);
+        var declared = NativeMenu.GetMenu(window)!;
+        Assert.Empty(declared.Items);
+
+        vm.Settings.MenuStyle = MenuStyle.Native;
+
+        var hotkeys = window.GetPlatformSettings()!.HotkeyConfiguration;
+        Assert.Equal(hotkeys.Copy.FirstOrDefault(), MenuLookup.Item(declared, "_Edit", "_Copy")!.Gesture);
+        Assert.Equal(hotkeys.Paste.FirstOrDefault(), MenuLookup.Item(declared, "_Edit", "_Paste")!.Gesture);
+        Assert.Equal(hotkeys.SelectAll.FirstOrDefault(), MenuLookup.Item(declared, "_Edit", "Select _All")!.Gesture);
+        Assert.Equal(new KeyGesture(Key.F, hotkeys.CommandModifiers), MenuLookup.Item(declared, "_Edit", "_Find...")!.Gesture);
+
+        // The application menu supplies both on macOS, so neither renderer's copy may also show one.
+        Assert.Equal(
+            MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS()),
+            MenuLookup.Item(declared, "_Help", "_About LizTerm...")!.IsVisible);
+        Assert.Equal(
+            MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS()),
+            MenuLookup.Item(declared, "_Edit", "P_references...")!.IsVisible);
     }
 
     /// <summary>Hiding the renderers is not what turns the native path off, so this asserts the thing that does.
@@ -495,10 +572,10 @@ public class NativeMenuTests
     [AvaloniaFact]
     public void The_classic_strategy_empties_the_window_native_menu_without_replacing_it()
     {
-        var (native, _, _, _) = Show(useNativeMenu: true);
+        var (native, _, _, _) = Show(MenuStyle.Native);
         Assert.NotEmpty(NativeMenu.GetMenu(native)!.Items);
 
-        var (classic, _, _, _) = Show(useNativeMenu: false);
+        var (classic, _, _, _) = Show(MenuStyle.InWindow);
         var menu = NativeMenu.GetMenu(classic);
         Assert.NotNull(menu);
         Assert.Empty(menu.Items);
@@ -512,7 +589,7 @@ public class NativeMenuTests
     [AvaloniaFact]
     public void The_classic_menu_keeps_its_gestures_when_the_native_menu_is_emptied()
     {
-        var (window, _, _, _) = Show(useNativeMenu: false);
+        var (window, _, _, _) = Show(MenuStyle.InWindow);
         var hotkeys = window.GetPlatformSettings()!.HotkeyConfiguration;
 
         Assert.Equal(hotkeys.Copy.FirstOrDefault(), window.FindControl<MenuItem>("CopyMenuItem")!.InputGesture);
@@ -650,11 +727,12 @@ public class NativeMenuTests
     /// key-equivalent interception (design section 2.1) needs a live macOS GUI session, and this test is not
     /// evidence about that path.</summary>
     [AvaloniaTheory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void The_paste_hotkey_reaches_the_host_exactly_once_via_TerminalScreen_under_headless(bool useNativeMenu)
+    [InlineData(MenuStyle.Native)]
+    [InlineData(MenuStyle.InWindow)]
+    [InlineData(MenuStyle.Both)]
+    public void The_paste_hotkey_reaches_the_host_exactly_once_via_TerminalScreen_under_headless(MenuStyle style)
     {
-        var (window, _, session, clipboard) = Show(useNativeMenu);
+        var (window, _, session, clipboard) = Show(style);
         clipboard.Text = "claude";
         session.RaiseConnection(ConnectionState.Connected3270);
 
@@ -764,11 +842,12 @@ public class NativeMenuTests
     /// dispatch path that exists there. Modelled on that same paste test, over both menu strategies for the same
     /// reason: this path does not go through either menu at all, so both must reach the bar identically.</summary>
     [AvaloniaTheory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void The_find_gesture_opens_the_bar_via_TerminalScreen(bool useNativeMenu)
+    [InlineData(MenuStyle.Native)]
+    [InlineData(MenuStyle.InWindow)]
+    [InlineData(MenuStyle.Both)]
+    public void The_find_gesture_opens_the_bar_via_TerminalScreen(MenuStyle style)
     {
-        var (window, vm, _, _) = Show(useNativeMenu);
+        var (window, vm, _, _) = Show(style);
         window.FindControl<TerminalScreen>("Screen")!.Focus();
 
         window.KeyPressQwerty(PhysicalKey.F, RawInputModifiers.Control);

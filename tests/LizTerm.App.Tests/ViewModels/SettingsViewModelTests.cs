@@ -153,4 +153,40 @@ public class SettingsViewModelTests : IDisposable
         Assert.True(reloaded.Keypad);
         Assert.Equal(KeypadDock.Right, reloaded.KeypadDock);
     }
+
+    [Fact]
+    public void The_menu_style_writes_through_raises_its_own_name_and_skips_an_unchanged_value()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.MenuStyle = MenuStyle.Auto;        // already the default: nothing
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.MenuStyle = MenuStyle.Both;
+
+        Assert.Equal(["MenuStyle"], changes);
+        Assert.Equal(MenuStyle.Both, new SettingsViewModel(new SettingsStore(FilePath)).MenuStyle);
+    }
+
+    /// <summary>LIZTERM_MENU seeds the running instance and nothing else: the value applies in memory, notifies
+    /// like any other change so open windows follow it, and never becomes the user's saved preference — not even
+    /// by riding along with the next thing they do change.</summary>
+    [Fact]
+    public void A_seeded_menu_style_applies_in_memory_and_never_reaches_the_file()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.SeedMenuStyle(MenuStyle.Both);
+
+        Assert.Equal(MenuStyle.Both, settings.MenuStyle);
+        Assert.Equal(["MenuStyle"], changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.Blink = false;
+
+        Assert.Equal(MenuStyle.Auto, new SettingsViewModel(new SettingsStore(FilePath)).MenuStyle);
+    }
 }

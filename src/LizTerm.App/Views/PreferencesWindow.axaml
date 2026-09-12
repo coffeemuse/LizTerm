@@ -50,6 +50,28 @@
     <RadioButton x:Name="KeypadRight" GroupName="KeypadDock" Content="On the right of the window" Click="OnKeypadRightClick"
                  IsChecked="{Binding KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Right, Mode=OneWay}" />
 
+    <!-- macOS only: elsewhere both renderers draw inside the window, so "Both" would be two stacked bars and
+         "in the system menu bar" would name nowhere. The constructor hides the whole group there rather than
+         disabling it, because there is no choice to explain. The same one-way-plus-Click shape as the radios
+         above.
+
+         The first radio is Auto, which the other groups have no equivalent of because their enums' defaults are
+         real members with a radio each. Auto is the absence of a choice and what an untouched settings file
+         reads as, so without a radio of its own the whole group would render with nothing selected on every
+         install that has never named a style — and once a style was named there would be no way back to
+         following the platform. -->
+    <StackPanel x:Name="MenuStyleGroup" Spacing="6">
+      <TextBlock Text="Menu bar" FontWeight="SemiBold" Margin="0,10,0,0" />
+      <RadioButton x:Name="MenuStyleAuto" GroupName="MenuStyle" Content="Wherever this platform puts it" Click="OnMenuStyleAutoClick"
+                   IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=Auto, Mode=OneWay}" />
+      <RadioButton x:Name="MenuStyleNative" GroupName="MenuStyle" Content="In the system menu bar" Click="OnMenuStyleNativeClick"
+                   IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=Native, Mode=OneWay}" />
+      <RadioButton x:Name="MenuStyleInWindow" GroupName="MenuStyle" Content="Inside the window" Click="OnMenuStyleInWindowClick"
+                   IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=InWindow, Mode=OneWay}" />
+      <RadioButton x:Name="MenuStyleBoth" GroupName="MenuStyle" Content="Both" Click="OnMenuStyleBothClick"
+                   IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+    </StackPanel>
+
     <!-- Empty until a save fails; the session windows show the same message in their banners. -->
     <TextBlock x:Name="SaveErrorText" Text="{Binding LastSaveError}" Foreground="#FF8080" TextWrapping="Wrap" Margin="0,10,0,0" />
 

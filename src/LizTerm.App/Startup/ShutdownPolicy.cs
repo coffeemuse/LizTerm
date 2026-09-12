@@ -7,7 +7,7 @@ using Avalonia.Controls;
 namespace LizTerm.App.Startup;
 
 /// <summary>Whether a closing window is on its way out with the whole application, and what that means for the
-/// picker. Kept pure and taking the reason as an argument, the shape MenuStrategy.Decide and
+/// picker. Kept pure and taking the reason as an argument, the shape MenuStrategy.Resolve and
 /// EngineRequirement.Decide use, because the paths that produce these reasons cannot be reached from a test.
 ///
 /// The app returns to the picker when the last session window closes, which is right for a window the user

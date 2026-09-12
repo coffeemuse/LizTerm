@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -15,12 +16,23 @@ namespace LizTerm.App.Views;
 
 public partial class SessionWindow : Window
 {
-    public SessionWindow() : this(MenuStrategy.UseNativeMenu) { }
+    /// <summary>The platform's default style and nothing else — the designer's constructor, and the tests' where
+    /// the menu is not what is under test. App passes the user's style explicitly; a window that reached for
+    /// App.Settings itself would open the real settings file from every headless test that builds one.</summary>
+    public SessionWindow() : this(MenuStyle.Auto, OperatingSystem.IsMacOS()) { }
 
-    /// <summary>The strategy is a constructor argument rather than a static read, so a test can build a window
-    /// in either mode without touching the process environment — the once-only paste test needs both.</summary>
-    internal SessionWindow(bool useNativeMenu)
+    /// <summary>The style and the platform are both constructor arguments rather than static reads, so a test can
+    /// build a window in any mode on any machine — the once-only paste test needs all three styles, and
+    /// MenuStrategy.Resolve answers InWindow for every style off macOS, so pinning the style without pinning the
+    /// platform would leave a Linux runner with InWindow whatever the test asked for.
+    ///
+    /// The style is resolved here rather than by the caller: unresolved is not a state ApplyMenuStyle can draw,
+    /// and one entry point that always resolves is what keeps a caller from having to remember. Note this
+    /// platform answer governs the menu *style* only. Where About and Preferences belong is the platform the
+    /// process is actually running on, which ApplyPlatformMenuRules reads directly, as its tests expect.</summary>
+    internal SessionWindow(MenuStyle style, bool isMacOS)
     {
+        _isMacOS = isMacOS;
         InitializeComponent();
         // The screen's events call the view model's methods, not its commands: each method carries its own guard,
         // and a keystroke must never be dropped for arriving while the previous one's round trip is still open.
@@ -44,34 +56,73 @@ public partial class SessionWindow : Window
         // every surface that takes no focus — the keypad's border padding and the margins between its buttons, a
         // button the pointer leaves before releasing (neither raises Click), the status bar and the error bar.
         AddHandler(PointerPressedEvent, (_, _) => Screen.CancelTap(), RoutingStrategies.Tunnel);
-        ApplyMenuStrategy(useNativeMenu);
+        ApplyMenuStyle(MenuStrategy.Resolve(style, isMacOS));
         Opened += (_, _) =>
         {
+            _opened = true;
+            // The settings subscription starts here rather than the moment the data context arrives: a window
+            // built and then never shown — App.OpenSession throwing before its Show() — never raises Closed
+            // either, so a subscription taken earlier would leave the process-wide settings object calling
+            // ApplyMenuStyle on a dead window for the life of the process. Nothing changes the style between
+            // the two, so nothing is missed.
+            if (_styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
             ShowPlatformGestures();
             Screen.Focus();
         };
     }
 
-    private bool _useNativeMenu;
+    private MenuStyle _menuStyle;
+
+    /// <summary>The platform as far as the menu style is concerned. A constructor argument because Resolve
+    /// collapses every style to InWindow off macOS, so a test naming a style has to name the platform too.</summary>
+    private readonly bool _isMacOS;
+
+    /// <summary>Whether Opened has run, and so whether this.GetPlatformSettings() can answer.</summary>
+    private bool _opened;
+
+    /// <summary>The declared menu's items while a style that hides the system menu bar has them removed. They are
+    /// the same NativeMenuItem objects throughout: refilling adds these back to the declared instance, which is
+    /// the only instance the macOS exporter will accept (#60).</summary>
+    private readonly List<NativeMenuItemBase> _stashedMenuItems = [];
+
+    /// <summary>The SettingsViewModel this window follows for live style changes, so a data-context swap can
+    /// unsubscribe from the old one — the same shape as _bellSource below.</summary>
+    private SettingsViewModel? _styleSource;
 
     /// <summary>The view model whose BellRang this window is subscribed to, so a data-context swap can unsubscribe
     /// from the old one before a bell from it flashes a screen it no longer owns.</summary>
     private SessionViewModel? _bellSource;
 
-    /// <summary>The window's native menu when the native strategy is live, else null. Under the classic strategy
-    /// the declared menu is still attached — the exporter accepts no other instance, see ApplyMenuStrategy — but
-    /// holds no items, and MenuLookup.Required throws for a menu that is there and lacks the item asked for; so
-    /// every native lookup goes through this, where null keeps its meaning of "nothing is exported".</summary>
-    private NativeMenu? ExportedMenu => _useNativeMenu ? NativeMenu.GetMenu(this) : null;
+    /// <summary>Whether the current style exports the menu definition, which is what draws the system menu bar on
+    /// macOS and installs its key equivalents.</summary>
+    private bool NativeMenuExported => _menuStyle is MenuStyle.Native or MenuStyle.Both;
 
-    /// <summary>One definition, two renderers, exactly one of them live. Hiding the classic menu under the
-    /// native strategy is required rather than tidy: measured on macOS, a NativeMenu installed while the classic
-    /// Menu was still visible drew both — an in-window bar beneath the system bar.</summary>
-    private void ApplyMenuStrategy(bool useNativeMenu)
+    /// <summary>The window's native menu while a style exports it, else null. Under InWindow the declared menu is
+    /// still attached — the exporter accepts no other instance, see ApplyMenuStyle — but holds no items, and
+    /// MenuLookup.Required throws for a menu that is there and lacks the item asked for; so every native lookup
+    /// goes through this, where null keeps its meaning of "nothing is exported".</summary>
+    private NativeMenu? ExportedMenu => NativeMenuExported ? NativeMenu.GetMenu(this) : null;
+
+    /// <summary>One definition, two renderers, and a style naming which of them are live. Hiding the classic menu
+    /// under Native is required rather than tidy: measured on macOS, a NativeMenu installed while the classic Menu
+    /// was still visible drew both — an in-window bar beneath the system bar. Both is that same state, chosen on
+    /// purpose rather than suppressed.
+    ///
+    /// Called again whenever the preference changes on an open window, so every branch has to be reversible.</summary>
+    private void ApplyMenuStyle(MenuStyle style)
     {
-        _useNativeMenu = useNativeMenu;
-        ClassicMenu.IsVisible = !useNativeMenu;
-        NativeBar.IsVisible = useNativeMenu;
+        // Auto names no renderer and neither does a value that is not a member at all, so either would hide both
+        // bars and empty the native menu — a window with no menu, and on Windows and Linux no route to
+        // Preferences to undo it. MenuStrategy.Resolve is what turns both into a real style and every caller
+        // goes through it, so anything arriving here unresolved is a bug in the caller, not a state to render.
+        _menuStyle = style switch
+        {
+            MenuStyle.Native or MenuStyle.InWindow or MenuStyle.Both => style,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(style), style, "A window's menu style must come from MenuStrategy.Resolve."),
+        };
+        ClassicMenu.IsVisible = style is MenuStyle.InWindow or MenuStyle.Both;
+        NativeBar.IsVisible = NativeMenuExported;
 
         // Hiding NativeMenuBar is not enough to turn the native path off, because NativeMenuBar is not what
         // exports the menu. A window's NativeMenu goes out through the window's own
@@ -94,12 +145,36 @@ public partial class SessionWindow : Window
         // with none removes and disposes every native item, and an NSMenu with no items installs no key
         // equivalent. Removed from the end one at a time rather than Clear(): AvaloniaList's Clear raises a
         // Reset that names no OldItems, so NativeMenu never nulls the removed items' Parent.
-        if (!useNativeMenu)
-        {
-            var declared = NativeMenu.GetMenu(this)!;
-            while (declared.Items.Count > 0) declared.Items.RemoveAt(declared.Items.Count - 1);
-        }
+        //
+        // Stashed rather than discarded, because the preference can be changed back: the removed items are the
+        // objects the refill adds to that same declared instance, so no branch here needs to build a menu.
+        var declared = NativeMenu.GetMenu(this)!;
+        if (NativeMenuExported) RefillNativeMenu(declared); else EmptyNativeMenu(declared);
 
+        ApplyPlatformMenuRules();
+        // The gestures need a TopLevel's platform settings, so the first pass is the Opened handler's; a style
+        // changed later re-runs it, since a refilled menu needs its key equivalents put back.
+        if (_opened) ShowPlatformGestures();
+    }
+
+    private void EmptyNativeMenu(NativeMenu declared)
+    {
+        if (declared.Items.Count == 0) return;
+        _stashedMenuItems.Clear();
+        _stashedMenuItems.AddRange(declared.Items);
+        while (declared.Items.Count > 0) declared.Items.RemoveAt(declared.Items.Count - 1);
+    }
+
+    private void RefillNativeMenu(NativeMenu declared)
+    {
+        foreach (var item in _stashedMenuItems) declared.Items.Add(item);
+        _stashedMenuItems.Clear();
+    }
+
+    /// <summary>Where About and Preferences belong, in both renderers. Re-run after a refill: under InWindow
+    /// ExportedMenu is null and the native half of each rule is skipped, so the items come back needing it.</summary>
+    private void ApplyPlatformMenuRules()
+    {
         // macOS puts About in the application menu, so neither renderer's Help item may also carry one. Both get
         // the rule: LIZTERM_MENU=classic on macOS is reachable, and there the classic bar renders in-window while
         // the application menu still supplies its own About. Under that strategy ExportedMenu answers null,
@@ -302,7 +377,7 @@ public partial class SessionWindow : Window
     /// four, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
     /// carries one.
     ///
-    /// Under the classic strategy ApplyMenuStrategy has emptied the native menu and ExportedMenu answers null,
+    /// Under InWindow, ApplyMenuStyle has emptied the native menu and ExportedMenu answers null,
     /// so the four classic InputGesture assignments still run and the four native ones find no item and do
     /// nothing — no key equivalent is installed for a menu with nothing in it.</summary>
     private void ShowPlatformGestures()
@@ -335,24 +410,46 @@ public partial class SessionWindow : Window
 
     private SessionViewModel? ViewModel => DataContext as SessionViewModel;
 
-    /// <summary>Follows the data context for the one view-model event the window handles itself. Every other
-    /// binding is XAML; the flash is a method call on the screen, which XAML cannot express.</summary>
+    /// <summary>Follows the data context for the two view-model events the window handles itself. Every other
+    /// binding is XAML; the flash is a method call on the screen and the menu style rebuilds controls, neither of
+    /// which XAML can express.</summary>
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
         if (_bellSource is not null) _bellSource.BellRang -= OnBellRang;
         _bellSource = ViewModel;
         if (_bellSource is not null) _bellSource.BellRang += OnBellRang;
+
+        if (_styleSource is not null) _styleSource.PropertyChanged -= OnSettingsChanged;
+        _styleSource = ViewModel?.Settings;
+        // Only once the window is open; see the Opened handler for why.
+        if (_opened && _styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
     }
 
     private void OnBellRang(object? sender, EventArgs e) => Screen.Flash();
 
-    /// <summary>The other half of the subscription's lifetime (bell spec §4): a view model that outlives its window
-    /// must not flash a screen that is gone.</summary>
+    /// <summary>Only changes, never the value on arrival. The constructor's argument is the whole truth about
+    /// the style this window opened with, and it has to outrank whatever the data context's settings say: the
+    /// App tests build a window in a named style and give it a SessionViewModel whose Settings is its own
+    /// in-memory instance reading Auto (SessionViewModel's constructor defaults it), so re-reading here would
+    /// resolve that to the platform default and override the style under test. In the app the two always agree
+    /// — App passes Resolve(Settings.MenuStyle, …) and seeds before any window exists — so nothing is lost by
+    /// not re-reading. A change means the user moved the radio, and every window follows it.</summary>
+    private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SettingsViewModel.MenuStyle)) return;
+        var style = MenuStrategy.Resolve(_styleSource!.MenuStyle, _isMacOS);
+        if (style != _menuStyle) ApplyMenuStyle(style);
+    }
+
+    /// <summary>The other half of both subscriptions' lifetime (bell spec §4): a view model that outlives its
+    /// window must not flash a screen that is gone, and the process-wide settings object outlives every window.</summary>
     protected override void OnClosed(EventArgs e)
     {
         if (_bellSource is not null) _bellSource.BellRang -= OnBellRang;
         _bellSource = null;
+        if (_styleSource is not null) _styleSource.PropertyChanged -= OnSettingsChanged;
+        _styleSource = null;
         base.OnClosed(e);
     }
 
