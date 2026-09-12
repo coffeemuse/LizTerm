@@ -97,6 +97,12 @@ public partial class ProfilePickerViewModel : ObservableObject
 
     private void RebuildScopes()
     {
+        // Read before Clear(), not after: ScopeBox's SelectedItem is two-way bound to SelectedScope, and
+        // Avalonia's SelectingItemsControl reacts to the Reset below by nulling its own selection, which the
+        // two-way binding writes straight back into SelectedScope. Re-reading the property afterwards would see
+        // that transient null instead of what the user actually had selected.
+        var previousTagName = SelectedScope.TagName;
+
         var wanted = _registry.All
             .Where(definition => Profiles.Any(p => p.Tags.Contains(definition.Name)) || TagRegistry.IsReserved(definition.Name))
             .Select(definition => TagRegistry.IsReserved(definition.Name)
@@ -109,7 +115,7 @@ public partial class ProfilePickerViewModel : ObservableObject
         foreach (var scope in wanted) Scopes.Add(scope);
 
         // A scope whose tag no longer exists anywhere would filter to nothing with no way back.
-        if (Scopes.FirstOrDefault(s => s.TagName == SelectedScope.TagName) is { } still) SelectedScope = still;
+        if (Scopes.FirstOrDefault(s => s.TagName == previousTagName) is { } still) SelectedScope = still;
         else SelectedScope = AllSessions;
     }
 
