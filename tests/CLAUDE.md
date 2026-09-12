@@ -51,7 +51,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   `RaiseBell`) fire the corresponding events.
 - Other fakes: `FakeTextClipboard` (a `Text` string and an optional `Exception`); `FakeFilePicker` (returns
   `Result`, records `open` and `save:<name>`); `FakeCertificatePrompt` (`Decision`, `OnAsk`, `Calls`,
-  `LastRequest`); `FakeFolderOpener`; `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
+  `LastRequest`); `FakeFolderOpener`; `FakeUriOpener` (`Opened`, the list of URLs and paths handed to it; `Result`;
+  an optional `Exception`); `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
   `fetch:<host>:<port>`); `FakeBellRinger` (`Rings`, the list of `BellSound` values asked for, `Available`, what
   `CanRing` answers, and an optional `Exception`).
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
@@ -82,6 +83,10 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   compile-time path, so it resolves from `bin/` and on a runner alike, and it throws rather than skipping when it
   cannot. `LicenseHeaderTests` needs its real header for a second reason: its fixtures put an SPDX line inside the
   eight-line window, and without a real header the file would pass on its own test data.
+- `UserGuideAssetTests` (`Documentation/`) lives in Core.Tests for the same reason `RepositoryHeadersTests` does:
+  the project builds on every run, so an edited `docs/user-guide.md` whose bundled HTML was not regenerated is
+  caught locally rather than in CI. It also holds the guide to what `UserGuideHtml`, the test-only converter, can
+  render.
 - `SettingsStoreTests` uses a temp directory per test like `ProfileStoreTests`; `SettingsLayersTests` needs no disk.
 
 ## Integration tests

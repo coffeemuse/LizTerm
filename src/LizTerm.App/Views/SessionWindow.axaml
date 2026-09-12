@@ -8,6 +8,7 @@
         xmlns:vm="using:LizTerm.App.ViewModels"
         xmlns:controls="using:LizTerm.App.Controls"
         xmlns:core="using:LizTerm.Core.Session"
+        xmlns:app="using:LizTerm.App"
         x:Class="LizTerm.App.Views.SessionWindow"
         x:DataType="vm:SessionViewModel"
         Title="{Binding Title}"
@@ -140,6 +141,14 @@
           <NativeMenu>
             <!-- OneWay plus a Click handler, unlike the classic item's TwoWay: a NativeMenuItem never toggles
                  itself. See OnWireLogClickNative. -->
+            <NativeMenuItem Header="_User Guide" Command="{Binding ShowUserGuideCommand}" />
+            <NativeMenuItem Header="Project on _GitHub" Command="{Binding OpenLinkCommand}"
+                            CommandParameter="{x:Static app:ProjectLinks.Repository}" />
+            <NativeMenuItem Header="_Report an Issue..." Command="{Binding OpenLinkCommand}"
+                            CommandParameter="{x:Static app:ProjectLinks.NewIssue}" />
+            <NativeMenuItem Header="R_eleases" Command="{Binding OpenLinkCommand}"
+                            CommandParameter="{x:Static app:ProjectLinks.Releases}" />
+            <NativeMenuItemSeparator />
             <NativeMenuItem Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=OneWay}"
                             Click="OnWireLogClickNative" />
             <NativeMenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />
@@ -228,6 +237,14 @@
         <MenuItem Header="PF24" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF24}" />
       </MenuItem>
       <MenuItem Header="_Help">
+        <MenuItem Header="_User Guide" Command="{Binding ShowUserGuideCommand}" />
+        <MenuItem Header="Project on _GitHub" Command="{Binding OpenLinkCommand}"
+                  CommandParameter="{x:Static app:ProjectLinks.Repository}" />
+        <MenuItem Header="_Report an Issue..." Command="{Binding OpenLinkCommand}"
+                  CommandParameter="{x:Static app:ProjectLinks.NewIssue}" />
+        <MenuItem Header="R_eleases" Command="{Binding OpenLinkCommand}"
+                  CommandParameter="{x:Static app:ProjectLinks.Releases}" />
+        <Separator />
         <MenuItem x:Name="WireLogMenuItem" Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=TwoWay}" />
         <MenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />
         <!-- Hidden with the item below it on macOS, where About lives in the application menu: a menu that ends

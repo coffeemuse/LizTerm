@@ -1,0 +1,226 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
+using System.Text;
+using System.Text.RegularExpressions;
+
+namespace LizTerm.Core.Tests.Documentation;
+
+/// <summary>Converts docs/user-guide.md to the single self-contained page the app embeds. Test-only code: no
+/// src/ project references it, so the shipped binary carries the HTML and none of this.
+///
+/// It is not a Markdown implementation. It handles exactly the constructs the guide uses, and
+/// UserGuideAssetTests fails if the guide grows one it does not — which is what makes a converter this small
+/// safe to own, because the failure mode of a partial converter is silence.</summary>
+public static partial class UserGuideHtml
+{
+    /// <summary>The document body. <see cref="Page"/> wraps it in the surrounding HTML document.</summary>
+    public static string Convert(string markdown, string version)
+    {
+        // Line endings are normalized on the way in and emitted as \n throughout. The committed HTML is
+        // compared against this output on runners whose checkout may have rewritten either file, and this
+        // repository has no .gitattributes.
+        var lines = markdown.ReplaceLineEndings("\n").Split('\n');
+        var body = new StringBuilder();
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (line.Length == 0) continue;
+
+            if (line.StartsWith("```", StringComparison.Ordinal))
+            {
+                var code = new StringBuilder();
+                for (i++; i < lines.Length && !lines[i].StartsWith("```", StringComparison.Ordinal); i++)
+                {
+                    code.Append(Escape(lines[i])).Append('\n');
+                }
+                body.Append("<pre><code>").Append(code).Append("</code></pre>\n");
+                continue;
+            }
+
+            if (line.StartsWith('#'))
+            {
+                var level = line.Length - line.TrimStart('#').Length;
+                var text = line[level..].Trim();
+                body.Append($"<h{level} id=\"{Slug(text)}\">").Append(Inline(text, version)).Append($"</h{level}>\n");
+                continue;
+            }
+
+            if (line.StartsWith('|'))
+            {
+                var rows = new List<string[]>();
+                for (; i < lines.Length && lines[i].StartsWith('|'); i++) rows.Add(Cells(lines[i]));
+                i--;
+
+                body.Append("<table>\n<thead>\n<tr>");
+                foreach (var cell in rows[0]) body.Append("<th>").Append(Inline(cell, version)).Append("</th>");
+                body.Append("</tr>\n</thead>\n<tbody>\n");
+                // rows[1] is the |---|---| separator, which carries no content.
+                foreach (var row in rows.Skip(2))
+                {
+                    body.Append("<tr>");
+                    foreach (var cell in row) body.Append("<td>").Append(Inline(cell, version)).Append("</td>");
+                    body.Append("</tr>\n");
+                }
+                body.Append("</tbody>\n</table>\n");
+                continue;
+            }
+
+            if (line.StartsWith("- ", StringComparison.Ordinal))
+            {
+                body.Append("<ul>\n");
+                for (; i < lines.Length && lines[i].StartsWith("- ", StringComparison.Ordinal); i++)
+                {
+                    var item = new List<string> { lines[i][2..] };
+                    // A wrapped bullet is one item: an indented line that is not itself a new "- " belongs to
+                    // the item above it. Without folding it in here, it falls through to the paragraph branch
+                    // and renders outside the list. This folds an indented "  - nested" bullet in too, which
+                    // would be wrong — but UserGuideAssetTests rejects a nested bullet in the source before it
+                    // ever reaches here, so this loop never has to tell the two apart.
+                    while (i + 1 < lines.Length && lines[i + 1].Length > 0 && lines[i + 1][0] is ' ' or '\t'
+                           && !lines[i + 1].StartsWith("- ", StringComparison.Ordinal))
+                    {
+                        i++;
+                        item.Add(lines[i].TrimStart());
+                    }
+                    body.Append("<li>").Append(Inline(string.Join('\n', item), version)).Append("</li>\n");
+                }
+                i--;
+                body.Append("</ul>\n");
+                continue;
+            }
+
+            var paragraph = new List<string>();
+            for (; i < lines.Length && lines[i].Length > 0; i++) paragraph.Add(lines[i]);
+            i--;
+            body.Append("<p>").Append(Inline(string.Join('\n', paragraph), version)).Append("</p>\n");
+        }
+
+        return body.ToString();
+    }
+
+    /// <summary>The id GitHub would have given the heading, so that the guide's own table of contents resolves
+    /// inside this page: lowercased, punctuation dropped, spaces hyphenated.</summary>
+    public static string Slug(string heading)
+    {
+        var slug = new StringBuilder();
+        foreach (var c in heading.ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(c)) slug.Append(c);
+            else if (c is ' ' or '-') slug.Append('-');
+        }
+        return slug.ToString();
+    }
+
+    /// <summary>The cells of one row. The guide escapes no pipes — UserGuideAssetTests holds it to that — so a
+    /// plain split is correct here, and a cell that grew a literal pipe would be caught there rather than
+    /// silently split into two.</summary>
+    private static string[] Cells(string row) =>
+        row.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToArray();
+
+    private static string Escape(string text) =>
+        text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+    private const string Repo = "https://github.com/coffeemuse/LizTerm";
+
+    /// <summary>One alternation over every inline construct, matched left to right. A single pass rather than
+    /// four sequential replacements: sequential passes would have to hide code spans behind a placeholder to
+    /// stop emphasis being applied inside them, and a placeholder is a token that can be collided with. Here
+    /// a code span simply wins its own match, and nothing else looks inside it.</summary>
+    [GeneratedRegex(@"`([^`]*)`|\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|(?<!\*)\*([^*]+)\*(?!\*)")]
+    private static partial Regex Spans();
+
+    private static string Inline(string text, string version)
+    {
+        var html = new StringBuilder();
+        var at = 0;
+
+        foreach (Match m in Spans().Matches(text))
+        {
+            // Text between constructs is escaped; each construct escapes its own content below.
+            html.Append(Escape(text[at..m.Index]));
+
+            if (m.Groups[1].Success) html.Append("<code>").Append(Escape(m.Groups[1].Value)).Append("</code>");
+            else if (m.Groups[2].Success)
+            {
+                // No current link contains an & or a quote, so this escaping is a no-op today. It stays here
+                // so a future link with a query string, or anything else Escape covers, cannot silently break
+                // the attribute the way the link text is already protected from breaking the markup around it.
+                html.Append($"<a href=\"{Escape(Href(m.Groups[3].Value, version))}\">")
+                    .Append(Escape(m.Groups[2].Value)).Append("</a>");
+            }
+            else if (m.Groups[4].Success) html.Append("<strong>").Append(Escape(m.Groups[4].Value)).Append("</strong>");
+            else html.Append("<em>").Append(Escape(m.Groups[5].Value)).Append("</em>");
+
+            at = m.Index + m.Length;
+        }
+
+        return html.Append(Escape(text[at..])).ToString();
+    }
+
+    /// <summary>Spec §5.1: a link that is part of the document's own content points at the tag, so it describes
+    /// the release the reader is running. The banner's link — the one asking "has this changed?" — is the
+    /// deliberate exception and points at main; it is written in Page, not here.</summary>
+    private static string Href(string target, string version) => target switch
+    {
+        "../README.md" => $"{Repo}/blob/v{version}/README.md",
+        "../README.md#first-run" => $"{Repo}/blob/v{version}/README.md#first-run",
+        _ => target,
+    };
+
+    private const string Guide = Repo + "/blob/main/docs/user-guide.md";
+
+    /// <summary>The whole document: one file, an inline stylesheet, no scripts, no web fonts, no external
+    /// references of any kind. It is read offline, and anything it would have to fetch is a blank space.
+    ///
+    /// Normalized to \n on the way out. A raw string literal carries the line endings of the FILE IT IS
+    /// WRITTEN IN, so on a checkout that turned this .cs file into CRLF -- this repository has no
+    /// .gitattributes and the suite runs on windows-latest -- the template below emits \r\n while the
+    /// committed page holds \n, and the golden-file test fails for a reason that has nothing to do with the
+    /// document. Convert's own output is already \n, because it appends the character explicitly.</summary>
+    public static string Page(string markdown, string version) =>
+        $$"""
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>LizTerm user guide</title>
+          <style>
+          :root { color-scheme: light dark; }
+          body { margin: 0 auto; max-width: 46rem; padding: 2rem 1.25rem 4rem;
+                 font: 16px/1.6 -apple-system, "Segoe UI", system-ui, sans-serif;
+                 color: #1c1c1c; background: #fff; }
+          h1, h2, h3 { line-height: 1.25; margin: 2rem 0 0.75rem; }
+          h2 { border-bottom: 1px solid #d8d8d8; padding-bottom: 0.3rem; }
+          code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em;
+                 background: #f2f2f2; padding: 0.1em 0.3em; border-radius: 3px; }
+          pre { background: #f2f2f2; padding: 0.9rem; overflow-x: auto; border-radius: 4px; }
+          pre code { background: none; padding: 0; }
+          table { border-collapse: collapse; width: 100%; margin: 1rem 0; display: block; overflow-x: auto; }
+          th, td { border: 1px solid #d8d8d8; padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
+          th { background: #f6f6f6; }
+          a { color: #0b5cab; }
+          .offline { font-size: 0.9em; color: #4a4a4a; background: #f6f6f6;
+                     border: 1px solid #e0e0e0; border-radius: 4px; padding: 0.6rem 0.8rem; }
+          @media (prefers-color-scheme: dark) {
+            body { color: #e4e4e4; background: #1b1b1b; }
+            h2 { border-bottom-color: #3a3a3a; }
+            code, pre { background: #262626; }
+            th, td { border-color: #3a3a3a; }
+            th { background: #242424; }
+            a { color: #6fb3ff; }
+            .offline { color: #b6b6b6; background: #242424; border-color: #3a3a3a; }
+          }
+          </style>
+          </head>
+          <body>
+          <p class="offline">Offline copy, shipped with LizTerm {{version}}. The manual may have been updated
+          since this release — <a href="{{Guide}}">the current version is on GitHub</a>.</p>
+          {{Convert(markdown, version)}}</body>
+          </html>
+
+          """.ReplaceLineEndings("\n");
+}

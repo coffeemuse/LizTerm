@@ -146,7 +146,8 @@ public partial class App : Application
                 });
             },
             settings: Settings,
-            bellRinger: _bellRinger);
+            bellRinger: _bellRinger,
+            uriOpener: new AvaloniaUriOpener(window));
         window.DataContext = viewModel;
         _sessions.Add(window);
         _lastActiveSession ??= window;

@@ -1,0 +1,169 @@
+// This file is part of LizTerm.
+// Copyright 2026 by CoffeeMuse
+// SPDX-License-Identifier: BSD-3-Clause
+
+namespace LizTerm.Core.Tests.Documentation;
+
+public class UserGuideHtmlTests
+{
+    private static string Body(string markdown) => UserGuideHtml.Convert(markdown, "9.9.9");
+
+    private static string Page(string markdown) => UserGuideHtml.Page(markdown, "9.9.9");
+
+    [Fact]
+    public void The_page_is_one_self_contained_document()
+    {
+        var html = Page("# LizTerm user guide\n");
+
+        Assert.StartsWith("<!doctype html>", html);
+        Assert.Contains("<style>", html);
+        Assert.Contains("prefers-color-scheme: dark", html);
+        Assert.DoesNotContain("<script", html);
+        Assert.DoesNotContain("<link", html);
+        Assert.EndsWith("</html>\n", html);
+    }
+
+    /// <summary>Spec §6: the banner exists only here. docs/user-guide.md is the live copy, and a note telling
+    /// its reader to go and find the live copy would be false there.</summary>
+    /// <summary>The page must never carry a carriage return, whatever the checkout did to this repository's
+    /// own source. A raw string literal takes the line endings of the file it is written in, so on a CRLF
+    /// checkout Page's template would emit \r\n while the committed page holds \n -- and the golden-file test
+    /// would fail on windows-latest for a reason having nothing to do with the document. That is not
+    /// hypothetical: it is exactly how this was found, on CI. Reproduce by converting UserGuideHtml.cs to CRLF
+    /// and running this project.</summary>
+    [Fact]
+    public void The_page_never_carries_a_carriage_return() =>
+        Assert.DoesNotContain("\r", Page("# LizTerm user guide\n\n- a bullet\n"));
+
+    [Fact]
+    public void The_banner_names_the_version_and_links_to_main()
+    {
+        var html = Page("# LizTerm user guide\n");
+
+        Assert.Contains("Offline copy, shipped with LizTerm 9.9.9.", html);
+        Assert.Contains("https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md", html);
+    }
+
+    [Fact]
+    public void The_banner_sits_above_the_title()
+    {
+        var html = Page("# LizTerm user guide\n");
+
+        Assert.True(html.IndexOf("Offline copy", StringComparison.Ordinal)
+                    < html.IndexOf("<h1", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Headings_carry_the_id_their_anchors_use()
+    {
+        Assert.Contains("<h2 id=\"tls-and-certificates\">TLS and certificates</h2>", Body("## TLS and certificates"));
+        Assert.Contains("<h3 id=\"profile-settings\">Profile settings</h3>", Body("### Profile settings"));
+    }
+
+    [Theory]
+    [InlineData("File transfer (IND$FILE)", "file-transfer-indfile")]
+    [InlineData("Mouse, selection and clipboard", "mouse-selection-and-clipboard")]
+    [InlineData("Where LizTerm keeps its files", "where-lizterm-keeps-its-files")]
+    public void Slugs_match_the_ids_GitHub_would_have_produced(string heading, string expected) =>
+        Assert.Equal(expected, UserGuideHtml.Slug(heading));
+
+    [Fact]
+    public void Consecutive_lines_become_one_paragraph()
+    {
+        var html = Body("one line\nand its continuation\n\na second paragraph");
+
+        Assert.Contains("<p>one line\nand its continuation</p>", html);
+        Assert.Contains("<p>a second paragraph</p>", html);
+    }
+
+    [Fact]
+    public void Consecutive_dashes_become_one_list()
+    {
+        var html = Body("- first\n- second\n");
+
+        Assert.Contains("<ul>\n<li>first</li>\n<li>second</li>\n</ul>", html);
+    }
+
+    [Fact]
+    public void A_wrapped_bullet_stays_one_list_item()
+    {
+        var html = Body("- first line\n  and its continuation\n- second\n");
+
+        Assert.Contains("<li>first line\nand its continuation</li>", html);
+        Assert.Contains("<li>second</li>", html);
+        Assert.DoesNotContain("<p>", html);
+    }
+
+    [Fact]
+    public void A_fenced_block_keeps_its_lines_and_drops_its_language()
+    {
+        var html = Body("```text\nREADY\nLOGON\n```");
+
+        Assert.Contains("<pre><code>READY\nLOGON\n</code></pre>", html);
+        Assert.DoesNotContain("text", html);
+    }
+
+    [Fact]
+    public void Bold_and_italic_and_code_become_their_elements()
+    {
+        Assert.Contains("<strong>Connect</strong>", Body("Choose **Connect** now."));
+        Assert.Contains("<em>pin</em>", Body("to *pin* the certificate"));
+        Assert.Contains("<code>settings.json</code>", Body("`settings.json` holds your preferences"));
+    }
+
+    /// <summary>The guide's line 252 carries `wire-&lt;profile&gt;-&lt;date&gt;-&lt;time&gt;.log`. A converter
+    /// that emits a code span verbatim hands the browser an unknown element, which renders as nothing, and the
+    /// user is shown "wire-.log" — wrong, plausible, and shipped offline where nobody can correct it.</summary>
+    [Fact]
+    public void A_code_span_escapes_its_contents()
+    {
+        var html = Body("`wire-<profile>-<date>.log` names the file");
+
+        Assert.Contains("<code>wire-&lt;profile&gt;-&lt;date&gt;.log</code>", html);
+        Assert.DoesNotContain("<profile>", html);
+    }
+
+    [Fact]
+    public void An_ampersand_outside_a_code_span_is_escaped_too() =>
+        Assert.Contains("Edit &amp; View", Body("Edit & View"));
+
+    [Fact]
+    public void Emphasis_inside_a_code_span_is_left_alone() =>
+        Assert.Contains("<code>a*b*c</code>", Body("`a*b*c`"));
+
+    [Fact]
+    public void Links_keep_their_target()
+    {
+        Assert.Contains("<a href=\"#keyboard\">Keyboard</a>", Body("[Keyboard](#keyboard)"));
+        Assert.Contains("<a href=\"https://example.invalid/x\">there</a>", Body("[there](https://example.invalid/x)"));
+    }
+
+    [Fact]
+    public void A_relative_readme_link_becomes_an_absolute_one_at_the_release_tag()
+    {
+        var html = Body("see the [README](../README.md#first-run)");
+
+        Assert.Contains("href=\"https://github.com/coffeemuse/LizTerm/blob/v9.9.9/README.md#first-run\"", html);
+        Assert.DoesNotContain("../README.md", html);
+    }
+
+    [Fact]
+    public void A_table_becomes_a_head_and_a_body()
+    {
+        var html = Body("| Setting | Meaning |\n|---|---|\n| Name | How it appears. |\n| Host | The server. |\n");
+
+        Assert.Contains("<table>\n<thead>\n<tr><th>Setting</th><th>Meaning</th></tr>\n</thead>", html);
+        Assert.Contains("<tbody>\n<tr><td>Name</td><td>How it appears.</td></tr>", html);
+        Assert.Contains("<tr><td>Host</td><td>The server.</td></tr>\n</tbody>\n</table>", html);
+        Assert.DoesNotContain("---", html);
+    }
+
+    [Fact]
+    public void A_table_cell_gets_the_same_inline_treatment_as_prose()
+    {
+        var html = Body("| Key | Action |\n|---|---|\n| `Escape` | Sends **Attn** |\n");
+
+        Assert.Contains("<td><code>Escape</code></td>", html);
+        Assert.Contains("<td>Sends <strong>Attn</strong></td>", html);
+    }
+}

@@ -44,7 +44,9 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - `SessionViewModel` takes an `Action<Action> dispatch` to marshal backend events onto the UI thread; the app passes
   `Dispatcher.UIThread.Post`, tests pass `a => a()`. Clipboard, file dialogs, the certificate prompt and folder
   opening are injected the same way: `ITextClipboard` (`AvaloniaTextClipboard(window)`), `IFilePicker`,
-  `ICertificatePrompt`, `IFolderOpener`.
+  `ICertificatePrompt`, `IFolderOpener`, `IUriOpener` (`Files/`; Help's project links and the bundled user guide,
+  beside `IFolderOpener`). `Documentation/UserGuide.cs` reads the guide as an embedded resource
+  (`avares://LizTerm.App/Assets/Docs/user-guide.html`) and writes it out before `IUriOpener.OpenFileAsync` opens it.
   The process's `SettingsViewModel` is injected the same way and defaults to an in-memory one, so no
   view-model test touches the settings file; its `SaveFailed` lands in `ErrorMessage`.
   `IBellRinger` (`Bell/`; the app's one `SystemBellRinger`, `FakeBellRinger` in tests) is injected after it; null

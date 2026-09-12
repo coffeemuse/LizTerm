@@ -74,6 +74,20 @@ The copyright line is worded exactly as `LICENSE`'s own first line. Build and co
 props files, `LizTerm.slnx`, `LizTerm.parcel`, the workflow YAML) are deliberately out of scope.
 `RepositoryHeadersTests` fails the suite for a file that is missing its header, so a new file is caught locally.
 
+### The bundled user guide
+
+`src/LizTerm.App/Assets/Docs/user-guide.html` is generated from `docs/user-guide.md` and is never hand-edited.
+Editing the guide fails `UserGuideAssetTests.The_committed_html_is_what_the_converter_produces` until it is
+regenerated:
+
+```bash
+LIZTERM_UPDATE_DOCS=1 dotnet test tests/LizTerm.Core.Tests --filter "FullyQualifiedName~UserGuideAssetTests"
+```
+
+The converter is `tests/LizTerm.Core.Tests/Documentation/UserGuideHtml.cs` and handles only the constructs the
+guide uses; `The_guide_uses_no_construct_the_converter_cannot_render` fails if the guide grows another. Extend the
+converter rather than the guard.
+
 ## Environment variables
 
 | Variable | Effect |

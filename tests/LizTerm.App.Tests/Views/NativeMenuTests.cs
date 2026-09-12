@@ -683,10 +683,10 @@ public class NativeMenuTests
     /// position, Command and (on Keys) CommandParameter, normalising across the two menu kinds' different item
     /// types (MenuItem/NativeMenuItem) and separator types (Separator/NativeMenuItemSeparator).</summary>
     [AvaloniaFact]
-    public void The_native_menu_matches_the_classic_menu_item_for_item()
-    {
-        var (window, _, _, _) = Show();
+    public void The_native_menu_matches_the_classic_menu_item_for_item() => AssertParity(Show().Window);
 
+    private static void AssertParity(SessionWindow window)
+    {
         var classicTop = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>().ToArray();
         var nativeTop = NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().ToArray();
         Assert.Equal(classicTop.Length, nativeTop.Length);
@@ -697,6 +697,21 @@ public class NativeMenuTests
             Assert.Equal(topHeader, nativeTop[i].Header);
             AssertMenusMatch(topHeader, topHeader, classicTop[i].Items.Cast<object>().ToArray(), [.. nativeTop[i].Menu!.Items]);
         }
+    }
+
+    /// <summary>The parity walk compares CommandParameter, which for Help is the whole of an item's meaning:
+    /// every link binds the same OpenLinkCommand, so a native item pointed at the wrong page differs from its
+    /// classic twin in nothing else. This breaks a Help item deliberately, because a guard that cannot fail is
+    /// not a guard.</summary>
+    [AvaloniaFact]
+    public void The_parity_walk_compares_command_parameters_outside_the_keys_menu()
+    {
+        var (window, _, _, _) = Show();
+        Item(window, "_Help", "_Wire Log").CommandParameter = "deliberately different";
+
+        // Record.Exception rather than Assert.Throws<EqualException>: what matters is that the walk rejects
+        // this, not which assertion inside it happened to fire first.
+        Assert.NotNull(Record.Exception(() => AssertParity(window)));
     }
 
     /// <summary>One level of the walk above, recursing into submenus — View &gt; Crosshair put four items a
@@ -737,10 +752,11 @@ public class NativeMenuTests
                     $"{path} > {classicItem.Header}: classic and native bind different commands");
             }
 
-            // The highest-value assertion in this test. Every Keys item binds SendKeyCommand, so header text
-            // alone cannot tell "PA1" wired to TerminalKey.PA1 apart from "PA1" wired to TerminalKey.PA2 — only
-            // the CommandParameter can, and getting it wrong sends the wrong key to the mainframe.
-            if (rootHeader == "_Keys")
+            // Every Keys item binds SendKeyCommand and every Help link binds OpenLinkCommand, so header text
+            // alone cannot tell "PA1" wired to TerminalKey.PA1 apart from "PA1" wired to TerminalKey.PA2, nor
+            // "Releases" pointed at the issue tracker. Only the CommandParameter can, and getting either wrong
+            // is invisible in the menu itself.
+            if (rootHeader is "_Keys" or "_Help")
             {
                 Assert.Equal(classicItem.CommandParameter, nativeItem.CommandParameter);
             }
@@ -990,5 +1006,92 @@ public class NativeMenuTests
         Assert.Equal(0, box.SelectionStart);
         Assert.Equal(5, box.SelectionEnd);
         Assert.Null(vm.Selection);
+    }
+
+    [AvaloniaFact]
+    public void Help_offers_the_three_project_links_on_both_menus()
+    {
+        var (window, _, _, _) = Show();
+        var classic = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>()
+            .Single(m => (string)m.Header! == "_Help");
+
+        foreach (var (header, url) in new[]
+                 {
+                     ("Project on _GitHub", ProjectLinks.Repository),
+                     ("_Report an Issue...", ProjectLinks.NewIssue),
+                     ("R_eleases", ProjectLinks.Releases),
+                 })
+        {
+            var native = Item(window, "_Help", header);
+            Assert.Equal(url, native.CommandParameter);
+            Assert.NotNull(native.Command);
+
+            var classicItem = classic.Items.OfType<MenuItem>().Single(m => (string)m.Header! == header);
+            Assert.Equal(url, classicItem.CommandParameter);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_a_project_link_opens_it()
+    {
+        var opener = new FakeUriOpener();
+        var vm = new SessionViewModel(new FakeEmulatorSession(), action => action(), new FakeTextClipboard(),
+            uriOpener: opener);
+        var window = new SessionWindow(MenuStyle.Native, isMacOS: true) { DataContext = vm };
+        window.Show();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Help", "_Report an Issue...")).RaiseClicked();
+        await Wait.UntilAsync(() => opener.Opened.Count == 1, "the link to be opened");
+
+        Assert.Equal([ProjectLinks.NewIssue], opener.Opened);
+    }
+
+    [AvaloniaFact]
+    public void Help_offers_the_user_guide_above_the_links_on_both_menus()
+    {
+        var (window, _, _, _) = Show();
+        var classic = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>()
+            .Single(m => (string)m.Header! == "_Help");
+
+        Assert.Equal("_User Guide", (string)classic.Items.OfType<MenuItem>().First().Header!);
+        Assert.NotNull(Item(window, "_Help", "_User Guide").Command);
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_the_user_guide_opens_the_extracted_file()
+    {
+        var opener = new FakeUriOpener();
+        var vm = new SessionViewModel(new FakeEmulatorSession(), action => action(), new FakeTextClipboard(),
+            uriOpener: opener);
+        var window = new SessionWindow(MenuStyle.Native, isMacOS: true) { DataContext = vm };
+        window.Show();
+
+        try
+        {
+            ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Help", "_User Guide")).RaiseClicked();
+            await Wait.UntilAsync(() => opener.Opened.Count == 1, "the guide to be opened");
+
+            Assert.EndsWith($"lizterm-user-guide-{AppVersion.Current}.html", opener.Opened[0]);
+            Assert.True(File.Exists(opener.Opened[0]));
+        }
+        finally
+        {
+            if (opener.Opened.Count > 0 && File.Exists(opener.Opened[0])) File.Delete(opener.Opened[0]);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_platform_that_cannot_open_the_guide_names_the_page_on_GitHub()
+    {
+        var opener = new FakeUriOpener { Result = false };
+        var vm = new SessionViewModel(new FakeEmulatorSession(), action => action(), new FakeTextClipboard(),
+            uriOpener: opener);
+        var window = new SessionWindow(MenuStyle.Native, isMacOS: true) { DataContext = vm };
+        window.Show();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Help", "_User Guide")).RaiseClicked();
+        await Wait.UntilAsync(() => vm.ErrorMessage is not null, "the banner");
+
+        Assert.Contains(ProjectLinks.UserGuide, vm.ErrorMessage!);
     }
 }
