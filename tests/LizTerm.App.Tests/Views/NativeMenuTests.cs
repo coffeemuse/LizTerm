@@ -1066,11 +1066,18 @@ public class NativeMenuTests
         var window = new SessionWindow(MenuStyle.Native, isMacOS: true) { DataContext = vm };
         window.Show();
 
-        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Help", "_User Guide")).RaiseClicked();
-        await Wait.UntilAsync(() => opener.Opened.Count == 1, "the guide to be opened");
+        try
+        {
+            ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Help", "_User Guide")).RaiseClicked();
+            await Wait.UntilAsync(() => opener.Opened.Count == 1, "the guide to be opened");
 
-        Assert.EndsWith($"lizterm-user-guide-{AppVersion.Current}.html", opener.Opened[0]);
-        Assert.True(File.Exists(opener.Opened[0]));
+            Assert.EndsWith($"lizterm-user-guide-{AppVersion.Current}.html", opener.Opened[0]);
+            Assert.True(File.Exists(opener.Opened[0]));
+        }
+        finally
+        {
+            if (opener.Opened.Count > 0 && File.Exists(opener.Opened[0])) File.Delete(opener.Opened[0]);
+        }
     }
 
     [AvaloniaFact]

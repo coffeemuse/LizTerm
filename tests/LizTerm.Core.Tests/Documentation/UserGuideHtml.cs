@@ -15,7 +15,7 @@ namespace LizTerm.Core.Tests.Documentation;
 /// safe to own, because the failure mode of a partial converter is silence.</summary>
 public static partial class UserGuideHtml
 {
-    /// <summary>The document body. <see cref="Page"/>, added in a later task, wraps it.</summary>
+    /// <summary>The document body. <see cref="Page"/> wraps it in the surrounding HTML document.</summary>
     public static string Convert(string markdown, string version)
     {
         // Line endings are normalized on the way in and emitted as \n throughout. The committed HTML is
@@ -76,7 +76,9 @@ public static partial class UserGuideHtml
                     var item = new List<string> { lines[i][2..] };
                     // A wrapped bullet is one item: an indented line that is not itself a new "- " belongs to
                     // the item above it. Without folding it in here, it falls through to the paragraph branch
-                    // and renders outside the list.
+                    // and renders outside the list. This folds an indented "  - nested" bullet in too, which
+                    // would be wrong — but UserGuideAssetTests rejects a nested bullet in the source before it
+                    // ever reaches here, so this loop never has to tell the two apart.
                     while (i + 1 < lines.Length && lines[i + 1].Length > 0 && lines[i + 1][0] is ' ' or '\t'
                            && !lines[i + 1].StartsWith("- ", StringComparison.Ordinal))
                     {
@@ -143,7 +145,10 @@ public static partial class UserGuideHtml
             if (m.Groups[1].Success) html.Append("<code>").Append(Escape(m.Groups[1].Value)).Append("</code>");
             else if (m.Groups[2].Success)
             {
-                html.Append($"<a href=\"{Href(m.Groups[3].Value, version)}\">")
+                // No current link contains an & or a quote, so this escaping is a no-op today. It stays here
+                // so a future link with a query string, or anything else Escape covers, cannot silently break
+                // the attribute the way the link text is already protected from breaking the markup around it.
+                html.Append($"<a href=\"{Escape(Href(m.Groups[3].Value, version))}\">")
                     .Append(Escape(m.Groups[2].Value)).Append("</a>");
             }
             else if (m.Groups[4].Success) html.Append("<strong>").Append(Escape(m.Groups[4].Value)).Append("</strong>");

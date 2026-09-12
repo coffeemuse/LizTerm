@@ -19,6 +19,12 @@ public class UserGuideAssetTests
 
     private static string Markdown() => File.ReadAllText(MarkdownPath).ReplaceLineEndings("\n");
 
+    /// <summary>True while the regeneration command is running. The tests that read the committed file must
+    /// not assert against it then: regeneration rewrites that file, and xunit gives no ordering guarantee, so
+    /// a test reading it first would compare fresh Markdown against a stale page and fail the very command
+    /// docs/development.md gives as the fix.</summary>
+    private static bool Regenerating => Environment.GetEnvironmentVariable("LIZTERM_UPDATE_DOCS") == "1";
+
     /// <summary>The version the release pipeline will agree with: release.yml's version job reads this same
     /// element and fails the run unless the tag and LizTerm.parcel match it.</summary>
     private static string Version()
@@ -34,7 +40,7 @@ public class UserGuideAssetTests
     {
         var expected = UserGuideHtml.Page(Markdown(), Version());
 
-        if (Environment.GetEnvironmentVariable("LIZTERM_UPDATE_DOCS") == "1")
+        if (Regenerating)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(HtmlPath)!);
             File.WriteAllText(HtmlPath, expected);
@@ -102,6 +108,8 @@ public class UserGuideAssetTests
     [Fact]
     public void Every_bullet_in_the_source_becomes_a_list_item()
     {
+        if (Regenerating) return;
+
         var bullets = Markdown().Split('\n').Count(l => l.StartsWith("- ", StringComparison.Ordinal));
         var items = Regex.Matches(File.ReadAllText(HtmlPath).ReplaceLineEndings("\n"), "<li>").Count;
 
@@ -109,15 +117,23 @@ public class UserGuideAssetTests
     }
 
     [Fact]
-    public void The_banner_names_the_version_the_release_will_carry() =>
+    public void The_banner_names_the_version_the_release_will_carry()
+    {
+        if (Regenerating) return;
+
         Assert.Contains($"Offline copy, shipped with LizTerm {Version()}.",
             File.ReadAllText(HtmlPath).ReplaceLineEndings("\n"));
+    }
 
     /// <summary>Every link in the guide must have become an anchor. A link the converter mishandled survives
     /// into the page as a literal "](", which is unambiguous in a way that pattern-matching the Markdown source
     /// for hazards is not — the source-side guards above are necessarily approximations, and this is not.
     /// The source has 18 links and no "](" inside a code span, so the rendered page should contain none.</summary>
     [Fact]
-    public void No_link_survives_unrendered_in_the_page() =>
+    public void No_link_survives_unrendered_in_the_page()
+    {
+        if (Regenerating) return;
+
         Assert.DoesNotContain("](", File.ReadAllText(HtmlPath).ReplaceLineEndings("\n"));
+    }
 }
