@@ -389,7 +389,7 @@ Then add:
 
 Run: `dotnet test tests/LizTerm.App.Tests --filter "FullyQualifiedName~The_parity_walk_compares_command_parameters_outside_the_keys_menu"`
 Expected: FAIL — the walk ignores `CommandParameter` outside `_Keys`, so nothing is thrown and
-`Assert.Throws` reports that no exception was raised.
+`Record.Exception` returns null.
 
 - [ ] **Step 3: Write the implementation**
 
