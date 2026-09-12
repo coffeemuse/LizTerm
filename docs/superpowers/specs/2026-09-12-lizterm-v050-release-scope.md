@@ -101,6 +101,10 @@ on/off and dock are deliberately two settings; the keypad spec §2.1 rejected co
 
 ### 4.3 Drop the engine path from About (#75)
 
+> **Done, 2026-09-12.** PR #77, merged as `66fcf99`. Issue #75 is closed. All three sites are gone from
+> `main`, and the `AboutWindowTests` comment that justified `SizeToContent.Height` by the path wrapping was
+> rewritten rather than left dangling.
+
 About shows the b3270 binary's full path on its own line. It is a residual from before the engine was built
 and bundled on all six RIDs, when "which binary is this actually running?" was a live question worth
 answering on screen. It is not live now: `engines.yml` builds the engine for every RID and
@@ -117,14 +121,27 @@ has to be rewritten rather than left pointing at a line that no longer exists.
 
 ## 5. Public-debut housekeeping
 
+> **Status, 2026-09-12: 5.1 to 5.4 are done; 5.5 is deliberately outstanding.** The file changes are two
+> commits on `claude/0-5-0-planning-section-5-95a178`, not yet merged: `0f4d9c3` (the issue forms) and
+> `18099f2` (the README, the screenshot and the disclaimer). 5.1 needed no commit, being repository
+> settings rather than files.
+
 The "debut" half of the theme. None of it is a feature, and all of it is what a stranger meets first.
 
 ### 5.1 The repository's own metadata
+
+> **Done, 2026-09-12.** Description, homepage and eleven topics set on the repository. The homepage points
+> at the user guide on GitHub, since #49's website does not exist and an empty field helps nobody.
 
 Verified empty on 2026-09-12: no description, no homepage, no topics. Issue #49 makes the point itself —
 this costs nothing and should happen regardless of what a website eventually becomes.
 
 ### 5.2 The README
+
+> **Done, 2026-09-12.** The screenshot is `docs/images/session-ispf.png` — a live MVS/CE session at the
+> ISPF primary option menu, keypad docked at the bottom, captured on macOS. It sits under the opening
+> paragraphs, ahead of "The name". The logo is referenced in place as agreed. The Features list now names
+> the keypad, the bell and Preferences, and records the menu-bar choice as a macOS one.
 
 Four changes:
 
@@ -138,6 +155,12 @@ Four changes:
 - **The pre-1.0 disclaimer.** Section 5.3.
 
 ### 5.3 The pre-1.0 disclaimer
+
+> **Done, 2026-09-12 — ahead of 4.1, by decision.** Section 9 sequences this after 4.1 so that both land in
+> one README pass; 5.2 opened that pass first, so taking the disclaimer with it was cheaper than a second
+> one. 4.1 now only appends a documentation link. The README section is "Where LizTerm is right now",
+> between Features and Download; `release.yml` carries the short version as `## Status`. Neither ranks a
+> platform against another, so section 7 is still what makes that silence honest.
 
 What it needs to say, in substance:
 
@@ -159,12 +182,18 @@ from the Releases page may never see the README.
 
 ### 5.4 Issue templates
 
+> **Done, 2026-09-12.** `.github/ISSUE_TEMPLATE/` now holds `bug_report.yml`, `feature_request.yml` and
+> `config.yml`. Issue *forms* rather than markdown, so all five facts below are required fields rather than
+> prompts; engine source is a dropdown over `EngineSource`'s own three values.
+
 `.github/` contains workflows and nothing else. A release whose stated premise is that people will report
 bugs should capture, in the template: the operating system and its version, the LizTerm version, the host
 and its type, whether TLS is in use, and the engine source — `EngineSource` already distinguishes `Bundled`, `Override` and
 `Unknown`, and About renders it. A feature-request template alongside it.
 
 ### 5.5 The version bump
+
+> **Outstanding, on purpose.** Both files still say `0.4.1`. This stays the last change before the tag.
 
 `Directory.Build.props` and `LizTerm.parcel` both still say `0.4.1`. They must both say `0.5.0` and they
 must agree, or the release run fails at its first job. This is the last change before the tag.
@@ -232,15 +261,24 @@ together rather than one at a time.
 
 ## 9. Sequence
 
-1. **Merge PR #74.** Everything else assumes it is in.
+Ticked as of 2026-09-12.
+
+1. ~~**Merge PR #74.**~~ **Done** — merged as `3966ee5`.
 2. **Section 6 (backlog hygiene) and sections 5.1, 5.2 and 5.4** — independent of each other and of the
    code; can land in any order, and none of them blocks anything.
-3. **Design spec for 4.1**, then its plan, then the work. This is the long pole.
-4. **4.2 and 4.3**, at any point after step 1. Neither blocks anything else.
-5. **5.3**, once 4.1's shape is settled — the disclaimer and the bundled docs land in the same README pass.
-6. **5.5**, the version bump.
+   **5.1, 5.2 and 5.4 are done. Section 6 is not started**, so the `v0.5.0` milestone still does not exist
+   and this scope remains invisible outside this file.
+3. **Design spec for 4.1**, then its plan, then the work. This is the long pole. **Not started** — now the
+   only substantial item left before section 7.
+4. **4.2 and 4.3**, at any point after step 1. Neither blocks anything else. **4.3 is done** (PR #77);
+   **4.2 is not started**.
+5. ~~**5.3**, once 4.1's shape is settled~~ — **done early**, with 5.2, for the reason recorded in 5.3.
+   4.1 now only appends a documentation link to a README section that already exists.
+6. **5.5**, the version bump. **Outstanding on purpose.**
 7. **Section 7**, the rehearsal and the cross-platform pass.
 8. **Tag `v0.5.0`.**
+
+**What is left:** section 6, 4.1, 4.2, 5.5, then section 7 and the tag.
 
 ## 10. Risks
 
