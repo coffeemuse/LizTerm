@@ -138,7 +138,8 @@ has to be rewritten rather than left pointing at a line that no longer exists.
 
 ## 5. Public-debut housekeeping
 
-> **Status, 2026-09-12: 5.1 to 5.4 are done and on `main`; 5.5 is deliberately outstanding.** The file
+> **Status, 2026-09-12: 5.1 to 5.4 are done and on `main`; 5.5 is done last, as planned — see its own note.**
+> The file
 > changes reached `main` in PR #81's merge, `703a754`: `8563dea` (the issue forms) and `7a23ffe` (the
 > README, the screenshot and the disclaimer). 5.1 needed no commit, being repository settings rather than
 > files.
@@ -215,7 +216,22 @@ and its type, whether TLS is in use, and the engine source — `EngineSource` al
 
 ### 5.5 The version bump
 
-> **Outstanding, on purpose.** Both files still say `0.4.1`. This stays the last change before the tag.
+> **Done, 2026-09-12.** Both files say `0.5.0`. This note is written in the commit it reports on, so it
+> names no SHA; section 5's note records why one written that way cannot be trusted.
+>
+> **The bump is three files, not the two named below.**
+> `src/LizTerm.App/Assets/Docs/user-guide.html` carries the version in its "Offline copy, shipped with
+> LizTerm ..." banner and pins two `README.md` links to the release's own tag, so
+> `UserGuideAssetTests.The_committed_html_is_what_the_converter_produces` fails until the guide is
+> regenerated:
+>
+> ```bash
+> LIZTERM_UPDATE_DOCS=1 dotnet test tests/LizTerm.Core.Tests --filter "FullyQualifiedName~UserGuideAssetTests"
+> ```
+>
+> The offline-docs design spec (§6.3) predicted this and said this step "gains one regeneration"; the
+> sentence never reached this section, and is here now. Those pinned links 404 until `v0.5.0` is tagged,
+> which is correct — they name the release the copy shipped with, not a branch.
 
 `Directory.Build.props` and `LizTerm.parcel` both still say `0.4.1`. They must both say `0.5.0` and they
 must agree, or the release run fails at its first job. This is the last change before the tag.
@@ -315,12 +331,12 @@ Ticked as of 2026-09-12.
 4. ~~**4.2 and 4.3**, at any point after step 1.~~ **Both done** — 4.3 as PR #77, 4.2 as PR #80.
 5. ~~**5.3**, once 4.1's shape is settled~~ — **done early**, with 5.2, for the reason recorded in 5.3.
    4.1 now only appends a documentation link to a README section that already exists.
-6. **5.5**, the version bump. **Outstanding on purpose.**
+6. ~~**5.5**, the version bump.~~ **Done** — three files, per its own note.
 7. **Section 7**, the rehearsal and the cross-platform pass.
 8. **Tag `v0.5.0`.**
 
-**What is left:** 5.5, then section 7 and the tag. 4.1 (#48) is done, along with 4.2 and 4.3, so no feature
-work remains in the release.
+**What is left:** section 7 — the rehearsal and the cross-platform pass — and the tag. All of sections 3
+to 6 are on `main`.
 
 ## 10. Risks
 
