@@ -2,6 +2,17 @@
 
 Date: 2026-09-12
 
+> **The release this plans shipped as 0.5.1, not 0.5.0.** Decided 2026-09-12, by Robert, after the
+> cross-platform pass. 0.5.0 was carried in the tree and rehearsed but never tagged and never published, so
+> no 0.5.0 exists anywhere public; the pass found the Windows executable had no icon of its own (PR #84), and
+> rather than rehearse 0.5.0 a second time the version went to 0.5.1. The known cost, recorded because it was
+> raised and accepted: the Releases page will show 0.4.1 then 0.5.1, and a gap reads to a stranger like a
+> withdrawn release.
+>
+> **This document keeps its name and its contents.** It is the record of what was scoped and why, and the
+> repository does not rewrite a plan to match what the code later did. Read every "0.5.0" below as the release
+> that became 0.5.1; §5.5 and §9 carry the amendments.
+
 This is a release plan, not a design spec. It records what 0.5.0 contains, what it deliberately does not,
 the decisions taken while scoping it, and the order the work happens in. Each item of new work still gets
 its own design spec and implementation plan; this document only says which items those are.
@@ -216,8 +227,11 @@ and its type, whether TLS is in use, and the engine source — `EngineSource` al
 
 ### 5.5 The version bump
 
-> **Done, 2026-09-12.** Both files say `0.5.0`. This note is written in the commit it reports on, so it
-> names no SHA; section 5's note records why one written that way cannot be trusted.
+> **Done, 2026-09-12** — twice. Both files said `0.5.0`, and now say `0.5.1`: the first bump merged as
+> PR #83, and the second followed the cross-platform pass, for the reason the note at the top of this
+> document records. Everything below about the mechanism held on both passes, the regeneration included, so
+> the three-file shape is the durable finding rather than a one-off. These notes are written in the commits
+> they report on, so they name no SHA; section 5's note records why one written that way cannot be trusted.
 >
 > **The bump is three files, not the two named below.**
 > `src/LizTerm.App/Assets/Docs/user-guide.html` carries the version in its "Offline copy, shipped with
@@ -342,10 +356,13 @@ Ticked as of 2026-09-12.
    4.1 now only appends a documentation link to a README section that already exists.
 6. ~~**5.5**, the version bump.~~ **Done** — three files, per its own note.
 7. **Section 7**, the rehearsal and the cross-platform pass.
-8. **Tag `v0.5.0`.**
+8. **Tag `v0.5.1`** — see the note at the top of this document for why it is not `v0.5.0`.
 
-**What is left:** section 7 — the rehearsal and the cross-platform pass — and the tag. All of sections 3
-to 6 are on `main`.
+**What is left:** the tag. Sections 3 to 6 are on `main`, and section 7's pass ran on 2026-09-12 against the
+0.5.0 rehearsal: every item passed on all three platforms except the `.rpm`, which had no host to install it
+on, and one finding — the Windows executable carrying no Win32 icon resource, so the shell drew a generic
+icon while the app's own windows were correct. Fixed as PR #84, which is what the second rehearsal, at 0.5.1,
+is for. By §7's triage rule the icon did not block the tag; it was taken anyway.
 
 ## 10. Risks
 
