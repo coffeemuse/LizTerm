@@ -27,6 +27,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly ICertificatePrompt? _certificatePrompt;
     private readonly Action<SessionProfile>? _saveProfile;
     private readonly IFolderOpener? _folderOpener;
+    private readonly IUriOpener? _uriOpener;
     private readonly ICertificateFetcher? _certificateFetcher;
     private readonly Func<SessionProfile, Task>? _saveAsProfile;
     private readonly IBellRinger? _bellRinger;
@@ -129,11 +130,13 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// SystemBellRinger, whose CanRing is false on Linux, so a saved SystemAlert is treated as None there.</param>
     /// <param name="bellThrottle">The one gate in front of both bell outputs; null builds one over BellInterval on
     /// the real clock. A test that needs two admitted bells passes one on an explicit clock, so nothing sleeps.</param>
+    /// <param name="uriOpener">Opens the Help menu's pages and the extracted user guide; null for tests that
+    /// don't cover them.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
         ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
         IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null,
         Func<SessionProfile, Task>? saveAsProfile = null, SettingsViewModel? settings = null,
-        IBellRinger? bellRinger = null, BellThrottle? bellThrottle = null)
+        IBellRinger? bellRinger = null, BellThrottle? bellThrottle = null, IUriOpener? uriOpener = null)
     {
         _session = session;
         _dispatch = dispatch;
@@ -141,6 +144,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _certificatePrompt = certificatePrompt;
         _saveProfile = saveProfile;
         _folderOpener = folderOpener;
+        _uriOpener = uriOpener;
         _certificateFetcher = certificateFetcher;
         _saveAsProfile = saveAsProfile;
         _bellRinger = bellRinger;
@@ -280,6 +284,22 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             // Fall through to naming the path.
         }
         ErrorMessage = $"Could not open the logs folder. Wire logs are in {directory}.";
+    }
+
+    /// <summary>Help's project links. The failure path is ShowWireLogsAsync's: when the platform cannot open
+    /// the target, name it in the banner so a user with no browser association can still read and copy it.</summary>
+    [RelayCommand]
+    private async Task OpenLinkAsync(string url)
+    {
+        try
+        {
+            if (_uriOpener is not null && await _uriOpener.OpenAsync(new Uri(url))) return;
+        }
+        catch (Exception)
+        {
+            // Fall through to naming the URL.
+        }
+        ErrorMessage = $"Could not open a browser. The page is at {url}.";
     }
 
     /// <summary>The last request a File Transfer dialog started from this window, so the next dialog opens as the
