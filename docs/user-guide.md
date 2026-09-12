@@ -73,10 +73,10 @@ The choice is remembered, and applies to every session window; it is also in Pre
 When the host rings the terminal bell, the screen flashes briefly. A sound can be turned on in Preferences; by
 default the bell is silent. A host that rings repeatedly is limited to two bells a second.
 
-**View > Keypad** shows a panel of buttons for PF1 to PF24, PA1 to PA3, Enter, Clear, Reset, Attn, SysReq, Erase
-EOF, Erase Input, Dup and Field Mark, for the keys a keyboard cannot reach. It is off by default, remembered, and
-applies to every session window; Preferences chooses whether it sits below the screen or to its right. Hold the
-pointer over a button to see its keyboard shortcut. The buttons never take the keyboard away from the screen, and
+**View > Keypad** shows a panel of buttons for PF1 to PF24, PA1 to PA3, Enter, Clear, Reset, Attn, SysReq, Erase EOF,
+Erase Input, Dup and Field Mark, for the keys a keyboard cannot reach. It is off by default, remembered, and applies
+to every session window; Preferences chooses whether it sits below the screen or to its right. Hold the pointer over a
+button to see its keyboard shortcut, where it has one. The buttons never take the keyboard away from the screen, and
 they are greyed out while the session is disconnected.
 
 ## Keyboard

@@ -372,3 +372,8 @@ the bump to 0.5.0 happens at release time, as the settings and bell specs said.
 Built as specified; the plan is `docs/superpowers/plans/2026-09-11-lizterm-keypad.md`. Two details were measured
 before the plan was written and are already in §5: Avalonia's name for the Enter key is "Return", and function keys
 sort ahead of other keys within a group so PF7 reads "F7 or PageUp".
+
+- **§5's parenthetical is loose.** "Alt, then Control, then Shift, combinations after" does not follow from the
+  primary rule it glosses, ascending `KeyModifiers` value, under which Alt+Control (3) sorts before Shift (4).
+  `KeymapHints` follows the primary rule; `DefaultKeymap` has no combination chord, so nothing observable differs
+  today. Noted for #18, when combinations become possible. §5 itself stays as written: design history is a record.

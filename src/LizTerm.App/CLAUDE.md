@@ -259,12 +259,11 @@ the host through the text input `TerminalScreen` already handles, and Ctrl+Cmd+S
 
 ### Gestures
 
-**No window menu item outside Edit ever carries a `Gesture`.** On macOS a `NativeMenuItem` gesture becomes an
-AppKit key equivalent that `NSApplication.sendEvent:` dispatches before the key window's responder chain, so
-`Gesture="F1"` would silently swallow PF1 — `TerminalScreen` would never see the key. So View (Crosshair and Keypad),
-File > Save Screen As... and Edit > Copy Screen as HTML carry none. **The one exception is Preferences... on the
-application menu**,
-with Cmd-comma (settings spec §5.4): the application menu exists only on macOS, `DefaultKeymap` binds no Cmd
+**No window menu item outside Edit ever carries a `Gesture`.** On macOS a `NativeMenuItem` gesture becomes an AppKit
+key equivalent that `NSApplication.sendEvent:` dispatches before the key window's responder chain, so `Gesture="F1"`
+would silently swallow PF1 — `TerminalScreen` would never see the key. So View (Crosshair and Keypad), File > Save
+Screen As... and Edit > Copy Screen as HTML carry none. **The one exception is Preferences... on the application
+menu**, with Cmd-comma (settings spec §5.4): the application menu exists only on macOS, `DefaultKeymap` binds no Cmd
 chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly this class.
 `NativeMenuTests.The_application_menu_carries_cmd_comma_on_preferences_and_nothing_else` holds it to that one.
 

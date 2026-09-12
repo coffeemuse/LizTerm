@@ -264,6 +264,26 @@ public class SessionWindowTests
         Assert.True(screen.IsFocused);
     }
 
+    /// <summary>The handler's third step is the guarantee for when something else had the keyboard, the find box
+    /// here; the buttons take no focus themselves, so this is the one path that exercises Screen.Focus(). Modelled
+    /// on Dismiss_returns_focus_to_the_screen.</summary>
+    [AvaloniaFact]
+    public void A_keypad_click_returns_focus_from_the_find_box_to_the_screen()
+    {
+        var (window, screen, vm, session, _) = Show();
+        session.RaiseConnection(ConnectionState.Connected3270);
+        vm.Settings.Keypad = true;
+        vm.Find.Open();
+        var findBox = window.FindControl<TextBox>("FindBox")!;
+        findBox.Focus();
+        Assert.False(screen.IsFocused);
+
+        KeypadButton(window, TerminalKey.PF3).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.True(screen.IsFocused);
+        Assert.Equal(["key:PF3"], session.Calls);
+    }
+
     /// <summary>Right Ctrl held across a keypad click: the key goes, and the release is not a tap. Without
     /// CancelTap the detector would see Ctrl down, nothing, Ctrl up, and send Enter (keypad spec §6.2).</summary>
     [AvaloniaFact]
