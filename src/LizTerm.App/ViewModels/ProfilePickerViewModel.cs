@@ -125,7 +125,13 @@ public partial class ProfilePickerViewModel : ObservableObject
             VisibleRows.Add(new ProfileRow(profile, _registry));
         }
 
-        SelectedRow = VisibleRows.FirstOrDefault(r => r.Name == preferred) ?? VisibleRows.FirstOrDefault();
+        // Keep a selection that is still visible, and move one the filter has hidden to the first visible row —
+        // but never invent a selection where there was none. Connect is the window's IsDefault button, so
+        // promoting the alphabetically-first profile on load would arm Enter to connect it the moment the picker
+        // appears, including when it reappears by itself as the last session window closes (spec 5.2, 5.4).
+        SelectedRow = preferred is null
+            ? null
+            : VisibleRows.FirstOrDefault(r => r.Name == preferred) ?? VisibleRows.FirstOrDefault();
     }
 
     private bool InScope(SessionProfile profile) =>

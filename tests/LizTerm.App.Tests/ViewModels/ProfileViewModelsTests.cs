@@ -75,9 +75,7 @@ public class ProfileViewModelsTests : IDisposable
         var vm = new ProfilePickerViewModel(_store, (p, s) => { opened = p; openedFromStore = s; }, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
 
         Assert.Equal(["a", "b"], vm.Profiles.Select(p => p.Name));
-        // Refilter always lands the selection on a visible row when there is one (see ProfilePickerViewModel.
-        // Refilter's doc comment), so the first row is already selected here rather than nothing.
-        Assert.True(vm.ConnectCommand.CanExecute(null));
+        Assert.False(vm.ConnectCommand.CanExecute(null));
 
         vm.SelectedRow = vm.VisibleRows[1];
         Assert.True(vm.ConnectCommand.CanExecute(null));
