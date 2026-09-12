@@ -35,6 +35,14 @@ case to hold a line nobody has asked for. Removal is unconditional.
 The `Unknown` case needs no thought either way: `EngineInfo.Path` is `""` there already, so the line renders
 empty today.
 
+There is a third case, and it is the one where the line came closest to earning its keep: an engine that is
+present but not executable. `SessionFactory.Refused` exists to describe it — a real path, `Bundled` or
+`Override`, `Version` null — and About renders it as `b3270, not started, bundled`, which names no file. The
+line is still removed there, because the file to `chmod` is already named where it is actionable:
+`B3270Locator.Find` throws `The emulator engine at {path} is not executable. Run: chmod +x "{path}"`, and that
+message reaches the user through `StartupErrorWindow` at launch and through the session's error banner on a
+connect. About repeating the path in grey, with no instruction beside it, adds nothing to that.
+
 ## 3. What stays
 
 - **`EngineInfo.Path`.** `SessionFactory` and `B3270Session` need it to start the process. This spec changes
@@ -69,7 +77,8 @@ The comment is rewritten to rest on what actually wraps now — the engine line 
 220-high licences box — and drops the reference to Spec 8, whose wording no longer describes the window. Per
 the root `CLAUDE.md`, the spec itself is a record and is not rewritten to match.
 
-No other test mentions `EnginePathText`; a repository-wide grep finds the three sites in §6 and nothing else.
+No other test mentions `EnginePathText`: a grep over `src` and `tests` finds the three sites in §6 and nothing
+else. Older plans and specs under `docs/superpowers/` quote the line as it was, and those are history.
 
 ## 6. Sites
 
@@ -81,6 +90,17 @@ No other test mentions `EnginePathText`; a repository-wide grep finds the three 
 
 ## 7. Documentation
 
-None. No user-facing or developer document describes the About path line — `docs/user-guide.md` mentions
-About only as a menu item, and `docs/development.md` documents `LIZTERM_B3270_PATH` without reference to where
-its value is displayed. Each fact has one home, and this one had no home outside the code.
+No user-facing or developer document describes the About path line — `docs/user-guide.md` mentions About only
+as a menu item, and `docs/development.md` documents `LIZTERM_B3270_PATH` without reference to where its value
+is displayed. `README.md` and `docs/architecture.md` say nothing about it either.
+
+Three comments do, and each one has to be reworded, because each says About names the binary so the user has a
+path to `chmod`:
+
+| Site | Correction |
+|---|---|
+| `src/LizTerm.App/SessionFactory.cs`, the `Refused` summary | The surviving source is what keeps About from saying "not found"; the surviving path only keeps `CheckBackendOrUnknown` and `Create` describing one binary identically. |
+| `src/LizTerm.App/CLAUDE.md`, the `SessionFactory.Refused` bullet | The same, plus a new bullet recording that `EngineInfo.Path` now reaches no UI at all, so nobody restores a path line to About to name the file. |
+| `tests/LizTerm.App.Tests/SessionFactoryTests.cs`, the summary on `CheckBackendOrUnknown_names_an_engine_that_is_present_but_not_executable` | The same. It states the old requirement as binding — "It must name the file, so there is a path to `chmod`" — which is the wording most likely to have the line restored. |
+
+Each fact has one home; these are those homes.

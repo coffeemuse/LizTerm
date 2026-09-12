@@ -97,9 +97,14 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   a running session. `ActiveWindow` skips `SplashWindow`, which closes itself on a timer and would take an owned
   About with it.
 - `SessionFactory.Refused` uses `B3270Locator.Candidates` to tell a missing engine from one that is present but not
-  executable, so a file that exists keeps its own path and source, and About and the status bar name the file to
-  `chmod` instead of calling it missing. `CheckBackendOrUnknown` and `Create` both go through it, so they cannot
+  executable, so a file that exists keeps its own source, and About and the status bar call it bundled or name the
+  override instead of calling it missing. `CheckBackendOrUnknown` and `Create` both go through it, so they cannot
   disagree about the same binary.
+- **`EngineInfo.Path` reaches no UI.** It is carried to start the process and to keep those two entry points
+  describing one binary identically; `StatusFormatter.Engine` has never emitted it, and About stopped showing it in
+  #75, because every platform ships an engine `engines.yml` built and `verify-bundled-engine.sh` gated. The file to
+  `chmod` for a present-but-unusable engine is named by `B3270Locator.Find`'s own exception, which reaches the user
+  through `StartupErrorWindow` and the session's error banner. Do not restore a path line to About to name it.
 
 ### Settings and Preferences
 

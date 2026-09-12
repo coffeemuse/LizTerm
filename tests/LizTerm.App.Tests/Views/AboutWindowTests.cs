@@ -37,8 +37,9 @@ public class AboutWindowTests
         var engine = new EngineInfo("b3270", "4.5.6 (fake)", path, EngineSource.Override);
         var window = new AboutWindow("0.3.0", engine, "LIZTERM_B3270_PATH");
         window.Show();
-        Assert.All(window.GetVisualDescendants().OfType<TextBlock>(),
-            block => Assert.DoesNotContain(path, block.Text ?? ""));
+        var blocks = window.GetVisualDescendants().OfType<TextBlock>().ToList();
+        Assert.NotEmpty(blocks); // A walk that found nothing would pass this test while showing anything at all.
+        Assert.All(blocks, block => Assert.DoesNotContain(path, block.Text ?? ""));
     }
 
     /// <summary>The credit line names the copyright and stops there. It used to carry the licence too, from when

@@ -27,8 +27,10 @@ public static class SessionFactory
 
     /// <summary>What to call an engine the locator refused. Find throws the same type for "no binary anywhere"
     /// and "a binary is there and unusable", which is what B3270Locator.Candidates exists to tell apart: a file
-    /// that is present keeps its own path and source, so About and the status bar name the thing to chmod
-    /// instead of claiming nothing was found. Only a genuinely absent engine is Unknown.</summary>
+    /// that is present keeps its own source, so About and the status bar call it bundled, or name the override,
+    /// instead of claiming nothing was found. Only a genuinely absent engine is Unknown. It keeps its own path
+    /// too, so CheckBackendOrUnknown and Create describe the same binary identically; the path is not shown
+    /// anywhere (#75), and the file to chmod is named by the locator's own exception.</summary>
     private static B3270Location Refused(string? overridePath, string baseDirectory) =>
         B3270Locator.Candidates(overridePath, baseDirectory).FirstOrDefault(c => File.Exists(c.Path))
         ?? B3270Location.Unknown;

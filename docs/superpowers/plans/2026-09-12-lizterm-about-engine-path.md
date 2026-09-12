@@ -37,6 +37,9 @@ None.
 | `src/LizTerm.App/Views/AboutWindow.axaml` | Delete the `EnginePathText` `TextBlock` (line 21). |
 | `src/LizTerm.App/Views/AboutWindow.axaml.cs` | Delete `EnginePathText.Text = engine.Path;` (line 23). |
 | `tests/LizTerm.App.Tests/Views/AboutWindowTests.cs` | Replace the path assertion with a no-path guard; rewrite the `SizeToContent` comment. |
+| `src/LizTerm.App/SessionFactory.cs` | Reword the `Refused` summary, which says About names the file to `chmod` (Task 2). |
+| `src/LizTerm.App/CLAUDE.md` | The same bullet, plus a new one recording that `EngineInfo.Path` reaches no UI (Task 2). |
+| `tests/LizTerm.App.Tests/SessionFactoryTests.cs` | Reword the summary that states "It must name the file" as a binding requirement (Task 2). |
 
 ---
 
@@ -129,9 +132,9 @@ Expected: `0`. A stale `x:Name` left in the code-behind would surface here as a 
 
 - [ ] **Step 6: Confirm the name is gone from the repository**
 
-Run: `grep -rn "EnginePathText" src tests docs`
+Run: `grep -rn "EnginePathText" src tests`
 
-Expected: no matches. (The spec and this plan describe the removal in prose and in the tables above; neither contains the bare identifier in a form this grep would hit outside a code fence. A hit under `docs/superpowers/` from an older document is history and stays.)
+Expected: no matches. Grep `docs` separately if you like, but do not expect it to be empty and do not edit what it finds: older plans and specs quote the removed line, this slice's own spec and plan name it to describe the removal, and all of that is history.
 
 - [ ] **Step 7: Commit**
 
@@ -144,9 +147,47 @@ Closes #75"
 
 ---
 
+### Task 2: Stop three comments promising a path About no longer shows
+
+**Files:**
+- Modify: `src/LizTerm.App/SessionFactory.cs` (the `Refused` summary)
+- Modify: `src/LizTerm.App/CLAUDE.md` (the `SessionFactory.Refused` bullet)
+- Modify: `tests/LizTerm.App.Tests/SessionFactoryTests.cs` (the summary on `CheckBackendOrUnknown_names_an_engine_that_is_present_but_not_executable`)
+
+**Interfaces:**
+- Consumes: nothing. No executable line changes in this task; the assertions in `SessionFactoryTests` stay exactly as they are, because what they check — `Source`, `Path` and a null `Version` surviving a refusal — is still required.
+- Produces: nothing.
+
+Each of the three says, in its own words, that About names the binary so the user has a path to `chmod`. None of that was ever true of `StatusFormatter.Engine`, and after Task 1 About cannot name a file at all. The behaviour is unaffected: `B3270Locator.Find` throws `The emulator engine at {path} is not executable. Run: chmod +x "{path}"`, and that reaches the user through `StartupErrorWindow` and the session's error banner. It is the prose that is wrong, and per the root `CLAUDE.md` it gets fixed where it lives.
+
+- [ ] **Step 1: Reword all three**
+
+Rest each on what is still true: the surviving `Source` is what keeps About saying "bundled", or naming the override, instead of "not found"; the surviving `Path` only keeps `CheckBackendOrUnknown` and `Create` describing one binary identically. Add a bullet to `src/LizTerm.App/CLAUDE.md` recording that `EngineInfo.Path` reaches no UI surface, and saying not to restore a path line to About to name the file — that file is `CLAUDE.md`'s designated home for App implementation facts, and the same section already carries a "do not restore" note about a superseded About assertion.
+
+There is no test for a comment. The guard is Step 2.
+
+- [ ] **Step 2: Run the full suite and the zero-warning check**
+
+Run: `dotnet test LizTerm.slnx`
+
+Expected: PASS, unchanged from Task 1. A doc comment that no longer compiles — a malformed `<summary>`, a `<see cref>` naming something gone — would have failed the build first.
+
+Run: `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "`
+
+Expected: `0`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/LizTerm.App/SessionFactory.cs src/LizTerm.App/CLAUDE.md tests/LizTerm.App.Tests/SessionFactoryTests.cs
+git commit -m "Stop three comments promising a path About no longer shows"
+```
+
+---
+
 ## Self-Review
 
-**Spec coverage.** §2 (remove unconditionally) → Step 3, which deletes the `TextBlock` outright with no `IsVisible`. §3 (what stays) → Step 3's instruction to leave the design-time constructor and every other consumer of `EngineInfo.Path` alone, and Step 5's full suite, which covers `StatusFormatter` and the status bar. §4 (layout) → Step 3's explicit "change no margin". §5 (testing) → Steps 1, 2 and 4, including the rewritten `SizeToContent` comment and the dropped Spec 8 citation. §6 (sites) → the File Structure table. §7 (documentation: none) → no documentation step, deliberately.
+**Spec coverage.** §2 (remove unconditionally, including the present-but-not-executable case) → Task 1 Step 3, which deletes the `TextBlock` outright with no `IsVisible`. §3 (what stays) → Task 1 Step 3's instruction to leave the design-time constructor and every other consumer of `EngineInfo.Path` alone, and Step 5's full suite, which covers `StatusFormatter` and the status bar. §4 (layout) → Step 3's explicit "change no margin". §5 (testing) → Task 1 Steps 1, 2 and 4, including the rewritten `SizeToContent` comment and the dropped Spec 8 citation. §6 (sites) → the File Structure table. §7 (documentation) → Task 2, one row of §7's table per file.
 
 **Placeholders.** None. Every code step carries the actual text to write or delete.
 
