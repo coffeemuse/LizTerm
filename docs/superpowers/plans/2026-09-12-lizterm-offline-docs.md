@@ -1151,7 +1151,10 @@ public class UserGuideAssetTests
         {
             ("an ordered list", new Regex(@"^\d+\. ", RegexOptions.Multiline)),
             ("a blockquote", new Regex("^> ", RegexOptions.Multiline)),
-            ("a nested list", new Regex(@"^\s+[-*] ", RegexOptions.Multiline)),
+            // [ \t] and not \s: \s matches \n, so under Multiline `^\s+` consumes a blank line's
+            // newline and matches the TOP-LEVEL bullet after it. Against this guide the \s form
+            // matched 9 times with no nested list present anywhere.
+            ("a nested list", new Regex(@"^[ \t]+[-*] ", RegexOptions.Multiline)),
             ("a horizontal rule", new Regex("^---+$", RegexOptions.Multiline)),
             ("an asterisk bullet", new Regex(@"^\* ", RegexOptions.Multiline)),
             ("an image", new Regex(@"!\[")),
@@ -1160,7 +1163,11 @@ public class UserGuideAssetTests
             ("a reference link", new Regex(@"^\[[^\]]+\]:", RegexOptions.Multiline)),
             // The inline alternation matches left to right, so bold wrapping a link would win the match and
             // the link inside it would render as literal brackets.
-            ("a link inside bold", new Regex(@"\*\*[^*]*\[[^\]]*\]\(")),
+            // [^*\n] and [^\]\n], not [^*] and [^\]]: without excluding \n these spans cross paragraph,
+            // list and table boundaries and pair a ** with an unrelated link far below it. The trailing \*\*
+            // is what distinguishes an opening delimiter from a closing one — without it,
+            // "**bold** text [link](url)" false-matches on the CLOSING **.
+            ("a link inside bold", new Regex(@"\*\*[^*\n]*\[[^\]\n]*\]\([^)\n]*\)[^*\n]*\*\*")),
         };
 
         var markdown = Markdown();
@@ -1184,6 +1191,13 @@ public class UserGuideAssetTests
             Assert.Contains(link.Groups[1].Value, ids);
         }
     }
+
+    /// <summary>Every link in the guide must have become an anchor. A link the converter mishandled survives
+    /// into the page as a literal "](", which is unambiguous in a way that pattern-matching the Markdown source
+    /// for hazards is not — the source-side guards above are necessarily approximations, and this is not.</summary>
+    [Fact]
+    public void No_link_survives_unrendered_in_the_page() =>
+        Assert.DoesNotContain("](", File.ReadAllText(HtmlPath).ReplaceLineEndings("\n"));
 
     [Fact]
     public void The_banner_names_the_version_the_release_will_carry() =>
