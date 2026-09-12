@@ -1,3 +1,5 @@
+<img src="src/LizTerm.App/Assets/Icons/lizterm-256.png" alt="" width="128">
+
 # LizTerm
 
 [![CI](https://github.com/coffeemuse/LizTerm/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/coffeemuse/LizTerm/actions/workflows/ci.yml?query=branch%3Amain)
@@ -9,6 +11,8 @@ consistent app on every platform, with nothing else to install.
 
 LizTerm's emulation comes from `b3270`, part of the long-established x3270 suite, which every build bundles.
 LizTerm is the modern client around it.
+
+![A LizTerm window showing the ISPF primary option menu, with the on-screen keypad docked below it.](docs/images/session-ispf.png)
 
 ## The name
 
@@ -25,9 +29,25 @@ keyboard while I worked. She was my mainframe cat.
 - **IND$FILE file transfer** to and from TSO, VM/CMS and CICS, with progress and cancel.
 - **Models 2 to 5**, custom oversize screens, extended colour, and 41 host code pages.
 - **A Vista TN3270-style keyboard**, rectangular selection, and margin-aware paste.
+- **An on-screen keypad** for PF1–PF24, PA1–PA3, Attn, Clear, Reset and the rest, docked to the bottom or the
+  right of the window.
 - **Find on screen**, a **crosshair** cursor, and **screen capture** to text or HTML.
+- **A bell** you can see, hear, or both.
 - **Keep-alive** and **automatic reconnect**.
+- **Preferences** for the crosshair, cursor blink, the bell, the keypad, and — on macOS — whether the menu is
+  the system menu bar, the one inside the window, or both.
 - The **IBM 3270 font**, on the screen and in the status bar.
+
+## Where LizTerm is right now
+
+LizTerm is pre-1.0. Settings, profile file formats, defaults and interfaces may change between releases.
+
+The 3270 emulation is **not new code**. It is `b3270`, from the long-established x3270 suite, which every build
+bundles. That part of the stack is mature, and it is not where the risk is. What is new is the client around it —
+the window, profiles, settings, the file-transfer interface and the packaging. Expect the terminal session itself
+to be solid, and rough edges in the application surrounding it.
+
+If you find one, please [open an issue](https://github.com/coffeemuse/LizTerm/issues).
 
 ## Download
 

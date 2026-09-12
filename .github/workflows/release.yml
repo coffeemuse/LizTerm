@@ -592,6 +592,14 @@ jobs:
           Pick the **ZIP** for your platform. The installers below it are the same application, for people who
           prefer one.
 
+          ## Status
+
+          LizTerm is pre-1.0: settings, profile file formats and defaults may change between releases. The 3270
+          emulation is not new code -- it is `b3270`, from the long-established x3270 suite, which every build
+          bundles, and that part of the stack is mature. What is new is the client around it, so expect the
+          terminal session itself to be solid and rough edges in the application surrounding it. Please report
+          them at https://github.com/coffeemuse/LizTerm/issues
+
           ## First run
 
           **macOS** builds are signed and notarized by Apple, so LizTerm opens like any other app you
