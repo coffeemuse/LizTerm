@@ -47,4 +47,48 @@ public class UserGuideHtmlTests
         Assert.Contains("<pre><code>READY\nLOGON\n</code></pre>", html);
         Assert.DoesNotContain("text", html);
     }
+
+    [Fact]
+    public void Bold_and_italic_and_code_become_their_elements()
+    {
+        Assert.Contains("<strong>Connect</strong>", Body("Choose **Connect** now."));
+        Assert.Contains("<em>pin</em>", Body("to *pin* the certificate"));
+        Assert.Contains("<code>settings.json</code>", Body("`settings.json` holds your preferences"));
+    }
+
+    /// <summary>The guide's line 252 carries `wire-&lt;profile&gt;-&lt;date&gt;-&lt;time&gt;.log`. A converter
+    /// that emits a code span verbatim hands the browser an unknown element, which renders as nothing, and the
+    /// user is shown "wire-.log" — wrong, plausible, and shipped offline where nobody can correct it.</summary>
+    [Fact]
+    public void A_code_span_escapes_its_contents()
+    {
+        var html = Body("`wire-<profile>-<date>.log` names the file");
+
+        Assert.Contains("<code>wire-&lt;profile&gt;-&lt;date&gt;.log</code>", html);
+        Assert.DoesNotContain("<profile>", html);
+    }
+
+    [Fact]
+    public void An_ampersand_outside_a_code_span_is_escaped_too() =>
+        Assert.Contains("Edit &amp; View", Body("Edit & View"));
+
+    [Fact]
+    public void Emphasis_inside_a_code_span_is_left_alone() =>
+        Assert.Contains("<code>a*b*c</code>", Body("`a*b*c`"));
+
+    [Fact]
+    public void Links_keep_their_target()
+    {
+        Assert.Contains("<a href=\"#keyboard\">Keyboard</a>", Body("[Keyboard](#keyboard)"));
+        Assert.Contains("<a href=\"https://example.invalid/x\">there</a>", Body("[there](https://example.invalid/x)"));
+    }
+
+    [Fact]
+    public void A_relative_readme_link_becomes_an_absolute_one_at_the_release_tag()
+    {
+        var html = Body("see the [README](../README.md#first-run)");
+
+        Assert.Contains("href=\"https://github.com/coffeemuse/LizTerm/blob/v9.9.9/README.md#first-run\"", html);
+        Assert.DoesNotContain("../README.md", html);
+    }
 }

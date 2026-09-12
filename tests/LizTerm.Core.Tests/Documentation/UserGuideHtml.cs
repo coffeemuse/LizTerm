@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace LizTerm.Core.Tests.Documentation;
 
@@ -84,6 +85,47 @@ public static partial class UserGuideHtml
     private static string Escape(string text) =>
         text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
-    // Task 5 replaces this with real inline handling.
-    private static string Inline(string text, string version) => Escape(text);
+    private const string Repo = "https://github.com/coffeemuse/LizTerm";
+
+    /// <summary>One alternation over every inline construct, matched left to right. A single pass rather than
+    /// four sequential replacements: sequential passes would have to hide code spans behind a placeholder to
+    /// stop emphasis being applied inside them, and a placeholder is a token that can be collided with. Here
+    /// a code span simply wins its own match, and nothing else looks inside it.</summary>
+    [GeneratedRegex(@"`([^`]*)`|\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|(?<!\*)\*([^*]+)\*(?!\*)")]
+    private static partial Regex Spans();
+
+    private static string Inline(string text, string version)
+    {
+        var html = new StringBuilder();
+        var at = 0;
+
+        foreach (Match m in Spans().Matches(text))
+        {
+            // Text between constructs is escaped; each construct escapes its own content below.
+            html.Append(Escape(text[at..m.Index]));
+
+            if (m.Groups[1].Success) html.Append("<code>").Append(Escape(m.Groups[1].Value)).Append("</code>");
+            else if (m.Groups[2].Success)
+            {
+                html.Append($"<a href=\"{Href(m.Groups[3].Value, version)}\">")
+                    .Append(Escape(m.Groups[2].Value)).Append("</a>");
+            }
+            else if (m.Groups[4].Success) html.Append("<strong>").Append(Escape(m.Groups[4].Value)).Append("</strong>");
+            else html.Append("<em>").Append(Escape(m.Groups[5].Value)).Append("</em>");
+
+            at = m.Index + m.Length;
+        }
+
+        return html.Append(Escape(text[at..])).ToString();
+    }
+
+    /// <summary>Spec §5.1: a link that is part of the document's own content points at the tag, so it describes
+    /// the release the reader is running. The banner's link — the one asking "has this changed?" — is the
+    /// deliberate exception and points at main; it is written in Page, not here.</summary>
+    private static string Href(string target, string version) => target switch
+    {
+        "../README.md" => $"{Repo}/blob/v{version}/README.md",
+        "../README.md#first-run" => $"{Repo}/blob/v{version}/README.md#first-run",
+        _ => target,
+    };
 }
