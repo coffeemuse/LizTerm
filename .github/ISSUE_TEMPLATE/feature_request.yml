@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest something LizTerm should be able to do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The task or workflow this is in the way of, rather than the feature itself.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should LizTerm do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: prior-art
+    attributes:
+      label: How do other emulators handle it?
+      description: >
+        Vista TN3270, x3270, PCOMM or any other client. Not required, but a concrete reference is the
+        fastest way to settle what the behaviour should be.

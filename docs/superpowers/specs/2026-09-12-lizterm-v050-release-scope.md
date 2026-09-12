@@ -93,6 +93,13 @@ carries Keyboard, Menus, Preferences and Known limitations sections, which is mo
 
 ### 4.2 View > Keypad as a submenu carrying the dock (#71)
 
+> **Done, 2026-09-12.** PR #80, merged as `b45c674`. Issue #71 is closed. Both renderers carry the same
+> submenu: **Show the Keypad**, a separator, then **At the Bottom** and **On the Right** over
+> `KeypadDockConverter`. The separator is the seam this section predicted — two settings rather than one
+> enum, because keypad spec §2.1 rejected a `Hidden` member that would forget the dock whenever the keypad
+> was hidden — so it is structural, not decoration. One-way binding plus Click throughout, the Crosshair
+> items' shape, and no `Gesture` on any of them.
+
 Small, and it finishes a feature that ships for the first time in this release. `KeypadDockConverter` is
 written and tested, `SettingsViewModel.KeypadDock` already writes through and notifies, and the
 View > Crosshair submenu is the template for both renderers. The one thing that is not copy-and-paste is
@@ -100,6 +107,10 @@ that Crosshair gets away with a single radio group because `None` is one of its 
 on/off and dock are deliberately two settings; the keypad spec §2.1 rejected collapsing them.
 
 ### 4.3 Drop the engine path from About (#75)
+
+> **Done, 2026-09-12.** PR #77, merged as `66fcf99`. Issue #75 is closed. All three sites are gone from
+> `main`, and the `AboutWindowTests` comment that justified `SizeToContent.Height` by the path wrapping was
+> rewritten rather than left dangling.
 
 About shows the b3270 binary's full path on its own line. It is a residual from before the engine was built
 and bundled on all six RIDs, when "which binary is this actually running?" was a live question worth
@@ -117,14 +128,27 @@ has to be rewritten rather than left pointing at a line that no longer exists.
 
 ## 5. Public-debut housekeeping
 
+> **Status, 2026-09-12: 5.1 to 5.4 are done; 5.5 is deliberately outstanding.** The file changes are two
+> commits on `claude/0-5-0-planning-section-5-95a178`, not yet merged: `0f4d9c3` (the issue forms) and
+> `18099f2` (the README, the screenshot and the disclaimer). 5.1 needed no commit, being repository
+> settings rather than files.
+
 The "debut" half of the theme. None of it is a feature, and all of it is what a stranger meets first.
 
 ### 5.1 The repository's own metadata
+
+> **Done, 2026-09-12.** Description, homepage and eleven topics set on the repository. The homepage points
+> at the user guide on GitHub, since #49's website does not exist and an empty field helps nobody.
 
 Verified empty on 2026-09-12: no description, no homepage, no topics. Issue #49 makes the point itself —
 this costs nothing and should happen regardless of what a website eventually becomes.
 
 ### 5.2 The README
+
+> **Done, 2026-09-12.** The screenshot is `docs/images/session-ispf.png` — a live MVS/CE session at the
+> ISPF primary option menu, keypad docked at the bottom, captured on macOS. It sits under the opening
+> paragraphs, ahead of "The name". The logo is referenced in place as agreed. The Features list now names
+> the keypad, the bell and Preferences, and records the menu-bar choice as a macOS one.
 
 Four changes:
 
@@ -138,6 +162,12 @@ Four changes:
 - **The pre-1.0 disclaimer.** Section 5.3.
 
 ### 5.3 The pre-1.0 disclaimer
+
+> **Done, 2026-09-12 — ahead of 4.1, by decision.** Section 9 sequences this after 4.1 so that both land in
+> one README pass; 5.2 opened that pass first, so taking the disclaimer with it was cheaper than a second
+> one. 4.1 now only appends a documentation link. The README section is "Where LizTerm is right now",
+> between Features and Download; `release.yml` carries the short version as `## Status`. Neither ranks a
+> platform against another, so section 7 is still what makes that silence honest.
 
 What it needs to say, in substance:
 
@@ -159,6 +189,10 @@ from the Releases page may never see the README.
 
 ### 5.4 Issue templates
 
+> **Done, 2026-09-12.** `.github/ISSUE_TEMPLATE/` now holds `bug_report.yml`, `feature_request.yml` and
+> `config.yml`. Issue *forms* rather than markdown, so all five facts below are required fields rather than
+> prompts; engine source is a dropdown over `EngineSource`'s own three values.
+
 `.github/` contains workflows and nothing else. A release whose stated premise is that people will report
 bugs should capture, in the template: the operating system and its version, the LizTerm version, the host
 and its type, whether TLS is in use, and the engine source — `EngineSource` already distinguishes `Bundled`, `Override` and
@@ -166,10 +200,32 @@ and its type, whether TLS is in use, and the engine source — `EngineSource` al
 
 ### 5.5 The version bump
 
+> **Outstanding, on purpose.** Both files still say `0.4.1`. This stays the last change before the tag.
+
 `Directory.Build.props` and `LizTerm.parcel` both still say `0.4.1`. They must both say `0.5.0` and they
 must agree, or the release run fails at its first job. This is the last change before the tag.
 
 ## 6. Backlog hygiene
+
+> **Done, 2026-09-12.** Milestone `v0.5.0` created (the repository's first) and assigned to #48, #71 and #75.
+> #22 was already closed. #19 closed as completed, with a comment recording what Preferences actually carries.
+> #55 amended **and retitled** to "Preferences and profiles: export and import as one bundle". #48 amended.
+> Amendments were appended rather than written over the original bodies, following #22's own precedent and the
+> repository's rule about not rewriting a record to match the code.
+>
+> **Two decisions taken while doing it, neither derivable from the list below:**
+>
+> - **A fixed cell size is withdrawn, not deferred.** The residue list below names it; Robert's call is that
+>   `CellGeometry.Fit` scaling the screen to the available space is right for a 3270 client, because the
+>   screen is a fixed grid and filling the window with it is what someone resizing the window is asking for.
+>   Vista sizing the window to the font is a defensible alternative, not a better one. Recorded in #19's
+>   closing comment so it is not re-raised as an omission.
+> - **The residue splits three ways, not one.** #78 (color themes, and cursor shape and blink), #79 (wire log
+>   defaults — which the list below missed, and which had shipped nowhere), and #18, which already existed for
+>   the keymap editor and needed only a cross-reference.
+>
+> **House style, from here on: American English.** These issues say "color". The repository's existing prose
+> still says "colour" and "licence"; no sweep was made, so the two conventions currently coexist.
 
 No code. The backlog currently misrepresents itself in three places, and a public debut is when strangers
 start reading it.
@@ -203,7 +259,9 @@ all six RIDs and every installer, creates no release, and needs no tag.
   the Preferences window already says so. Confirm the note appears and the visual bell works.
 - The Preferences window: layout, and that the **Menu bar group is correctly absent** rather than present
   and inert.
-- The in-window menu carrying View > Keypad, and — if 4.2 lands — its submenu.
+- The in-window menu carrying View > Keypad and its submenu. 4.2 landed, so this is no longer conditional:
+  check that **Show the Keypad**, **At the Bottom** and **On the Right** all work from the in-window menu,
+  which off macOS is the only menu there is.
 - `settings.json` written to the right per-OS path, and surviving a restart.
 - The `.deb`, `.rpm` and `.exe` installers themselves, which are packaged on every release and installed by
   nobody so far.
@@ -232,15 +290,23 @@ together rather than one at a time.
 
 ## 9. Sequence
 
-1. **Merge PR #74.** Everything else assumes it is in.
+Ticked as of 2026-09-12.
+
+1. ~~**Merge PR #74.**~~ **Done** — merged as `3966ee5`.
 2. **Section 6 (backlog hygiene) and sections 5.1, 5.2 and 5.4** — independent of each other and of the
    code; can land in any order, and none of them blocks anything.
-3. **Design spec for 4.1**, then its plan, then the work. This is the long pole.
-4. **4.2 and 4.3**, at any point after step 1. Neither blocks anything else.
-5. **5.3**, once 4.1's shape is settled — the disclaimer and the bundled docs land in the same README pass.
-6. **5.5**, the version bump.
+   **Done** — 5.1, 5.2 and 5.4, and section 6. The `v0.5.0` milestone now exists and carries #48, #71 and #75.
+3. **Design spec for 4.1**, then its plan, then the work. This is the long pole. **Not started** — the only
+   substantial item left before section 7.
+4. ~~**4.2 and 4.3**, at any point after step 1.~~ **Both done** — 4.3 as PR #77, 4.2 as PR #80.
+5. ~~**5.3**, once 4.1's shape is settled~~ — **done early**, with 5.2, for the reason recorded in 5.3.
+   4.1 now only appends a documentation link to a README section that already exists.
+6. **5.5**, the version bump. **Outstanding on purpose.**
 7. **Section 7**, the rehearsal and the cross-platform pass.
 8. **Tag `v0.5.0`.**
+
+**What is left:** 4.1 (#48), 5.5, then section 7 and the tag. 4.1 is now the only feature work in the
+release, and it is the one item that still has no design spec.
 
 ## 10. Risks
 

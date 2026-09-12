@@ -1,0 +1,83 @@
+name: Bug report
+description: Something in LizTerm does not work, or does not work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The fields below are the ones that usually decide
+        whether a bug can be reproduced without a follow-up question.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what LizTerm did, and what you expected instead.
+      placeholder: |
+        1. Connected to my MVS 3.8j host over TLS
+        2. Chose File > Transfer...
+        3. LizTerm reported "..." and the transfer stopped
+
+        I expected the file to arrive in my dataset.
+    validations:
+      required: true
+
+  - type: input
+    id: lizterm-version
+    attributes:
+      label: LizTerm version
+      description: Shown in **About LizTerm** — the Help menu in a session window, or the LizTerm menu on macOS.
+      placeholder: "0.5.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      placeholder: "macOS 15.2 (Apple Silicon) / Ubuntu 24.04 x86-64 / Windows 11 24H2 ARM64"
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Host and its type
+      description: What you are connecting to. Do not include a public address you would rather not publish.
+      placeholder: "MVS 3.8j (TK5) on my LAN / VM/370 / z/OS 3.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tls
+    attributes:
+      label: Is TLS in use?
+      options:
+        - "No — plain TN3270"
+        - "Yes, verified against system roots"
+        - "Yes, with a pinned certificate"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine source
+      description: >
+        The last line of **About LizTerm**. "Bundled" is the b3270 that shipped with LizTerm and is what
+        almost everyone has; "Override" means LIZTERM_B3270_PATH is set.
+      options:
+        - Bundled
+        - Override
+        - Unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: wire-log
+    attributes:
+      label: Wire log (optional, but it helps a lot)
+      description: >
+        Turn on **Help > Wire Log** in the session window, reproduce the problem, turn it off, and attach the
+        file (**Help > Show Wire Logs...** opens the folder).
+        **A wire log records everything you type, including passwords** — check it before you share it.
