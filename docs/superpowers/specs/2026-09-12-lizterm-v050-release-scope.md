@@ -128,10 +128,15 @@ has to be rewritten rather than left pointing at a line that no longer exists.
 
 ## 5. Public-debut housekeeping
 
-> **Status, 2026-09-12: 5.1 to 5.4 are done; 5.5 is deliberately outstanding.** The file changes are two
-> commits on `claude/0-5-0-planning-section-5-95a178`, not yet merged: `0f4d9c3` (the issue forms) and
-> `18099f2` (the README, the screenshot and the disclaimer). 5.1 needed no commit, being repository
-> settings rather than files.
+> **Status, 2026-09-12: 5.1 to 5.4 are done and on `main`; 5.5 is deliberately outstanding.** The file
+> changes reached `main` in PR #81's merge, `703a754`: `8563dea` (the issue forms) and `7a23ffe` (the
+> README, the screenshot and the disclaimer). 5.1 needed no commit, being repository settings rather than
+> files.
+>
+> This paragraph was first written from the branch it was describing, so it named that branch and the
+> pre-rebase SHAs `0f4d9c3` and `18099f2`, which no longer reach `main`. A status note drafted in the same
+> commit it reports on cannot say where that commit ended up; the note is amended here rather than left to
+> read as unmerged work. The rest of the section is the record as written.
 
 The "debut" half of the theme. None of it is a feature, and all of it is what a stranger meets first.
 
