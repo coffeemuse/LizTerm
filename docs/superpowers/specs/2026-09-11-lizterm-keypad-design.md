@@ -192,22 +192,23 @@ public static class KeymapHints
 
 It reverses the keymap, collecting every `KeyChord` whose value is `key`, and orders them without reference to the
 table's insertion order: chords with no modifiers first, then modified chords in ascending order of their
-`KeyModifiers` value (Alt, then Control, then Shift, combinations after), then taps; within a group, by `Key`. The
-ordering is spelled out because `Keymap` holds a `Dictionary`, whose enumeration order is an implementation detail
-the project does not lean on.
+`KeyModifiers` value (Alt, then Control, then Shift, combinations after), then taps; within a group, function keys
+first, then by `Key`, so PF7 reads "F7 or PageUp" and not the reverse. The ordering is spelled out because `Keymap`
+holds a `Dictionary`, whose enumeration order is an implementation detail the project does not lean on.
 
 Each chord is formatted:
 
 - An ordinary chord through Avalonia's own `new KeyGesture(chord.Key, chord.Modifiers).ToString("p", format)`.
   Every backend in the pinned Avalonia 12.1.2 registers a platform `KeyGestureFormatInfo`: glyphs on macOS, so
   PA1 reads "⌥+1" and PF13 "⌃+F1 or ⇧+F1", and words on Windows and Linux, "Alt+1" and "Ctrl+F1 or Shift+F1".
-  Key names come from Avalonia's common overrides, so a digit key is "1" and not "D1".
+  Key names come from Avalonia's common overrides, so a digit key is "1" and not "D1", while Page Up stays "PageUp".
 - A tap, which the formatter has no word for, by hand: "a tap of Left Ctrl", "a tap of Right Ctrl".
 
 Two chords join with "or", three or more with commas and a final "or". Under the default keymap, on a platform that
-formats with words: PF1 is "F1"; PF13 "Ctrl+F1 or Shift+F1"; PA2 "Alt+2 or Ctrl+Home"; Enter "Enter, Ctrl+Enter or
-a tap of Right Ctrl"; Reset "Ctrl+R or a tap of Left Ctrl"; Clear "Pause or Ctrl+Escape"; Attn "Escape"; Erase EOF
-"End"; Erase Input, Dup and Field Mark null.
+formats with words: PF1 is "F1"; PF13 "Ctrl+F1 or Shift+F1"; PA2 "Alt+2 or Ctrl+Home"; Enter "Return, Ctrl+Return
+or a tap of Right Ctrl", since Avalonia's name for the key is Return; Reset "Ctrl+R or a tap of Left Ctrl"; Clear
+"Pause or Ctrl+Escape"; Attn "Escape"; Erase EOF "End"; Erase Input, Dup and Field Mark null. Measured against the
+pinned Avalonia 12.1.2 before the plan was written, not taken from its documentation.
 
 **The provider rule.** The control passes a null `format`, which `KeyGestureFormatInfo.GetInstance` resolves to
 the platform's registration. The tests pass an explicit `KeyGestureFormatInfo` and assert against that, so their
