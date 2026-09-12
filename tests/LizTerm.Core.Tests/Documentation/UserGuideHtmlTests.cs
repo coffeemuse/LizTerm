@@ -25,6 +25,16 @@ public class UserGuideHtmlTests
 
     /// <summary>Spec §6: the banner exists only here. docs/user-guide.md is the live copy, and a note telling
     /// its reader to go and find the live copy would be false there.</summary>
+    /// <summary>The page must never carry a carriage return, whatever the checkout did to this repository's
+    /// own source. A raw string literal takes the line endings of the file it is written in, so on a CRLF
+    /// checkout Page's template would emit \r\n while the committed page holds \n -- and the golden-file test
+    /// would fail on windows-latest for a reason having nothing to do with the document. That is not
+    /// hypothetical: it is exactly how this was found, on CI. Reproduce by converting UserGuideHtml.cs to CRLF
+    /// and running this project.</summary>
+    [Fact]
+    public void The_page_never_carries_a_carriage_return() =>
+        Assert.DoesNotContain("\r", Page("# LizTerm user guide\n\n- a bullet\n"));
+
     [Fact]
     public void The_banner_names_the_version_and_links_to_main()
     {

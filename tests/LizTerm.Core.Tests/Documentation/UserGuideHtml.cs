@@ -173,7 +173,13 @@ public static partial class UserGuideHtml
     private const string Guide = Repo + "/blob/main/docs/user-guide.md";
 
     /// <summary>The whole document: one file, an inline stylesheet, no scripts, no web fonts, no external
-    /// references of any kind. It is read offline, and anything it would have to fetch is a blank space.</summary>
+    /// references of any kind. It is read offline, and anything it would have to fetch is a blank space.
+    ///
+    /// Normalized to \n on the way out. A raw string literal carries the line endings of the FILE IT IS
+    /// WRITTEN IN, so on a checkout that turned this .cs file into CRLF -- this repository has no
+    /// .gitattributes and the suite runs on windows-latest -- the template below emits \r\n while the
+    /// committed page holds \n, and the golden-file test fails for a reason that has nothing to do with the
+    /// document. Convert's own output is already \n, because it appends the character explicitly.</summary>
     public static string Page(string markdown, string version) =>
         $$"""
           <!doctype html>
@@ -216,5 +222,5 @@ public static partial class UserGuideHtml
           {{Convert(markdown, version)}}</body>
           </html>
 
-          """;
+          """.ReplaceLineEndings("\n");
 }
