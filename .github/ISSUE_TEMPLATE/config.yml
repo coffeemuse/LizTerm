@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: User guide
+    url: https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md
+    about: The keyboard map, profiles, TLS, file transfer, screen capture, and the current known limitations.
