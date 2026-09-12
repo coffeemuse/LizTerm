@@ -225,19 +225,32 @@ is what gives the picker a menu bar on macOS. Each window's menu is rendered nat
 
 ### Style
 
-- `MenuStyle` (`Core/Settings/`) is `Auto | Native | InWindow | Both`, saved in `AppSettings`. `Auto` is what an
-  untouched file reads as and is never acted on: `MenuStrategy.Resolve` turns it into `Native` on macOS and
-  `InWindow` elsewhere, because `NativeMenuBar`'s in-window rendering has never been reviewed on Windows or Linux
-  (#22). `Resolve`, `FromVariable`, `AboutInHelpMenu` and `PreferencesInEditMenu` are pure and take the platform as
-  an argument, so every combination is testable anywhere.
+- `MenuStyle` (`src/LizTerm.Core/Settings/`) is `Auto | Native | InWindow | Both`, saved in `AppSettings`. `Auto`
+  is what an untouched file reads as and is never acted on: `MenuStrategy.Resolve` turns it into `Native` on macOS
+  and `InWindow` elsewhere, because `NativeMenuBar`'s in-window rendering has never been reviewed on Windows or
+  Linux (#22). `Resolve`, `FromVariable`, `MenuStyleChoosable`, `AboutInHelpMenu` and `PreferencesInEditMenu` are
+  pure and take the platform as an argument, so every combination is testable anywhere.
+- **`Resolve` answers `InWindow` for everything off macOS**, and `MenuStyleChoosable` is the same rule seen from
+  Preferences — a style offered where `Resolve` ignores it, or honoured where Preferences hides the group, is the
+  bug. `Both` off macOS is two bars stacked (both renderers draw in-window there, both docked `Top`) and `Native`
+  is the unreviewed renderer or a global-menu registrar; a settings file carried from a Mac, or hand-edited, is
+  how those states would otherwise be reached with no control to leave them. `Resolve` is also where a value that
+  is not a member at all is normalised: a settings file is text, `JsonStringEnumConverter` accepts integers, and
+  `"menuStyle": 9` reads back as `(MenuStyle)9` rather than falling to `Auto` the way an unknown *name* does.
+  `ApplyMenuStyle` throws for anything unresolved rather than rendering it, since it names no renderer.
 - **`LIZTERM_MENU` seeds, it does not override.** `App` resolves it once through `MenuStrategy.FromVariable` and
   calls `SettingsViewModel.SeedMenuStyle`, which changes the value in memory and notifies but never writes. The
   Preferences radios then work normally for the rest of the session, and a change there saves. The seed cannot
   reach the file later either: `SettingsStore.Update` applies each change to the record it re-reads from disk, so a
   save carries only the key the user changed. `A_seeded_menu_style_applies_in_memory_and_never_reaches_the_file`
-  guards that.
-- **The style is live.** `SessionWindow` follows `SettingsViewModel.MenuStyle` through `OnDataContextChanged`, and
-  applies only *changes* — re-reading the value on arrival would undo the variable's seed. `ApplyMenuStyle` is
+  guards that. The `MenuStyle` setter carries the one exception to the unchanged-value guard every other setter
+  has: while a seed is in force an *equal* value still writes, because the seeded style is the one the radio
+  already shows, and clicking it is the user asking for it to become their preference.
+- **The style is live.** `SessionWindow` follows `SettingsViewModel.MenuStyle` from its `Opened` handler (not from
+  `OnDataContextChanged`, which only re-points the field: a window built and never shown never raises `Closed`
+  either, so a subscription taken there would outlive it), and applies only *changes* — the constructor's argument
+  outranks the data context, because the App tests build a window in a named style and hand it a view model whose
+  `Settings` is its own in-memory instance reading `Auto`. `ApplyMenuStyle` is
   therefore re-entrant, and `_stashedMenuItems` is what makes `InWindow` a state a window can leave: emptying the
   declared menu removes the items and nulls their `Parent`, so the same objects are kept and added back. Back to
   the *same* instance, always — see the `#60` note below.

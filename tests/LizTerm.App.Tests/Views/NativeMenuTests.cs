@@ -515,6 +515,36 @@ public class NativeMenuTests
         Assert.Same(declared, NativeMenu.GetMenu(window));
     }
 
+    /// <summary>The direction that needs ApplyMenuStyle's re-run of ApplyPlatformMenuRules and
+    /// ShowPlatformGestures, and the one the test above cannot see: a window that *opened* under InWindow had its
+    /// menu emptied before either ever ran against it, so the items come back never having been given a gesture
+    /// or had the About/Preferences rule applied. Headers survive a refill whatever those two calls do — they are
+    /// XAML literals — so this asserts the state a refill has to restore rather than the state it cannot
+    /// lose. Delete either call from ApplyMenuStyle and this is what fails.</summary>
+    [AvaloniaFact]
+    public void A_window_opened_in_window_gets_its_gestures_and_platform_rules_when_it_switches_to_native()
+    {
+        var (window, vm, _, _) = Show(MenuStyle.InWindow);
+        var declared = NativeMenu.GetMenu(window)!;
+        Assert.Empty(declared.Items);
+
+        vm.Settings.MenuStyle = MenuStyle.Native;
+
+        var hotkeys = window.GetPlatformSettings()!.HotkeyConfiguration;
+        Assert.Equal(hotkeys.Copy.FirstOrDefault(), MenuLookup.Item(declared, "_Edit", "_Copy")!.Gesture);
+        Assert.Equal(hotkeys.Paste.FirstOrDefault(), MenuLookup.Item(declared, "_Edit", "_Paste")!.Gesture);
+        Assert.Equal(hotkeys.SelectAll.FirstOrDefault(), MenuLookup.Item(declared, "_Edit", "Select _All")!.Gesture);
+        Assert.Equal(new KeyGesture(Key.F, hotkeys.CommandModifiers), MenuLookup.Item(declared, "_Edit", "_Find...")!.Gesture);
+
+        // The application menu supplies both on macOS, so neither renderer's copy may also show one.
+        Assert.Equal(
+            MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS()),
+            MenuLookup.Item(declared, "_Help", "_About LizTerm...")!.IsVisible);
+        Assert.Equal(
+            MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS()),
+            MenuLookup.Item(declared, "_Edit", "P_references...")!.IsVisible);
+    }
+
     /// <summary>Hiding the renderers is not what turns the native path off, so this asserts the thing that does.
     /// A window's NativeMenu is exported through the window's own ITopLevelNativeMenuExporter — NativeMenu's
     /// MenuProperty change handler calls SetNativeMenu on it — with no NativeMenuBar involved at all;

@@ -31,4 +31,13 @@ public class MenuStyleConverterTests
             () => Converter.Convert(MenuStyle.Native, typeof(bool), nameof(BellSound.SystemAlert), CultureInfo.InvariantCulture));
         Assert.Contains(nameof(MenuStyle.InWindow), ex.Message);
     }
+
+    [Fact]
+    public void A_missing_parameter_is_false_not_an_error() =>
+        Assert.Equal(false, Converter.Convert(MenuStyle.Native, typeof(bool), null, CultureInfo.InvariantCulture));
+
+    [Fact]
+    public void ConvertBack_is_not_supported() =>
+        Assert.Throws<NotSupportedException>(
+            () => Converter.ConvertBack(true, typeof(MenuStyle), "Native", CultureInfo.InvariantCulture));
 }

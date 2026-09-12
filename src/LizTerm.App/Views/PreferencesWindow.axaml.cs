@@ -41,6 +41,7 @@ public partial class PreferencesWindow : Window
     private void OnKeypadBottomClick(object? sender, RoutedEventArgs e) => Settings.KeypadDock = KeypadDock.Bottom;
     private void OnKeypadRightClick(object? sender, RoutedEventArgs e) => Settings.KeypadDock = KeypadDock.Right;
 
+    private void OnMenuStyleAutoClick(object? sender, RoutedEventArgs e) => Settings.MenuStyle = MenuStyle.Auto;
     private void OnMenuStyleNativeClick(object? sender, RoutedEventArgs e) => Settings.MenuStyle = MenuStyle.Native;
     private void OnMenuStyleInWindowClick(object? sender, RoutedEventArgs e) => Settings.MenuStyle = MenuStyle.InWindow;
     private void OnMenuStyleBothClick(object? sender, RoutedEventArgs e) => Settings.MenuStyle = MenuStyle.Both;

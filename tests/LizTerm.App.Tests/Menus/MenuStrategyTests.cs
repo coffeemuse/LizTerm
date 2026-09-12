@@ -23,10 +23,38 @@ public class MenuStrategyTests
     [InlineData(MenuStyle.Native)]
     [InlineData(MenuStyle.InWindow)]
     [InlineData(MenuStyle.Both)]
-    public void A_chosen_style_survives_resolution_on_every_platform(MenuStyle style)
-    {
+    public void A_chosen_style_survives_resolution_on_macOS(MenuStyle style) =>
         Assert.Equal(style, MenuStrategy.Resolve(style, isMacOS: true));
-        Assert.Equal(style, MenuStrategy.Resolve(style, isMacOS: false));
+
+    /// <summary>Off macOS the choice is not offered, so it must not be honoured either: Both would draw two bars
+    /// stacked and Native the renderer nobody has reviewed (#22), and Preferences hides the group there, so a
+    /// settings file carried from a Mac would strand a user in a state with no control to leave it.</summary>
+    [Theory]
+    [InlineData(MenuStyle.Auto)]
+    [InlineData(MenuStyle.Native)]
+    [InlineData(MenuStyle.InWindow)]
+    [InlineData(MenuStyle.Both)]
+    public void Every_style_resolves_to_the_in_window_menu_off_macOS(MenuStyle style) =>
+        Assert.Equal(MenuStyle.InWindow, MenuStrategy.Resolve(style, isMacOS: false));
+
+    /// <summary>A settings file is text and JsonStringEnumConverter accepts integers, so `"menuStyle": 9` reads
+    /// back as a value that is not a member at all rather than falling to Auto the way an unknown name does.
+    /// Resolve is the one place that is normalised; without it the value names no renderer and ApplyMenuStyle
+    /// would have nothing to draw.</summary>
+    [Fact]
+    public void A_value_that_is_not_a_member_resolves_to_the_platform_default()
+    {
+        Assert.Equal(MenuStyle.Native, MenuStrategy.Resolve((MenuStyle)9, isMacOS: true));
+        Assert.Equal(MenuStyle.InWindow, MenuStrategy.Resolve((MenuStyle)9, isMacOS: false));
+    }
+
+    /// <summary>The same rule as Resolve, seen from Preferences: the group is offered exactly where a style other
+    /// than the platform's own is honoured.</summary>
+    [Fact]
+    public void The_menu_style_is_a_choice_only_on_macOS()
+    {
+        Assert.True(MenuStrategy.MenuStyleChoosable(isMacOS: true));
+        Assert.False(MenuStrategy.MenuStyleChoosable(isMacOS: false));
     }
 
     [Theory]

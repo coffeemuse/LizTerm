@@ -104,9 +104,19 @@ public sealed class SettingsViewModel : ObservableObject
         get => Current.MenuStyle;
         set
         {
-            if (Current.MenuStyle != value) Apply(nameof(MenuStyle), s => s with { MenuStyle = value });
+            // The unchanged-value guard every other setter has, plus the one case where "unchanged" still has to
+            // write: a seeded style is in memory and not in the file, so the radio showing it is already checked
+            // and clicking it is the user asking for it to become their preference. Without this the seeded
+            // style is the one value they cannot save, and the next launch without LIZTERM_MENU loses it (#70).
+            if (Current.MenuStyle == value && !_menuStyleSeeded) return;
+            _menuStyleSeeded = false;
+            Apply(nameof(MenuStyle), s => s with { MenuStyle = value });
         }
     }
+
+    /// <summary>Whether MenuStyle currently holds a LIZTERM_MENU seed rather than anything the file says, which
+    /// is what makes a click on the matching radio a write rather than a no-op.</summary>
+    private bool _menuStyleSeeded;
 
     /// <summary>The style LIZTERM_MENU named, applied to this instance and nothing else: in memory, notifying so
     /// open windows follow it, and never written. App calls it once at startup. It cannot reach the file later
@@ -114,15 +124,32 @@ public sealed class SettingsViewModel : ObservableObject
     /// triggers carries only the key they changed.</summary>
     internal void SeedMenuStyle(MenuStyle style)
     {
+        _menuStyleSeeded = true;
         if (Current.MenuStyle == style) return;
         Current = Current with { MenuStyle = style };
         OnPropertyChanged(nameof(MenuStyle));
     }
 
+    /// <summary>The notification keeps its place ahead of the save, so the value change always reaches the UI
+    /// before any LastSaveError does — but it goes in a try/finally, because a subscriber now does real work in
+    /// it: a session window rebuilds its menus on a MenuStyle change, and MenuLookup.Required throws for a menu
+    /// missing a header it names. An exception stops the multicast delegate wherever it is raised; the finally at
+    /// least keeps it from costing the user the write as well as the windows after it.</summary>
     private void Apply(string property, Func<AppSettings, AppSettings> change)
     {
         Current = change(Current);
-        OnPropertyChanged(property);
+        try
+        {
+            OnPropertyChanged(property);
+        }
+        finally
+        {
+            Save(change);
+        }
+    }
+
+    private void Save(Func<AppSettings, AppSettings> change)
+    {
         if (_store is null) return;
         try
         {

@@ -257,7 +257,9 @@ public partial class App : Application
             return showing;
         }
         var window = new PreferencesWindow(
-            settings, _bellRinger.CanRing(BellSound.SystemAlert), menuStyleChoosable: OperatingSystem.IsMacOS());
+            settings,
+            _bellRinger.CanRing(BellSound.SystemAlert),
+            MenuStrategy.MenuStyleChoosable(OperatingSystem.IsMacOS()));
         _preferences = window;
         window.Closed += (_, _) => { if (ReferenceEquals(_preferences, window)) _preferences = null; };
         window.Show();

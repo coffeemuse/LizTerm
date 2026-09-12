@@ -21,14 +21,26 @@ internal static class MenuStrategy
 {
     public const string Variable = "LIZTERM_MENU";
 
-    /// <summary>Auto — an untouched settings file — as the style the platform actually gets. Kept pure, taking
-    /// the platform rather than reading it, so every combination is testable on every machine: the shape
-    /// EngineRequirement.Decide uses for the same reason. Never answers Auto.</summary>
-    public static MenuStyle Resolve(MenuStyle style, bool isMacOS) => style switch
-    {
-        MenuStyle.Auto => isMacOS ? MenuStyle.Native : MenuStyle.InWindow,
-        _ => style,
-    };
+    /// <summary>A stored style as the style the platform actually gets. Kept pure, taking the platform rather
+    /// than reading it, so every combination is testable on every machine: the shape EngineRequirement.Decide
+    /// uses for the same reason. Never answers Auto.
+    ///
+    /// Off macOS the answer is always InWindow, whatever the file says. Both draws two bars stacked there
+    /// (NativeMenuBar renders in-window where there is no exporter, and both are docked Top), and Native hands
+    /// the definition to a global-menu registrar or to a renderer nobody has reviewed (#22) — states
+    /// MenuStyleChoosable gives no control to leave, so they must not be reachable at all. A settings file
+    /// carried between platforms, or hand-edited, is exactly how they otherwise would be.
+    ///
+    /// This is also the one place an out-of-range value is normalised. A settings file is text a user can edit
+    /// and JsonStringEnumConverter accepts integers, so `"menuStyle": 9` reads back as (MenuStyle)9 rather than
+    /// falling to Auto the way an unknown *name* does; left alone it names no renderer at all.</summary>
+    public static MenuStyle Resolve(MenuStyle style, bool isMacOS) => isMacOS
+        ? style switch
+        {
+            MenuStyle.Native or MenuStyle.InWindow or MenuStyle.Both => style,
+            _ => MenuStyle.Native,
+        }
+        : MenuStyle.InWindow;
 
     /// <summary>The style LIZTERM_MENU names, or null for a variable that names none — unset, blank, or a typo.
     /// Null means "no seed", leaving the saved preference to decide, because a value that left the app with no
@@ -42,6 +54,12 @@ internal static class MenuStrategy
         "both" => MenuStyle.Both,
         _ => null,
     };
+
+    /// <summary>Whether the menu style is a choice worth offering here, and so whether Preferences shows the
+    /// group. Only macOS draws the two renderers in different places; elsewhere Resolve answers InWindow for
+    /// every style, so there is nothing to choose. The two answers are the same rule and belong in the same
+    /// file — a group offered where Resolve ignores it, or ignored where it is offered, is the bug.</summary>
+    public static bool MenuStyleChoosable(bool isMacOS) => isMacOS;
 
     /// <summary>macOS puts About in the application menu, so the Help item must not also carry one.</summary>
     public static bool AboutInHelpMenu(bool isMacOS) => !isMacOS;

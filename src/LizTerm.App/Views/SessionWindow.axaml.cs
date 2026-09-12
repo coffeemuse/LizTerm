@@ -52,6 +52,12 @@ public partial class SessionWindow : Window
         Opened += (_, _) =>
         {
             _opened = true;
+            // The settings subscription starts here rather than the moment the data context arrives: a window
+            // built and then never shown — App.OpenSession throwing before its Show() — never raises Closed
+            // either, so a subscription taken earlier would leave the process-wide settings object calling
+            // ApplyMenuStyle on a dead window for the life of the process. Nothing changes the style between
+            // the two, so nothing is missed.
+            if (_styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
             ShowPlatformGestures();
             Screen.Focus();
         };
@@ -93,9 +99,18 @@ public partial class SessionWindow : Window
     /// Called again whenever the preference changes on an open window, so every branch has to be reversible.</summary>
     private void ApplyMenuStyle(MenuStyle style)
     {
-        _menuStyle = style;
+        // Auto names no renderer and neither does a value that is not a member at all, so either would hide both
+        // bars and empty the native menu — a window with no menu, and on Windows and Linux no route to
+        // Preferences to undo it. MenuStrategy.Resolve is what turns both into a real style and every caller
+        // goes through it, so anything arriving here unresolved is a bug in the caller, not a state to render.
+        _menuStyle = style switch
+        {
+            MenuStyle.Native or MenuStyle.InWindow or MenuStyle.Both => style,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(style), style, "A window's menu style must come from MenuStrategy.Resolve."),
+        };
         ClassicMenu.IsVisible = style is MenuStyle.InWindow or MenuStyle.Both;
-        NativeBar.IsVisible = style is MenuStyle.Native or MenuStyle.Both;
+        NativeBar.IsVisible = NativeMenuExported;
 
         // Hiding NativeMenuBar is not enough to turn the native path off, because NativeMenuBar is not what
         // exports the menu. A window's NativeMenu goes out through the window's own
@@ -395,14 +410,19 @@ public partial class SessionWindow : Window
 
         if (_styleSource is not null) _styleSource.PropertyChanged -= OnSettingsChanged;
         _styleSource = ViewModel?.Settings;
-        if (_styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
+        // Only once the window is open; see the Opened handler for why.
+        if (_opened && _styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
     }
 
     private void OnBellRang(object? sender, EventArgs e) => Screen.Flash();
 
-    /// <summary>Only changes, never the value on arrival: the style this window opened with came from
-    /// LIZTERM_MENU or the saved preference, and re-reading Auto here would undo the variable's seed. A change
-    /// means the user moved the radio, and every window follows it.</summary>
+    /// <summary>Only changes, never the value on arrival. The constructor's argument is the whole truth about
+    /// the style this window opened with, and it has to outrank whatever the data context's settings say: the
+    /// App tests build a window in a named style and give it a SessionViewModel whose Settings is its own
+    /// in-memory instance reading Auto (SessionViewModel's constructor defaults it), so re-reading here would
+    /// resolve that to the platform default and override the style under test. In the app the two always agree
+    /// — App passes Resolve(Settings.MenuStyle, …) and seeds before any window exists — so nothing is lost by
+    /// not re-reading. A change means the user moved the radio, and every window follows it.</summary>
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(SettingsViewModel.MenuStyle)) return;

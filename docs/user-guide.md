@@ -203,18 +203,24 @@ Windows and Linux, the menu is drawn inside each window.
 
 On macOS you can choose, under **Menu bar** in Preferences:
 
-- **In the system menu bar** — the default, and where a Mac user expects it.
+- **Wherever this platform puts it** — the default: the system menu bar on a Mac. Picking one of the three
+  below pins that choice instead, and this brings you back.
+- **In the system menu bar** — where a Mac user expects it, and what the default already gives you there.
 - **Inside the window** — draws the menu in each session window and takes it out of the system menu bar, so no
   menu shortcut can intercept a key the mainframe needs.
-- **Both** — draws it in both places at once.
+- **Both** — draws it in both places at once. The system menu bar is a real menu bar again, so the menu
+  shortcuts come back with it: pick this only if you did not need **Inside the window** to keep them off a
+  key the mainframe uses.
 
 The choice applies immediately, to every open session window. It is macOS only: on Windows and Linux the menu is
-drawn inside the window whatever you pick, so Preferences does not offer it there.
+always drawn inside the window, whatever a settings file carried from a Mac may say, so Preferences does not
+offer the choice there.
 
 To start LizTerm with a particular style, set the `LIZTERM_MENU` environment variable to `native`, `classic` or
-`both` before launching; any other value is ignored. It only decides what that run *starts* with — you can still
-change it in Preferences afterwards, and doing so saves the new choice as your preference. Leaving the variable
-unset uses whatever you last chose.
+`both` before launching; any other value is ignored, and so is the variable itself away from macOS. It only
+decides what that run *starts* with — you can still change it in Preferences afterwards, and doing so saves the
+new choice as your preference, including when you pick the style the variable already started you on. Leaving
+the variable unset uses whatever you last chose.
 
 The macOS LizTerm application menu (About, Preferences, and Apple's standard items) stays whatever you pick.
 
@@ -230,6 +236,7 @@ window's **Edit** menu on Windows and Linux. Changes apply as you make them, to 
   Linux.
 - **Keypad** — whether the on-screen keypad is shown (the same as View > Keypad), and whether it docks below the
   screen or to its right.
+- **Menu bar** — macOS only; see [Menus](#menus).
 
 ## Where LizTerm keeps its files
 
