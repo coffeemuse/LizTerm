@@ -133,4 +133,24 @@ public class SettingsViewModelTests : IDisposable
         Assert.False(reloaded.VisualBell);
         Assert.Equal(BellSound.SystemAlert, reloaded.BellSound);
     }
+
+    [Fact]
+    public void The_keypad_properties_write_through_and_skip_unchanged_values()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.Keypad = false;
+        settings.KeypadDock = KeypadDock.Bottom;
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.Keypad = true;
+        settings.KeypadDock = KeypadDock.Right;
+
+        Assert.Equal(["Keypad", "KeypadDock"], changes);
+        var reloaded = new SettingsViewModel(new SettingsStore(FilePath));
+        Assert.True(reloaded.Keypad);
+        Assert.Equal(KeypadDock.Right, reloaded.KeypadDock);
+    }
 }

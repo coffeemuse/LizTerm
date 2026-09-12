@@ -80,6 +80,11 @@
                 </NativeMenu>
               </NativeMenuItem.Menu>
             </NativeMenuItem>
+            <!-- One-way plus Click, the Crosshair items' shape: a NativeMenuItem never toggles itself, and the
+                 handler flips the setting on the view model, whose change reaches every window's panel and check
+                 mark. No Gesture: nothing outside Edit carries one (keypad spec §6.3). -->
+            <NativeMenuItem Header="_Keypad" ToggleType="CheckBox" Click="OnKeypadClickNative"
+                            IsChecked="{Binding Settings.Keypad, Mode=OneWay}" />
           </NativeMenu>
         </NativeMenuItem.Menu>
       </NativeMenuItem>
@@ -166,6 +171,10 @@
           <MenuItem Header="_Both" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairBothClick"
                     IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
         </MenuItem>
+        <!-- The same shape as the native item and the Crosshair radios above, so the two menus stay alike and
+             Wire Log stays the one item whose two menus differ. -->
+        <MenuItem x:Name="KeypadMenuItem" Header="_Keypad" ToggleType="CheckBox" Click="OnKeypadClick"
+                  IsChecked="{Binding Settings.Keypad, Mode=OneWay}" />
       </MenuItem>
       <MenuItem Header="_Keys">
         <MenuItem Header="Clear" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Clear}" />
@@ -234,6 +243,18 @@
                  PlaceholderText="Find on screen" />
       </DockPanel>
     </Border>
+
+    <!-- Declared innermost (keypad spec §6.1): at the bottom it sits directly under the screen, above the find,
+         error and status bars; on the right it stands beside the screen and above those three, spanning the
+         screen's height. Two bindings to one setting: the grid's shape is the control's, its edge of the window is
+         this panel's. Invisible costs no layout, and the control builds no buttons until it is first shown.
+         IsEnabled follows the connection so a disconnected session shows a greyed keypad rather than buttons that
+         silently do nothing. -->
+    <controls:Keypad x:Name="KeypadPanel"
+                     DockPanel.Dock="{Binding Settings.KeypadDock, Converter={x:Static controls:Keypad.DockPanelDock}}"
+                     Dock="{Binding Settings.KeypadDock}"
+                     IsVisible="{Binding Settings.Keypad}"
+                     IsEnabled="{Binding IsConnected}" />
 
     <controls:TerminalScreen x:Name="Screen"
                              Snapshot="{Binding Screen}"

@@ -9,6 +9,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using LizTerm.App.Controls;
 using LizTerm.App.Menus;
@@ -133,6 +134,47 @@ public class NativeMenuTests
         Assert.Equal(CrosshairMode.Both, window.FindControl<TerminalScreen>("Screen")!.Crosshair);
     }
 
+    /// <summary>View > Keypad is a check box in the Crosshair items' shape on both menus (keypad spec §6.3):
+    /// RaiseClicked is the entry point both real renderers use, the handler flips the setting, and the one-way
+    /// bindings carry the mark back to both items. The classic item is driven through its own Click for the same
+    /// reason. No gesture: nothing outside Edit carries one.</summary>
+    [AvaloniaFact]
+    public void Clicking_view_keypad_flips_the_setting_and_the_check_mark_on_both_menus()
+    {
+        var (window, vm, _, _) = Show();
+        var native = Item(window, "_View", "_Keypad");
+        var classic = window.FindControl<MenuItem>("KeypadMenuItem")!;
+        Assert.Equal(MenuItemToggleType.CheckBox, native.ToggleType);
+        Assert.Null(native.Gesture);
+        Assert.False(native.IsChecked);
+        Assert.False(classic.IsChecked);
+
+        ((INativeMenuItemExporterEventsImplBridge)native).RaiseClicked();
+        Assert.True(vm.Settings.Keypad);
+        Assert.True(native.IsChecked);
+        Assert.True(classic.IsChecked);
+
+        classic.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.False(vm.Settings.Keypad);
+        Assert.False(native.IsChecked);
+        Assert.False(classic.IsChecked);
+    }
+
+    /// <summary>The keypad offers at least what the menu does (keypad spec §3), read from the menu itself so the
+    /// two cannot drift: a key added to the Keys menu and not to KeypadLayout fails here.</summary>
+    [AvaloniaFact]
+    public void Every_key_on_the_Keys_menu_is_on_the_keypad()
+    {
+        var (window, _, _, _) = Show();
+        var onKeypad = KeypadLayout.Banks.SelectMany(bank => bank).Select(k => k.Key).ToHashSet();
+        var onMenu = MenuLookup.Item(NativeMenu.GetMenu(window), "_Keys")!.Menu!.Items
+            .OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator)
+            .Select(i => (TerminalKey)i.CommandParameter!).ToArray();
+
+        Assert.NotEmpty(onMenu);
+        Assert.All(onMenu, key => Assert.Contains(key, onKeypad));
+    }
+
     [AvaloniaFact]
     public void The_blink_setting_reaches_the_terminal_screen()
     {
@@ -157,15 +199,14 @@ public class NativeMenuTests
 
         var nativeView = MenuLookup.Item(NativeMenu.GetMenu(window), "_View")!;
         var nativeChildren = nativeView.Menu!.Items.OfType<NativeMenuItem>().ToArray();
-        var nativeCrosshair = Assert.Single(nativeChildren);
-        Assert.Equal("_Crosshair", nativeCrosshair.Header);
-        Assert.Equal(expected, nativeCrosshair.Menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header));
+        Assert.Equal(["_Crosshair", "_Keypad"], nativeChildren.Select(i => i.Header));
+        Assert.Equal(expected, nativeChildren[0].Menu!.Items.OfType<NativeMenuItem>().Select(i => i.Header));
 
         var classicView = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>()
             .Single(i => (string)i.Header! == "_View");
-        var classicCrosshair = Assert.Single(classicView.Items.OfType<MenuItem>());
-        Assert.Equal("_Crosshair", classicCrosshair.Header);
-        Assert.Equal(expected, classicCrosshair.Items.OfType<MenuItem>().Select(i => (string)i.Header!));
+        var classicChildren = classicView.Items.OfType<MenuItem>().ToArray();
+        Assert.Equal(["_Crosshair", "_Keypad"], classicChildren.Select(i => (string)i.Header!));
+        Assert.Equal(expected, classicChildren[0].Items.OfType<MenuItem>().Select(i => (string)i.Header!));
     }
 
     [AvaloniaFact]

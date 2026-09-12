@@ -40,6 +40,16 @@
     <!-- Shown only where the constructor disabled the radio above (the ringer's CanRing said no). -->
     <TextBlock x:Name="BellSoundNote" Text="The system alert sound is not available on Linux." Foreground="#A0A0A0" TextWrapping="Wrap" IsVisible="False" />
 
+    <TextBlock Text="Keypad" FontWeight="SemiBold" Margin="0,10,0,0" />
+    <!-- The show box is here as well as in View so the group makes sense on its own: a position with no way to
+         show the thing would be a puzzle (keypad spec §7). -->
+    <CheckBox x:Name="KeypadBox" Content="Show the keypad" IsChecked="{Binding Keypad, Mode=TwoWay}" />
+    <!-- The Crosshair radios' shape over KeypadDockConverter: one-way check marks plus Click handlers. -->
+    <RadioButton x:Name="KeypadBottom" GroupName="KeypadDock" Content="At the bottom of the window" Click="OnKeypadBottomClick"
+                 IsChecked="{Binding KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Bottom, Mode=OneWay}" />
+    <RadioButton x:Name="KeypadRight" GroupName="KeypadDock" Content="On the right of the window" Click="OnKeypadRightClick"
+                 IsChecked="{Binding KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Right, Mode=OneWay}" />
+
     <!-- Empty until a save fails; the session windows show the same message in their banners. -->
     <TextBlock x:Name="SaveErrorText" Text="{Binding LastSaveError}" Foreground="#FF8080" TextWrapping="Wrap" Margin="0,10,0,0" />
 

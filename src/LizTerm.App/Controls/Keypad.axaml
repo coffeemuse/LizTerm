@@ -1,0 +1,26 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="LizTerm.App.Controls.Keypad">
+  <UserControl.Styles>
+    <!-- Compact (keypad spec §4.1): three rows come to about 90 px at the bottom. The UI font, not the
+         terminal's. Stretch so a bottom row fills its twelfth of the window; on the right the grid takes its
+         natural width and the cells are as wide as the widest label. -->
+    <Style Selector="Button.keypad">
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="Margin" Value="1" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
+  <!-- The status bar's grey. The grid is filled in code from KeypadLayout: no button is written by hand. -->
+  <Border x:Name="KeypadBorder" Background="#181818" Padding="6,4">
+    <UniformGrid x:Name="ButtonGrid" />
+  </Border>
+</UserControl>

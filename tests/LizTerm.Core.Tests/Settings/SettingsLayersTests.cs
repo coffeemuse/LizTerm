@@ -50,6 +50,24 @@ public class SettingsLayersTests
         Assert.Equal(new AppSettings(), SettingsLayers.Read(Doc("""{}""")));
     }
 
+    /// <summary>A dock this build does not know (a later build's Left, say) costs that key alone (keypad spec §2.1),
+    /// the same guarantee the bell's sound relies on.</summary>
+    [Fact]
+    public void A_keypad_dock_this_build_does_not_know_falls_to_Bottom_and_the_rest_are_kept()
+    {
+        Assert.Equal(new AppSettings(Keypad: true), SettingsLayers.Read(Doc("""{"keypad":true,"keypadDock":"Left"}""")));
+    }
+
+    [Fact]
+    public void The_keypad_fields_read_by_name_and_default_to_hidden_at_the_bottom()
+    {
+        Assert.Equal(new AppSettings(Keypad: true, KeypadDock: KeypadDock.Right),
+            SettingsLayers.Read(Doc("""{"keypad":true,"keypadDock":"Right"}""")));
+        Assert.Equal(new AppSettings(), SettingsLayers.Read(Doc("""{}""")));
+        Assert.False(new AppSettings().Keypad);
+        Assert.Equal(KeypadDock.Bottom, new AppSettings().KeypadDock);
+    }
+
     [Fact]
     public void An_unknown_key_is_ignored_on_read()
     {
