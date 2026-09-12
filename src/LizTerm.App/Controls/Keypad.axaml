@@ -20,7 +20,7 @@
     </Style>
   </UserControl.Styles>
   <!-- The status bar's grey. The grid is filled in code from KeypadLayout: no button is written by hand. -->
-  <Border Background="#181818" Padding="6,4">
+  <Border x:Name="KeypadBorder" Background="#181818" Padding="6,4">
     <UniformGrid x:Name="ButtonGrid" />
   </Border>
 </UserControl>

@@ -189,22 +189,33 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 ## Keypad (`Controls/Keypad.axaml`)
 
 - A `UserControl` that mirrors `TerminalScreen`'s contract: it raises `KeyRequested` and knows nothing about view
-  models. Its buttons are built in the constructor from `KeypadLayout.Banks` (three banks of twelve; `KeypadKey` is
-  a label plus a `TerminalKey`), so no button is written by hand. `Dock` (`KeypadDock`) lays the same `UniformGrid`
+  models. Its buttons are built from `KeypadLayout.Banks` (three banks of twelve; `KeypadKey` is a label plus a
+  `TerminalKey`), so no button is written by hand. `Dock` (`KeypadDock`) lays the same `UniformGrid`
   out bank-per-row at the bottom or bank-per-column on the right; `Keypad.DockPanelDock` is the converter the
   window's `DockPanel.Dock` binding uses, two bindings to one setting because the grid's shape is the control's and
   its edge of the window is the window's. The window binds `IsVisible` to `Settings.Keypad` and `IsEnabled` to
   `IsConnected`. `NativeMenuTests.Every_key_on_the_Keys_menu_is_on_the_keypad` holds the menu to a subset of the
   table.
+- **`Build` runs on the first show, not in the constructor**, because the keypad is off by default and a window that
+  never shows it should build no buttons and format no tooltips: `OnAttachedToVisualTree` when already visible, and
+  the `IsVisible` change otherwise. Everything after that point reads `_banks`, one list of buttons per bank —
+  `Relayout` walks the real banks rather than indexing a flat list by `BankSize`, which only `KeypadLayout`'s table
+  promises. `Relayout` also owns the border's `VerticalAlignment` (`Top` on the right), never the control's: how a
+  host aligns this control is the host's.
 - **Every button is `Focusable = false`**, so a click never moves the keyboard off the screen; the window still calls
   `Screen.Focus()` after each key as the guarantee. A click goes to `SendKeyAsync`, never the command (see Keyboard
-  above for why), and first to `TerminalScreen.CancelTap()`: a keypad click is a pointer press the screen does not
-  see, and Right Ctrl held across it must not become Enter on release.
-- Tooltips come from `KeymapHints.Describe(keymap, key, format)` (`Keyboard/`), the reverse of a `Keymap`: chords
-  ordered unmodified first, then by modifier, function keys ahead within a group, taps last; ordinary chords through
-  Avalonia's `KeyGesture.ToString("p", format)`, taps worded by hand. The control passes a null format, the
-  platform's registration (glyphs on macOS, words elsewhere); tests pass an explicit `KeyGestureFormatInfo`. The
-  control's `Keymap` property is the #18 hook, and nothing binds it yet.
+  above for why). Ending a modifier tap is *not* the keypad's job: it is a rule about the window, and
+  `SessionWindow`'s one tunnelled `PointerPressed` handler calls `TerminalScreen.CancelTap()` for every press the
+  screen does not see. Hooking it to the keypad's `Click` instead missed the presses that never become one — the
+  border's padding, the margins between buttons, a button the pointer leaves before releasing — and each of those
+  sent a spurious Enter on the Ctrl release.
+- Tooltips come from `KeymapHints.Describe` (`Keyboard/`), the reverse of a `Keymap`: chords ordered unmodified
+  first, then by modifier, function keys ahead within a group, taps last; ordinary chords through Avalonia's
+  `KeyGesture.ToString("p", format)`, taps worded by hand. The overload taking a `Keymap` and one `TerminalKey`
+  scans the table; the one taking the chords themselves is what the control uses, over a single `ToLookup`, so 36
+  tooltips are one pass and not 36. The control passes a null format, the platform's registration (glyphs on macOS,
+  words elsewhere); tests pass an explicit `KeyGestureFormatInfo`. The control's `Keymap` property is the #18 hook,
+  nothing binds it yet, and a null from that future binding leaves the tooltips as they are rather than throwing.
 
 ## Menus
 

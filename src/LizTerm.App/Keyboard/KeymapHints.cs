@@ -17,22 +17,25 @@ public static class KeymapHints
     /// (Alt, Control, Shift, combinations after), function keys ahead of other keys within a group, taps last.
     /// Ordinary chords are formatted by Avalonia's own platform formatter — glyphs on macOS, words elsewhere — and a
     /// null format means the platform's registration; taps, which it has no word for, are worded here.</summary>
-    public static string? Describe(Keymap keymap, TerminalKey key, IFormatProvider? format = null)
+    public static string? Describe(Keymap keymap, TerminalKey key, IFormatProvider? format = null) =>
+        Describe(keymap.Keys.Where(pair => pair.Value == key).Select(pair => pair.Key), format);
+
+    /// <summary>The same line from chords already collected, for a caller that reverses the keymap once and then
+    /// asks about many keys: the keypad's 36 tooltips are one lookup rather than 36 scans of the table.</summary>
+    public static string? Describe(IEnumerable<KeyChord> chords, IFormatProvider? format = null)
     {
-        var chords = keymap.Keys
-            .Where(pair => pair.Value == key)
-            .Select(pair => pair.Key)
+        var formatted = chords
             .OrderBy(chord => chord.Tap ? 1 : 0)
             .ThenBy(chord => (int)chord.Modifiers)
             .ThenBy(chord => IsFunctionKey(chord.Key) ? 0 : 1)
             .ThenBy(chord => (int)chord.Key)
             .Select(chord => Format(chord, format))
             .ToList();
-        return chords.Count switch
+        return formatted.Count switch
         {
             0 => null,
-            1 => chords[0],
-            _ => string.Join(", ", chords.Take(chords.Count - 1)) + " or " + chords[^1],
+            1 => formatted[0],
+            _ => string.Join(", ", formatted.Take(formatted.Count - 1)) + " or " + formatted[^1],
         };
     }
 

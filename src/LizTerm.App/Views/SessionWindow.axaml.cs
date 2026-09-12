@@ -31,15 +31,19 @@ public partial class SessionWindow : Window
         Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteAsync();
         Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAll();
         Screen.FindRequested += (_, _) => ShowFind();
-        // The keypad's keys take the screen's route: the method, never the command. CancelTap first, because a
-        // click here is a pointer press the screen does not see (keypad spec §6.2); Focus last, a no-op while the
+        // The keypad's keys take the screen's route: the method, never the command. Focus last, a no-op while the
         // non-focusable buttons leave the keyboard alone, and the guarantee when something else (the find box) had it.
         KeypadPanel.KeyRequested += (_, key) =>
         {
-            Screen.CancelTap();
             _ = ViewModel?.SendKeyAsync(key);
             Screen.Focus();
         };
+        // "A pointer press ends a modifier tap" is a rule about the window, not about the keypad (keypad spec §6.2):
+        // Right Ctrl held across a press anywhere in here must not become Enter on its release. The screen applies it
+        // to presses on itself; this tunnelled handler applies it to every surface the screen never sees, which is
+        // every surface that takes no focus — the keypad's border padding and the margins between its buttons, a
+        // button the pointer leaves before releasing (neither raises Click), the status bar and the error bar.
+        AddHandler(PointerPressedEvent, (_, _) => Screen.CancelTap(), RoutingStrategies.Tunnel);
         ApplyMenuStrategy(useNativeMenu);
         Opened += (_, _) =>
         {

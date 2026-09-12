@@ -32,28 +32,12 @@ public partial class Keypad : UserControl
         new FuncValueConverter<KeypadDock, Avalonia.Controls.Dock>(dock =>
             dock == KeypadDock.Right ? Avalonia.Controls.Dock.Right : Avalonia.Controls.Dock.Bottom);
 
-    /// <summary>In bank order, whatever the dock; Arrange reorders the grid's children, never this list.</summary>
-    private readonly List<Button> _buttons = [];
+    /// <summary>The buttons, one list per bank and in bank order, whatever the dock; Relayout reorders the grid's
+    /// children, never these lists. Per bank rather than one flat list because that is the shape the layout reads:
+    /// nothing then does arithmetic on BankSize, which only KeypadLayout's table promises. Empty until Build runs.</summary>
+    private readonly List<List<Button>> _banks = [];
 
-    public Keypad()
-    {
-        InitializeComponent();
-        foreach (var bank in KeypadLayout.Banks)
-        {
-            foreach (var entry in bank)
-            {
-                // Focusable = false is the rule that keeps the keyboard on the screen through a click (spec §4.1);
-                // the window's refocus after each key is the guarantee behind it. Tag carries the key so one
-                // handler serves every button.
-                var button = new Button { Content = entry.Label, Tag = entry.Key, Focusable = false };
-                button.Classes.Add("keypad");
-                button.Click += OnButtonClick;
-                _buttons.Add(button);
-            }
-        }
-        Arrange(Dock);
-        Describe(Keymap);
-    }
+    public Keypad() => InitializeComponent();
 
     public KeypadDock Dock
     {
@@ -70,41 +54,86 @@ public partial class Keypad : UserControl
     /// <summary>A button was clicked. The window sends it through SendKeyAsync, the method, never the command.</summary>
     public event EventHandler<TerminalKey>? KeyRequested;
 
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (IsVisible) Build();
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == DockProperty) Arrange(change.GetNewValue<KeypadDock>());
-        else if (change.Property == KeymapProperty) Describe(change.GetNewValue<Keymap>());
+        if (change.Property == IsVisibleProperty && change.GetNewValue<bool>()) Build();
+        // Nothing built yet: Build reads both properties itself, so there is nothing to bring up to date.
+        else if (_banks.Count == 0) return;
+        else if (change.Property == DockProperty) Relayout(change.GetNewValue<KeypadDock>());
+        // A binding can hand a reference-typed styled property a null whatever its declared type says; the #18 hook
+        // is exactly such a binding, so a keymap that is not there yet keeps the tooltips the control has.
+        else if (change.Property == KeymapProperty && change.GetNewValue<Keymap>() is { } keymap) Describe(keymap);
     }
 
-    /// <summary>Bottom: BankSize columns, bank-major, stretched to the window's width. Right: one column per bank,
-    /// index-major so PF1 to PF12 read down the first, top-aligned so the twelve rows keep their natural height
-    /// beside the screen instead of stretching to fill it (spec §4.2, §4.3).</summary>
-    private void Arrange(KeypadDock dock)
+    /// <summary>The buttons, built the first time the keypad is shown rather than in the constructor: it is off by
+    /// default (spec §2.1), and a window that never shows it should build no buttons and format no tooltips.</summary>
+    private void Build()
     {
-        var banks = KeypadLayout.Banks;
+        if (_banks.Count > 0) return;
+        foreach (var bank in KeypadLayout.Banks)
+        {
+            var buttons = new List<Button>(bank.Count);
+            foreach (var entry in bank)
+            {
+                // Focusable = false is the rule that keeps the keyboard on the screen through a click (spec §4.1);
+                // the window's refocus after each key is the guarantee behind it. Tag carries the key so one
+                // handler serves every button.
+                var button = new Button { Content = entry.Label, Tag = entry.Key, Focusable = false };
+                button.Classes.Add("keypad");
+                button.Click += OnButtonClick;
+                buttons.Add(button);
+            }
+            _banks.Add(buttons);
+        }
+        Relayout(Dock);
+        Describe(Keymap);
+    }
+
+    /// <summary>Bottom: one column per button of the longest bank, bank-major, stretched to the window's width.
+    /// Right: one column per bank, index-major so PF1 to PF12 read down the first, with the border top-aligned so
+    /// the twelve rows keep their natural height beside the screen instead of stretching to fill it (spec §4.2,
+    /// §4.3). The border's alignment rather than the control's: how a host aligns this control is the host's.</summary>
+    private void Relayout(KeypadDock dock)
+    {
+        var longest = _banks.Max(bank => bank.Count);
         ButtonGrid.Children.Clear();
         if (dock == KeypadDock.Right)
         {
-            ButtonGrid.Columns = banks.Count;
-            for (var i = 0; i < KeypadLayout.BankSize; i++)
+            ButtonGrid.Columns = _banks.Count;
+            for (var i = 0; i < longest; i++)
             {
-                for (var b = 0; b < banks.Count; b++) ButtonGrid.Children.Add(_buttons[b * KeypadLayout.BankSize + i]);
+                foreach (var bank in _banks)
+                {
+                    if (i < bank.Count) ButtonGrid.Children.Add(bank[i]);
+                }
             }
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top;
         }
         else
         {
-            ButtonGrid.Columns = KeypadLayout.BankSize;
-            foreach (var button in _buttons) ButtonGrid.Children.Add(button);
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch;
+            ButtonGrid.Columns = longest;
+            foreach (var button in _banks.SelectMany(bank => bank)) ButtonGrid.Children.Add(button);
         }
+        KeypadBorder.VerticalAlignment = dock == KeypadDock.Right
+            ? Avalonia.Layout.VerticalAlignment.Top
+            : Avalonia.Layout.VerticalAlignment.Stretch;
     }
 
-    /// <summary>A null format is the platform's registration: glyphs on macOS, words elsewhere (spec §5).</summary>
+    /// <summary>A null format is the platform's registration: glyphs on macOS, words elsewhere (spec §5). The
+    /// keymap is reversed once for all 36 buttons rather than once per button.</summary>
     private void Describe(Keymap keymap)
     {
-        foreach (var button in _buttons) ToolTip.SetTip(button, KeymapHints.Describe(keymap, (TerminalKey)button.Tag!));
+        var chords = keymap.Keys.ToLookup(pair => pair.Value, pair => pair.Key);
+        foreach (var button in _banks.SelectMany(bank => bank))
+        {
+            ToolTip.SetTip(button, KeymapHints.Describe(chords[(TerminalKey)button.Tag!]));
+        }
     }
 
     private void OnButtonClick(object? sender, RoutedEventArgs e) =>

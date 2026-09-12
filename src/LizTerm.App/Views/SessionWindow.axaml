@@ -247,9 +247,9 @@
     <!-- Declared innermost (keypad spec §6.1): at the bottom it sits directly under the screen, above the find,
          error and status bars; on the right it stands beside the screen and above those three, spanning the
          screen's height. Two bindings to one setting: the grid's shape is the control's, its edge of the window is
-         this panel's. Invisible costs no layout. IsEnabled follows the connection so a disconnected session shows
-         a greyed keypad rather than buttons that silently do nothing. The control sets its own VerticalAlignment when
-         its Dock changes (spec §4.2), so nothing here may set it. -->
+         this panel's. Invisible costs no layout, and the control builds no buttons until it is first shown.
+         IsEnabled follows the connection so a disconnected session shows a greyed keypad rather than buttons that
+         silently do nothing. -->
     <controls:Keypad x:Name="KeypadPanel"
                      DockPanel.Dock="{Binding Settings.KeypadDock, Converter={x:Static controls:Keypad.DockPanelDock}}"
                      Dock="{Binding Settings.KeypadDock}"

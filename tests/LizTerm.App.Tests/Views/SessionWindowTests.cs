@@ -244,6 +244,9 @@ public class SessionWindowTests
     private static Button KeypadButton(SessionWindow window, TerminalKey key) =>
         KeypadOf(window).FindControl<UniformGrid>("ButtonGrid")!.Children.Cast<Button>().Single(b => (TerminalKey)b.Tag! == key);
 
+    private static Point CentreOf(SessionWindow window, Control control) =>
+        control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
+
     /// <summary>The whole route, by a real pointer press: the button's key reaches the host through SendKeyAsync,
     /// and the screen still has the keyboard afterwards — the buttons take no focus and the handler refocuses
     /// regardless (keypad spec §4.1, §6.2).</summary>
@@ -254,8 +257,7 @@ public class SessionWindowTests
         session.RaiseConnection(ConnectionState.Connected3270);
         vm.Settings.Keypad = true;
         window.UpdateLayout();
-        var button = KeypadButton(window, TerminalKey.PF3);
-        var centre = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)!.Value;
+        var centre = CentreOf(window, KeypadButton(window, TerminalKey.PF3));
 
         window.MouseDown(centre, MouseButton.Left, RawInputModifiers.None);
         window.MouseUp(centre, MouseButton.Left, RawInputModifiers.None);
@@ -285,19 +287,52 @@ public class SessionWindowTests
     }
 
     /// <summary>Right Ctrl held across a keypad click: the key goes, and the release is not a tap. Without
-    /// CancelTap the detector would see Ctrl down, nothing, Ctrl up, and send Enter (keypad spec §6.2).</summary>
+    /// CancelTap the detector would see Ctrl down, nothing, Ctrl up, and send Enter (keypad spec §6.2). Driven by a
+    /// real pointer press rather than a raised ClickEvent: the rule is about presses, and a synthetic click always
+    /// reaches the handler, so it could never see a press that does not become one — the case below.</summary>
     [AvaloniaFact]
     public void Right_ctrl_held_across_a_keypad_click_sends_the_key_and_no_enter()
     {
         var (window, _, vm, session, _) = Show();
         session.RaiseConnection(ConnectionState.Connected3270);
         vm.Settings.Keypad = true;
+        window.UpdateLayout();
+        var centre = CentreOf(window, KeypadButton(window, TerminalKey.PF3));
 
         window.KeyPressQwerty(PhysicalKey.ControlRight, RawInputModifiers.Control);
-        KeypadButton(window, TerminalKey.PF3).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        window.MouseDown(centre, MouseButton.Left, RawInputModifiers.Control);
+        window.MouseUp(centre, MouseButton.Left, RawInputModifiers.Control);
         window.KeyReleaseQwerty(PhysicalKey.ControlRight, RawInputModifiers.None);
 
         Assert.Equal(["key:PF3"], session.Calls);
+    }
+
+    /// <summary>The same rule for the presses on the keypad that never become clicks, which is why the window ends
+    /// the tap on any pointer press rather than on the keypad's Click: the border's padding and the margins between
+    /// the buttons take no focus and raise no Click, and neither does a button the pointer leaves before releasing.
+    /// Each half holds its own Ctrl, so neither is carried by the other's reset.</summary>
+    [AvaloniaFact]
+    public void Right_ctrl_held_across_a_keypad_press_that_is_not_a_click_sends_nothing()
+    {
+        var (window, _, vm, session, _) = Show();
+        session.RaiseConnection(ConnectionState.Connected3270);
+        vm.Settings.Keypad = true;
+        window.UpdateLayout();
+        var chrome = KeypadOf(window).TranslatePoint(new Point(2, 1), window)!.Value;
+        var button = CentreOf(window, KeypadButton(window, TerminalKey.PF3));
+
+        window.KeyPressQwerty(PhysicalKey.ControlRight, RawInputModifiers.Control);
+        window.MouseDown(chrome, MouseButton.Left, RawInputModifiers.Control);
+        window.MouseUp(chrome, MouseButton.Left, RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.ControlRight, RawInputModifiers.None);
+        Assert.Empty(session.Calls);
+
+        window.KeyPressQwerty(PhysicalKey.ControlRight, RawInputModifiers.Control);
+        window.MouseDown(button, MouseButton.Left, RawInputModifiers.Control);
+        window.MouseMove(chrome, RawInputModifiers.Control);
+        window.MouseUp(chrome, MouseButton.Left, RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.ControlRight, RawInputModifiers.None);
+        Assert.Empty(session.Calls);
     }
 
     [AvaloniaFact]

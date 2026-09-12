@@ -41,7 +41,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 - `KeymapHintsTests` format every expectation with an explicit `KeyGestureFormatInfo` (Avalonia's common key names,
   the default modifier words): the headless platform registers a format of its own, and what it says is not ours to
   assert. Keypad buttons are driven by raising `Button.ClickEvent`, or by a headless mouse press at the button's
-  centre (after `window.UpdateLayout()`) when focus is the question.
+  centre (after `window.UpdateLayout()`) when focus or the modifier-tap rule is the question — a raised
+  `ClickEvent` always reaches the click handler, so it can never see a press that never becomes a click.
 - `FakeEmulatorSession` records calls as strings: `key:PF3`, `move:3,9`, `connect:noverify`, `connect:pin:<sha256>`,
   `wirelog:start:<path>`, `wirelog:stop`, `transfer:<Direction>:<HostFile>`. It also exposes `ConnectCompletion`,
   `ConnectToken`, `WireLogException`, `Engine`, `LastTransferRequest`, `TransferProgress`, `TransferToken`, and

@@ -377,3 +377,22 @@ sort ahead of other keys within a group so PF7 reads "F7 or PageUp".
   primary rule it glosses, ascending `KeyModifiers` value, under which Alt+Control (3) sorts before Shift (4).
   `KeymapHints` follows the primary rule; `DefaultKeymap` has no combination chord, so nothing observable differs
   today. Noted for #18, when combinations become possible. §5 itself stays as written: design history is a record.
+
+Three departures from the text, from the review of this branch. As above, the sections stay as written.
+
+- **§6.2's first step is the window's, not the keypad's.** `CancelTap()` in the `KeyRequested` handler was a
+  `Button.Click` away from the rule it enforces, and missed every press on the keypad that never becomes a click:
+  the border's padding, the 1 px margins between buttons, and a button the pointer leaves before releasing. All
+  three sent the spurious Enter §6.2 exists to prevent, measured headless. `SessionWindow` now applies the rule
+  once, `AddHandler(PointerPressedEvent, … , RoutingStrategies.Tunnel)`, which also covers the status and error
+  bars and anything added beside them later; the handler keeps only steps 2 and 3.
+- **§4.2's top-alignment is the border's.** Writing `VerticalAlignment` on the control put a local value on a
+  property its host owns, which is why the window's XAML had to carry "nothing here may set it". The inner
+  `Border` takes it instead, for the same layout.
+- **§4.1's buttons are built on the first show.** Building 36 buttons and formatting 36 tooltips in the
+  constructor was work every window did and the default-off user never used. `Keypad.Build` runs from
+  `OnAttachedToVisualTree` when already visible and from the `IsVisible` change otherwise, and holds the buttons
+  as one list per bank so the right-hand layout never indexes a flat list by `BankSize` — an assumption a
+  thirteenth key in a bank would have broken silently. `Describe` reverses the keymap once for all 36, through a
+  new `KeymapHints.Describe(IEnumerable<KeyChord>, …)` overload, rather than scanning it per button; and a null
+  from the #18 binding now leaves the tooltips alone instead of throwing.

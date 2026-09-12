@@ -28,6 +28,10 @@ public class KeypadTests
 
     private static UniformGrid Grid(Keypad keypad) => keypad.FindControl<UniformGrid>("ButtonGrid")!;
 
+    /// <summary>The border carries the dock's vertical alignment, not the control: how a host aligns the keypad is
+    /// the host's business (keypad spec §4.2).</summary>
+    private static Border BorderOf(Keypad keypad) => keypad.FindControl<Border>("KeypadBorder")!;
+
     private static TerminalKey KeyOf(Control child) => (TerminalKey)((Button)child).Tag!;
 
     [AvaloniaFact]
@@ -54,7 +58,7 @@ public class KeypadTests
         Assert.Equal(TerminalKey.PF13, KeyOf(grid.Children[1]));
         Assert.Equal(TerminalKey.PA1, KeyOf(grid.Children[2]));
         Assert.Equal(TerminalKey.PF2, KeyOf(grid.Children[3]));
-        Assert.Equal(Avalonia.Layout.VerticalAlignment.Top, keypad.VerticalAlignment);
+        Assert.Equal(Avalonia.Layout.VerticalAlignment.Top, BorderOf(keypad).VerticalAlignment);
     }
 
     [AvaloniaFact]
@@ -71,7 +75,7 @@ public class KeypadTests
         keypad.Dock = KeypadDock.Bottom;
         Assert.Equal(KeypadLayout.BankSize, grid.Columns);
         Assert.Equal(before, grid.Children.ToArray());
-        Assert.Equal(Avalonia.Layout.VerticalAlignment.Stretch, keypad.VerticalAlignment);
+        Assert.Equal(Avalonia.Layout.VerticalAlignment.Stretch, BorderOf(keypad).VerticalAlignment);
     }
 
     /// <summary>Two clicks, two keys: no command disables in between (spec §4.1). And no button can take the
@@ -106,5 +110,34 @@ public class KeypadTests
             .With([KeyValuePair.Create(new KeyChord(Key.F9), TerminalKey.Dup)], []);
 
         Assert.NotNull(ToolTip.GetTip(dup));
+    }
+
+    /// <summary>The #18 hook again: that binding can hand the property a null before a live keymap exists, and a
+    /// control that threw from its own property-changed callback would take the window down with it.</summary>
+    [AvaloniaFact]
+    public void A_null_keymap_keeps_the_tooltips_the_control_has()
+    {
+        var (keypad, _) = Show();
+        var pa1 = Grid(keypad).Children.Cast<Button>().Single(b => KeyOf(b) == TerminalKey.PA1);
+        var before = ToolTip.GetTip(pa1);
+
+        keypad.Keymap = null!;
+
+        Assert.Equal(before, ToolTip.GetTip(pa1));
+    }
+
+    /// <summary>Nothing is built for a keypad that is never shown: it is off by default, so most windows pay for no
+    /// buttons and no tooltips at all.</summary>
+    [AvaloniaFact]
+    public void A_keypad_that_is_never_shown_builds_no_buttons()
+    {
+        var keypad = new Keypad { IsVisible = false };
+        var window = new Window { Width = 960, Height = 680, Content = keypad };
+        window.Show();
+        Assert.Empty(Grid(keypad).Children);
+
+        keypad.IsVisible = true;
+
+        Assert.Equal(36, Grid(keypad).Children.Count);
     }
 }
