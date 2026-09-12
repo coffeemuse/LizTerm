@@ -595,4 +595,84 @@ public class ProfileViewModelsTests : IDisposable
 
     private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession) =>
         new(_store, openSession, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+
+    [Fact]
+    public void Editor_round_trips_tags_and_a_note()
+    {
+        var existing = new SessionProfile
+        {
+            Name = "mvsce", Host = "h", Tags = TagSet.From(["FAVORITE", "PROD", "MVS"]), Note = "no live data",
+        };
+        var vm = new ProfileEditorViewModel(existing);
+
+        // FAVORITE belongs to the checkbox, so it must not also appear in the box the user edits.
+        Assert.True(vm.IsFavorite);
+        Assert.Equal("PROD, MVS", vm.TagsText);
+        Assert.Equal("no live data", vm.Note);
+
+        var built = vm.TryBuild()!;
+        Assert.Equal(existing.Tags, built.Tags);
+        Assert.Equal("no live data", built.Note);
+    }
+
+    [Fact]
+    public void Editor_defaults_to_no_tags_and_no_note()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        Assert.False(vm.IsFavorite);
+        Assert.Equal("", vm.TagsText);
+        var built = vm.TryBuild()!;
+        Assert.True(built.Tags.IsEmpty);
+        Assert.Null(built.Note);
+    }
+
+    [Fact]
+    public void Editor_normalises_the_tag_box_and_puts_the_checkbox_first()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", IsFavorite = true, TagsText = " #prod , mvs ,, prod " };
+        var built = vm.TryBuild()!;
+        Assert.Equal(["FAVORITE", "prod", "mvs"], built.Tags.Names);
+    }
+
+    /// <summary>The checkbox owns the reserved tag, so typing it is forgiven rather than refused: the box drops
+    /// it and the checkbox visibly turns on, which explains itself without a validation message.</summary>
+    [Fact]
+    public void Typing_the_reserved_tag_turns_the_checkbox_on_and_drops_it_from_the_box()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", TagsText = "favorite, PROD" };
+        Assert.True(vm.IsFavorite);
+        Assert.Equal("PROD", vm.TagsText);
+        Assert.Equal(["FAVORITE", "PROD"], vm.TryBuild()!.Tags.Names);
+    }
+
+    [Fact]
+    public void Editor_refuses_an_over_long_tag_name()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", TagsText = new string('x', 17) };
+        Assert.Null(vm.TryBuild());
+        Assert.Contains("16", vm.ValidationMessage);
+    }
+
+    /// <summary>Counted before TagSet.From runs. Afterwards From has already discarded the surplus, so the
+    /// check could never fire and nine tags would silently become eight.</summary>
+    [Fact]
+    public void Editor_refuses_more_tags_than_the_cap_including_the_reserved_one()
+    {
+        var eight = string.Join(",", Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}"));
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", TagsText = eight };
+        Assert.NotNull(vm.TryBuild());
+
+        vm.IsFavorite = true;
+        Assert.Null(vm.TryBuild());
+        Assert.Contains($"{TagSet.MaxTags}", vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void A_blank_note_becomes_null_and_a_typed_one_is_trimmed()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", Note = "   " };
+        Assert.Null(vm.TryBuild()!.Note);
+        vm.Note = "  LAN only  ";
+        Assert.Equal("LAN only", vm.TryBuild()!.Note);
+    }
 }

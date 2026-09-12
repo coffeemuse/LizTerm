@@ -12,7 +12,7 @@
         Title="Session Profile" Width="480" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="10">
-    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" >
+    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" >
       <TextBlock Grid.Row="0" Text="Name" VerticalAlignment="Center" />
       <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name}" />
       <TextBlock Grid.Row="1" Text="Host" VerticalAlignment="Center" />
@@ -64,6 +64,21 @@
       <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding LuName}" Width="140" HorizontalAlignment="Left" PlaceholderText="optional" />
       <TextBlock Grid.Row="9" Text="Keyboard" VerticalAlignment="Center" />
       <CheckBox x:Name="BackspaceBox" Grid.Row="9" Grid.Column="1" Content="Backspace erases the previous character (off: Backspace only moves the cursor left)" IsChecked="{Binding DestructiveBackspace}" />
+      <TextBlock Grid.Row="10" Text="Tags" VerticalAlignment="Center" />
+      <StackPanel Grid.Row="10" Grid.Column="1" Spacing="4">
+        <!-- The checkbox owns FAVORITE rather than the box below: it is the one tag name with a fixed meaning,
+             and a typo would otherwise turn it into an ordinary tag that merely looks the same. The label names
+             the tag instead of spelling "favourite" in prose, which also keeps the reserved name visible. -->
+        <CheckBox x:Name="FavoriteBox" Content="Mark as FAVORITE" IsChecked="{Binding IsFavorite}" />
+        <TextBox x:Name="TagsBox" Text="{Binding TagsText}" PlaceholderText="PROD, MVS" />
+        <TextBlock Text="Separate with commas; shown as uppercase chips in the session list."
+                   Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap" />
+      </StackPanel>
+      <TextBlock Grid.Row="11" Text="Note" VerticalAlignment="Center" />
+      <!-- AcceptsReturn false and a cap, because this line is drawn in the session list: a pasted paragraph
+           would make every row tall and the visible list short. -->
+      <TextBox x:Name="NoteBox" Grid.Row="11" Grid.Column="1" Text="{Binding Note}" AcceptsReturn="False"
+               MaxLength="120" PlaceholderText="optional — shown under the host in the list" />
     </Grid>
     <TextBlock Text="{Binding ValidationMessage}" Foreground="#FF8080" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
