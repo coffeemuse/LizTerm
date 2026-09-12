@@ -11,9 +11,5 @@ public sealed class AvaloniaUriOpener(TopLevel topLevel) : IUriOpener
 {
     public Task<bool> OpenAsync(Uri uri) => topLevel.Launcher.LaunchUriAsync(uri);
 
-    public async Task<bool> OpenFileAsync(string path)
-    {
-        var file = await topLevel.StorageProvider.TryGetFileFromPathAsync(path);
-        return file is not null && await topLevel.Launcher.LaunchFileAsync(file);
-    }
+    public Task<bool> OpenFileAsync(string path) => topLevel.Launcher.LaunchFileInfoAsync(new FileInfo(path));
 }
