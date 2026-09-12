@@ -37,7 +37,7 @@ public class ProfilePickerWindowTests : IDisposable
         window.Show();
 
         var vm = (ProfilePickerViewModel)window.DataContext!;
-        vm.SelectedProfile = vm.Profiles.Single();
+        vm.SelectedRow = vm.VisibleRows.Single();
         Assert.True(vm.ConnectCommand.CanExecute(null));
 
         var box = window.FindControl<TextBox>("QuickConnectBox")!;

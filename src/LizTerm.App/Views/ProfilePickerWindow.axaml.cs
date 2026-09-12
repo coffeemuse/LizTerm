@@ -21,13 +21,14 @@ public partial class ProfilePickerWindow : Window
         Activated += (_, _) => (DataContext as ProfilePickerViewModel)?.Reload();
     }
 
-    public ProfilePickerWindow(ProfileStore store, Action<SessionProfile, bool> openSession, Action quit) : this()
+    public ProfilePickerWindow(ProfileStore store, Action<SessionProfile, bool> openSession, Action quit, TagRegistryStore? tags = null) : this()
     {
         DataContext = new ProfilePickerViewModel(
             store,
             openSession,
             existing => new ProfileEditorWindow(existing).ShowDialog<ProfileEdit?>(this),
-            quit);
+            quit,
+            tags);
     }
 
     private void OnDoubleTapped(object? sender, TappedEventArgs e)

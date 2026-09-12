@@ -75,9 +75,11 @@ public class ProfileViewModelsTests : IDisposable
         var vm = new ProfilePickerViewModel(_store, (p, s) => { opened = p; openedFromStore = s; }, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
 
         Assert.Equal(["a", "b"], vm.Profiles.Select(p => p.Name));
-        Assert.False(vm.ConnectCommand.CanExecute(null));
+        // Refilter always lands the selection on a visible row when there is one (see ProfilePickerViewModel.
+        // Refilter's doc comment), so the first row is already selected here rather than nothing.
+        Assert.True(vm.ConnectCommand.CanExecute(null));
 
-        vm.SelectedProfile = vm.Profiles[1];
+        vm.SelectedRow = vm.VisibleRows[1];
         Assert.True(vm.ConnectCommand.CanExecute(null));
         vm.ConnectCommand.Execute(null);
         Assert.Equal("b", opened!.Name);
@@ -94,7 +96,7 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(["a", "b", "c2"], vm.Profiles.Select(p => p.Name));
         Assert.Equal(3, _store.LoadAll().Count);
 
-        vm.SelectedProfile = vm.Profiles[0];
+        vm.SelectedRow = vm.VisibleRows[0];
         vm.DeleteCommand.Execute(null);
         Assert.Equal(["b", "c2"], vm.Profiles.Select(p => p.Name));
 
@@ -128,7 +130,7 @@ public class ProfileViewModelsTests : IDisposable
             },
             () => { });
 
-        picker.SelectedProfile = picker.Profiles.Single();
+        picker.SelectedRow = picker.VisibleRows.Single();
         await picker.EditCommand.ExecuteAsync(null);
 
         Assert.Equal(pin, _store.Load("MVS")!.PinnedCertificate);
@@ -143,7 +145,7 @@ public class ProfileViewModelsTests : IDisposable
             existing => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { PinnedCertificate = null }, PinCleared: true)),
             () => { });
 
-        picker.SelectedProfile = picker.Profiles.Single();
+        picker.SelectedRow = picker.VisibleRows.Single();
         await picker.EditCommand.ExecuteAsync(null);
 
         Assert.Null(_store.Load("MVS")!.PinnedCertificate);
@@ -162,7 +164,7 @@ public class ProfileViewModelsTests : IDisposable
                 new ProfileEdit(existing! with { Name = "MVS-CE", PinnedCertificate = null }, PinCleared: false)),
             () => { });
 
-        picker.SelectedProfile = picker.Profiles.Single();
+        picker.SelectedRow = picker.VisibleRows.Single();
         await picker.EditCommand.ExecuteAsync(null);
 
         Assert.Null(_store.Load("MVS"));
@@ -674,5 +676,129 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Null(vm.TryBuild()!.Note);
         vm.Note = "  LAN only  ";
         Assert.Equal("LAN only", vm.TryBuild()!.Note);
+    }
+
+    private ProfilePickerViewModel Picker(TagRegistryStore? tags = null) =>
+        new(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, tags);
+
+    [Fact]
+    public void Picker_shows_every_profile_until_something_narrows_it()
+    {
+        _store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        _store.Save(new SessionProfile { Name = "zeta", Host = "h" });
+
+        var vm = Picker();
+        Assert.Equal(["alpha", "zeta"], vm.VisibleRows.Select(r => r.Name));
+        Assert.Null(vm.SelectedScope.TagName);
+        Assert.Equal("All sessions", vm.SelectedScope.Label);
+    }
+
+    /// <summary>Scope narrows first, then the text box filters what is left — Robert's ordering.</summary>
+    [Fact]
+    public void The_scope_narrows_before_the_filter_text_does()
+    {
+        _store.Save(new SessionProfile { Name = "mvsce", Host = "h", Tags = TagSet.From(["PROD", "MVS"]) });
+        _store.Save(new SessionProfile { Name = "mvs-dev", Host = "h", Tags = TagSet.From(["DEV"]) });
+        _store.Save(new SessionProfile { Name = "gateway", Host = "h", Tags = TagSet.From(["PROD"]) });
+
+        var vm = Picker();
+        vm.SelectedScope = vm.Scopes.Single(s => s.TagName == "PROD");
+        Assert.Equal(["gateway", "mvsce"], vm.VisibleRows.Select(r => r.Name));
+
+        vm.FilterText = "mvs";
+        Assert.Equal(["mvsce"], vm.VisibleRows.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void The_filter_text_matches_a_name_or_a_tag_but_not_a_host()
+    {
+        _store.Save(new SessionProfile { Name = "alpha", Host = "prod.example" });
+        _store.Save(new SessionProfile { Name = "beta", Host = "h", Tags = TagSet.From(["PROD"]) });
+
+        var vm = Picker();
+        vm.FilterText = "prod";
+        Assert.Equal(["beta"], vm.VisibleRows.Select(r => r.Name));
+
+        vm.FilterText = "ALP";
+        Assert.Equal(["alpha"], vm.VisibleRows.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void The_favorite_scope_narrows_to_the_starred_profiles()
+    {
+        _store.Save(new SessionProfile { Name = "starred", Host = "h", Tags = TagSet.From(["FAVORITE"]) });
+        _store.Save(new SessionProfile { Name = "plain", Host = "h" });
+
+        var vm = Picker();
+        vm.SelectedScope = vm.Scopes.Single(s => s.TagName == TagRegistry.FavoriteName);
+        Assert.Equal(["starred"], vm.VisibleRows.Select(r => r.Name));
+    }
+
+    /// <summary>What makes the filter box need no Enter handler: Connect is the window's default button, so as
+    /// long as the selection is always a visible row, typing and pressing Enter connects what you are looking
+    /// at rather than something the filter has hidden.</summary>
+    [Fact]
+    public void Filtering_moves_a_hidden_selection_to_the_first_visible_row()
+    {
+        _store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        _store.Save(new SessionProfile { Name = "zeta", Host = "h" });
+
+        var vm = Picker();
+        vm.SelectedRow = vm.VisibleRows.Single(r => r.Name == "zeta");
+
+        vm.FilterText = "alpha";
+        Assert.Equal("alpha", vm.SelectedRow!.Name);
+        Assert.Equal("alpha", vm.SelectedProfile!.Name);
+
+        vm.FilterText = "nothing matches";
+        Assert.Empty(vm.VisibleRows);
+        Assert.Null(vm.SelectedRow);
+        Assert.False(vm.ConnectCommand.CanExecute(null));
+    }
+
+    /// <summary>Quick Connect resolves against every saved profile, not the filtered view: a name the filter
+    /// has hidden must still connect by name, as it does from the command line.</summary>
+    [Fact]
+    public void Quick_connect_still_finds_a_profile_the_filter_has_hidden()
+    {
+        _store.Save(new SessionProfile { Name = "tk5", Host = "tk5.local", Port = 3270 });
+        SessionProfile? opened = null;
+        var vm = new ProfilePickerViewModel(_store, (p, _) => opened = p, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+
+        vm.FilterText = "zzz";
+        Assert.Empty(vm.VisibleRows);
+
+        vm.QuickConnectText = "tk5";
+        vm.QuickConnectCommand.Execute(null);
+        Assert.Equal("tk5.local", opened?.Host);
+    }
+
+    [Fact]
+    public void The_scopes_list_is_all_sessions_then_favorite_then_the_tags_alphabetically()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["zeta", "MVS"]) });
+
+        var vm = Picker();
+        Assert.Equal(["All sessions", "FAVORITE", "#MVS", "#zeta"], vm.Scopes.Select(s => s.Label));
+    }
+
+    /// <summary>Reconciliation: a tag name seen on a profile but absent from the registry registers itself, so
+    /// a profile copied from another machine gets colours locally rather than rendering colourless.</summary>
+    [Fact]
+    public void An_unknown_tag_registers_itself_and_the_registry_is_written_once()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        var tagFile = Path.Combine(_dir, "tags.json");
+        var tags = new TagRegistryStore(tagFile);
+
+        var vm = Picker(tags);
+        Assert.Equal(["PROD"], tags.Load().Stored.Select(d => d.Name));
+
+        // Nothing new to learn, so no second write. Asserted by deleting the file and checking that a reload
+        // does not recreate it, rather than by comparing timestamps — two writes inside one filesystem tick
+        // would compare equal and the test would pass while the bug was present.
+        File.Delete(tagFile);
+        vm.Reload();
+        Assert.False(File.Exists(tagFile), "Reload rewrote tags.json with nothing new to register");
     }
 }
