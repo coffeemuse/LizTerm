@@ -5,9 +5,15 @@ Date: 2026-09-12
 > **The release this plans shipped as 0.5.1, not 0.5.0.** Decided 2026-09-12, by Robert, after the
 > cross-platform pass. 0.5.0 was carried in the tree and rehearsed but never tagged and never published, so
 > no 0.5.0 exists anywhere public; the pass found the Windows executable had no icon of its own (PR #84), and
-> rather than rehearse 0.5.0 a second time the version went to 0.5.1. The known cost, recorded because it was
-> raised and accepted: the Releases page will show 0.4.1 then 0.5.1, and a gap reads to a stranger like a
-> withdrawn release.
+> rather than rehearse 0.5.0 a second time the version went to 0.5.1.
+>
+> The objection raised was that the Releases page will show 0.4.1 then 0.5.1, and that a gap reads to a
+> stranger like a withdrawn release. Robert's answer, which is the decision: the project is pre-1.0 and this
+> is its first attempt at a release meant to be public before it is announced, so early hiccups are what a
+> user should expect — and a visible defect in a published build costs more than a skipped version number.
+> **Get it right rather than look like we did not check before publishing.** That is the standard for
+> anything section 7 finds from here on, and it outranks the triage rule's letter: the rule decides what
+> blocks a *tag*, not what is worth fixing before one.
 >
 > **This document keeps its name and its contents.** It is the record of what was scoped and why, and the
 > repository does not rewrite a plan to match what the code later did. Read every "0.5.0" below as the release
