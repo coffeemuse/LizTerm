@@ -8,9 +8,9 @@ using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.ViewModels;
 
-/// <summary>KeypadDockConverter.Convert backs each Preferences dock radio's IsChecked, keyed by a hand-written
-/// ConverterParameter; the same contract as the crosshair and bell converters, including the loud failure on a
-/// typo.</summary>
+/// <summary>KeypadDockConverter.Convert backs each dock radio's IsChecked — two in Preferences and two on each
+/// menu (#71) — keyed by a hand-written ConverterParameter; the same contract as the crosshair and bell
+/// converters, including the loud failure on a typo.</summary>
 public class KeypadDockConverterTests
 {
     private static readonly KeypadDockConverter Converter = KeypadDockConverter.Instance;

@@ -133,8 +133,9 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.
-- The Preferences **Keypad** group is a two-way `KeypadBox` for `Settings.Keypad` (also View > Keypad) plus the two
-  dock radios over `KeypadDockConverter`, the Crosshair shape.
+- The Preferences **Keypad** group is a two-way `KeypadBox` for `Settings.Keypad` plus the two dock radios over
+  `KeypadDockConverter`, the Crosshair shape. Both settings are also on the View > Keypad submenu (#71); the group
+  stays because Preferences is where a user goes looking for settings, and both doors write the same properties.
 
 ## Terminal screen (`Controls/TerminalScreen.cs`)
 
@@ -351,8 +352,20 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   also why OneWay is required rather than tidy: the in-window fallback runs the same handler over a `MenuItem` bound
   two-way to the `NativeMenuItem`, so with a TwoWay binding to the view model there would be two toggles and the
   click would do nothing.
-- View > Keypad is a check box in the Crosshair items' shape on *both* menus: a one-way `IsChecked` plus a Click
-  handler (`ToggleKeypad`) that flips `Settings.Keypad`, so Wire Log stays the only item whose two menus differ.
+- View > Keypad is a **submenu** on *both* menus, the Crosshair's structure: a `Show the Keypad` check box
+  (`ToggleKeypad`, flipping `Settings.Keypad`), a separator, then `At the Bottom` and `On the Right` radios over
+  `KeypadDockConverter` (`SetKeypadDock`, writing `Settings.KeypadDock`). Every one is a one-way `IsChecked` plus a
+  Click handler, so Wire Log stays the only item whose two menus differ. What it cannot copy from the Crosshair is
+  the single radio group: these are two settings and not one enum (keypad spec §2.1 — a `Hidden` member would
+  forget the dock every time the keypad was hidden), and the separator is that seam rather than decoration. The
+  menu writes the same `SettingsViewModel` properties Preferences does, so the dock is saved to `settings.json`
+  whichever door changed it; the menu holds no state of its own (#71). The headers are shorter than Preferences'
+  ("At the Bottom" against "At the bottom of the window") because the submenu's own name is the missing context.
+- **No top-level Keypad check box survives beside the submenu**, and that was the open question in #71 rather than
+  an oversight: show/hide costs a hover it did not cost before. Robert chose the single submenu on 2026-09-12 over
+  keeping the toggle in View with a separate dock submenu. Two check boxes for one setting in the same menu is the
+  worse trade — Preferences already keeps a second door open for it — and the keypad is a thing you leave on rather
+  than flick. If the extra step ever grates, the answer is a `Gesture`-free reachability fix, not a duplicate item.
 - In tests, drive native items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`, the one
   entry point both real renderers use. Assigning `IsChecked` instead only proves a binding round-trips.
 - `MenuLookup` (`Menus/`) is how code-behind and tests find a `NativeMenuItem`, which `FindControl` cannot reach.
@@ -473,12 +486,18 @@ in `Program.BuildAvaloniaApp`; Release builds carry none of it, and the headless
 - `tree` with no node returns the window roots. A dialog opened by `input` Click appears there as a new root, but
   `search` does not find windows opened after its first query, so re-list the roots instead. Menu popups never appear
   as roots, but an item can still be reached: `input` Click on the top-level menu header, then Click on the item.
-- **On macOS the menu you drive is `ClassicMenu`, and it does not need to be visible.** The native strategy hides it
-  but leaves it populated, and a hidden `Menu` drives exactly like a shown one: measured 2026-09-12, View >
-  Crosshair > None moved the check with `IsVisible = false` throughout. So never `set-prop` it visible first, and
-  never read a failure as "the menu is hidden" — what a nested item needs is the header-then-item sequence above. A
-  direct Click on one answers `handled:false` whether the bar is shown or hidden, which looks like a refusal and is
-  not one.
+- **On macOS the menu you drive is `ClassicMenu`, and the reliable recipe is to launch with `LIZTERM_MENU=classic`
+  so the bar is really shown.** It is populated either way, and an earlier measurement (2026-09-12, View >
+  Crosshair > None) reported a hidden bar driving exactly like a shown one. That did not reproduce later the same
+  day while building #71: under the default native strategy, with the bar hidden, Click on the View header, on a
+  submenu header and on a leaf all answered `handled:false` and moved nothing — including the same Crosshair path,
+  run as a control. Relaunching the identical build under `LIZTERM_MENU=classic` answered `handled:true` at every
+  step and the settings changed. Both runs were `nohup`-launched and neither app was frontmost, so focus is not the
+  difference; hit-testing a hidden control is the likely one. Until someone reconciles the two, launch classic.
+- **A submenu materialises its children only when its popup opens.** Under `LIZTERM_MENU=classic`, `tree` on
+  View > Keypad returns nothing until you Click the View header and then the Keypad header; re-read the tree after
+  that and the leaves are there, with new node IDs. So the sequence for a nested item is header, header, re-read,
+  leaf — not a single Click on an ID captured earlier.
 - **`NativeMenuBar` is never the way in.** Its items are generated inside the control's template, so `search`
   returns the bar alone and `tree` on the bar returns `[]` — true even when it is rendering, which on macOS takes
   forcing `NativeMenuBarPresenter.IsVisible` (#70). For the same reason nothing driving the tree can reach About or

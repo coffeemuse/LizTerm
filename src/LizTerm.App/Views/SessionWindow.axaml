@@ -80,11 +80,29 @@
                 </NativeMenu>
               </NativeMenuItem.Menu>
             </NativeMenuItem>
-            <!-- One-way plus Click, the Crosshair items' shape: a NativeMenuItem never toggles itself, and the
-                 handler flips the setting on the view model, whose change reaches every window's panel and check
-                 mark. No Gesture: nothing outside Edit carries one (keypad spec §6.3). -->
-            <NativeMenuItem Header="_Keypad" ToggleType="CheckBox" Click="OnKeypadClickNative"
-                            IsChecked="{Binding Settings.Keypad, Mode=OneWay}" />
+            <!-- A submenu, the Crosshair's structure, because the dock belongs beside the thing it docks and
+                 "At the Bottom" under View on its own names nothing (#71). What it cannot copy is the Crosshair's
+                 single radio group: these are two settings, not one enum — keypad spec §2.1 rejected an enum with
+                 a Hidden member because it would forget the dock every time the keypad was hidden — so the
+                 separator is the seam between them rather than decoration. The wording is shorter than the same
+                 settings in Preferences, whose radios sit under a bare "Keypad" heading with the whole window as
+                 context; inside a submenu already named Keypad, "At the Bottom" is the whole sentence.
+                 One-way plus Click throughout, the Crosshair items' shape: a NativeMenuItem never toggles itself,
+                 and the handlers write the view model, whose change reaches every window's panel and check mark.
+                 No Gesture on any of them: nothing outside Edit carries one (keypad spec §6.3). -->
+            <NativeMenuItem Header="_Keypad">
+              <NativeMenuItem.Menu>
+                <NativeMenu>
+                  <NativeMenuItem Header="_Show the Keypad" ToggleType="CheckBox" Click="OnKeypadClickNative"
+                                  IsChecked="{Binding Settings.Keypad, Mode=OneWay}" />
+                  <NativeMenuItemSeparator />
+                  <NativeMenuItem Header="At the _Bottom" ToggleType="Radio" Click="OnKeypadBottomClickNative"
+                                  IsChecked="{Binding Settings.KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Bottom, Mode=OneWay}" />
+                  <NativeMenuItem Header="On the _Right" ToggleType="Radio" Click="OnKeypadRightClickNative"
+                                  IsChecked="{Binding Settings.KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Right, Mode=OneWay}" />
+                </NativeMenu>
+              </NativeMenuItem.Menu>
+            </NativeMenuItem>
           </NativeMenu>
         </NativeMenuItem.Menu>
       </NativeMenuItem>
@@ -171,10 +189,18 @@
           <MenuItem Header="_Both" ToggleType="Radio" GroupName="Crosshair" Click="OnCrosshairBothClick"
                     IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
         </MenuItem>
-        <!-- The same shape as the native item and the Crosshair radios above, so the two menus stay alike and
-             Wire Log stays the one item whose two menus differ. -->
-        <MenuItem x:Name="KeypadMenuItem" Header="_Keypad" ToggleType="CheckBox" Click="OnKeypadClick"
-                  IsChecked="{Binding Settings.Keypad, Mode=OneWay}" />
+        <!-- The same shape as the native submenu and the Crosshair radios above, so the two menus stay alike and
+             Wire Log stays the one item whose two menus differ. GroupName on the radios is the classic side's
+             own requirement; the native items have no group to name. -->
+        <MenuItem Header="_Keypad">
+          <MenuItem x:Name="KeypadShowMenuItem" Header="_Show the Keypad" ToggleType="CheckBox" Click="OnKeypadClick"
+                    IsChecked="{Binding Settings.Keypad, Mode=OneWay}" />
+          <Separator />
+          <MenuItem x:Name="KeypadDockBottomMenuItem" Header="At the _Bottom" ToggleType="Radio" GroupName="KeypadDock" Click="OnKeypadBottomClick"
+                    IsChecked="{Binding Settings.KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Bottom, Mode=OneWay}" />
+          <MenuItem x:Name="KeypadDockRightMenuItem" Header="On the _Right" ToggleType="Radio" GroupName="KeypadDock" Click="OnKeypadRightClick"
+                    IsChecked="{Binding Settings.KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Right, Mode=OneWay}" />
+        </MenuItem>
       </MenuItem>
       <MenuItem Header="_Keys">
         <MenuItem Header="Clear" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Clear}" />
