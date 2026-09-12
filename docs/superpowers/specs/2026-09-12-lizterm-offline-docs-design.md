@@ -325,10 +325,17 @@ golden-file test honest on the third of those.
 ## 11. Out of scope
 
 **The keyboard table's drift from `DefaultKeymap`.** Issue #48 raises it, and it is real: the guide's Keyboard
-section is a prose copy of a table the code owns, and #18 (a user-editable keymap) would make it wrong
-outright. It is deliberately not in this spec. It is a property of the Markdown source, identical before and
-after bundling, and folding it in would grow the release's long pole to fix something this change does not
-worsen. It gets its own issue.
+section is a prose copy of a table the code owns. It is deliberately not in this spec. It is a property of the
+Markdown source, identical before and after bundling, and folding it in would grow the release's long pole to
+fix something this change does not worsen.
+
+It also does not get its own issue, and the reason is worth recording, because "a documented table can drift
+from the code" reads like a standing defect that someone should file. While `DefaultKeymap` is the only keymap
+there is, the prose copy is checked by reading it, and a written table is sufficient. What makes it a real
+defect is **#18, the user-editable keymap**: once a user can change the bindings, a fixed table in a document
+is not stale, it is wrong, and no amount of care in the document can fix it. The resolution is therefore part
+of #18's own work rather than a task beside it — when the keymap becomes editable, the app generates the
+table from the map in force. Recorded here and on #18; not filed separately.
 
 **An in-app documentation window.** Avalonia 12 ships a first-party `Avalonia.Controls.WebView` with
 `NativeWebDialog`, which would render this same HTML in a window of our own. It is rejected for 0.5.0 on
