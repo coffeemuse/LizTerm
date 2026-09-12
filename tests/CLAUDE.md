@@ -47,8 +47,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 - Other fakes: `FakeTextClipboard` (a `Text` string and an optional `Exception`); `FakeFilePicker` (returns
   `Result`, records `open` and `save:<name>`); `FakeCertificatePrompt` (`Decision`, `OnAsk`, `Calls`,
   `LastRequest`); `FakeFolderOpener`; `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
-  `fetch:<host>:<port>`); `FakeBellRinger` (`Rings`, the list of `BellSound` values asked for, and an optional
-  `Exception`).
+  `fetch:<host>:<port>`); `FakeBellRinger` (`Rings`, the list of `BellSound` values asked for, `Available`, what
+  `CanRing` answers, and an optional `Exception`).
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
   `src/LizTerm.App/CLAUDE.md` say why.
 - The App tests name the backend in exactly one place:

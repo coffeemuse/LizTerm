@@ -2,6 +2,8 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Diagnostics;
+using LizTerm.App.Bell;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Settings;
@@ -12,12 +14,17 @@ namespace LizTerm.App.Tests.ViewModels;
 /// stands for the flash, FakeBellRinger for the sound (bell spec §3.4).</summary>
 public class SessionViewModelBellTests
 {
-    private static (SessionViewModel Vm, FakeEmulatorSession Session, FakeBellRinger Ringer, SettingsViewModel Settings, List<int> Flashes) Create()
+    private static long Ticks(double milliseconds) => (long)(milliseconds / 1000 * Stopwatch.Frequency);
+
+    /// <summary>The throttle runs on the clock given, so a test that needs two admitted bells advances an explicit
+    /// time instead of sleeping; the default never moves, which is the "same instant" case.</summary>
+    private static (SessionViewModel Vm, FakeEmulatorSession Session, FakeBellRinger Ringer, SettingsViewModel Settings, List<int> Flashes) Create(Func<long>? clock = null)
     {
         var session = new FakeEmulatorSession();
         var ringer = new FakeBellRinger();
         var settings = new SettingsViewModel();
-        var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard(), settings: settings, bellRinger: ringer);
+        var throttle = new BellThrottle(SessionViewModel.BellInterval, clock ?? (() => 0));
+        var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard(), settings: settings, bellRinger: ringer, bellThrottle: throttle);
         var flashes = new List<int>();
         vm.BellRang += (_, _) => flashes.Add(flashes.Count);
         return (vm, session, ringer, settings, flashes);
@@ -107,23 +114,79 @@ public class SessionViewModelBellTests
     }
 
     /// <summary>A P/Invoke that failed will fail again: the message is posted once, the ringer is not asked again,
-    /// and the flash keeps working. Two bells here are separated by more than BellInterval so the throttle admits
-    /// both; the second is what proves the latch.</summary>
+    /// and the flash keeps working. The two bells are separated by more than BellInterval on the test clock so the
+    /// throttle admits both; the second is what proves the latch.</summary>
     [Fact]
-    public async Task A_failing_ringer_is_reported_once_and_not_called_again()
+    public void A_failing_ringer_is_reported_once_and_not_called_again()
     {
-        var (vm, session, ringer, settings, flashes) = Create();
+        var now = 0.0;
+        var (vm, session, ringer, settings, flashes) = Create(() => Ticks(now));
         settings.BellSound = BellSound.SystemAlert;
         ringer.Exception = new InvalidOperationException("no speaker");
 
         session.RaiseBell();
         vm.ErrorMessage = null;
-        await Task.Delay(SessionViewModel.BellInterval + TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        now = 600;
         session.RaiseBell();
 
         Assert.Equal(2, flashes.Count);
         Assert.Single(ringer.Rings);
         Assert.Null(vm.ErrorMessage);
+    }
+
+    /// <summary>The latch is not for the life of the window: changing the sound is the user saying "try this one",
+    /// which is what a cause they can fix (a sound file, one day) needs.</summary>
+    [Fact]
+    public void Changing_the_sound_lets_a_failed_ringer_be_tried_again()
+    {
+        var now = 0.0;
+        var (vm, session, ringer, settings, _) = Create(() => Ticks(now));
+        settings.BellSound = BellSound.SystemAlert;
+        ringer.Exception = new InvalidOperationException("no speaker");
+        session.RaiseBell();
+        vm.ErrorMessage = null;
+        ringer.Exception = null;
+
+        settings.BellSound = BellSound.None;
+        settings.BellSound = BellSound.SystemAlert;
+        now = 600;
+        session.RaiseBell();
+
+        Assert.Equal([BellSound.SystemAlert, BellSound.SystemAlert], ringer.Rings);
+        Assert.Null(vm.ErrorMessage);
+    }
+
+    /// <summary>A sound the ringer cannot make here (Linux) is None: the ringer is not asked, and no banner.</summary>
+    [Fact]
+    public void A_sound_the_ringer_cannot_make_is_treated_as_None()
+    {
+        var (vm, session, ringer, settings, flashes) = Create();
+        settings.BellSound = BellSound.SystemAlert;
+        ringer.Available = false;
+
+        session.RaiseBell();
+
+        Assert.Single(flashes);
+        Assert.Empty(ringer.Rings);
+        Assert.Null(vm.ErrorMessage);
+    }
+
+    /// <summary>A bell nobody could perceive does not consume the throttle's slot: the first bell after the user
+    /// turns the flash on is shown even when a silent one landed just before it.</summary>
+    [Fact]
+    public void A_bell_with_both_outputs_off_does_not_start_the_interval()
+    {
+        var now = 0.0;
+        var (_, session, ringer, settings, flashes) = Create(() => Ticks(now));
+        settings.VisualBell = false;
+        session.RaiseBell();
+
+        settings.VisualBell = true;
+        now = 100;
+        session.RaiseBell();
+
+        Assert.Single(flashes);
+        Assert.Empty(ringer.Rings);
     }
 
     [Fact]

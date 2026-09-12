@@ -91,9 +91,9 @@ public sealed class TerminalScreen : Control
     internal int RunPlanBuilds { get; private set; }
     /// <summary>True during the phase in which blinking text is not drawn.</summary>
     internal bool BlinkHidden { get; private set; }
-    /// <summary>True while the bell overlay is painted. Test seam, like BlinkHidden.</summary>
-    internal bool BellFlashing { get; private set; }
-    internal bool FlashTimerRunning => _flashTimer.IsEnabled;
+    /// <summary>True while the bell overlay is painted: exactly while the one-shot flash timer runs, so there is
+    /// one state rather than two to keep in step. Test seam, like BlinkTimerRunning.</summary>
+    internal bool BellFlashing => _flashTimer.IsEnabled;
 
     public TerminalScreen()
     {
@@ -144,17 +144,15 @@ public sealed class TerminalScreen : Control
     /// not misbehave if something else calls it.</summary>
     public void Flash()
     {
-        BellFlashing = true;
-        InvalidateVisual();
         _flashTimer.Stop();
         _flashTimer.Start();
+        InvalidateVisual();
     }
 
     private void EndFlash()
     {
+        if (!_flashTimer.IsEnabled) return;
         _flashTimer.Stop();
-        if (!BellFlashing) return;
-        BellFlashing = false;
         InvalidateVisual();
     }
 

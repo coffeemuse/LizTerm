@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LizTerm.App.Bell;
@@ -29,7 +30,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly ICertificateFetcher? _certificateFetcher;
     private readonly Func<SessionProfile, Task>? _saveAsProfile;
     private readonly IBellRinger? _bellRinger;
-    private readonly BellThrottle _bellThrottle = new(BellInterval);
+    private readonly BellThrottle _bellThrottle;
     private bool _bellRingerFailed;
     /// <summary>The pin chosen in this window. The session's profile is fixed at construction, so a pin made after
     /// the window opened travels as a one-shot option on every later connect from here (spec 5.3).</summary>
@@ -41,6 +42,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly EventHandler<string> _onHostMessage;
     private readonly EventHandler _onBellRang;
     private readonly EventHandler<string> _onSettingsSaveFailed;
+    private readonly PropertyChangedEventHandler _onSettingsChanged;
     private bool _disposed;
 
     public static readonly TimeSpan DefaultConnectTimeout = TimeSpan.FromSeconds(30);
@@ -122,13 +124,16 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// pre-filled and writes the result; null disables the menu item.</param>
     /// <param name="settings">The process's settings object; null builds an in-memory one, which is what tests
     /// want and what keeps them off the settings file.</param>
-    /// <param name="bellRinger">Makes the bell audible when Settings.BellSound asks for it; null (tests, or a
-    /// platform with nothing to ring) means the flash is the whole bell.</param>
+    /// <param name="bellRinger">Makes the bell audible when Settings.BellSound asks for it and the ringer says it
+    /// can (IBellRinger.CanRing); null (tests) means the flash is the whole bell. The app always passes its one
+    /// SystemBellRinger, whose CanRing is false on Linux, so a saved SystemAlert is treated as None there.</param>
+    /// <param name="bellThrottle">The one gate in front of both bell outputs; null builds one over BellInterval on
+    /// the real clock. A test that needs two admitted bells passes one on an explicit clock, so nothing sleeps.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
         ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
         IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null,
         Func<SessionProfile, Task>? saveAsProfile = null, SettingsViewModel? settings = null,
-        IBellRinger? bellRinger = null)
+        IBellRinger? bellRinger = null, BellThrottle? bellThrottle = null)
     {
         _session = session;
         _dispatch = dispatch;
@@ -139,6 +144,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _certificateFetcher = certificateFetcher;
         _saveAsProfile = saveAsProfile;
         _bellRinger = bellRinger;
+        _bellThrottle = bellThrottle ?? new BellThrottle(BellInterval);
         Settings = settings ?? new SettingsViewModel();
 
         // Already on the UI thread: the settings are only ever set from a menu or the Preferences window.
@@ -147,6 +153,13 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             if (!_disposed) ErrorMessage = message;
         };
         Settings.SaveFailed += _onSettingsSaveFailed;
+        // A ringer that failed is asked again only once the user changes the sound: a change is the user saying
+        // "try this one", which is what a cause they can fix (a sound file, one day) needs.
+        _onSettingsChanged = (_, e) =>
+        {
+            if (e.PropertyName == nameof(SettingsViewModel.BellSound)) _bellRingerFailed = false;
+        };
+        Settings.PropertyChanged += _onSettingsChanged;
 
         _onScreenUpdated = (_, s) => _dispatch(() => ApplyScreen(s));
         _onStatusChanged = (_, k) => _dispatch(() => ApplyStatus(k));
@@ -522,20 +535,26 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand]
     private void DismissError() => ErrorMessage = null;
 
-    /// <summary>On the UI thread. Disposed first, throttle second, settings third, each output independently: the
-    /// flash has nothing that can throw, and a ringer that does must not take the dispatcher down with it. A
-    /// ringer that has already failed once is never asked again, and its banner is posted only that once
-    /// (bell spec §3.4): a P/Invoke that failed will fail again, and a host ringing in a loop must not re-post a
-    /// banner the user has dismissed every 500 ms.</summary>
+    /// <summary>On the UI thread. Disposed first; then, if neither output has anything to do, return before the
+    /// throttle, so a bell nobody could perceive does not open a refusal window against the first one the user
+    /// turns on; then the throttle; then each output independently: the flash has nothing that can throw, and a
+    /// ringer that does must not take the dispatcher down with it. A sound the ringer cannot make here
+    /// (IBellRinger.CanRing; Linux today) is treated as None. A ringer that has failed is not asked again, and
+    /// its banner is posted only once (bell spec §3.4): a P/Invoke that failed will fail again, and a host
+    /// ringing in a loop must not re-post a banner the user has dismissed every 500 ms. Changing the sound in
+    /// Preferences resets that, so a cause the user can fix gets its retry.</summary>
     private void OnBell()
     {
         if (_disposed) return;
+        var sound = Settings.BellSound;
+        var ringer = sound != BellSound.None && !_bellRingerFailed && _bellRinger?.CanRing(sound) == true ? _bellRinger : null;
+        if (!Settings.VisualBell && ringer is null) return;
         if (!_bellThrottle.TryAdmit()) return;
         if (Settings.VisualBell) BellRang?.Invoke(this, EventArgs.Empty);
-        if (Settings.BellSound == BellSound.None || _bellRinger is null || _bellRingerFailed) return;
+        if (ringer is null) return;
         try
         {
-            _bellRinger.Ring(Settings.BellSound);
+            ringer.Ring(sound);
         }
         catch (Exception ex)
         {
@@ -718,6 +737,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         _session.HostMessage -= _onHostMessage;
         _session.BellRang -= _onBellRang;
         Settings.SaveFailed -= _onSettingsSaveFailed;
+        Settings.PropertyChanged -= _onSettingsChanged;
         await _session.DisposeAsync();
     }
 }

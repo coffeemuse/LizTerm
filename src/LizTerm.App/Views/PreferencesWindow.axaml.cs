@@ -4,7 +4,6 @@
 
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using LizTerm.App.Bell;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Settings;
 
@@ -14,12 +13,11 @@ namespace LizTerm.App.Views;
 /// App.ShowPreferences is the route (settings spec §5).</summary>
 public partial class PreferencesWindow : Window
 {
-    /// <summary>Design-time only.</summary>
-    public PreferencesWindow() : this(new SettingsViewModel()) { }
+    /// <summary>Design-time only, in the full shape.</summary>
+    public PreferencesWindow() : this(new SettingsViewModel(), systemAlertAvailable: true) { }
 
-    public PreferencesWindow(SettingsViewModel settings) : this(settings, BellSupport.SystemAlertAvailableHere) { }
-
-    /// <summary>The platform is an argument so a test can see the Linux shape of the window on any machine.</summary>
+    /// <summary>Whether the system alert can ring here is an argument (App passes its ringer's CanRing), so a test
+    /// can see the Linux shape of the window on any machine.</summary>
     internal PreferencesWindow(SettingsViewModel settings, bool systemAlertAvailable)
     {
         InitializeComponent();

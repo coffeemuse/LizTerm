@@ -37,7 +37,7 @@
                  IsChecked="{Binding BellSound, Converter={x:Static vm:BellSoundConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
     <RadioButton x:Name="BellSoundSystemAlert" GroupName="BellSound" Content="System alert sound" Click="OnBellSoundSystemAlertClick"
                  IsChecked="{Binding BellSound, Converter={x:Static vm:BellSoundConverter.Instance}, ConverterParameter=SystemAlert, Mode=OneWay}" />
-    <!-- Shown only where the constructor disabled the radio above (BellSupport). -->
+    <!-- Shown only where the constructor disabled the radio above (the ringer's CanRing said no). -->
     <TextBlock x:Name="BellSoundNote" Text="The system alert sound is not available on Linux." Foreground="#A0A0A0" TextWrapping="Wrap" IsVisible="False" />
 
     <!-- Empty until a save fails; the session windows show the same message in their banners. -->

@@ -332,3 +332,17 @@ planning:
   still gets one bell through every 500 ms. A throttle that restarted on every refusal would silence it entirely.
 - **`PreferencesWindow` gained an internal constructor taking the platform rule's answer**, the shape
   `SessionWindow(bool useNativeMenu)` already has, so the Linux form of the window is tested on macOS.
+
+Changed in review of PR #68:
+
+- **`IBellRinger.CanRing(BellSound)` replaced `BellSupport`** as the one home of which sounds the platform can
+  make (§3.3, §5): `SystemBellRinger` answers from the same checks it rings with, `App` passes that answer to
+  `PreferencesWindow`, and `OnBell` treats a refused sound as `None`. `App` always passes its one ringer; the
+  "null on a platform with nothing to ring" wording was never what the code did.
+- **`OnBell` returns before the throttle when neither output has anything to do** (§3.4), so a bell nobody could
+  perceive does not open a refusal window against the first one the user turns on.
+- **The failed-ringer latch resets when the sound setting changes**, so a cause the user can fix gets its retry.
+- **`SessionViewModel` takes an optional `BellThrottle`**, so the view-model tests drive an explicit clock and
+  never sleep.
+- **`CrosshairModeConverter` and `BellSoundConverter` share `EnumIsConverter<TEnum>`.**
+- **The system-alert ring test is gated by `LIZTERM_TEST_BELL`** on macOS and Windows, where it is audible.

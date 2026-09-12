@@ -14,10 +14,12 @@ namespace LizTerm.App.Tests.Views;
 
 public class PreferencesWindowTests
 {
-    private static (PreferencesWindow Window, SettingsViewModel Settings) Show(SettingsViewModel? settings = null)
+    /// <summary>The platform answer defaults to the full shape, the one that ships on macOS and Windows, so the
+    /// radio tests exercise an enabled radio on every CI runner; the Linux shape is asked for by name.</summary>
+    private static (PreferencesWindow Window, SettingsViewModel Settings) Show(SettingsViewModel? settings = null, bool systemAlertAvailable = true)
     {
         settings ??= new SettingsViewModel();
-        var window = new PreferencesWindow(settings);
+        var window = new PreferencesWindow(settings, systemAlertAvailable);
         window.Show();
         return (window, settings);
     }
@@ -119,9 +121,7 @@ public class PreferencesWindowTests
     [AvaloniaFact]
     public void Where_the_system_alert_is_unavailable_the_radio_is_disabled_with_a_note_and_a_saved_value_stays()
     {
-        var settings = new SettingsViewModel { BellSound = BellSound.SystemAlert };
-        var window = new PreferencesWindow(settings, systemAlertAvailable: false);
-        window.Show();
+        var (window, settings) = Show(new SettingsViewModel { BellSound = BellSound.SystemAlert }, systemAlertAvailable: false);
         var alert = window.FindControl<RadioButton>("BellSoundSystemAlert")!;
         var note = window.FindControl<TextBlock>("BellSoundNote")!;
 
@@ -135,8 +135,7 @@ public class PreferencesWindowTests
     [AvaloniaFact]
     public void Where_the_system_alert_is_available_the_radio_is_enabled_and_the_note_hidden()
     {
-        var window = new PreferencesWindow(new SettingsViewModel(), systemAlertAvailable: true);
-        window.Show();
+        var (window, _) = Show(systemAlertAvailable: true);
 
         Assert.True(window.FindControl<RadioButton>("BellSoundSystemAlert")!.IsEnabled);
         Assert.False(window.FindControl<TextBlock>("BellSoundNote")!.IsVisible);

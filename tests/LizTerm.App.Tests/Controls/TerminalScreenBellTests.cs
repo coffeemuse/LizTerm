@@ -35,7 +35,6 @@ public class TerminalScreenBellTests
 
         screen.Flash();
         Assert.True(screen.BellFlashing);
-        Assert.True(screen.FlashTimerRunning);
         TestRender.Repaint(window);
 
         for (var i = 0; i < 40 && screen.BellFlashing; i++)
@@ -44,7 +43,6 @@ public class TerminalScreenBellTests
             Dispatcher.UIThread.RunJobs();
         }
         Assert.False(screen.BellFlashing, "the flash must clear on its own");
-        Assert.False(screen.FlashTimerRunning);
         TestRender.Repaint(window);
     }
 
@@ -57,6 +55,5 @@ public class TerminalScreenBellTests
         window.Content = null;
 
         Assert.False(screen.BellFlashing);
-        Assert.False(screen.FlashTimerRunning);
     }
 }
