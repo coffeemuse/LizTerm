@@ -60,7 +60,7 @@ yet, which is section 5's problem.
 
 ## 4. New work
 
-Two items. One of them is not small.
+Three items. One of them is not small.
 
 ### 4.1 Help menu links, and bundled offline documentation (#48)
 
@@ -98,6 +98,22 @@ written and tested, `SettingsViewModel.KeypadDock` already writes through and no
 View > Crosshair submenu is the template for both renderers. The one thing that is not copy-and-paste is
 that Crosshair gets away with a single radio group because `None` is one of its modes, where the keypad's
 on/off and dock are deliberately two settings; the keypad spec §2.1 rejected collapsing them.
+
+### 4.3 Drop the engine path from About (#75)
+
+About shows the b3270 binary's full path on its own line. It is a residual from before the engine was built
+and bundled on all six RIDs, when "which binary is this actually running?" was a live question worth
+answering on screen. It is not live now: `engines.yml` builds the engine for every RID and
+`verify-bundled-engine.sh` gates the archive that carries it. For the user this release is aimed at, the line
+is a filesystem path they did not ask for and cannot act on.
+
+Three sites, all in About — the `EnginePathText` `TextBlock`, the line that fills it, and one assertion.
+`StatusFormatter.Engine` already reports provenance without a path, so the status bar is unaffected, and
+`EngineInfo.Path` stays because the backend needs it to start the process.
+
+The issue names one decision — whether to keep the line when `LIZTERM_B3270_PATH` is in force — and one
+detail: `AboutWindowTests` justifies `SizeToContent.Height` by saying the engine path wraps, so that comment
+has to be rewritten rather than left pointing at a line that no longer exists.
 
 ## 5. Public-debut housekeeping
 
@@ -220,7 +236,7 @@ together rather than one at a time.
 2. **Section 6 (backlog hygiene) and sections 5.1, 5.2 and 5.4** — independent of each other and of the
    code; can land in any order, and none of them blocks anything.
 3. **Design spec for 4.1**, then its plan, then the work. This is the long pole.
-4. **4.2**, at any point after step 1.
+4. **4.2 and 4.3**, at any point after step 1. Neither blocks anything else.
 5. **5.3**, once 4.1's shape is settled — the disclaimer and the bundled docs land in the same README pass.
 6. **5.5**, the version bump.
 7. **Section 7**, the rehearsal and the cross-platform pass.
