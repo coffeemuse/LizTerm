@@ -48,6 +48,26 @@ public static partial class UserGuideHtml
                 continue;
             }
 
+            if (line.StartsWith('|'))
+            {
+                var rows = new List<string[]>();
+                for (; i < lines.Length && lines[i].StartsWith('|'); i++) rows.Add(Cells(lines[i]));
+                i--;
+
+                body.Append("<table>\n<thead>\n<tr>");
+                foreach (var cell in rows[0]) body.Append("<th>").Append(Inline(cell, version)).Append("</th>");
+                body.Append("</tr>\n</thead>\n<tbody>\n");
+                // rows[1] is the |---|---| separator, which carries no content.
+                foreach (var row in rows.Skip(2))
+                {
+                    body.Append("<tr>");
+                    foreach (var cell in row) body.Append("<td>").Append(Inline(cell, version)).Append("</td>");
+                    body.Append("</tr>\n");
+                }
+                body.Append("</tbody>\n</table>\n");
+                continue;
+            }
+
             if (line.StartsWith("- ", StringComparison.Ordinal))
             {
                 body.Append("<ul>\n");
@@ -81,6 +101,12 @@ public static partial class UserGuideHtml
         }
         return slug.ToString();
     }
+
+    /// <summary>The cells of one row. The guide escapes no pipes — UserGuideAssetTests holds it to that — so a
+    /// plain split is correct here, and a cell that grew a literal pipe would be caught there rather than
+    /// silently split into two.</summary>
+    private static string[] Cells(string row) =>
+        row.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToArray();
 
     private static string Escape(string text) =>
         text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");

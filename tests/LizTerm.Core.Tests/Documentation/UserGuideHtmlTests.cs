@@ -91,4 +91,24 @@ public class UserGuideHtmlTests
         Assert.Contains("href=\"https://github.com/coffeemuse/LizTerm/blob/v9.9.9/README.md#first-run\"", html);
         Assert.DoesNotContain("../README.md", html);
     }
+
+    [Fact]
+    public void A_table_becomes_a_head_and_a_body()
+    {
+        var html = Body("| Setting | Meaning |\n|---|---|\n| Name | How it appears. |\n| Host | The server. |\n");
+
+        Assert.Contains("<table>\n<thead>\n<tr><th>Setting</th><th>Meaning</th></tr>\n</thead>", html);
+        Assert.Contains("<tbody>\n<tr><td>Name</td><td>How it appears.</td></tr>", html);
+        Assert.Contains("<tr><td>Host</td><td>The server.</td></tr>\n</tbody>\n</table>", html);
+        Assert.DoesNotContain("---", html);
+    }
+
+    [Fact]
+    public void A_table_cell_gets_the_same_inline_treatment_as_prose()
+    {
+        var html = Body("| Key | Action |\n|---|---|\n| `Escape` | Sends **Attn** |\n");
+
+        Assert.Contains("<td><code>Escape</code></td>", html);
+        Assert.Contains("<td>Sends <strong>Attn</strong></td>", html);
+    }
 }
