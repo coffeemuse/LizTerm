@@ -434,6 +434,16 @@ in `Program.BuildAvaloniaApp`; Release builds carry none of it, and the headless
 - `tree` with no node returns the window roots. A dialog opened by `input` Click appears there as a new root, but
   `search` does not find windows opened after its first query, so re-list the roots instead. Menu popups never appear
   as roots, but an item can still be reached: `input` Click on the top-level menu header, then Click on the item.
+- **On macOS the menu you drive is `ClassicMenu`, and it does not need to be visible.** The native strategy hides it
+  but leaves it populated, and a hidden `Menu` drives exactly like a shown one: measured 2026-09-12, View >
+  Crosshair > None moved the check with `IsVisible = false` throughout. So never `set-prop` it visible first, and
+  never read a failure as "the menu is hidden" — what a nested item needs is the header-then-item sequence above. A
+  direct Click on one answers `handled:false` whether the bar is shown or hidden, which looks like a refusal and is
+  not one.
+- **`NativeMenuBar` is never the way in.** Its items are generated inside the control's template, so `search`
+  returns the bar alone and `tree` on the bar returns `[]` — true even when it is rendering, which on macOS takes
+  forcing `NativeMenuBarPresenter.IsVisible` (#70). For the same reason nothing driving the tree can reach About or
+  Preferences on macOS: they exist only as `NativeMenuItem`s on the application menu, in every menu style.
 - To reach the picker and the profile editor, launch a second instance with no profile argument.
 - `props` returns `bindingExpression` beside each value, the quickest check that a control reached the view model.
   `IsEnabled` on a command-bound button reads `True` even while the tree shows `:disabled`, so check
