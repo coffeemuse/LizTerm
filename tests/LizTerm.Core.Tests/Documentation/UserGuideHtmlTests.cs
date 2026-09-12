@@ -75,6 +75,16 @@ public class UserGuideHtmlTests
     }
 
     [Fact]
+    public void A_wrapped_bullet_stays_one_list_item()
+    {
+        var html = Body("- first line\n  and its continuation\n- second\n");
+
+        Assert.Contains("<li>first line\nand its continuation</li>", html);
+        Assert.Contains("<li>second</li>", html);
+        Assert.DoesNotContain("<p>", html);
+    }
+
+    [Fact]
     public void A_fenced_block_keeps_its_lines_and_drops_its_language()
     {
         var html = Body("```text\nREADY\nLOGON\n```");

@@ -73,7 +73,17 @@ public static partial class UserGuideHtml
                 body.Append("<ul>\n");
                 for (; i < lines.Length && lines[i].StartsWith("- ", StringComparison.Ordinal); i++)
                 {
-                    body.Append("<li>").Append(Inline(lines[i][2..], version)).Append("</li>\n");
+                    var item = new List<string> { lines[i][2..] };
+                    // A wrapped bullet is one item: an indented line that is not itself a new "- " belongs to
+                    // the item above it. Without folding it in here, it falls through to the paragraph branch
+                    // and renders outside the list.
+                    while (i + 1 < lines.Length && lines[i + 1].Length > 0 && lines[i + 1][0] is ' ' or '\t'
+                           && !lines[i + 1].StartsWith("- ", StringComparison.Ordinal))
+                    {
+                        i++;
+                        item.Add(lines[i].TrimStart());
+                    }
+                    body.Append("<li>").Append(Inline(string.Join('\n', item), version)).Append("</li>\n");
                 }
                 i--;
                 body.Append("</ul>\n");

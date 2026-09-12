@@ -147,11 +147,11 @@ plus PF1 to PF12, Enter, Erase EOF and Erase Input.</p>
 <ul>
 <li>Click to move the cursor.</li>
 <li>Drag to select a rectangle of the screen. Double-click selects a word.</li>
-<li><strong>Copy</strong> copies the selection as text, with trailing spaces trimmed from each line. With nothing selected, use</li>
+<li><strong>Copy</strong> copies the selection as text, with trailing spaces trimmed from each line. With nothing selected, use
+<strong>Select All</strong> first.</li>
+<li><strong>Paste</strong> sends clipboard text to the host. Multi-line text is pasted line by line, respecting the screen's
+margins.</li>
 </ul>
-<p>  <strong>Select All</strong> first.
-- <strong>Paste</strong> sends clipboard text to the host. Multi-line text is pasted line by line, respecting the screen's
-  margins.</p>
 <h2 id="finding-text">Finding text</h2>
 <p><strong>Edit &gt; Find...</strong> (Cmd+F or Ctrl+F) opens a find bar at the bottom of the window. Every match on the current screen is
 highlighted as you type; the search ignores case. Press <strong>Enter</strong> to move the cursor to the next match and
@@ -159,11 +159,11 @@ highlighted as you type; the search ignores case. Press <strong>Enter</strong> t
 repaints, and the highlight stays on your current match where it can.</p>
 <h2 id="saving-and-copying-the-screen">Saving and copying the screen</h2>
 <ul>
-<li><strong>File &gt; Save Screen As...</strong> saves the current screen as plain text, or as HTML in the colours you see. Choose the</li>
+<li><strong>File &gt; Save Screen As...</strong> saves the current screen as plain text, or as HTML in the colours you see. Choose the
+format in the save dialog, or end the file name with <code>.html</code>.</li>
+<li><strong>Edit &gt; Copy Screen as HTML</strong> puts the coloured screen on the clipboard as HTML source, for pasting into a web
+page, a wiki, or anything else that takes HTML markup.</li>
 </ul>
-<p>  format in the save dialog, or end the file name with <code>.html</code>.
-- <strong>Edit &gt; Copy Screen as HTML</strong> puts the coloured screen on the clipboard as HTML source, for pasting into a web
-  page, a wiki, or anything else that takes HTML markup.</p>
 <p>Both work after the host has disconnected, as long as the last screen is still showing.</p>
 <h2 id="tls-and-certificates">TLS and certificates</h2>
 <p>With <strong>Use TLS</strong> and <strong>Verify host certificate</strong> on, LizTerm checks the host's certificate against your operating
@@ -171,15 +171,15 @@ system's trusted roots, as a web browser does.</p>
 <p>Most hobbyist hosts use a self-signed certificate, which fails that check. When it does, LizTerm opens a
 <strong>Certificate not verified</strong> window showing why, and what the host presented:</p>
 <ul>
-<li>Tick <strong>Trust this certificate for this profile</strong>, then choose <strong>Connect Anyway</strong>, to <em>pin</em> the certificate: the</li>
+<li>Tick <strong>Trust this certificate for this profile</strong>, then choose <strong>Connect Anyway</strong>, to <em>pin</em> the certificate: the
+profile is saved with it, verification stays on, and later connections accept exactly that certificate and
+nothing else. If the host sent a chain rather than one self-signed certificate, the box reads <strong>Trust this
+certificate and its issuing CA for this profile</strong>: the pin then trusts that CA for this host's name, so a
+certificate the CA later issues to the same host verifies too. If the host ever presents a certificate the pin
+does not cover, LizTerm warns you with a <strong>Certificate changed</strong> window showing both fingerprints.</li>
+<li><strong>Connect Anyway</strong> without the tick connects once without verification, and asks again next time.</li>
+<li><strong>Cancel</strong> stays disconnected.</li>
 </ul>
-<p>  profile is saved with it, verification stays on, and later connections accept exactly that certificate and
-  nothing else. If the host sent a chain rather than one self-signed certificate, the box reads <strong>Trust this
-  certificate and its issuing CA for this profile</strong>: the pin then trusts that CA for this host's name, so a
-  certificate the CA later issues to the same host verifies too. If the host ever presents a certificate the pin
-  does not cover, LizTerm warns you with a <strong>Certificate changed</strong> window showing both fingerprints.
-- <strong>Connect Anyway</strong> without the tick connects once without verification, and asks again next time.
-- <strong>Cancel</strong> stays disconnected.</p>
 <p>When a certificate cannot be pinned — on Windows, for example — the window says why and offers only the one-time
 connection.</p>
 <p>The profile editor shows a pinned certificate's fingerprint. <strong>Forget</strong> removes the pin and returns the profile to
@@ -190,14 +190,14 @@ says whether the certificate was verified.</p>
 <p><strong>File &gt; IND$FILE Transfer...</strong> sends files to, or receives them from, a TSO, VM/CMS or CICS host using the host's
 IND$FILE program. Before you start, put the cursor at a TSO <code>READY</code> prompt or a command line.</p>
 <ul>
-<li>Choose <strong>Send to host</strong> or <strong>Receive from host</strong>, the local file, and the host file (for example</li>
+<li>Choose <strong>Send to host</strong> or <strong>Receive from host</strong>, the local file, and the host file (for example
+<code>LIZTERM.JCL(JOB1)</code>, or <code>'USER.DATA.SET'</code> with quotes for a fully qualified TSO name).</li>
+<li><strong>Text</strong> mode translates between ASCII and EBCDIC and can convert line endings; <strong>Binary</strong> copies bytes unchanged.</li>
+<li><strong>Append to an existing file</strong> adds to the target rather than replacing it. Without it, LizTerm will not receive
+over a local file you did not pick with the Browse dialog.</li>
+<li>When sending, <strong>Advanced</strong> sets up the new host file: record format and LRECL (TSO and VM), BLKSIZE and space
+allocation (TSO only), plus a buffer size and extra options appended to the IND$FILE command.</li>
 </ul>
-<p>  <code>LIZTERM.JCL(JOB1)</code>, or <code>'USER.DATA.SET'</code> with quotes for a fully qualified TSO name).
-- <strong>Text</strong> mode translates between ASCII and EBCDIC and can convert line endings; <strong>Binary</strong> copies bytes unchanged.
-- <strong>Append to an existing file</strong> adds to the target rather than replacing it. Without it, LizTerm will not receive
-  over a local file you did not pick with the Browse dialog.
-- When sending, <strong>Advanced</strong> sets up the new host file: record format and LRECL (TSO and VM), BLKSIZE and space
-  allocation (TSO only), plus a buffer size and extra options appended to the IND$FILE command.</p>
 <p>The dialog shows progress while the transfer runs. <strong>Cancel</strong>, or closing the dialog, asks the host to stop. The
 host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
 the transfer ends. The dialog remembers your last transfer for that window.</p>
@@ -215,22 +215,23 @@ the part of the session after you have logged on.</p>
 Windows and Linux, the menu is drawn inside each window.</p>
 <p>The Help menu carries the project's own pages, ahead of Wire Log (see <a href="#wire-logs">Wire logs</a>):</p>
 <ul>
-<li><strong>Help &gt; User Guide</strong> opens this guide in your browser, from a bundled copy, so it works with no network connection. If the platform cannot open a browser, an error names this page's address on GitHub instead.</li>
+<li><strong>Help &gt; User Guide</strong> opens this guide in your browser, from a bundled copy, so it works with no network
+connection. If the platform cannot open a browser, an error names this page's address on GitHub instead.</li>
 <li><strong>Help &gt; Project on GitHub</strong> opens the project's page on GitHub.</li>
 <li><strong>Help &gt; Report an Issue...</strong> opens GitHub's form for a new bug report or feature request.</li>
 <li><strong>Help &gt; Releases</strong> opens the project's releases page on GitHub.</li>
 </ul>
 <p>On macOS you can choose, under <strong>Menu bar</strong> in Preferences:</p>
 <ul>
-<li><strong>Wherever this platform puts it</strong> — the default: the system menu bar on a Mac. Picking one of the three</li>
+<li><strong>Wherever this platform puts it</strong> — the default: the system menu bar on a Mac. Picking one of the three
+below pins that choice instead, and this brings you back.</li>
+<li><strong>In the system menu bar</strong> — where a Mac user expects it, and what the default already gives you there.</li>
+<li><strong>Inside the window</strong> — draws the menu in each session window and takes it out of the system menu bar, so no
+menu shortcut can intercept a key the mainframe needs.</li>
+<li><strong>Both</strong> — draws it in both places at once. The system menu bar is a real menu bar again, so the menu
+shortcuts come back with it: pick this only if you did not need <strong>Inside the window</strong> to keep them off a
+key the mainframe uses.</li>
 </ul>
-<p>  below pins that choice instead, and this brings you back.
-- <strong>In the system menu bar</strong> — where a Mac user expects it, and what the default already gives you there.
-- <strong>Inside the window</strong> — draws the menu in each session window and takes it out of the system menu bar, so no
-  menu shortcut can intercept a key the mainframe needs.
-- <strong>Both</strong> — draws it in both places at once. The system menu bar is a real menu bar again, so the menu
-  shortcuts come back with it: pick this only if you did not need <strong>Inside the window</strong> to keep them off a
-  key the mainframe uses.</p>
 <p>The choice applies immediately, to every open session window. It is macOS only: on Windows and Linux the menu is
 always drawn inside the window, whatever a settings file carried from a Mac may say, so Preferences does not
 offer the choice there.</p>
@@ -246,13 +247,13 @@ window's <strong>Edit</strong> menu on Windows and Linux. Changes apply as you m
 <ul>
 <li><strong>Crosshair</strong> — the same choice as View &gt; Crosshair.</li>
 <li><strong>Blink</strong> — whether text the host marks as blinking actually blinks. Off draws it steady.</li>
-<li><strong>Bell</strong> — whether the screen flashes when the host rings the bell (on by default), and what sound plays: none, or</li>
+<li><strong>Bell</strong> — whether the screen flashes when the host rings the bell (on by default), and what sound plays: none, or
+the system alert sound, at the volume your system uses for alerts. The system alert sound is not available on
+Linux.</li>
+<li><strong>Keypad</strong> — whether the on-screen keypad is shown, and whether it docks below the screen or to its right. The
+View &gt; Keypad submenu carries both of the same settings.</li>
+<li><strong>Menu bar</strong> — macOS only; see <a href="#menus">Menus</a>.</li>
 </ul>
-<p>  the system alert sound, at the volume your system uses for alerts. The system alert sound is not available on
-  Linux.
-- <strong>Keypad</strong> — whether the on-screen keypad is shown, and whether it docks below the screen or to its right. The
-  View &gt; Keypad submenu carries both of the same settings.
-- <strong>Menu bar</strong> — macOS only; see <a href="#menus">Menus</a>.</p>
 <h2 id="where-lizterm-keeps-its-files">Where LizTerm keeps its files</h2>
 <table>
 <thead>
@@ -269,15 +270,15 @@ window's <strong>Edit</strong> menu on Windows and Linux. Changes apply as you m
 deleting it puts everything back to the defaults.</p>
 <h2 id="known-limitations">Known limitations</h2>
 <ul>
-<li><strong>Unsigned Windows builds.</strong> Windows SmartScreen warns about the app the first time you open it; the</li>
+<li><strong>Unsigned Windows builds.</strong> Windows SmartScreen warns about the app the first time you open it; the
+<a href="https://github.com/coffeemuse/LizTerm/blob/v0.4.1/README.md#first-run">README</a> explains how to allow it.</li>
+<li><strong>No certificate pinning on Windows.</strong> The Windows emulation engine verifies against the Windows certificate
+store and cannot pin a certificate. A profile carrying a pin refuses to connect on Windows rather than ignoring
+the pin.</li>
+<li><strong>TLS hosts that rely on SNI</strong> (several TLS sites sharing one address) cannot be verified, because the
+underlying x3270 engine does not send a server name (<a href="https://github.com/coffeemuse/LizTerm/issues/12">#12</a>).</li>
+<li><strong>No keymap editing yet</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/18">#18</a>).</li>
+<li><strong>No printer sessions or scripting.</strong></li>
 </ul>
-<p>  <a href="https://github.com/coffeemuse/LizTerm/blob/v0.4.1/README.md#first-run">README</a> explains how to allow it.
-- <strong>No certificate pinning on Windows.</strong> The Windows emulation engine verifies against the Windows certificate
-  store and cannot pin a certificate. A profile carrying a pin refuses to connect on Windows rather than ignoring
-  the pin.
-- <strong>TLS hosts that rely on SNI</strong> (several TLS sites sharing one address) cannot be verified, because the
-  underlying x3270 engine does not send a server name (<a href="https://github.com/coffeemuse/LizTerm/issues/12">#12</a>).
-- <strong>No keymap editing yet</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/18">#18</a>).
-- <strong>No printer sessions or scripting.</strong></p>
 </body>
 </html>

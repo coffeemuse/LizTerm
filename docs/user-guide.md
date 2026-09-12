@@ -205,7 +205,8 @@ Windows and Linux, the menu is drawn inside each window.
 
 The Help menu carries the project's own pages, ahead of Wire Log (see [Wire logs](#wire-logs)):
 
-- **Help > User Guide** opens this guide in your browser, from a bundled copy, so it works with no network connection. If the platform cannot open a browser, an error names this page's address on GitHub instead.
+- **Help > User Guide** opens this guide in your browser, from a bundled copy, so it works with no network
+  connection. If the platform cannot open a browser, an error names this page's address on GitHub instead.
 - **Help > Project on GitHub** opens the project's page on GitHub.
 - **Help > Report an Issue...** opens GitHub's form for a new bug report or feature request.
 - **Help > Releases** opens the project's releases page on GitHub.
