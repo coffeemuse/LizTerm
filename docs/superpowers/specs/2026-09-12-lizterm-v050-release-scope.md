@@ -93,6 +93,13 @@ carries Keyboard, Menus, Preferences and Known limitations sections, which is mo
 
 ### 4.2 View > Keypad as a submenu carrying the dock (#71)
 
+> **Done, 2026-09-12.** PR #80, merged as `b45c674`. Issue #71 is closed. Both renderers carry the same
+> submenu: **Show the Keypad**, a separator, then **At the Bottom** and **On the Right** over
+> `KeypadDockConverter`. The separator is the seam this section predicted — two settings rather than one
+> enum, because keypad spec §2.1 rejected a `Hidden` member that would forget the dock whenever the keypad
+> was hidden — so it is structural, not decoration. One-way binding plus Click throughout, the Crosshair
+> items' shape, and no `Gesture` on any of them.
+
 Small, and it finishes a feature that ships for the first time in this release. `KeypadDockConverter` is
 written and tested, `SettingsViewModel.KeypadDock` already writes through and notifies, and the
 View > Crosshair submenu is the template for both renderers. The one thing that is not copy-and-paste is
@@ -252,7 +259,9 @@ all six RIDs and every installer, creates no release, and needs no tag.
   the Preferences window already says so. Confirm the note appears and the visual bell works.
 - The Preferences window: layout, and that the **Menu bar group is correctly absent** rather than present
   and inert.
-- The in-window menu carrying View > Keypad, and — if 4.2 lands — its submenu.
+- The in-window menu carrying View > Keypad and its submenu. 4.2 landed, so this is no longer conditional:
+  check that **Show the Keypad**, **At the Bottom** and **On the Right** all work from the in-window menu,
+  which off macOS is the only menu there is.
 - `settings.json` written to the right per-OS path, and surviving a restart.
 - The `.deb`, `.rpm` and `.exe` installers themselves, which are packaged on every release and installed by
   nobody so far.
@@ -289,15 +298,15 @@ Ticked as of 2026-09-12.
    **Done** — 5.1, 5.2 and 5.4, and section 6. The `v0.5.0` milestone now exists and carries #48, #71 and #75.
 3. **Design spec for 4.1**, then its plan, then the work. This is the long pole. **Not started** — the only
    substantial item left before section 7.
-4. **4.2 and 4.3**, at any point after step 1. Neither blocks anything else. **4.3 is done** (PR #77);
-   **4.2 is not started**.
+4. ~~**4.2 and 4.3**, at any point after step 1.~~ **Both done** — 4.3 as PR #77, 4.2 as PR #80.
 5. ~~**5.3**, once 4.1's shape is settled~~ — **done early**, with 5.2, for the reason recorded in 5.3.
    4.1 now only appends a documentation link to a README section that already exists.
 6. **5.5**, the version bump. **Outstanding on purpose.**
 7. **Section 7**, the rehearsal and the cross-platform pass.
 8. **Tag `v0.5.0`.**
 
-**What is left:** 4.1 (#48), 4.2 (#71), 5.5, then section 7 and the tag.
+**What is left:** 4.1 (#48), 5.5, then section 7 and the tag. 4.1 is now the only feature work in the
+release, and it is the one item that still has no design spec.
 
 ## 10. Risks
 
