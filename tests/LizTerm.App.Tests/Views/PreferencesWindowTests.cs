@@ -116,6 +116,50 @@ public class PreferencesWindowTests
         Assert.False(window.FindControl<RadioButton>("BellSoundNone")!.IsChecked);
     }
 
+    /// <summary>The show box is here as well as in View so the group makes sense on its own (keypad spec §7).</summary>
+    [AvaloniaFact]
+    public void The_keypad_box_writes_through_and_follows_the_settings()
+    {
+        var (window, settings) = Show();
+        var box = window.FindControl<CheckBox>("KeypadBox")!;
+        Assert.False(box.IsChecked);
+
+        box.IsChecked = true;
+        Assert.True(settings.Keypad);
+
+        settings.Keypad = false;
+        Assert.False(box.IsChecked);
+    }
+
+    [AvaloniaFact]
+    public void Clicking_a_dock_radio_sets_the_shared_settings_and_checks_exactly_that_radio()
+    {
+        var (window, settings) = Show();
+        var bottom = window.FindControl<RadioButton>("KeypadBottom")!;
+        var right = window.FindControl<RadioButton>("KeypadRight")!;
+        Assert.True(bottom.IsChecked);
+        Assert.False(right.IsChecked);
+
+        Click(right);
+        Assert.Equal(KeypadDock.Right, settings.KeypadDock);
+        Assert.False(bottom.IsChecked);
+        Assert.True(right.IsChecked);
+
+        Click(bottom);
+        Assert.Equal(KeypadDock.Bottom, settings.KeypadDock);
+        Assert.True(bottom.IsChecked);
+        Assert.False(right.IsChecked);
+    }
+
+    [AvaloniaFact]
+    public void The_dock_radios_show_the_saved_value_on_open()
+    {
+        var (window, _) = Show(new SettingsViewModel { KeypadDock = KeypadDock.Right });
+
+        Assert.True(window.FindControl<RadioButton>("KeypadRight")!.IsChecked);
+        Assert.False(window.FindControl<RadioButton>("KeypadBottom")!.IsChecked);
+    }
+
     /// <summary>Linux: the radio is disabled and says why, but a saved SystemAlert (a file exported from a Mac, one
     /// day) still shows as the value it is and is not rewritten (bell spec §5).</summary>
     [AvaloniaFact]
