@@ -81,6 +81,24 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    public bool Keypad
+    {
+        get => Current.Keypad;
+        set
+        {
+            if (Current.Keypad != value) Apply(nameof(Keypad), s => s with { Keypad = value });
+        }
+    }
+
+    public KeypadDock KeypadDock
+    {
+        get => Current.KeypadDock;
+        set
+        {
+            if (Current.KeypadDock != value) Apply(nameof(KeypadDock), s => s with { KeypadDock = value });
+        }
+    }
+
     private void Apply(string property, Func<AppSettings, AppSettings> change)
     {
         Current = change(Current);
