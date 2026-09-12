@@ -26,9 +26,10 @@ public class MenuStrategyTests
     public void A_chosen_style_survives_resolution_on_macOS(MenuStyle style) =>
         Assert.Equal(style, MenuStrategy.Resolve(style, isMacOS: true));
 
-    /// <summary>Off macOS the choice is not offered, so it must not be honoured either: Both would draw two bars
-    /// stacked and Native the renderer nobody has reviewed (#22), and Preferences hides the group there, so a
-    /// settings file carried from a Mac would strand a user in a state with no control to leave it.</summary>
+    /// <summary>The native menu is a macOS feature and nothing else — Avalonia exports one nowhere else — so off
+    /// macOS the choice is neither offered nor honoured: Both would draw two bars stacked and Native a second
+    /// in-window bar or a global-menu handoff, and Preferences hides the group there, so a settings file carried
+    /// from a Mac would otherwise strand a user in a state with no control to leave it.</summary>
     [Theory]
     [InlineData(MenuStyle.Auto)]
     [InlineData(MenuStyle.Native)]

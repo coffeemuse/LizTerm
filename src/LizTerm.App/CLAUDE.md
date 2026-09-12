@@ -227,9 +227,13 @@ is what gives the picker a menu bar on macOS. Each window's menu is rendered nat
 
 - `MenuStyle` (`src/LizTerm.Core/Settings/`) is `Auto | Native | InWindow | Both`, saved in `AppSettings`. `Auto`
   is what an untouched file reads as and is never acted on: `MenuStrategy.Resolve` turns it into `Native` on macOS
-  and `InWindow` elsewhere, because `NativeMenuBar`'s in-window rendering has never been reviewed on Windows or
-  Linux (#22). `Resolve`, `FromVariable`, `MenuStyleChoosable`, `AboutInHelpMenu` and `PreferencesInEditMenu` are
-  pure and take the platform as an argument, so every combination is testable anywhere.
+  and `InWindow` elsewhere. `Resolve`, `FromVariable`, `MenuStyleChoosable`, `AboutInHelpMenu` and
+  `PreferencesInEditMenu` are pure and take the platform as an argument, so every combination is testable anywhere.
+- **The native menu is a macOS feature and nothing else**, and that is Avalonia's shape rather than work not yet
+  done: macOS is the only platform with a native menu exporter. Win32 has none and Linux's `DBusMenuExporter`
+  hands the menu to whatever global-menu registrar the desktop runs, so off macOS "native" is either a second
+  in-window bar beside the one that already works or a bar the desktop moved. Decided 2026-09-12; revisit through
+  #22 only if Avalonia's support grows. Do not reintroduce a way to reach `Native` or `Both` off macOS.
 - **`Resolve` answers `InWindow` for everything off macOS**, and `MenuStyleChoosable` is the same rule seen from
   Preferences — a style offered where `Resolve` ignores it, or honoured where Preferences hides the group, is the
   bug. `Both` off macOS is two bars stacked (both renderers draw in-window there, both docked `Top`) and `Native`

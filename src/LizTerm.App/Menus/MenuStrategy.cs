@@ -6,14 +6,19 @@ using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Menus;
 
-/// <summary>Which renderers a platform gets by default, and where About belongs on them.
+/// <summary>Which renderers a platform gets, and where About belongs on them.
 ///
-/// The classic in-window menu and the NativeMenuBar both render the same definition. The default is native on
-/// macOS and in-window on Windows and Linux, because NativeMenuBar's in-window rendering has not been looked at
-/// on either of those platforms — this project has no Windows or Linux GUI, and CI has no GUI at all — and
-/// replacing a menu that works with one nobody has seen is the wrong default. #22 is where that default gets
-/// flipped. Both renderers are permanent (#70): the in-window one is the only menu anything driving the visual
-/// tree can reach, because a NativeMenuItem is not a Control.
+/// The classic in-window menu and the NativeMenuBar both render the same definition. **The native menu is a macOS
+/// feature and nothing else**, because of how Avalonia is built rather than anything this project has yet to get
+/// round to: macOS is the only platform with a native menu exporter at all. Win32 has none, and Linux's
+/// DBusMenuExporter hands the menu to whatever global-menu registrar the desktop happens to run — so off macOS
+/// "native" means either an in-window NativeMenuBar, which is a second in-window menu beside the one that already
+/// works, or a bar that moves somewhere the user's desktop chose. Neither is a menu worth offering, so Resolve
+/// answers InWindow for every style off macOS and Preferences shows no choice there. Should Avalonia's support
+/// grow, #22 is where that gets revisited; until then this is scope, not a staging device.
+///
+/// Both renderers are permanent (#70): the in-window one is the only menu anything driving the visual tree can
+/// reach, because a NativeMenuItem is not a Control.
 ///
 /// The style a window actually gets is the user's preference, seeded at launch by LIZTERM_MENU and resolved
 /// here; SettingsViewModel.MenuStyle holds it and SessionWindow.ApplyMenuStyle acts on it.</summary>
@@ -25,10 +30,10 @@ internal static class MenuStrategy
     /// than reading it, so every combination is testable on every machine: the shape EngineRequirement.Decide
     /// uses for the same reason. Never answers Auto.
     ///
-    /// Off macOS the answer is always InWindow, whatever the file says. Both draws two bars stacked there
-    /// (NativeMenuBar renders in-window where there is no exporter, and both are docked Top), and Native hands
-    /// the definition to a global-menu registrar or to a renderer nobody has reviewed (#22) — states
-    /// MenuStyleChoosable gives no control to leave, so they must not be reachable at all. A settings file
+    /// Off macOS the answer is always InWindow, whatever the file says, because the native menu is macOS-only —
+    /// see the class summary. Both would draw two bars stacked there (NativeMenuBar renders in-window where there
+    /// is no exporter, and both are docked Top), and Native either that same second bar or a global-menu handoff;
+    /// MenuStyleChoosable gives no control to leave either, so they must not be reachable at all. A settings file
     /// carried between platforms, or hand-edited, is exactly how they otherwise would be.
     ///
     /// This is also the one place an out-of-range value is normalised. A settings file is text a user can edit
