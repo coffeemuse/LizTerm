@@ -1543,7 +1543,7 @@ git commit -m "Edit a profile's tags and note"
 **Files:**
 - Create: `src/LizTerm.App/ViewModels/ProfileRow.cs`, `src/LizTerm.App/ViewModels/ScopeOption.cs`
 - Modify: `src/LizTerm.App/ViewModels/ProfilePickerViewModel.cs`, `src/LizTerm.App/Views/ProfilePickerWindow.axaml.cs`, `src/LizTerm.App/App.axaml.cs:190`
-- Test: `tests/LizTerm.App.Tests/ViewModels/ProfileRowTests.cs`, `tests/LizTerm.App.Tests/ViewModels/ProfileViewModelsTests.cs`
+- Test: `tests/LizTerm.App.Tests/ViewModels/ProfileRowTests.cs`, `tests/LizTerm.App.Tests/ViewModels/ProfileViewModelsTests.cs`, `tests/LizTerm.App.Tests/Views/ProfilePickerWindowTests.cs:40` (one assignment — see Step 7)
 
 **Interfaces:**
 - Consumes: `TagSet`, `TagRegistry`, `TagRegistryStore`, `TagPalette`.
@@ -2043,6 +2043,18 @@ Then replace each remaining `SelectedProfile = …` assignment:
 
 `HasSelection` becomes `public bool HasSelection => SelectedRow is not null;`.
 
+**Then fix the six existing assignments that this breaks.** `SelectedProfile` is now get-only, so every
+`vm.SelectedProfile = …` is a `CS0200` compile error. Replace each with the equivalent row assignment — no
+filter is active in any of these, so `VisibleRows` and `Profiles` are in the same order:
+
+- `tests/LizTerm.App.Tests/ViewModels/ProfileViewModelsTests.cs:80` — `vm.SelectedProfile = vm.Profiles[1];` → `vm.SelectedRow = vm.VisibleRows[1];`
+- `tests/LizTerm.App.Tests/ViewModels/ProfileViewModelsTests.cs:97` — `vm.SelectedProfile = vm.Profiles[0];` → `vm.SelectedRow = vm.VisibleRows[0];`
+- `tests/LizTerm.App.Tests/ViewModels/ProfileViewModelsTests.cs:131, 146, 165` — `picker.SelectedProfile = picker.Profiles.Single();` → `picker.SelectedRow = picker.VisibleRows.Single();`
+- `tests/LizTerm.App.Tests/Views/ProfilePickerWindowTests.cs:40` — `vm.SelectedProfile = vm.Profiles.Single();` → `vm.SelectedRow = vm.VisibleRows.Single();`
+
+Reads of `SelectedProfile` (for example `Assert.Equal("c", vm.SelectedProfile!.Name)`) stay exactly as they
+are — the derived property still answers them.
+
 - [ ] **Step 8: Thread the store through the window and the app**
 
 In `src/LizTerm.App/Views/ProfilePickerWindow.axaml.cs`, add `TagRegistryStore? tags = null` as the last constructor parameter and pass it last to the view model.
@@ -2062,7 +2074,8 @@ Declare `private TagRegistryStore? _tags;` beside `_store`.
 Run: `dotnet test tests/LizTerm.App.Tests --filter "FullyQualifiedName~ProfileViewModelsTests"`
 Run: `dotnet test tests/LizTerm.App.Tests`
 
-Expected: PASS. `ProfilePickerWindowTests` still passes because both its cases drive Quick Connect and layout, neither of which changed.
+Expected: PASS, including `ProfilePickerWindowTests` — whose one `SelectedProfile` assignment Step 7 above
+rewrites. Its two existing cases otherwise drive Quick Connect and layout, neither of which changed.
 
 - [ ] **Step 10: Commit**
 
@@ -2070,7 +2083,8 @@ Expected: PASS. `ProfilePickerWindowTests` still passes because both its cases d
 git add src/LizTerm.App/ViewModels/ProfileRow.cs src/LizTerm.App/ViewModels/ScopeOption.cs \
         src/LizTerm.App/ViewModels/ProfilePickerViewModel.cs src/LizTerm.App/Views/ProfilePickerWindow.axaml.cs \
         src/LizTerm.App/App.axaml.cs tests/LizTerm.App.Tests/ViewModels/ProfileRowTests.cs \
-        tests/LizTerm.App.Tests/ViewModels/ProfileViewModelsTests.cs
+        tests/LizTerm.App.Tests/ViewModels/ProfileViewModelsTests.cs \
+        tests/LizTerm.App.Tests/Views/ProfilePickerWindowTests.cs
 git commit -m "Filter the session list by scope and text"
 ```
 
