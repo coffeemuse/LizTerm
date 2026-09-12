@@ -2335,7 +2335,7 @@ git commit -m "Draw tags, notes and the filter row in the session list"
 ### Task 9: The user guide
 
 **Files:**
-- Modify: `docs/user-guide.md`, `src/LizTerm.App/Assets/Docs/user-guide.html` (generated)
+- Modify: `docs/user-guide.md`, `src/LizTerm.Core/CLAUDE.md`, `src/LizTerm.App/Assets/Docs/user-guide.html` (generated)
 
 - [ ] **Step 1: Run the guard to see it pass before the edit**
 
@@ -2364,23 +2364,59 @@ the scope, the box searches inside it. Whatever the filter shows, **Quick Connec
 profile by name.
 ```
 
-- [ ] **Step 4: Regenerate the bundled HTML**
+- [ ] **Step 4: Fix the two statements `tags.json` made untrue**
+
+The repository's rule is that each fact has one home, and a change that makes a documented statement untrue is
+fixed where it lives. Adding `tags.json` beside `settings.json` broke two.
+
+In `docs/user-guide.md`, in **Where LizTerm keeps its files**, replace the paragraph beginning "Profiles are in
+`profiles/`" with:
+
+```markdown
+Profiles are in `profiles/`, one JSON file each, and wire logs in `logs/`, named
+`wire-<profile>-<date>-<time>.log`. `settings.json` holds your preferences — only the ones you have changed, so
+deleting it puts everything back to the defaults. `tags.json` holds one colour per tag name; deleting it loses
+only the colours, because the tag names themselves live in the profiles and are given fresh colours the next
+time LizTerm starts.
+```
+
+In `src/LizTerm.Core/CLAUDE.md`, replace the `AppPaths` bullet in the **Model** section:
+
+```markdown
+- `AppPaths` owns the per-OS config root, with `profiles`, `logs`, `settings.json` and `tags.json` beneath it.
+```
+
+And add two bullets to the end of that file's **Profiles** section:
+
+```markdown
+- `SessionProfile.Tags` is a `TagSet`, not a list, and that is load-bearing: a record's synthesised `Equals`
+  compares a collection member by **reference**, so a list would make a profile read back from disk unequal to
+  the one written — which `ProfileStoreTests` asserts it is. `TagSet` is a struct with hand-written value
+  equality. Anyone adding another collection field to a record here needs the same treatment; hand-writing
+  `Equals` on the record instead would silently stop covering each field added after it.
+- Tag **names** live on the profile; a tag's **colour** lives in `TagRegistry`, loaded from `tags.json`, so one
+  tag is one colour everywhere. `FAVORITE` is reserved: always present, always gold, never written to the file,
+  and an entry for it in a hand-edited file is ignored. Reconciliation — registering a name the file does not
+  know — belongs to the App layer, never to `ProfileStore.LoadAll`, because a load must not write.
+```
+
+- [ ] **Step 5: Regenerate the bundled HTML**
 
 Run: `LIZTERM_UPDATE_DOCS=1 dotnet test tests/LizTerm.Core.Tests --filter "FullyQualifiedName~UserGuideAssetTests"`
 
 Expected: PASS, with `src/LizTerm.App/Assets/Docs/user-guide.html` rewritten. If `The_guide_uses_no_construct_the_converter_cannot_render` fails, extend `tests/LizTerm.Core.Tests/Documentation/UserGuideHtml.cs` rather than simplifying the guide.
 
-- [ ] **Step 5: Verify the whole suite and the warning count**
+- [ ] **Step 6: Verify the whole suite and the warning count**
 
 Run: `dotnet test LizTerm.slnx`
 Run: `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "`
 
 Expected: all tests pass; the warning count prints `0`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add docs/user-guide.md src/LizTerm.App/Assets/Docs/user-guide.html
+git add docs/user-guide.md src/LizTerm.App/Assets/Docs/user-guide.html src/LizTerm.Core/CLAUDE.md
 git commit -m "Document tags, notes and the session filter"
 ```
 
