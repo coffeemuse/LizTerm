@@ -19,12 +19,20 @@ public partial class SessionWindow : Window
     /// <summary>The platform's default style and nothing else — the designer's constructor, and the tests' where
     /// the menu is not what is under test. App passes the user's style explicitly; a window that reached for
     /// App.Settings itself would open the real settings file from every headless test that builds one.</summary>
-    public SessionWindow() : this(MenuStrategy.Resolve(MenuStyle.Auto, OperatingSystem.IsMacOS())) { }
+    public SessionWindow() : this(MenuStyle.Auto, OperatingSystem.IsMacOS()) { }
 
-    /// <summary>The style is a constructor argument rather than a static read, so a test can build a window in
-    /// any mode without touching the process environment — the once-only paste test needs all three.</summary>
-    internal SessionWindow(MenuStyle style)
+    /// <summary>The style and the platform are both constructor arguments rather than static reads, so a test can
+    /// build a window in any mode on any machine — the once-only paste test needs all three styles, and
+    /// MenuStrategy.Resolve answers InWindow for every style off macOS, so pinning the style without pinning the
+    /// platform would leave a Linux runner with InWindow whatever the test asked for.
+    ///
+    /// The style is resolved here rather than by the caller: unresolved is not a state ApplyMenuStyle can draw,
+    /// and one entry point that always resolves is what keeps a caller from having to remember. Note this
+    /// platform answer governs the menu *style* only. Where About and Preferences belong is the platform the
+    /// process is actually running on, which ApplyPlatformMenuRules reads directly, as its tests expect.</summary>
+    internal SessionWindow(MenuStyle style, bool isMacOS)
     {
+        _isMacOS = isMacOS;
         InitializeComponent();
         // The screen's events call the view model's methods, not its commands: each method carries its own guard,
         // and a keystroke must never be dropped for arriving while the previous one's round trip is still open.
@@ -48,7 +56,7 @@ public partial class SessionWindow : Window
         // every surface that takes no focus — the keypad's border padding and the margins between its buttons, a
         // button the pointer leaves before releasing (neither raises Click), the status bar and the error bar.
         AddHandler(PointerPressedEvent, (_, _) => Screen.CancelTap(), RoutingStrategies.Tunnel);
-        ApplyMenuStyle(style);
+        ApplyMenuStyle(MenuStrategy.Resolve(style, isMacOS));
         Opened += (_, _) =>
         {
             _opened = true;
@@ -64,6 +72,10 @@ public partial class SessionWindow : Window
     }
 
     private MenuStyle _menuStyle;
+
+    /// <summary>The platform as far as the menu style is concerned. A constructor argument because Resolve
+    /// collapses every style to InWindow off macOS, so a test naming a style has to name the platform too.</summary>
+    private readonly bool _isMacOS;
 
     /// <summary>Whether Opened has run, and so whether this.GetPlatformSettings() can answer.</summary>
     private bool _opened;
@@ -426,7 +438,7 @@ public partial class SessionWindow : Window
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(SettingsViewModel.MenuStyle)) return;
-        var style = MenuStrategy.Resolve(_styleSource!.MenuStyle, OperatingSystem.IsMacOS());
+        var style = MenuStrategy.Resolve(_styleSource!.MenuStyle, _isMacOS);
         if (style != _menuStyle) ApplyMenuStyle(style);
     }
 

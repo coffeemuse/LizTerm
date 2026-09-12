@@ -63,7 +63,10 @@ public class NativeMenuTests
         Assert.True(about.HasClickHandlers);
     }
 
-    private static (SessionWindow Window, SessionViewModel Vm, FakeEmulatorSession Session, FakeTextClipboard Clipboard) Show(MenuStyle style = MenuStyle.Native)
+    /// <summary>macOS by default, because that is the only platform where the three styles differ: Resolve
+    /// answers InWindow for every one of them elsewhere, so a window built with the runner's own platform
+    /// would ignore the style a test names. Ask for the other shape by name where it is what is under test.</summary>
+    private static (SessionWindow Window, SessionViewModel Vm, FakeEmulatorSession Session, FakeTextClipboard Clipboard) Show(MenuStyle style = MenuStyle.Native, bool isMacOS = true)
     {
         var session = new FakeEmulatorSession();
         var buffer = new ScreenBuffer(24, 80);
@@ -71,7 +74,7 @@ public class NativeMenuTests
         session.CurrentScreen = buffer.Snapshot();
         var clipboard = new FakeTextClipboard();
         var vm = new SessionViewModel(session, action => action(), clipboard);
-        var window = new SessionWindow(style) { DataContext = vm };
+        var window = new SessionWindow(style, isMacOS) { DataContext = vm };
         window.Show();
         return (window, vm, session, clipboard);
     }

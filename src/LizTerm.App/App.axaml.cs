@@ -121,7 +121,7 @@ public partial class App : Application
     /// an ad hoc command-line profile.</param>
     public void OpenSession(SessionProfile profile, bool fromStore)
     {
-        var window = new SessionWindow(MenuStrategy.Resolve(Settings.MenuStyle, OperatingSystem.IsMacOS()));
+        var window = new SessionWindow(Settings.MenuStyle, OperatingSystem.IsMacOS());
         var store = _store ??= new ProfileStore(AppPaths.ProfilesDirectory());
         var viewModel = new SessionViewModel(
             SessionFactory.Create(profile),
