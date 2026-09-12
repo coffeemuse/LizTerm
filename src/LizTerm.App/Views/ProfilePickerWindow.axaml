@@ -3,13 +3,15 @@
   Copyright 2026 by CoffeeMuse
   SPDX-License-Identifier: BSD-3-Clause
 -->
+<!-- 480 rather than 400: the Quick Connect row, the filter row and three-line rows together left about
+     four profiles visible at 400. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LizTerm.App.ViewModels"
-        xmlns:core="using:LizTerm.Core.Session"
+        xmlns:render="using:LizTerm.App.Rendering"
         x:Class="LizTerm.App.Views.ProfilePickerWindow"
         x:DataType="vm:ProfilePickerViewModel"
-        Title="LizTerm" Width="520" Height="400" MinWidth="400" MinHeight="300"
+        Title="LizTerm" Width="520" Height="480" MinWidth="400" MinHeight="360"
         Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         WindowStartupLocation="CenterScreen">
   <DockPanel Margin="16">
@@ -26,6 +28,15 @@
       <TextBlock Text="{Binding QuickConnectError}" Foreground="#FF8080" FontSize="12" TextWrapping="Wrap"
                  IsVisible="{Binding QuickConnectError, Converter={x:Static ObjectConverters.IsNotNull}}" />
     </StackPanel>
+    <!-- A second text box a few pixels from Quick Connect's, so the two are told apart by placeholder and by
+         position: this one sits directly on the list it narrows. It deliberately has NO KeyDown handler, unlike
+         Quick Connect — Refilter always leaves the selection on a visible row, so the window's default Connect
+         button already does the right thing when you narrow to one profile and press Enter. -->
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" LastChildFill="True">
+      <ComboBox x:Name="ScopeBox" DockPanel.Dock="Right" Width="130" Margin="8,0,0,0"
+                ItemsSource="{Binding Scopes}" SelectedItem="{Binding SelectedScope}" />
+      <TextBox x:Name="FilterBox" Text="{Binding FilterText}" PlaceholderText="Filter sessions" />
+    </DockPanel>
     <StackPanel DockPanel.Dock="Right" Margin="12,0,0,0" Spacing="8" Width="120">
       <Button Content="Connect" Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch" IsDefault="True" />
       <Button Content="New..." Command="{Binding NewCommand}" HorizontalAlignment="Stretch" />
@@ -33,15 +44,49 @@
       <Button Content="Delete" Command="{Binding DeleteCommand}" HorizontalAlignment="Stretch" />
       <Button Content="Quit" Command="{Binding QuitCommand}" HorizontalAlignment="Stretch" Margin="0,24,0,0" />
     </StackPanel>
-    <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" DoubleTapped="OnDoubleTapped">
+    <ListBox ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}" DoubleTapped="OnDoubleTapped">
       <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="core:SessionProfile">
-          <StackPanel>
-            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-            <TextBlock Foreground="#A0A0A0" FontSize="12">
-              <Run Text="{Binding Host}" /><Run Text=":" /><Run Text="{Binding Port}" />
-            </TextBlock>
-          </StackPanel>
+        <DataTemplate x:DataType="vm:ProfileRow">
+          <!-- A 15px gutter on all three lines, so every star lands on the same x and a column of them can be
+               scanned. Right-aligned among the chips it would slide with the chip count, which is most of what
+               a favourite marker is for. -->
+          <Grid ColumnDefinitions="15,*" RowDefinitions="Auto,Auto,Auto">
+            <TextBlock x:Name="StarGlyph" Grid.Row="0" Grid.Column="0" Text="★" Foreground="{x:Static render:TagPalette.Star}"
+                       FontSize="13" VerticalAlignment="Center" IsVisible="{Binding IsFavorite}" />
+            <!-- The name is what ellipsises; the chips never shrink. A truncated PRO… carries nothing, where a
+                 truncated long name is still recognisable. -->
+            <DockPanel Grid.Row="0" Grid.Column="1" LastChildFill="True">
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                <ItemsControl ItemsSource="{Binding Chips}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" Spacing="3" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TagChip">
+                      <Border x:Name="Chip" Background="{Binding Background}" CornerRadius="3" Padding="5,1">
+                        <TextBlock Text="{Binding Text}" Foreground="{x:Static render:TagPalette.ChipText}"
+                                   FontSize="10" FontWeight="Bold" />
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Border Background="{x:Static render:TagPalette.Overflow}" CornerRadius="3" Padding="5,1"
+                        IsVisible="{Binding HasOverflow}">
+                  <TextBlock x:Name="OverflowChip" Text="{Binding OverflowText}" FontSize="10" FontWeight="Bold"
+                             Foreground="{x:Static render:TagPalette.ChipText}" ToolTip.Tip="{Binding OverflowTip}" />
+                </Border>
+              </StackPanel>
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                         VerticalAlignment="Center" Margin="0,0,6,0" />
+            </DockPanel>
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding HostPort}" Foreground="#A0A0A0" FontSize="12" />
+            <!-- Only when there is one, so an un-noted profile stays two lines and the list stays long. -->
+            <TextBlock x:Name="NoteLine" Grid.Row="2" Grid.Column="1" Text="{Binding Note}" Foreground="#8F8F8F"
+                       FontSize="12" FontStyle="Italic" TextTrimming="CharacterEllipsis"
+                       IsVisible="{Binding HasNote}" ToolTip.Tip="{Binding Note}" />
+          </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>

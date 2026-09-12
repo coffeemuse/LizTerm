@@ -6,6 +6,7 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LizTerm.Core;
+using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.ViewModels;
@@ -25,6 +26,16 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private string _keepAliveText = "60";
     [ObservableProperty] private bool _autoReconnect;
     [ObservableProperty] private string _oversize = "";
+
+    /// <summary>The tag names as the user edits them, comma-separated, WITHOUT the reserved tag —
+    /// <see cref="IsFavorite"/> owns that one.</summary>
+    [ObservableProperty] private string _tagsText = "";
+
+    /// <summary>Whether the profile carries <c>TagRegistry.FavoriteName</c>. A checkbox rather than a typed tag
+    /// so the one name with a fixed meaning cannot be misspelled into an ordinary tag.</summary>
+    [ObservableProperty] private bool _isFavorite;
+
+    [ObservableProperty] private string _note = "";
     [ObservableProperty] private string? _validationMessage;
 
     /// <summary>The pin the profile carries, shown read-only. Forget clears it and Save then writes the profile
@@ -97,6 +108,9 @@ public partial class ProfileEditorViewModel : ObservableObject
         _keepAliveText = existing.KeepAliveSeconds.ToString(CultureInfo.InvariantCulture);
         _autoReconnect = existing.AutoReconnect;
         _oversize = existing.Oversize ?? "";
+        _isFavorite = existing.Tags.Contains(TagRegistry.FavoriteName);
+        _tagsText = string.Join(", ", existing.Tags.Names.Where(name => !TagRegistry.IsReserved(name)));
+        _note = existing.Note ?? "";
         _pinnedCertificate = existing.PinnedCertificate;
         _pinnedFor = existing.PinnedCertificate;
         _pinnedHost = existing.Host;
@@ -155,6 +169,18 @@ public partial class ProfileEditorViewModel : ObservableObject
             && int.TryParse(PortText.Trim(), out var port) && port == _pinnedPort
             ? _pinnedFor : null;
 
+    /// <summary>Typing the reserved tag into the box turns the checkbox on and drops it from the text, rather
+    /// than raising a validation message: the checkbox visibly moving explains what happened, and there is
+    /// nothing for the user to go and fix. Re-entrant by construction — the assignment below re-enters this
+    /// handler, whose Split then finds no reserved name and leaves the text alone.</summary>
+    partial void OnTagsTextChanged(string value)
+    {
+        var names = TagSet.Split(value);
+        if (!names.Any(TagRegistry.IsReserved)) return;
+        IsFavorite = true;
+        TagsText = string.Join(", ", names.Where(name => !TagRegistry.IsReserved(name)));
+    }
+
     /// <summary>The user pressed Forget. The picker needs this because a null PinnedCertificate here can also
     /// mean the editor's copy of the profile simply predates a pin written from a session window.</summary>
     public bool PinCleared { get; private set; }
@@ -191,6 +217,21 @@ public partial class ProfileEditorViewModel : ObservableObject
             SetValidation(oversizeError, fromOversize: true);
             return null;
         }
+        // Counted from what the user typed, BEFORE TagSet.From runs: From enforces the caps by discarding what
+        // does not fit, so a check afterwards could never fire and a ninth tag would vanish in silence.
+        var typed = TagSet.Split(TagsText);
+        if (typed.FirstOrDefault(name => name.Length > TagSet.MaxNameLength) is not null)
+        {
+            SetValidation($"Tag names can be at most {TagSet.MaxNameLength} characters.");
+            return null;
+        }
+        // Explicitly typed, not var: a collection expression in a conditional needs a target type.
+        IReadOnlyList<string> wanted = IsFavorite ? [TagRegistry.FavoriteName, .. typed] : typed;
+        if (wanted.Distinct(StringComparer.OrdinalIgnoreCase).Count() > TagSet.MaxTags)
+        {
+            SetValidation($"A profile can carry at most {TagSet.MaxTags} tags.");
+            return null;
+        }
         SetValidation(null);
         return new SessionProfile
         {
@@ -208,6 +249,8 @@ public partial class ProfileEditorViewModel : ObservableObject
             KeepAliveSeconds = keepAlive,
             AutoReconnect = AutoReconnect,
             Oversize = oversize?.ToString(),
+            Tags = TagSet.From(wanted),
+            Note = string.IsNullOrWhiteSpace(Note) ? null : Note.Trim(),
         };
     }
 }

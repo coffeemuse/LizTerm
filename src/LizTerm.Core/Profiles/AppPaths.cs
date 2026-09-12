@@ -4,7 +4,8 @@
 
 namespace LizTerm.Core.Profiles;
 
-/// <summary>Per-OS locations of LizTerm's own files: profiles, wire logs and the settings file live side by side under one root.</summary>
+/// <summary>Per-OS locations of LizTerm's own files: profiles, wire logs, the settings file and the tag registry
+/// live side by side under one root.</summary>
 public static class AppPaths
 {
     public static string ConfigRoot()
@@ -27,4 +28,9 @@ public static class AppPaths
     /// <summary>App-wide settings, one file beside profiles/ and logs/. Holds only the keys the user has set
     /// (see LizTerm.Core.Settings.SettingsLayers), so deleting it restores every default.</summary>
     public static string SettingsFile() => Path.Combine(ConfigRoot(), "settings.json");
+
+    /// <summary>The tag registry, one file beside settings.json. Holds a colour per tag name; FAVORITE is
+    /// synthesised rather than stored, so deleting this file loses only the chosen colours — every tag name
+    /// travels in its profiles and re-registers with a fresh colour.</summary>
+    public static string TagsFile() => Path.Combine(ConfigRoot(), "tags.json");
 }

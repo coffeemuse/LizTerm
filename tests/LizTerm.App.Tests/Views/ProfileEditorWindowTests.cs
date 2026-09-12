@@ -31,4 +31,29 @@ public class ProfileEditorWindowTests
         Assert.Equal("Backspace erases the previous character (off: Backspace only moves the cursor left)",
             plain.FindControl<CheckBox>("BackspaceBox")!.Content);
     }
+
+    [AvaloniaFact]
+    public void The_tag_and_note_rows_render_the_profiles_values()
+    {
+        var window = new ProfileEditorWindow(new SessionProfile
+        {
+            Name = "mvsce", Host = "h", Tags = TagSet.From(["FAVORITE", "PROD"]), Note = "no live data",
+        });
+        window.Show();
+
+        Assert.Equal("PROD", window.FindControl<TextBox>("TagsBox")!.Text);
+        Assert.True(window.FindControl<CheckBox>("FavoriteBox")!.IsChecked);
+        Assert.Equal("no live data", window.FindControl<TextBox>("NoteBox")!.Text);
+    }
+
+    /// <summary>A pasted paragraph must not reach the list, where it would reshape every row.</summary>
+    [AvaloniaFact]
+    public void The_note_box_is_single_line_and_capped()
+    {
+        var window = new ProfileEditorWindow(new SessionProfile { Name = "p", Host = "h" });
+        window.Show();
+        var note = window.FindControl<TextBox>("NoteBox")!;
+        Assert.False(note.AcceptsReturn);
+        Assert.Equal(120, note.MaxLength);
+    }
 }

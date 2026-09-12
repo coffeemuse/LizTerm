@@ -2,6 +2,8 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Text.Json.Serialization;
+
 namespace LizTerm.Core.Session;
 
 /// <summary>A saved connection. Positional, with a default on every parameter, on purpose: the System.Text.Json
@@ -25,6 +27,14 @@ namespace LizTerm.Core.Session;
 /// so an LU can move.</param>
 /// <param name="Oversize">An oversize geometry as <c>columns x rows</c>, or null for the model's own. Validated by
 /// <see cref="OversizeGeometry"/>, whose order is the opposite of <see cref="TerminalModel.ToString"/>'s.</param>
+/// <param name="Tags">The tag names this profile carries, or none. Names only: a tag's COLOUR belongs to its
+/// definition in <c>TagRegistry</c>, so <c>PROD</c> is one colour everywhere rather than one per profile. A
+/// <see cref="TagSet"/> rather than a list because this is a record, and a record compares a collection member
+/// by reference — see TagSet's own remarks. <c>FAVORITE</c> is an ordinary member here and is drawn as a gold
+/// star rather than a chip.</param>
+/// <param name="Note">A short line the name cannot carry — "no live data", "LAN only" — shown under the host in
+/// the session list, or null. Capped and single-line at the editor, so a pasted paragraph cannot reshape the
+/// list.</param>
 public sealed record SessionProfile(
     string Name = "",
     string Host = "",
@@ -39,4 +49,6 @@ public sealed record SessionProfile(
     bool DestructiveBackspace = true,
     int KeepAliveSeconds = 60,
     bool AutoReconnect = false,
-    string? Oversize = null);
+    string? Oversize = null,
+    [property: JsonConverter(typeof(TagSetJsonConverter))] TagSet Tags = default,
+    string? Note = null);
