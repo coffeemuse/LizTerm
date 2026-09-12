@@ -371,6 +371,20 @@ public partial class SessionWindow : Window
         if (ViewModel is { } vm) vm.Settings.Keypad = !vm.Settings.Keypad;
     }
 
+    // The dock's two, the same two-handlers-per-value shape as the crosshair's above (#71).
+    private void OnKeypadBottomClick(object? sender, RoutedEventArgs e) => SetKeypadDock(KeypadDock.Bottom);
+    private void OnKeypadBottomClickNative(object? sender, EventArgs e) => SetKeypadDock(KeypadDock.Bottom);
+    private void OnKeypadRightClick(object? sender, RoutedEventArgs e) => SetKeypadDock(KeypadDock.Right);
+    private void OnKeypadRightClickNative(object? sender, EventArgs e) => SetKeypadDock(KeypadDock.Right);
+
+    /// <summary>Writes the setting, which is where the dock lives whichever door it was changed through: the
+    /// setter applies it in memory, notifies every window and the Preferences radios, and saves it to
+    /// settings.json. The menu surfaces the preference; it does not hold one of its own (#71).</summary>
+    private void SetKeypadDock(KeypadDock dock)
+    {
+        if (ViewModel is { } vm) vm.Settings.KeypadDock = dock;
+    }
+
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
     /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these

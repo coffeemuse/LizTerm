@@ -89,6 +89,12 @@ public class NativeMenuTests
         MenuLookup.Item(Item(window, "_View", "_Crosshair").Menu, header)
         ?? throw new InvalidOperationException($"no native menu item _View > _Crosshair > {header}");
 
+    /// <summary>So do the keypad's, for the same reason turned around: the dock belongs beside the thing it
+    /// docks, and View is not where "At the Bottom" means anything on its own (#71).</summary>
+    private static NativeMenuItem KeypadItem(SessionWindow window, string header) =>
+        MenuLookup.Item(Item(window, "_View", "_Keypad").Menu, header)
+        ?? throw new InvalidOperationException($"no native menu item _View > _Keypad > {header}");
+
     [AvaloniaFact]
     public void The_window_menu_has_the_same_five_top_level_menus_as_the_classic_one()
     {
@@ -137,15 +143,15 @@ public class NativeMenuTests
         Assert.Equal(CrosshairMode.Both, window.FindControl<TerminalScreen>("Screen")!.Crosshair);
     }
 
-    /// <summary>View > Keypad is a check box in the Crosshair items' shape on both menus (keypad spec §6.3):
-    /// RaiseClicked is the entry point both real renderers use, the handler flips the setting, and the one-way
-    /// bindings carry the mark back to both items. The classic item is driven through its own Click for the same
-    /// reason. No gesture: nothing outside Edit carries one.</summary>
+    /// <summary>View > Keypad > Show the Keypad is a check box in the Crosshair items' shape on both menus
+    /// (keypad spec §6.3): RaiseClicked is the entry point both real renderers use, the handler flips the
+    /// setting, and the one-way bindings carry the mark back to both items. The classic item is driven through
+    /// its own Click for the same reason. No gesture: nothing outside Edit carries one.</summary>
     [AvaloniaFact]
     public void Clicking_view_keypad_flips_the_setting_and_the_check_mark_on_both_menus()
     {
         var (window, vm, _, _) = Show();
-        var native = Item(window, "_View", "_Keypad");
+        var native = KeypadItem(window, "_Show the Keypad");
         var classic = window.FindControl<MenuItem>("KeypadMenuItem")!;
         Assert.Equal(MenuItemToggleType.CheckBox, native.ToggleType);
         Assert.Null(native.Gesture);
@@ -161,6 +167,63 @@ public class NativeMenuTests
         Assert.False(vm.Settings.Keypad);
         Assert.False(native.IsChecked);
         Assert.False(classic.IsChecked);
+    }
+
+    /// <summary>The dock radios in the same submenu, in the Crosshair radios' shape (#71). Both docks are
+    /// exercised rather than one: KeypadDockConverter.Convert throws on a parameter that does not parse, but
+    /// Avalonia swallows a converter's exception, so a mistyped ConverterParameter would surface only as a wrong
+    /// IsChecked on that one item's own click. Driven from the native side and asserted on both, because the two
+    /// renderers bind the same converter and a one-sided edit is the failure worth catching. Nothing here writes
+    /// the settings file: SettingsViewModel.KeypadDock does that, and the menu is a second door onto it.</summary>
+    [AvaloniaFact]
+    public void Choosing_a_keypad_dock_checks_exactly_that_item_on_both_menus()
+    {
+        var (window, vm, _, _) = Show();
+        // Bottom first, which is the default and so proves the unclicked state renders right, then Right, which
+        // is the one that proves a click writes. The classic click below then has somewhere to move it back to.
+        var docks = new[] { KeypadDock.Bottom, KeypadDock.Right };
+        var native = new[] { "At the _Bottom", "On the _Right" }.Select(h => KeypadItem(window, h)).ToArray();
+        var classic = new[] { "KeypadDockBottomMenuItem", "KeypadDockRightMenuItem" }
+            .Select(name => window.FindControl<MenuItem>(name)!).ToArray();
+        Assert.All(native, item => Assert.Equal(MenuItemToggleType.Radio, item.ToggleType));
+        Assert.All(native, item => Assert.Null(item.Gesture));
+
+        foreach (var dock in docks)
+        {
+            var chosen = dock == KeypadDock.Bottom ? 0 : 1;
+            ((INativeMenuItemExporterEventsImplBridge)native[chosen]).RaiseClicked();
+
+            Assert.Equal(dock, vm.Settings.KeypadDock);
+            Assert.Equal([chosen == 0, chosen == 1], native.Select(i => i.IsChecked));
+            Assert.Equal([chosen == 0, chosen == 1], classic.Select(i => i.IsChecked));
+        }
+
+        classic[0].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(KeypadDock.Bottom, vm.Settings.KeypadDock);
+        Assert.Equal([true, false], native.Select(i => i.IsChecked));
+    }
+
+    /// <summary>The submenu's shape, asserted on both renderers because the parity walk compares structure and
+    /// this is the structure it compares (#71). A separator between the toggle and the radios, because these are
+    /// two settings and not one enum: keypad spec §2.1 rejected a single enum with a Hidden member, since it
+    /// would forget the dock every time the keypad was hidden.</summary>
+    [AvaloniaFact]
+    public void The_keypad_submenu_carries_the_toggle_above_its_dock_on_both_menus()
+    {
+        var (window, _, _, _) = Show();
+        var expected = new[] { "_Show the Keypad", "At the _Bottom", "On the _Right" };
+
+        var nativeKeypad = Item(window, "_View", "_Keypad");
+        var nativeChildren = nativeKeypad.Menu!.Items;
+        Assert.Equal(expected, nativeChildren.OfType<NativeMenuItem>()
+            .Where(i => i is not NativeMenuItemSeparator).Select(i => i.Header));
+        Assert.IsType<NativeMenuItemSeparator>(nativeChildren[1]);
+
+        var classicKeypad = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>()
+            .Single(i => (string)i.Header! == "_View").Items.OfType<MenuItem>()
+            .Single(i => (string)i.Header! == "_Keypad");
+        Assert.Equal(expected, classicKeypad.Items.OfType<MenuItem>().Select(i => (string)i.Header!));
+        Assert.IsType<Separator>(classicKeypad.Items[1]);
     }
 
     /// <summary>The keypad offers at least what the menu does (keypad spec §3), read from the menu itself so the
