@@ -56,6 +56,10 @@ since this release — <a href="https://github.com/coffeemuse/LizTerm/blob/main/
 <p>LizTerm opens on the <strong>Sessions</strong> list. Select a saved profile and choose <strong>Connect</strong>, or use <strong>New...</strong>,
 <strong>Edit...</strong> and <strong>Delete</strong> to manage them. Each session opens in its own window. Closing the last session window
 brings the list back; closing the list with no sessions open quits.</p>
+<p>Above the list, the <strong>Filter</strong> box narrows it to profiles whose name or tag contains what you type, and the
+drop-down beside it narrows to <strong>FAVORITE</strong> or to one tag first. The two work together: the drop-down chooses
+the scope, the box searches inside it. Whatever the filter shows, <strong>Quick Connect</strong> still reaches every saved
+profile by name.</p>
 <h3 id="profile-settings">Profile settings</h3>
 <table>
 <thead>
@@ -74,6 +78,9 @@ brings the list back; closing the list with no sessions open quits.</p>
 <tr><td>Code page</td><td>The host's character set. The default is <code>cp037</code> (US/Canada); TK4- and TK5 users may want <code>bracket</code>, which maps the 3270 bracket characters.</td></tr>
 <tr><td>LU name</td><td>Request a specific logical unit from the host. Optional.</td></tr>
 <tr><td>Backspace erases</td><td>On by default: Backspace erases the previous character. Off: Backspace only moves the cursor left.</td></tr>
+<tr><td>Mark as FAVORITE</td><td>Adds the reserved <code>FAVORITE</code> tag, shown as a gold star in the list.</td></tr>
+<tr><td>Tags</td><td>Short labels, separated by commas (<code>PROD, MVS</code>), drawn as uppercase colour chips. A tag's colour is picked automatically the first time you use it, and is the same everywhere that tag appears. At most 8 per profile, 16 characters each.</td></tr>
+<tr><td>Note</td><td>One short line — "no live data", "LAN only" — shown under the host in the list.</td></tr>
 </tbody>
 </table>
 <h3 id="quick-connect-and-the-command-line">Quick Connect and the command line</h3>
@@ -267,7 +274,9 @@ View &gt; Keypad submenu carries both of the same settings.</li>
 </table>
 <p>Profiles are in <code>profiles/</code>, one JSON file each, and wire logs in <code>logs/</code>, named
 <code>wire-&lt;profile&gt;-&lt;date&gt;-&lt;time&gt;.log</code>. <code>settings.json</code> holds your preferences — only the ones you have changed, so
-deleting it puts everything back to the defaults.</p>
+deleting it puts everything back to the defaults. <code>tags.json</code> holds one colour per tag name; deleting it loses
+only the colours, because the tag names themselves live in the profiles and are given fresh colours the next
+time LizTerm starts.</p>
 <h2 id="known-limitations">Known limitations</h2>
 <ul>
 <li><strong>Unsigned Windows builds.</strong> Windows SmartScreen warns about the app the first time you open it; the

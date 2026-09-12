@@ -22,7 +22,7 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - `ScreenSearch.Find` is the Find scan: case-insensitive, in reading order, over one entry per *character* rather
   than per cell so a DBCS match cannot begin or end mid-character. It runs against one immutable snapshot, so it
   needs no locking and keeps nothing between calls.
-- `AppPaths` owns the per-OS config root, with `profiles`, `logs` and `settings.json` beneath it.
+- `AppPaths` owns the per-OS config root, with `profiles`, `logs`, `settings.json` and `tags.json` beneath it.
 
 ## `IEmulatorSession`
 
@@ -62,6 +62,15 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - `DestructiveBackspace` defaults to true. Every x3270-family default keymap erases; the old belief that x3270
   defaults to cursor-left came from the name of its `BackSpace()` action.
 - The profile JSON writes every field, so a saved `false` survives a change of default.
+- `SessionProfile.Tags` is a `TagSet`, not a list, and that is load-bearing: a record's synthesised `Equals`
+  compares a collection member by **reference**, so a list would make a profile read back from disk unequal to
+  the one written — which `ProfileStoreTests` asserts it is. `TagSet` is a struct with hand-written value
+  equality. Anyone adding another collection field to a record here needs the same treatment; hand-writing
+  `Equals` on the record instead would silently stop covering each field added after it.
+- Tag **names** live on the profile; a tag's **colour** lives in `TagRegistry`, loaded from `tags.json`, so one
+  tag is one colour everywhere. `FAVORITE` is reserved: always present, always gold, never written to the file,
+  and an entry for it in a hand-edited file is ignored. Reconciliation — registering a name the file does not
+  know — belongs to the App layer, never to `ProfileStore.LoadAll`, because a load must not write.
 
 ## Settings (`LizTerm.Core.Settings`)
 

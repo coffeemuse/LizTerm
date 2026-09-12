@@ -22,6 +22,11 @@ LizTerm opens on the **Sessions** list. Select a saved profile and choose **Conn
 **Edit...** and **Delete** to manage them. Each session opens in its own window. Closing the last session window
 brings the list back; closing the list with no sessions open quits.
 
+Above the list, the **Filter** box narrows it to profiles whose name or tag contains what you type, and the
+drop-down beside it narrows to **FAVORITE** or to one tag first. The two work together: the drop-down chooses
+the scope, the box searches inside it. Whatever the filter shows, **Quick Connect** still reaches every saved
+profile by name.
+
 ### Profile settings
 
 | Setting | Meaning |
@@ -38,6 +43,9 @@ brings the list back; closing the list with no sessions open quits.
 | Code page | The host's character set. The default is `cp037` (US/Canada); TK4- and TK5 users may want `bracket`, which maps the 3270 bracket characters. |
 | LU name | Request a specific logical unit from the host. Optional. |
 | Backspace erases | On by default: Backspace erases the previous character. Off: Backspace only moves the cursor left. |
+| Mark as FAVORITE | Adds the reserved `FAVORITE` tag, shown as a gold star in the list. |
+| Tags | Short labels, separated by commas (`PROD, MVS`), drawn as uppercase colour chips. A tag's colour is picked automatically the first time you use it, and is the same everywhere that tag appears. At most 8 per profile, 16 characters each. |
+| Note | One short line — "no live data", "LAN only" — shown under the host in the list. |
 
 ### Quick Connect and the command line
 
@@ -258,7 +266,9 @@ window's **Edit** menu on Windows and Linux. Changes apply as you make them, to 
 
 Profiles are in `profiles/`, one JSON file each, and wire logs in `logs/`, named
 `wire-<profile>-<date>-<time>.log`. `settings.json` holds your preferences — only the ones you have changed, so
-deleting it puts everything back to the defaults.
+deleting it puts everything back to the defaults. `tags.json` holds one colour per tag name; deleting it loses
+only the colours, because the tag names themselves live in the profiles and are given fresh colours the next
+time LizTerm starts.
 
 ## Known limitations
 
