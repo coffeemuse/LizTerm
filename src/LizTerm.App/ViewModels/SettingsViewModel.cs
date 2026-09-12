@@ -99,6 +99,26 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    public MenuStyle MenuStyle
+    {
+        get => Current.MenuStyle;
+        set
+        {
+            if (Current.MenuStyle != value) Apply(nameof(MenuStyle), s => s with { MenuStyle = value });
+        }
+    }
+
+    /// <summary>The style LIZTERM_MENU named, applied to this instance and nothing else: in memory, notifying so
+    /// open windows follow it, and never written. App calls it once at startup. It cannot reach the file later
+    /// either — SettingsStore.Update applies each change to the record it re-reads from disk, so a save the user
+    /// triggers carries only the key they changed.</summary>
+    internal void SeedMenuStyle(MenuStyle style)
+    {
+        if (Current.MenuStyle == style) return;
+        Current = Current with { MenuStyle = style };
+        OnPropertyChanged(nameof(MenuStyle));
+    }
+
     private void Apply(string property, Func<AppSettings, AppSettings> change)
     {
         Current = change(Current);

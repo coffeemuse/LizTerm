@@ -16,10 +16,11 @@ public class PreferencesWindowTests
 {
     /// <summary>The platform answer defaults to the full shape, the one that ships on macOS and Windows, so the
     /// radio tests exercise an enabled radio on every CI runner; the Linux shape is asked for by name.</summary>
-    private static (PreferencesWindow Window, SettingsViewModel Settings) Show(SettingsViewModel? settings = null, bool systemAlertAvailable = true)
+    private static (PreferencesWindow Window, SettingsViewModel Settings) Show(
+        SettingsViewModel? settings = null, bool systemAlertAvailable = true, bool menuStyleChoosable = true)
     {
         settings ??= new SettingsViewModel();
-        var window = new PreferencesWindow(settings, systemAlertAvailable);
+        var window = new PreferencesWindow(settings, systemAlertAvailable, menuStyleChoosable);
         window.Show();
         return (window, settings);
     }
@@ -242,5 +243,40 @@ public class PreferencesWindowTests
         var again = app.ShowPreferences(settings);
         Assert.NotSame(first, again);
         again.Close();
+    }
+
+    /// <summary>The same one-way-plus-Click shape as the crosshair radios. Seeded to Native first, as App seeds
+    /// every launch, so the group starts with a selection rather than the no-choice Auto that only ever reaches
+    /// the settings file.</summary>
+    [AvaloniaFact]
+    public void Clicking_a_menu_style_radio_sets_the_shared_settings_and_checks_exactly_that_radio()
+    {
+        var settings = new SettingsViewModel();
+        settings.SeedMenuStyle(MenuStyle.Native);
+        var (window, _) = Show(settings);
+        var radios = new[] { "MenuStyleNative", "MenuStyleInWindow", "MenuStyleBoth" }
+            .Select(name => window.FindControl<RadioButton>(name)!).ToArray();
+        var styles = new[] { MenuStyle.Native, MenuStyle.InWindow, MenuStyle.Both };
+        Assert.Equal([true, false, false], radios.Select(r => r.IsChecked == true));
+
+        for (var chosen = 0; chosen < styles.Length; chosen++)
+        {
+            Click(radios[chosen]);
+
+            Assert.Equal(styles[chosen], settings.MenuStyle);
+            Assert.Equal(Enumerable.Range(0, styles.Length).Select(i => i == chosen), radios.Select(r => r.IsChecked == true));
+        }
+    }
+
+    /// <summary>Windows and Linux draw both renderers inside the window, where "Both" would be two stacked bars
+    /// and "in the system menu bar" names nowhere. Hidden rather than disabled: there is no choice to explain.</summary>
+    [AvaloniaFact]
+    public void The_menu_style_group_is_shown_only_where_the_choice_means_something()
+    {
+        var (mac, _) = Show(menuStyleChoosable: true);
+        Assert.True(mac.FindControl<StackPanel>("MenuStyleGroup")!.IsVisible);
+
+        var (elsewhere, _) = Show(menuStyleChoosable: false);
+        Assert.False(elsewhere.FindControl<StackPanel>("MenuStyleGroup")!.IsVisible);
     }
 }

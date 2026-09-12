@@ -18,7 +18,7 @@ internal static class MenuLookup
         menu?.Items.OfType<NativeMenuItem>().FirstOrDefault(i => i.Header == header);
 
     /// <summary>The item, or null when there is no menu to look in — which under the classic strategy is the
-    /// deliberate state: ApplyMenuStrategy empties the window's NativeMenu (the exporter accepts no other
+    /// deliberate state: ApplyMenuStyle empties the window's NativeMenu (the exporter accepts no other
     /// instance, so it cannot be detached), and SessionWindow.ExportedMenu hands this null for it.
     ///
     /// A menu that IS there and does not hold the item is a header typo, not a strategy, and throws rather than

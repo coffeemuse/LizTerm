@@ -201,10 +201,22 @@ the part of the session after you have logged on.
 On macOS, LizTerm uses the system menu bar, and About and Preferences are in the LizTerm application menu. On
 Windows and Linux, the menu is drawn inside each window.
 
-To force one style, set the `LIZTERM_MENU` environment variable to `native` or `classic` before starting LizTerm;
-any other value is ignored. `classic` also takes the session window's menu out of the system menu bar, so no menu
-shortcut can intercept a key the mainframe needs. The macOS LizTerm application menu (About, Preferences, and
-Apple's standard items) stays either way.
+On macOS you can choose, under **Menu bar** in Preferences:
+
+- **In the system menu bar** — the default, and where a Mac user expects it.
+- **Inside the window** — draws the menu in each session window and takes it out of the system menu bar, so no
+  menu shortcut can intercept a key the mainframe needs.
+- **Both** — draws it in both places at once.
+
+The choice applies immediately, to every open session window. It is macOS only: on Windows and Linux the menu is
+drawn inside the window whatever you pick, so Preferences does not offer it there.
+
+To start LizTerm with a particular style, set the `LIZTERM_MENU` environment variable to `native`, `classic` or
+`both` before launching; any other value is ignored. It only decides what that run *starts* with — you can still
+change it in Preferences afterwards, and doing so saves the new choice as your preference. Leaving the variable
+unset uses whatever you last chose.
+
+The macOS LizTerm application menu (About, Preferences, and Apple's standard items) stays whatever you pick.
 
 ## Preferences
 

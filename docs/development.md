@@ -80,7 +80,7 @@ props files, `LizTerm.slnx`, `LizTerm.parcel`, the workflow YAML) are deliberate
 |---|---|
 | `LIZTERM_B3270_PATH` | Use this b3270 instead of the bundled one. |
 | `LIZTERM_WIRE_LOG` | Append every protocol line, in both directions, to this file. Help > Wire Log does the same from inside the app. |
-| `LIZTERM_MENU` | `native` or `classic`, overriding the platform's menu style (see the [user guide](user-guide.md#menus)); any other value falls back to the default. The macOS application menu is not affected. |
+| `LIZTERM_MENU` | `native`, `classic` (the in-window menu) or `both`, seeding the launched instance's menu style (see the [user guide](user-guide.md#menus)); any other value leaves the saved preference to decide. It seeds rather than overrides: Preferences still changes the style for the rest of the session, and a change made there is saved. The macOS application menu is not affected. |
 | `LIZTERM_TEST_HOST` | `host[:port]`; enables the live integration tests, which otherwise skip. |
 | `LIZTERM_TEST_TLS` | `1` if the test host speaks TLS. |
 | `LIZTERM_TEST_VERIFY_CERT` | `0` to accept the test host's self-signed certificate. |

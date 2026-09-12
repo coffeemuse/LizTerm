@@ -14,16 +14,18 @@ namespace LizTerm.App.Views;
 public partial class PreferencesWindow : Window
 {
     /// <summary>Design-time only, in the full shape.</summary>
-    public PreferencesWindow() : this(new SettingsViewModel(), systemAlertAvailable: true) { }
+    public PreferencesWindow() : this(new SettingsViewModel(), systemAlertAvailable: true, menuStyleChoosable: true) { }
 
-    /// <summary>Whether the system alert can ring here is an argument (App passes its ringer's CanRing), so a test
-    /// can see the Linux shape of the window on any machine.</summary>
-    internal PreferencesWindow(SettingsViewModel settings, bool systemAlertAvailable)
+    /// <summary>Whether the system alert can ring here, and whether the menu style is a choice at all, are both
+    /// arguments (App passes its ringer's CanRing and the platform), so a test can see every shape of the window
+    /// on any machine.</summary>
+    internal PreferencesWindow(SettingsViewModel settings, bool systemAlertAvailable, bool menuStyleChoosable)
     {
         InitializeComponent();
         DataContext = settings;
         BellSoundSystemAlert.IsEnabled = systemAlertAvailable;
         BellSoundNote.IsVisible = !systemAlertAvailable;
+        MenuStyleGroup.IsVisible = menuStyleChoosable;
     }
 
     private SettingsViewModel Settings => (SettingsViewModel)DataContext!;
@@ -38,6 +40,10 @@ public partial class PreferencesWindow : Window
 
     private void OnKeypadBottomClick(object? sender, RoutedEventArgs e) => Settings.KeypadDock = KeypadDock.Bottom;
     private void OnKeypadRightClick(object? sender, RoutedEventArgs e) => Settings.KeypadDock = KeypadDock.Right;
+
+    private void OnMenuStyleNativeClick(object? sender, RoutedEventArgs e) => Settings.MenuStyle = MenuStyle.Native;
+    private void OnMenuStyleInWindowClick(object? sender, RoutedEventArgs e) => Settings.MenuStyle = MenuStyle.InWindow;
+    private void OnMenuStyleBothClick(object? sender, RoutedEventArgs e) => Settings.MenuStyle = MenuStyle.Both;
 
     private void OnDoneClick(object? sender, RoutedEventArgs e) => Close();
 }

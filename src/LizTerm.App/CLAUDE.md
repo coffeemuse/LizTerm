@@ -220,34 +220,51 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 ## Menus
 
 One `NativeMenu` per window, plus an application-level one in `App.axaml` holding **About and Preferences**, which
-is what gives the picker a menu bar on macOS. Each window's menu is rendered either natively or by the classic
-in-window `<Menu>`, which still exists.
+is what gives the picker a menu bar on macOS. Each window's menu is rendered natively, by the classic in-window
+`<Menu>`, or by both at once — `MenuStyle` says which. Both renderers are permanent (#70).
 
-### Strategy
+### Style
 
-- `MenuStrategy` (`Menus/`) picks the renderer: `LIZTERM_MENU=native|classic`, else native on macOS and classic
-  elsewhere, because `NativeMenuBar`'s in-window rendering has never been reviewed on Windows or Linux.
-  `MenuStrategy.Decide`, `AboutInHelpMenu` and `PreferencesInEditMenu` are pure and take the platform as an argument,
-  so every combination is testable anywhere.
+- `MenuStyle` (`Core/Settings/`) is `Auto | Native | InWindow | Both`, saved in `AppSettings`. `Auto` is what an
+  untouched file reads as and is never acted on: `MenuStrategy.Resolve` turns it into `Native` on macOS and
+  `InWindow` elsewhere, because `NativeMenuBar`'s in-window rendering has never been reviewed on Windows or Linux
+  (#22). `Resolve`, `FromVariable`, `AboutInHelpMenu` and `PreferencesInEditMenu` are pure and take the platform as
+  an argument, so every combination is testable anywhere.
+- **`LIZTERM_MENU` seeds, it does not override.** `App` resolves it once through `MenuStrategy.FromVariable` and
+  calls `SettingsViewModel.SeedMenuStyle`, which changes the value in memory and notifies but never writes. The
+  Preferences radios then work normally for the rest of the session, and a change there saves. The seed cannot
+  reach the file later either: `SettingsStore.Update` applies each change to the record it re-reads from disk, so a
+  save carries only the key the user changed. `A_seeded_menu_style_applies_in_memory_and_never_reaches_the_file`
+  guards that.
+- **The style is live.** `SessionWindow` follows `SettingsViewModel.MenuStyle` through `OnDataContextChanged`, and
+  applies only *changes* — re-reading the value on arrival would undo the variable's seed. `ApplyMenuStyle` is
+  therefore re-entrant, and `_stashedMenuItems` is what makes `InWindow` a state a window can leave: emptying the
+  declared menu removes the items and nulls their `Parent`, so the same objects are kept and added back. Back to
+  the *same* instance, always — see the `#60` note below.
+- `SessionWindow`'s parameterless constructor takes the platform default and nothing else; `App` passes the user's
+  style explicitly. A window that read `App.Settings` itself would open the real settings file from every headless
+  test that builds one, because the tests run the real `App` and `App.Settings` is lazy.
 - In the pinned Avalonia 12.1.2, the in-window rendering binds `NativeMenuItem.Gesture` only to
   `MenuItem.InputGesture`, which is display-only; `MenuItem.OnKeyDown` and `MenuBase.OnKeyDown` are empty, and only
   `MenuItem.HotKey` dispatches. So the fallback bar shows a shortcut but never fires it, and double dispatch is
   impossible on Windows and Linux by construction. What is still unreviewed there is mnemonics and appearance.
-- **The classic strategy empties the declared `NativeMenu`**, removing its items from the end one at a time. Hiding
+- **`InWindow` empties the declared `NativeMenu`**, removing its items from the end one at a time. Hiding
   `NativeMenuBar` detaches nothing: the window's own `ITopLevelNativeMenuExporter` exports `NativeMenu.Menu`
-  directly, and `NativeMenuBar` only consumes the same property. Left populated, classic on macOS would still install
-  the AppKit key equivalents and draw the system bar beside the in-window one, and on Linux the default strategy
-  would still hand the menu to a global-menu registrar (Plasma's Application Menu applet, Unity).
+  directly, and `NativeMenuBar` only consumes the same property. Left populated, `InWindow` on macOS would still
+  install the AppKit key equivalents and draw the system bar beside the in-window one, and on Linux the default
+  style would still hand the menu to a global-menu registrar (Plasma's Application Menu applet, Unity). `Both` is
+  precisely that un-suppressed state, asked for on purpose.
 - **Never detach it** with `NativeMenu.SetMenu(this, null)`, and never replace it with a new empty `NativeMenu`
   (#60). Avalonia 12.1.2's macOS `AvaloniaNativeMenuExporter` binds its native proxy to the first `NativeMenu`
   instance a window is given, and `Update` throws "The menu being updated does not match" for any other instance, so
   every macOS launch with `LIZTERM_MENU=classic` fell to `StartupErrorWindow`. Emptying the same instance removes and
   disposes every native item, and an item-less NSMenu installs no key equivalent. Linux's `DBusMenuExporter` sees the
   same thing either way, and Win32 has no exporter.
-- `SessionWindow.ExportedMenu` is the strategy-aware accessor every native lookup goes through: null under classic,
+- `SessionWindow.ExportedMenu` is the style-aware accessor every native lookup goes through: null under `InWindow`,
   since the emptied menu is still attached and `MenuLookup.Required` would throw for a present menu lacking an item.
   `ShowPlatformGestures` therefore finds no native Edit item and no-ops there, while the classic `InputGesture`
-  assignments still run.
+  assignments still run. A refill has to re-run both it and `ApplyPlatformMenuRules`, since the items come back
+  never having had either applied.
 - Headless tests cannot tell emptying from replacing, since both pass the attached-property check, so the other half
   of that guard is launching with `LIZTERM_MENU=classic` on a Mac: a window opens, and a bare F1 reaches the host as
   `PF(1)`. That was last checked with a key injected through the DevTools MCP, which enters downstream of

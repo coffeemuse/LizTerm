@@ -11,6 +11,7 @@ using LizTerm.App.Bell;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
+using LizTerm.App.Menus;
 using LizTerm.App.Startup;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -58,6 +59,11 @@ public partial class App : Application
 
             _store = new ProfileStore(AppPaths.ProfilesDirectory());
             _settings = new SettingsViewModel(new SettingsStore(AppPaths.SettingsFile()));
+            // LIZTERM_MENU seeds this instance and nothing else: in memory, never written, and overridable from
+            // Preferences for the rest of the session (#70). A variable naming no style leaves the saved
+            // preference to decide.
+            if (MenuStrategy.FromVariable(Environment.GetEnvironmentVariable(MenuStrategy.Variable)) is { } seeded)
+                _settings.SeedMenuStyle(seeded);
             string? backendError = null;
             try
             {
@@ -115,7 +121,7 @@ public partial class App : Application
     /// an ad hoc command-line profile.</param>
     public void OpenSession(SessionProfile profile, bool fromStore)
     {
-        var window = new SessionWindow();
+        var window = new SessionWindow(MenuStrategy.Resolve(Settings.MenuStyle, OperatingSystem.IsMacOS()));
         var store = _store ??= new ProfileStore(AppPaths.ProfilesDirectory());
         var viewModel = new SessionViewModel(
             SessionFactory.Create(profile),
@@ -250,7 +256,8 @@ public partial class App : Application
             showing.Activate();
             return showing;
         }
-        var window = new PreferencesWindow(settings, _bellRinger.CanRing(BellSound.SystemAlert));
+        var window = new PreferencesWindow(
+            settings, _bellRinger.CanRing(BellSound.SystemAlert), menuStyleChoosable: OperatingSystem.IsMacOS());
         _preferences = window;
         window.Closed += (_, _) => { if (ReferenceEquals(_preferences, window)) _preferences = null; };
         window.Show();

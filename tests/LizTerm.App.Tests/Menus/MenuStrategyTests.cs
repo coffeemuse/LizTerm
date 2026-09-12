@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using LizTerm.App.Menus;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.Menus;
 
@@ -10,48 +11,50 @@ namespace LizTerm.App.Tests.Menus;
 /// the way EngineRequirement.Decide is: every combination is reachable on every machine.</summary>
 public class MenuStrategyTests
 {
-    [Theory]
-    [InlineData("native")]
-    [InlineData("NATIVE")]
-    [InlineData("  native  ")]
-    public void The_variable_can_force_the_native_menu_on_any_platform(string variable)
+    /// <summary>Auto is what an untouched settings file reads as, and it has to mean today's behaviour.</summary>
+    [Fact]
+    public void Auto_resolves_to_the_native_menu_on_macOS_and_the_in_window_one_elsewhere()
     {
-        Assert.True(MenuStrategy.Decide(variable, isMacOS: true));
-        Assert.True(MenuStrategy.Decide(variable, isMacOS: false));
+        Assert.Equal(MenuStyle.Native, MenuStrategy.Resolve(MenuStyle.Auto, isMacOS: true));
+        Assert.Equal(MenuStyle.InWindow, MenuStrategy.Resolve(MenuStyle.Auto, isMacOS: false));
     }
 
     [Theory]
-    [InlineData("classic")]
-    [InlineData("Classic")]
-    [InlineData("\tclassic\n")]
-    public void The_variable_can_force_the_classic_menu_on_any_platform(string variable)
+    [InlineData(MenuStyle.Native)]
+    [InlineData(MenuStyle.InWindow)]
+    [InlineData(MenuStyle.Both)]
+    public void A_chosen_style_survives_resolution_on_every_platform(MenuStyle style)
     {
-        Assert.False(MenuStrategy.Decide(variable, isMacOS: true));
-        Assert.False(MenuStrategy.Decide(variable, isMacOS: false));
+        Assert.Equal(style, MenuStrategy.Resolve(style, isMacOS: true));
+        Assert.Equal(style, MenuStrategy.Resolve(style, isMacOS: false));
     }
 
-    /// <summary>The default is the point of the staging device: native only where it has been watched to work.</summary>
+    [Theory]
+    [InlineData("native", MenuStyle.Native)]
+    [InlineData("NATIVE", MenuStyle.Native)]
+    [InlineData("  native  ", MenuStyle.Native)]
+    [InlineData("classic", MenuStyle.InWindow)]
+    [InlineData("Classic", MenuStyle.InWindow)]
+    [InlineData("\tclassic\n", MenuStyle.InWindow)]
+    [InlineData("both", MenuStyle.Both)]
+    [InlineData("BOTH", MenuStyle.Both)]
+    public void The_variable_names_a_style(string variable, MenuStyle expected) =>
+        Assert.Equal(expected, MenuStrategy.FromVariable(variable));
+
+    /// <summary>"classic" is the name this variable has always used for the in-window menu, and it keeps working.
+    /// A typo must not leave the app with no menu bar at all: naming no style means the saved preference decides,
+    /// and the quiet fallback is the less damaging of the two failures. "auto" names no style either — Auto is the
+    /// absence of a choice, so seeding it would be seeding nothing.</summary>
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Without_the_variable_only_macOS_gets_the_native_menu(string? variable)
-    {
-        Assert.True(MenuStrategy.Decide(variable, isMacOS: true));
-        Assert.False(MenuStrategy.Decide(variable, isMacOS: false));
-    }
-
-    /// <summary>A typo must not leave the app with no menu bar at all: it is a development escape hatch, and
-    /// the quiet fallback is the less damaging of the two failures.</summary>
-    [Theory]
     [InlineData("banana")]
     [InlineData("1")]
     [InlineData("true")]
-    public void An_unrecognised_value_falls_back_to_the_platform_default(string variable)
-    {
-        Assert.True(MenuStrategy.Decide(variable, isMacOS: true));
-        Assert.False(MenuStrategy.Decide(variable, isMacOS: false));
-    }
+    [InlineData("auto")]
+    public void An_absent_or_unrecognised_variable_names_no_style(string? variable) =>
+        Assert.Null(MenuStrategy.FromVariable(variable));
 
     [Fact]
     public void About_belongs_in_the_help_menu_everywhere_except_macOS()
