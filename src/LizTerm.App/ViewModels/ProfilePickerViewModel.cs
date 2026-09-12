@@ -140,8 +140,14 @@ public partial class ProfilePickerViewModel : ObservableObject
             : VisibleRows.FirstOrDefault(r => r.Name == preferred) ?? VisibleRows.FirstOrDefault();
     }
 
+    /// <summary>Whether the scope drop-down admits this profile. A property PATTERN rather than a dereference,
+    /// because SelectedScope is genuinely null for part of every RebuildScopes: Scopes.Clear() makes the bound
+    /// ComboBox null its own selection and the two-way binding writes that back, which fires this method through
+    /// OnSelectedScopeChanged before the rebuild reassigns a real scope. The declared type says non-nullable and
+    /// the compiler believes it, so nothing warns — only the pattern keeps it from throwing. Its semantics are
+    /// the ones wanted anyway: no scope means everything, which is what AllSessions already means.</summary>
     private bool InScope(SessionProfile profile) =>
-        SelectedScope.TagName is not { } tag || profile.Tags.Contains(tag);
+        SelectedScope is not { TagName: { } tag } || profile.Tags.Contains(tag);
 
     /// <summary>Name or any tag name, ignoring case. Not the host: Quick Connect is where a host is typed.</summary>
     private static bool Matches(SessionProfile profile, string text) =>

@@ -799,4 +799,25 @@ public class ProfileViewModelsTests : IDisposable
         vm.Reload();
         Assert.False(File.Exists(tagFile), "Reload rewrote tags.json with nothing new to register");
     }
+
+    /// <summary>Scopes.Clear() in RebuildScopes makes a bound ComboBox null its own selection, and the two-way
+    /// binding writes that null back into SelectedScope — so the filter runs, through
+    /// OnSelectedScopeChanged, against a null scope on every rebuild. The declared type says that cannot
+    /// happen and the compiler agrees, which is exactly why this needs asserting: before the guard, a real
+    /// NullReferenceException was thrown on every picker activation and only Avalonia's own binding
+    /// exception handling kept it off the screen. `null!` is the point of the test, not a shortcut.</summary>
+    [Fact]
+    public void Filtering_survives_the_null_scope_a_bound_combo_box_writes_back()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        _store.Save(new SessionProfile { Name = "b", Host = "h" });
+
+        var vm = Picker();
+        vm.SelectedScope = null!;
+
+        // Refilter runs on the assignment above and again here; neither may throw, and a null scope admits
+        // everything, exactly as "All sessions" does.
+        vm.FilterText = "";
+        Assert.Equal(["a", "b"], vm.VisibleRows.Select(r => r.Name));
+    }
 }
