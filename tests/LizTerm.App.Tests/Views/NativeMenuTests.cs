@@ -683,10 +683,10 @@ public class NativeMenuTests
     /// position, Command and (on Keys) CommandParameter, normalising across the two menu kinds' different item
     /// types (MenuItem/NativeMenuItem) and separator types (Separator/NativeMenuItemSeparator).</summary>
     [AvaloniaFact]
-    public void The_native_menu_matches_the_classic_menu_item_for_item()
-    {
-        var (window, _, _, _) = Show();
+    public void The_native_menu_matches_the_classic_menu_item_for_item() => AssertParity(Show().Window);
 
+    private static void AssertParity(SessionWindow window)
+    {
         var classicTop = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>().ToArray();
         var nativeTop = NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().ToArray();
         Assert.Equal(classicTop.Length, nativeTop.Length);
@@ -697,6 +697,21 @@ public class NativeMenuTests
             Assert.Equal(topHeader, nativeTop[i].Header);
             AssertMenusMatch(topHeader, topHeader, classicTop[i].Items.Cast<object>().ToArray(), [.. nativeTop[i].Menu!.Items]);
         }
+    }
+
+    /// <summary>The parity walk compares CommandParameter, which for Help is the whole of an item's meaning:
+    /// every link binds the same OpenLinkCommand, so a native item pointed at the wrong page differs from its
+    /// classic twin in nothing else. This breaks a Help item deliberately, because a guard that cannot fail is
+    /// not a guard.</summary>
+    [AvaloniaFact]
+    public void The_parity_walk_compares_command_parameters_outside_the_keys_menu()
+    {
+        var (window, _, _, _) = Show();
+        Item(window, "_Help", "_Wire Log").CommandParameter = "deliberately different";
+
+        // Record.Exception rather than Assert.Throws<EqualException>: what matters is that the walk rejects
+        // this, not which assertion inside it happened to fire first.
+        Assert.NotNull(Record.Exception(() => AssertParity(window)));
     }
 
     /// <summary>One level of the walk above, recursing into submenus — View &gt; Crosshair put four items a
@@ -737,10 +752,11 @@ public class NativeMenuTests
                     $"{path} > {classicItem.Header}: classic and native bind different commands");
             }
 
-            // The highest-value assertion in this test. Every Keys item binds SendKeyCommand, so header text
-            // alone cannot tell "PA1" wired to TerminalKey.PA1 apart from "PA1" wired to TerminalKey.PA2 — only
-            // the CommandParameter can, and getting it wrong sends the wrong key to the mainframe.
-            if (rootHeader == "_Keys")
+            // Every Keys item binds SendKeyCommand and every Help link binds OpenLinkCommand, so header text
+            // alone cannot tell "PA1" wired to TerminalKey.PA1 apart from "PA1" wired to TerminalKey.PA2, nor
+            // "Releases" pointed at the issue tracker. Only the CommandParameter can, and getting either wrong
+            // is invisible in the menu itself.
+            if (rootHeader is "_Keys" or "_Help")
             {
                 Assert.Equal(classicItem.CommandParameter, nativeItem.CommandParameter);
             }
