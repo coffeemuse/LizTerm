@@ -4,6 +4,7 @@
 
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using LizTerm.App.Views;
 using LizTerm.Core.Session;
 
@@ -17,12 +18,27 @@ public class AboutWindowTests
         var engine = new EngineInfo("b3270", "4.5.6 (fake)", "/opt/homebrew/bin/b3270", EngineSource.Override);
         var window = new AboutWindow("0.3.0", engine, "LIZTERM_B3270_PATH");
         window.Show();
-        // Spec 8: the engine path wraps, so the window grows with it instead of clipping at a fixed height.
+        // The engine line and the copyright both wrap, above a fixed 220-high licences box, so the window
+        // grows with its content instead of clipping at a fixed height.
         Assert.Equal(SizeToContent.Height, window.SizeToContent);
         Assert.Equal(220, window.FindControl<TextBox>("LicensesText")!.Height);
         Assert.Equal("Version 0.3.0", window.FindControl<TextBlock>("VersionText")!.Text);
         Assert.Equal("b3270 4.5.6 (fake), from LIZTERM_B3270_PATH", window.FindControl<TextBlock>("EngineText")!.Text);
-        Assert.Equal("/opt/homebrew/bin/b3270", window.FindControl<TextBlock>("EnginePathText")!.Text);
+    }
+
+    /// <summary>The binary's full path was shown under the engine name from before the engine was built and
+    /// bundled on all six RIDs, when "which binary is this actually running?" was live. It is not: the engine
+    /// line already says bundled or names the override, and the path is a string the user cannot act on. The
+    /// fixture is an override because that is the case where showing a path was most defensible.</summary>
+    [AvaloniaFact]
+    public void Names_the_engine_without_showing_its_path()
+    {
+        const string path = "/opt/homebrew/bin/b3270";
+        var engine = new EngineInfo("b3270", "4.5.6 (fake)", path, EngineSource.Override);
+        var window = new AboutWindow("0.3.0", engine, "LIZTERM_B3270_PATH");
+        window.Show();
+        Assert.All(window.GetVisualDescendants().OfType<TextBlock>(),
+            block => Assert.DoesNotContain(path, block.Text ?? ""));
     }
 
     /// <summary>The credit line names the copyright and stops there. It used to carry the licence too, from when
