@@ -282,6 +282,16 @@ public partial class SessionWindow : Window
         if (ViewModel is { } vm) vm.Settings.Crosshair = mode;
     }
 
+    private void OnKeypadClick(object? sender, RoutedEventArgs e) => ToggleKeypad();
+    private void OnKeypadClickNative(object? sender, EventArgs e) => ToggleKeypad();
+
+    /// <summary>Flips the setting; the one-way bindings carry the check mark back on both menus and the panel into
+    /// or out of every window (keypad spec §6.3).</summary>
+    private void ToggleKeypad()
+    {
+        if (ViewModel is { } vm) vm.Settings.Keypad = !vm.Settings.Keypad;
+    }
+
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
     /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these
