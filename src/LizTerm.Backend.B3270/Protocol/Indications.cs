@@ -28,6 +28,8 @@ public sealed record TlsIndication(bool Secure, bool? Verified, string? Session,
 public sealed record TlsHelloIndication(bool Supported, string? Provider, IReadOnlyList<string> Options) : Indication;
 public sealed record RunResultIndication(string? Tag, bool Success, IReadOnlyList<string> Text, IReadOnlyList<bool> TextErr, bool Abort) : Indication;
 public sealed record PopupIndication(string Type, string Text, bool Retrying, bool Error) : Indication;
+/// <summary>The host rang the 3270 alarm. b3270 sends an empty body; there is nothing to carry.</summary>
+public sealed record BellIndication : Indication;
 public sealed record UiErrorIndication(bool Fatal, string Text, string? Operation, string? Member) : Indication;
 public sealed record FtIndication(string State, bool? Success, string? Text, long? Bytes, string? Cause) : Indication;
 public sealed record SettingIndication(string Name, string? Value, string? Cause) : Indication;

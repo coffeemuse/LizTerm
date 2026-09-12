@@ -85,6 +85,7 @@ props files, `LizTerm.slnx`, `LizTerm.parcel`, the workflow YAML) are deliberate
 | `LIZTERM_TEST_TLS` | `1` if the test host speaks TLS. |
 | `LIZTERM_TEST_VERIFY_CERT` | `0` to accept the test host's self-signed certificate. |
 | `LIZTERM_TEST_USER`, `LIZTERM_TEST_PASSWORD` | Additionally enable the IND$FILE round-trip test. |
+| `LIZTERM_TEST_BELL` | Any non-blank value runs the system-alert ring test on macOS and Windows, where it is audible; unset, it skips there. On Linux the ring is a no-op and the test always runs. |
 | `LIZTERM_REQUIRE_ENGINE` | Any non-blank value makes the engine smoke test fail, instead of skip, when the test output has no bundled engine. CI sets it; leave it unset locally. |
 
 ## Tests

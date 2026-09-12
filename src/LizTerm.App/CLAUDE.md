@@ -45,8 +45,11 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `Dispatcher.UIThread.Post`, tests pass `a => a()`. Clipboard, file dialogs, the certificate prompt and folder
   opening are injected the same way: `ITextClipboard` (`AvaloniaTextClipboard(window)`), `IFilePicker`,
   `ICertificatePrompt`, `IFolderOpener`.
-  The process's `SettingsViewModel` is injected the same way, last, and defaults to an in-memory one, so no
+  The process's `SettingsViewModel` is injected the same way and defaults to an in-memory one, so no
   view-model test touches the settings file; its `SaveFailed` lands in `ErrorMessage`.
+  `IBellRinger` (`Bell/`; the app's one `SystemBellRinger`, `FakeBellRinger` in tests) is injected after it; null
+  (tests) means the flash is the whole bell. An optional `BellThrottle` comes last, so a test that needs two
+  admitted bells drives an explicit clock instead of sleeping.
 - Rejected actions (`EmulatorActionException`) are deliberately swallowed, because b3270 already explains them
   through the keyboard lock. Only unexpected and backend-unavailable errors set `ErrorMessage`. `SessionWindow`
   refocuses the screen after the error bar's Dismiss.
@@ -109,6 +112,19 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   dismissed banner).
 - `TerminalScreen.BlinkEnabled` (bound to `Settings.Blink`) stops the blink timer and clears the hidden phase;
   the snapshot still says what the host asked for.
+- **The bell.** `IEmulatorSession.BellRang` is marshalled like the other events, then `SessionViewModel.OnBell`
+  runs: disposed check; return if neither output has anything to do, so a bell nobody could perceive does not
+  start the interval; one `BellThrottle` (`BellInterval`, 500 ms, one gate for both outputs, refused bells are
+  dropped not queued); then `Settings.VisualBell` raises the view model's own `BellRang` (the window calls
+  `TerminalScreen.Flash()`, a 120 ms `Palette.BellFlash` overlay painted exactly while the control's one-shot
+  timer runs) and `Settings.BellSound` other than `None` calls the ringer. "None means silence" is the view
+  model's rule; the ringer only knows how to make sounds. `IBellRinger.CanRing` is the one home of which sounds
+  this platform can make: the view model treats a refused sound as `None`, and `App` passes the same answer to
+  `PreferencesWindow`, which disables the radio and says why. `SystemBellRinger` is the App's only P/Invoke
+  (`NSBeep`, `MessageBeep`) and answers no on Linux. A ringer that throws is reported once and not asked again
+  until the sound setting changes. The bell's sound radios are one-way check marks plus Click handlers over
+  `BellSoundConverter`, the Crosshair shape; both converters are subclasses of `EnumIsConverter<TEnum>`, which
+  holds the rule.
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.

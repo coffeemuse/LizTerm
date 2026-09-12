@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using LizTerm.App.Bell;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
@@ -23,6 +24,8 @@ namespace LizTerm.App;
 public partial class App : Application
 {
     private readonly List<SessionWindow> _sessions = [];
+    /// <summary>The process's one ringer: what it can ring is the answer Preferences shows, so they cannot drift.</summary>
+    private readonly SystemBellRinger _bellRinger = new();
     /// <summary>The session window the user was in most recently, which is what About describes when it is
     /// opened from the application menu with something else — the picker, a dialog — in front.</summary>
     private SessionWindow? _lastActiveSession;
@@ -136,7 +139,8 @@ public partial class App : Application
                     PinnedCertificate = PinMerge.Resolve(edit.Profile, store.Load(edit.Profile.Name), edit.PinCleared),
                 });
             },
-            settings: Settings);
+            settings: Settings,
+            bellRinger: _bellRinger);
         window.DataContext = viewModel;
         _sessions.Add(window);
         _lastActiveSession ??= window;
@@ -246,7 +250,7 @@ public partial class App : Application
             showing.Activate();
             return showing;
         }
-        var window = new PreferencesWindow(settings);
+        var window = new PreferencesWindow(settings, _bellRinger.CanRing(BellSound.SystemAlert));
         _preferences = window;
         window.Closed += (_, _) => { if (ReferenceEquals(_preferences, window)) _preferences = null; };
         window.Show();

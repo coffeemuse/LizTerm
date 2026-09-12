@@ -13,13 +13,17 @@ namespace LizTerm.App.Views;
 /// App.ShowPreferences is the route (settings spec §5).</summary>
 public partial class PreferencesWindow : Window
 {
-    /// <summary>Design-time only.</summary>
-    public PreferencesWindow() : this(new SettingsViewModel()) { }
+    /// <summary>Design-time only, in the full shape.</summary>
+    public PreferencesWindow() : this(new SettingsViewModel(), systemAlertAvailable: true) { }
 
-    public PreferencesWindow(SettingsViewModel settings)
+    /// <summary>Whether the system alert can ring here is an argument (App passes its ringer's CanRing), so a test
+    /// can see the Linux shape of the window on any machine.</summary>
+    internal PreferencesWindow(SettingsViewModel settings, bool systemAlertAvailable)
     {
         InitializeComponent();
         DataContext = settings;
+        BellSoundSystemAlert.IsEnabled = systemAlertAvailable;
+        BellSoundNote.IsVisible = !systemAlertAvailable;
     }
 
     private SettingsViewModel Settings => (SettingsViewModel)DataContext!;
@@ -28,6 +32,9 @@ public partial class PreferencesWindow : Window
     private void OnCrosshairHorizontalClick(object? sender, RoutedEventArgs e) => Settings.Crosshair = CrosshairMode.Horizontal;
     private void OnCrosshairVerticalClick(object? sender, RoutedEventArgs e) => Settings.Crosshair = CrosshairMode.Vertical;
     private void OnCrosshairBothClick(object? sender, RoutedEventArgs e) => Settings.Crosshair = CrosshairMode.Both;
+
+    private void OnBellSoundNoneClick(object? sender, RoutedEventArgs e) => Settings.BellSound = BellSound.None;
+    private void OnBellSoundSystemAlertClick(object? sender, RoutedEventArgs e) => Settings.BellSound = BellSound.SystemAlert;
 
     private void OnDoneClick(object? sender, RoutedEventArgs e) => Close();
 }

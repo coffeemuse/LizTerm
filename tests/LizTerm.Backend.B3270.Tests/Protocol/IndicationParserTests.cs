@@ -199,12 +199,19 @@ public class IndicationParserTests
         Assert.True(done.Success);
     }
 
+    /// <summary>stats stays here because it is still genuinely unhandled. bell used to sit beside it; it is a
+    /// real indication now (Parses_bell, below), which is what #47 was about.</summary>
     [Fact]
     public void Unknown_indications_are_reported_by_name()
     {
         var u = Parse<UnknownIndication>("""{"stats":{"bytes-received":107,"records-received":1}}""");
         Assert.Equal("stats", u.Name);
-        Assert.IsType<UnknownIndication>(Parse<UnknownIndication>("""{"bell":{}}"""));
+    }
+
+    [Fact]
+    public void Parses_bell()
+    {
+        Parse<BellIndication>("""{"bell":{}}""");
     }
 
     [Fact]

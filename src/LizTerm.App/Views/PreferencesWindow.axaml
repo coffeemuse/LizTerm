@@ -29,6 +29,17 @@
     <TextBlock Text="Blink" FontWeight="SemiBold" Margin="0,10,0,0" />
     <CheckBox x:Name="BlinkBox" Content="Blink text the host marks as blinking" IsChecked="{Binding Blink, Mode=TwoWay}" />
 
+    <TextBlock Text="Bell" FontWeight="SemiBold" Margin="0,10,0,0" />
+    <CheckBox x:Name="VisualBellBox" Content="Flash the screen when the host rings the bell" IsChecked="{Binding VisualBell, Mode=TwoWay}" />
+    <!-- The same one-way-plus-Click shape as the Crosshair radios above, over BellSoundConverter. A third radio
+         and a Choose... button for a sound file join this group later (bell spec §8). -->
+    <RadioButton x:Name="BellSoundNone" GroupName="BellSound" Content="No sound" Click="OnBellSoundNoneClick"
+                 IsChecked="{Binding BellSound, Converter={x:Static vm:BellSoundConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
+    <RadioButton x:Name="BellSoundSystemAlert" GroupName="BellSound" Content="System alert sound" Click="OnBellSoundSystemAlertClick"
+                 IsChecked="{Binding BellSound, Converter={x:Static vm:BellSoundConverter.Instance}, ConverterParameter=SystemAlert, Mode=OneWay}" />
+    <!-- Shown only where the constructor disabled the radio above (the ringer's CanRing said no). -->
+    <TextBlock x:Name="BellSoundNote" Text="The system alert sound is not available on Linux." Foreground="#A0A0A0" TextWrapping="Wrap" IsVisible="False" />
+
     <!-- Empty until a save fails; the session windows show the same message in their banners. -->
     <TextBlock x:Name="SaveErrorText" Text="{Binding LastSaveError}" Foreground="#FF8080" TextWrapping="Wrap" Margin="0,10,0,0" />
 

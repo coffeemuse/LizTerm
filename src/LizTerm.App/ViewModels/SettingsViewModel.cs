@@ -63,6 +63,24 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    public bool VisualBell
+    {
+        get => Current.VisualBell;
+        set
+        {
+            if (Current.VisualBell != value) Apply(nameof(VisualBell), s => s with { VisualBell = value });
+        }
+    }
+
+    public BellSound BellSound
+    {
+        get => Current.BellSound;
+        set
+        {
+            if (Current.BellSound != value) Apply(nameof(BellSound), s => s with { BellSound = value });
+        }
+    }
+
     private void Apply(string property, Func<AppSettings, AppSettings> change)
     {
         Current = change(Current);

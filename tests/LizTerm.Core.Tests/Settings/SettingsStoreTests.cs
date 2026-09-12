@@ -43,6 +43,17 @@ public class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void The_bell_fields_round_trip_and_the_sound_is_written_by_name()
+    {
+        var store = new SettingsStore(FilePath);
+
+        store.Update(s => s with { VisualBell = false, BellSound = BellSound.SystemAlert });
+
+        Assert.Equal(new AppSettings(VisualBell: false, BellSound: BellSound.SystemAlert), store.Load());
+        Assert.Contains("\"bellSound\": \"SystemAlert\"", File.ReadAllText(FilePath));
+    }
+
+    [Fact]
     public void A_first_change_writes_only_that_key()
     {
         Store.Update(s => s with { Blink = false });

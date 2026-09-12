@@ -78,7 +78,12 @@ public sealed class TerminalScreen : Control
     /// three per second; never take it below 500 ms without revisiting that (spec section 8).</summary>
     public static readonly TimeSpan BlinkInterval = TimeSpan.FromMilliseconds(750);
 
+    /// <summary>How long the visual bell lights the screen. Brief enough to read as a flash, long enough to be
+    /// seen; SessionViewModel.BellInterval keeps successive flashes at most two per second.</summary>
+    public static readonly TimeSpan BellFlashDuration = TimeSpan.FromMilliseconds(120);
+
     private readonly DispatcherTimer _blinkTimer = new() { Interval = BlinkInterval };
+    private readonly DispatcherTimer _flashTimer = new() { Interval = BellFlashDuration };
     private bool _attached;
 
     internal bool BlinkTimerRunning => _blinkTimer.IsEnabled;
@@ -86,6 +91,9 @@ public sealed class TerminalScreen : Control
     internal int RunPlanBuilds { get; private set; }
     /// <summary>True during the phase in which blinking text is not drawn.</summary>
     internal bool BlinkHidden { get; private set; }
+    /// <summary>True while the bell overlay is painted: exactly while the one-shot flash timer runs, so there is
+    /// one state rather than two to keep in step. Test seam, like BlinkTimerRunning.</summary>
+    internal bool BellFlashing => _flashTimer.IsEnabled;
 
     public TerminalScreen()
     {
@@ -94,6 +102,7 @@ public sealed class TerminalScreen : Control
             BlinkHidden = !BlinkHidden;
             InvalidateVisual();
         };
+        _flashTimer.Tick += (_, _) => EndFlash();
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -112,6 +121,7 @@ public sealed class TerminalScreen : Control
         if (_window is not null) _window.Deactivated -= OnWindowDeactivated;
         _window = null;
         UpdateBlinkTimer(null);
+        EndFlash();
     }
 
     private void UpdateBlinkTimer(ScreenSnapshot? snapshot)
@@ -129,6 +139,22 @@ public sealed class TerminalScreen : Control
         }
     }
 
+    /// <summary>The visual bell: lights the screen for BellFlashDuration, then clears it. A second call during a
+    /// flash restarts the timer; the view model's throttle makes that unreachable from the bell, but the method must
+    /// not misbehave if something else calls it.</summary>
+    public void Flash()
+    {
+        _flashTimer.Stop();
+        _flashTimer.Start();
+        InvalidateVisual();
+    }
+
+    private void EndFlash()
+    {
+        if (!_flashTimer.IsEnabled) return;
+        _flashTimer.Stop();
+        InvalidateVisual();
+    }
 
     public ScreenSnapshot? Snapshot
     {
@@ -398,6 +424,7 @@ public sealed class TerminalScreen : Control
         DrawSelection(context, snapshot, g);
         DrawFindMatches(context, snapshot, g);
         DrawCursor(context, snapshot, g);
+        if (BellFlashing) context.FillRectangle(Palette.BellFlash, bounds);
     }
 
     private void UpdateGeometry(Size size)

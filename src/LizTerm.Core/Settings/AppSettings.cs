@@ -13,4 +13,6 @@ namespace LizTerm.Core.Settings;
 /// the file is hand-readable and a reordering of the enum can never change a saved meaning.</summary>
 public sealed record AppSettings(
     [property: JsonConverter(typeof(JsonStringEnumConverter<CrosshairMode>))] CrosshairMode Crosshair = CrosshairMode.None,
-    bool Blink = true);
+    bool Blink = true,
+    bool VisualBell = true,
+    [property: JsonConverter(typeof(JsonStringEnumConverter<BellSound>))] BellSound BellSound = BellSound.None);
