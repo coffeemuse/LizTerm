@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LizTerm user guide</title>
+<style>
+:root { color-scheme: light dark; }
+body { margin: 0 auto; max-width: 46rem; padding: 2rem 1.25rem 4rem;
+       font: 16px/1.6 -apple-system, "Segoe UI", system-ui, sans-serif;
+       color: #1c1c1c; background: #fff; }
+h1, h2, h3 { line-height: 1.25; margin: 2rem 0 0.75rem; }
+h2 { border-bottom: 1px solid #d8d8d8; padding-bottom: 0.3rem; }
+code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em;
+       background: #f2f2f2; padding: 0.1em 0.3em; border-radius: 3px; }
+pre { background: #f2f2f2; padding: 0.9rem; overflow-x: auto; border-radius: 4px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; display: block; overflow-x: auto; }
+th, td { border: 1px solid #d8d8d8; padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: #f6f6f6; }
+a { color: #0b5cab; }
+.offline { font-size: 0.9em; color: #4a4a4a; background: #f6f6f6;
+           border: 1px solid #e0e0e0; border-radius: 4px; padding: 0.6rem 0.8rem; }
+@media (prefers-color-scheme: dark) {
+  body { color: #e4e4e4; background: #1b1b1b; }
+  h2 { border-bottom-color: #3a3a3a; }
+  code, pre { background: #262626; }
+  th, td { border-color: #3a3a3a; }
+  th { background: #242424; }
+  a { color: #6fb3ff; }
+  .offline { color: #b6b6b6; background: #242424; border-color: #3a3a3a; }
+}
+</style>
+</head>
+<body>
+<p class="offline">Offline copy, shipped with LizTerm 0.4.1. The manual may have been updated
+since this release — <a href="https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md">the current version is on GitHub</a>.</p>
+<h1 id="lizterm-user-guide">LizTerm user guide</h1>
+<p>This guide covers everything past the first connection. For downloading and first-run steps, see the
+<a href="https://github.com/coffeemuse/LizTerm/blob/v0.4.1/README.md">README</a>.</p>
+<ul>
+<li><a href="#sessions-and-profiles">Sessions and profiles</a></li>
+<li><a href="#the-session-window">The session window</a></li>
+<li><a href="#keyboard">Keyboard</a></li>
+<li><a href="#mouse-selection-and-clipboard">Mouse, selection and clipboard</a></li>
+<li><a href="#finding-text">Finding text</a></li>
+<li><a href="#saving-and-copying-the-screen">Saving and copying the screen</a></li>
+<li><a href="#tls-and-certificates">TLS and certificates</a></li>
+<li><a href="#file-transfer-indfile">File transfer (IND$FILE)</a></li>
+<li><a href="#wire-logs">Wire logs</a></li>
+<li><a href="#menus">Menus</a></li>
+<li><a href="#where-lizterm-keeps-its-files">Where LizTerm keeps its files</a></li>
+<li><a href="#known-limitations">Known limitations</a></li>
+</ul>
+<h2 id="sessions-and-profiles">Sessions and profiles</h2>
+<p>LizTerm opens on the <strong>Sessions</strong> list. Select a saved profile and choose <strong>Connect</strong>, or use <strong>New...</strong>,
+<strong>Edit...</strong> and <strong>Delete</strong> to manage them. Each session opens in its own window. Closing the last session window
+brings the list back; closing the list with no sessions open quits.</p>
+<h3 id="profile-settings">Profile settings</h3>
+<table>
+<thead>
+<tr><th>Setting</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>Name</td><td>How the profile appears in the list, and what you type on the command line to open it.</td></tr>
+<tr><td>Host, Port</td><td>The TN3270 server.</td></tr>
+<tr><td>Use TLS</td><td>Connect over TLS.</td></tr>
+<tr><td>Verify host certificate</td><td>Check the host's certificate (on by default). See <a href="#tls-and-certificates">TLS and certificates</a>.</td></tr>
+<tr><td>Keep-alive every <em>n</em> seconds</td><td>Keeps the network connection open through firewalls and routers that drop idle connections. <code>0</code> turns it off. It does not stop the host logging you off for being idle.</td></tr>
+<tr><td>Reconnect automatically</td><td>Reconnect if the host drops the session.</td></tr>
+<tr><td>Model</td><td>The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132).</td></tr>
+<tr><td>Extended data stream</td><td>Colours and extended attributes (on by default).</td></tr>
+<tr><td>Oversize</td><td>A custom screen size, written as columns x rows (for example <code>132x43</code>), for hosts that support one. Leave it blank for the model's own size.</td></tr>
+<tr><td>Code page</td><td>The host's character set. The default is <code>cp037</code> (US/Canada); TK4- and TK5 users may want <code>bracket</code>, which maps the 3270 bracket characters.</td></tr>
+<tr><td>LU name</td><td>Request a specific logical unit from the host. Optional.</td></tr>
+<tr><td>Backspace erases</td><td>On by default: Backspace erases the previous character. Off: Backspace only moves the cursor left.</td></tr>
+</tbody>
+</table>
+<h3 id="quick-connect-and-the-command-line">Quick Connect and the command line</h3>
+<p>To connect without saving a profile first, type a host into the <strong>Quick Connect</strong> box: a name with a dot or an
+address (<code>mvs.example.org</code>, <code>192.168.1.10</code>), <code>host:port</code>, or <code>L:host</code> for TLS. A one-word name needs a port
+(<code>tk5:3270</code>), or it is taken as a profile name. The box accepts the same forms as the command line, below, and a
+saved profile's name too. Once connected, <strong>File &gt; Save as Profile...</strong> turns the session into a saved profile — including
+any certificate you chose to trust.</p>
+<p>You can also start LizTerm with a profile name or a host on the command line, which skips the list:</p>
+<pre><code>LizTerm [profile | [L:][Y:][lu@]host[:port]]
+</code></pre>
+<p>The executable is <code>LizTerm.App</code> (<code>LizTerm.App.exe</code> on Windows); on macOS it is inside the bundle, at
+<code>LizTerm.app/Contents/MacOS/LizTerm.App</code>. The host form is x3270's own syntax: <code>L:</code> means TLS, <code>Y:</code> turns certificate verification off, and <code>lu@</code> requests an LU.
+Bracket IPv6 addresses, as in <code>[2001:db8::1]:3270</code>. The port defaults to 23, or 992 with TLS. A saved profile whose
+name matches the argument, ignoring case, always wins.</p>
+<h2 id="the-session-window">The session window</h2>
+<p>The status bar along the bottom shows, in order: the connection state, the TLS state, the keyboard state (for
+example <em>Ready</em>, or why the keyboard is locked), insert mode, the cursor position, the model and LU name, and — while
+a wire log is recording — a red <strong>● wire log</strong> marker.</p>
+<p>If a connection attempt has not finished within 30 seconds, LizTerm gives up and says so. <strong>File &gt; Disconnect</strong>
+cancels an attempt that is still in progress.</p>
+<p><strong>View &gt; Crosshair</strong> draws a horizontal line, a vertical line, or both through the cursor, for lining up columns.
+The choice is remembered, and applies to every session window; it is also in Preferences.</p>
+<p>When the host rings the terminal bell, the screen flashes briefly. A sound can be turned on in Preferences; by
+default the bell is silent. A host that rings repeatedly is limited to two bells a second.</p>
+<p><strong>View &gt; Keypad &gt; Show the Keypad</strong> shows a panel of buttons for PF1 to PF24, PA1 to PA3, Enter, Clear, Reset, Attn,
+SysReq, Erase EOF, Erase Input, Dup and Field Mark, for the keys a keyboard cannot reach. It is off by default,
+remembered, and applies to every session window. The same submenu chooses whether it sits <strong>At the Bottom</strong> of the
+window or <strong>On the Right</strong>, and so does Preferences; either way the choice is saved and every open window follows
+it. The buttons never take the keyboard away from the screen, and they are greyed out while the session is
+disconnected. Once it is connected, hold the pointer over a button to see its keyboard shortcut, where it has one;
+a greyed-out button shows none.</p>
+<h2 id="keyboard">Keyboard</h2>
+<p>The default layout follows Vista TN3270, cross-checked against wc3270. It cannot be changed yet.</p>
+<table>
+<thead>
+<tr><th>Key</th><th>3270 key</th></tr>
+</thead>
+<tbody>
+<tr><td>Enter, Ctrl+Enter, or a tap of Right Ctrl</td><td>Enter</td></tr>
+<tr><td>Shift+Enter</td><td>Newline</td></tr>
+<tr><td>Escape</td><td>Attn</td></tr>
+<tr><td>Shift+Escape</td><td>SysReq</td></tr>
+<tr><td>A tap of Left Ctrl, or Ctrl+R</td><td>Reset</td></tr>
+<tr><td>Pause, or Ctrl+Escape</td><td>Clear</td></tr>
+<tr><td>F1 – F12</td><td>PF1 – PF12</td></tr>
+<tr><td>Shift+F1 – F12, or Ctrl+F1 – F12</td><td>PF13 – PF24</td></tr>
+<tr><td>Page Up / Page Down</td><td>PF7 / PF8</td></tr>
+<tr><td>Alt+1</td><td>PA1</td></tr>
+<tr><td>Alt+2, or Ctrl+Home</td><td>PA2</td></tr>
+<tr><td>Alt+3, or Ctrl+Page Up</td><td>PA3</td></tr>
+<tr><td>Tab / Shift+Tab</td><td>Tab / Back Tab</td></tr>
+<tr><td>Insert</td><td>Toggle insert mode</td></tr>
+<tr><td>Home</td><td>Home</td></tr>
+<tr><td>End</td><td>Erase EOF</td></tr>
+<tr><td>Delete</td><td>Delete</td></tr>
+<tr><td>Backspace</td><td>Erase the previous character, or move left (see the profile's Backspace setting)</td></tr>
+<tr><td>Arrow keys</td><td>Move the cursor</td></tr>
+<tr><td>Ctrl+[</td><td>Types <code>¬</code></td></tr>
+<tr><td>Ctrl+6</td><td>Types <code>¢</code></td></tr>
+</tbody>
+</table>
+<p>On a Mac, Alt is the Option key. A "tap" means pressing and releasing the key on its own, with nothing else in
+between.</p>
+<p>Copy, Paste, Select All and Find use the platform's own shortcuts — Cmd+C, Cmd+V, Cmd+A and Cmd+F on macOS, Ctrl
+elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.</p>
+<p>The <strong>Keys</strong> menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, PA1 to
+PA3, and PF13 to PF24. The on-screen keypad (<strong>View &gt; Keypad &gt; Show the Keypad</strong>) offers all of those as buttons,
+plus PF1 to PF12, Enter, Erase EOF and Erase Input.</p>
+<h2 id="mouse-selection-and-clipboard">Mouse, selection and clipboard</h2>
+<ul>
+<li>Click to move the cursor.</li>
+<li>Drag to select a rectangle of the screen. Double-click selects a word.</li>
+<li><strong>Copy</strong> copies the selection as text, with trailing spaces trimmed from each line. With nothing selected, use</li>
+</ul>
+<p>  <strong>Select All</strong> first.
+- <strong>Paste</strong> sends clipboard text to the host. Multi-line text is pasted line by line, respecting the screen's
+  margins.</p>
+<h2 id="finding-text">Finding text</h2>
+<p><strong>Edit &gt; Find...</strong> (Cmd+F or Ctrl+F) opens a find bar at the bottom of the window. Every match on the current screen is
+highlighted as you type; the search ignores case. Press <strong>Enter</strong> to move the cursor to the next match and
+<strong>Shift+Enter</strong> for the previous one; <strong>Escape</strong> closes the bar and returns to the screen. Matches update as the host
+repaints, and the highlight stays on your current match where it can.</p>
+<h2 id="saving-and-copying-the-screen">Saving and copying the screen</h2>
+<ul>
+<li><strong>File &gt; Save Screen As...</strong> saves the current screen as plain text, or as HTML in the colours you see. Choose the</li>
+</ul>
+<p>  format in the save dialog, or end the file name with <code>.html</code>.
+- <strong>Edit &gt; Copy Screen as HTML</strong> puts the coloured screen on the clipboard as HTML source, for pasting into a web
+  page, a wiki, or anything else that takes HTML markup.</p>
+<p>Both work after the host has disconnected, as long as the last screen is still showing.</p>
+<h2 id="tls-and-certificates">TLS and certificates</h2>
+<p>With <strong>Use TLS</strong> and <strong>Verify host certificate</strong> on, LizTerm checks the host's certificate against your operating
+system's trusted roots, as a web browser does.</p>
+<p>Most hobbyist hosts use a self-signed certificate, which fails that check. When it does, LizTerm opens a
+<strong>Certificate not verified</strong> window showing why, and what the host presented:</p>
+<ul>
+<li>Tick <strong>Trust this certificate for this profile</strong>, then choose <strong>Connect Anyway</strong>, to <em>pin</em> the certificate: the</li>
+</ul>
+<p>  profile is saved with it, verification stays on, and later connections accept exactly that certificate and
+  nothing else. If the host sent a chain rather than one self-signed certificate, the box reads <strong>Trust this
+  certificate and its issuing CA for this profile</strong>: the pin then trusts that CA for this host's name, so a
+  certificate the CA later issues to the same host verifies too. If the host ever presents a certificate the pin
+  does not cover, LizTerm warns you with a <strong>Certificate changed</strong> window showing both fingerprints.
+- <strong>Connect Anyway</strong> without the tick connects once without verification, and asks again next time.
+- <strong>Cancel</strong> stays disconnected.</p>
+<p>When a certificate cannot be pinned — on Windows, for example — the window says why and offers only the one-time
+connection.</p>
+<p>The profile editor shows a pinned certificate's fingerprint. <strong>Forget</strong> removes the pin and returns the profile to
+normal verification.</p>
+<p>Turning <strong>Verify host certificate</strong> off in a profile skips the check entirely. On a TLS connection, the status bar
+says whether the certificate was verified.</p>
+<h2 id="file-transfer-indfile">File transfer (IND$FILE)</h2>
+<p><strong>File &gt; IND$FILE Transfer...</strong> sends files to, or receives them from, a TSO, VM/CMS or CICS host using the host's
+IND$FILE program. Before you start, put the cursor at a TSO <code>READY</code> prompt or a command line.</p>
+<ul>
+<li>Choose <strong>Send to host</strong> or <strong>Receive from host</strong>, the local file, and the host file (for example</li>
+</ul>
+<p>  <code>LIZTERM.JCL(JOB1)</code>, or <code>'USER.DATA.SET'</code> with quotes for a fully qualified TSO name).
+- <strong>Text</strong> mode translates between ASCII and EBCDIC and can convert line endings; <strong>Binary</strong> copies bytes unchanged.
+- <strong>Append to an existing file</strong> adds to the target rather than replacing it. Without it, LizTerm will not receive
+  over a local file you did not pick with the Browse dialog.
+- When sending, <strong>Advanced</strong> sets up the new host file: record format and LRECL (TSO and VM), BLKSIZE and space
+  allocation (TSO only), plus a buffer size and extra options appended to the IND$FILE command.</p>
+<p>The dialog shows progress while the transfer runs. <strong>Cancel</strong>, or closing the dialog, asks the host to stop. The
+host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
+the transfer ends. The dialog remembers your last transfer for that window.</p>
+<h2 id="wire-logs">Wire logs</h2>
+<p>A wire log records every message between LizTerm and its emulation engine. It is the most useful thing to attach
+to a bug report.</p>
+<ul>
+<li><strong>Help &gt; Wire Log</strong> starts and stops a log for the current session.</li>
+<li><strong>Help &gt; Show Wire Logs...</strong> opens the folder they are saved in.</li>
+</ul>
+<p><strong>A wire log contains everything you type, including passwords.</strong> Read it before you share it, or record only
+the part of the session after you have logged on.</p>
+<h2 id="menus">Menus</h2>
+<p>On macOS, LizTerm uses the system menu bar, and About and Preferences are in the LizTerm application menu. On
+Windows and Linux, the menu is drawn inside each window.</p>
+<p>On macOS you can choose, under <strong>Menu bar</strong> in Preferences:</p>
+<ul>
+<li><strong>Wherever this platform puts it</strong> — the default: the system menu bar on a Mac. Picking one of the three</li>
+</ul>
+<p>  below pins that choice instead, and this brings you back.
+- <strong>In the system menu bar</strong> — where a Mac user expects it, and what the default already gives you there.
+- <strong>Inside the window</strong> — draws the menu in each session window and takes it out of the system menu bar, so no
+  menu shortcut can intercept a key the mainframe needs.
+- <strong>Both</strong> — draws it in both places at once. The system menu bar is a real menu bar again, so the menu
+  shortcuts come back with it: pick this only if you did not need <strong>Inside the window</strong> to keep them off a
+  key the mainframe uses.</p>
+<p>The choice applies immediately, to every open session window. It is macOS only: on Windows and Linux the menu is
+always drawn inside the window, whatever a settings file carried from a Mac may say, so Preferences does not
+offer the choice there.</p>
+<p>To start LizTerm with a particular style, set the <code>LIZTERM_MENU</code> environment variable to <code>native</code>, <code>classic</code> or
+<code>both</code> before launching; any other value is ignored, and so is the variable itself away from macOS. It only
+decides what that run <em>starts</em> with — you can still change it in Preferences afterwards, and doing so saves the
+new choice as your preference, including when you pick the style the variable already started you on. Leaving
+the variable unset uses whatever you last chose.</p>
+<p>The macOS LizTerm application menu (About, Preferences, and Apple's standard items) stays whatever you pick.</p>
+<h2 id="preferences">Preferences</h2>
+<p><strong>Preferences...</strong> is in the LizTerm application menu on macOS (Cmd-comma), and at the bottom of a session
+window's <strong>Edit</strong> menu on Windows and Linux. Changes apply as you make them, to every open session window:</p>
+<ul>
+<li><strong>Crosshair</strong> — the same choice as View &gt; Crosshair.</li>
+<li><strong>Blink</strong> — whether text the host marks as blinking actually blinks. Off draws it steady.</li>
+<li><strong>Bell</strong> — whether the screen flashes when the host rings the bell (on by default), and what sound plays: none, or</li>
+</ul>
+<p>  the system alert sound, at the volume your system uses for alerts. The system alert sound is not available on
+  Linux.
+- <strong>Keypad</strong> — whether the on-screen keypad is shown, and whether it docks below the screen or to its right. The
+  View &gt; Keypad submenu carries both of the same settings.
+- <strong>Menu bar</strong> — macOS only; see <a href="#menus">Menus</a>.</p>
+<h2 id="where-lizterm-keeps-its-files">Where LizTerm keeps its files</h2>
+<table>
+<thead>
+<tr><th>System</th><th>Folder</th></tr>
+</thead>
+<tbody>
+<tr><td>macOS</td><td><code>~/Library/Application Support/LizTerm</code></td></tr>
+<tr><td>Windows</td><td><code>%APPDATA%\LizTerm</code></td></tr>
+<tr><td>Linux</td><td><code>$XDG_CONFIG_HOME/LizTerm</code>, or <code>~/.config/LizTerm</code></td></tr>
+</tbody>
+</table>
+<p>Profiles are in <code>profiles/</code>, one JSON file each, and wire logs in <code>logs/</code>, named
+<code>wire-&lt;profile&gt;-&lt;date&gt;-&lt;time&gt;.log</code>. <code>settings.json</code> holds your preferences — only the ones you have changed, so
+deleting it puts everything back to the defaults.</p>
+<h2 id="known-limitations">Known limitations</h2>
+<ul>
+<li><strong>Unsigned Windows builds.</strong> Windows SmartScreen warns about the app the first time you open it; the</li>
+</ul>
+<p>  <a href="https://github.com/coffeemuse/LizTerm/blob/v0.4.1/README.md#first-run">README</a> explains how to allow it.
+- <strong>No certificate pinning on Windows.</strong> The Windows emulation engine verifies against the Windows certificate
+  store and cannot pin a certificate. A profile carrying a pin refuses to connect on Windows rather than ignoring
+  the pin.
+- <strong>TLS hosts that rely on SNI</strong> (several TLS sites sharing one address) cannot be verified, because the
+  underlying x3270 engine does not send a server name (<a href="https://github.com/coffeemuse/LizTerm/issues/12">#12</a>).
+- <strong>No keymap editing yet</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/18">#18</a>).
+- <strong>No printer sessions or scripting.</strong></p>
+</body>
+</html>
