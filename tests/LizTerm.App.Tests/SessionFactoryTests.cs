@@ -101,10 +101,12 @@ public class SessionFactoryTests
         }
     }
 
-    /// <summary>The other arm of the same exception, which About used to render as "b3270, not found" over a
-    /// blank path. A binary that is *there* and only needs chmod is not a missing one: B3270Locator.Find throws
-    /// the same type for both, which is what Candidates exists to tell apart, and About is the screen a user
-    /// opens to find out which of the two they have. It must name the file, so there is a path to chmod.</summary>
+    /// <summary>The other arm of the same exception, which About would otherwise render as "b3270, not found".
+    /// A binary that is *there* and only needs chmod is not a missing one: B3270Locator.Find throws the same type
+    /// for both, which is what Candidates exists to tell apart, and About is the screen a user opens to find out
+    /// which of the two they have. So the source must survive — "bundled" or the override's name, not "not
+    /// found". The path survives with it so this answer and a session's cannot differ, though nothing displays it
+    /// (#75); the file to chmod is named by the locator's exception, not by About.</summary>
     [Fact]
     public void CheckBackendOrUnknown_names_an_engine_that_is_present_but_not_executable()
     {
