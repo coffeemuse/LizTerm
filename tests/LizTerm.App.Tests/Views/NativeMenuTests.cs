@@ -1007,4 +1007,42 @@ public class NativeMenuTests
         Assert.Equal(5, box.SelectionEnd);
         Assert.Null(vm.Selection);
     }
+
+    [AvaloniaFact]
+    public void Help_offers_the_three_project_links_on_both_menus()
+    {
+        var (window, _, _, _) = Show();
+        var classic = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>()
+            .Single(m => (string)m.Header! == "_Help");
+
+        foreach (var (header, url) in new[]
+                 {
+                     ("Project on _GitHub", ProjectLinks.Repository),
+                     ("_Report an Issue...", ProjectLinks.NewIssue),
+                     ("R_eleases", ProjectLinks.Releases),
+                 })
+        {
+            var native = Item(window, "_Help", header);
+            Assert.Equal(url, native.CommandParameter);
+            Assert.NotNull(native.Command);
+
+            var classicItem = classic.Items.OfType<MenuItem>().Single(m => (string)m.Header! == header);
+            Assert.Equal(url, classicItem.CommandParameter);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_a_project_link_opens_it()
+    {
+        var opener = new FakeUriOpener();
+        var vm = new SessionViewModel(new FakeEmulatorSession(), action => action(), new FakeTextClipboard(),
+            uriOpener: opener);
+        var window = new SessionWindow(MenuStyle.Native, isMacOS: true) { DataContext = vm };
+        window.Show();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Help", "_Report an Issue...")).RaiseClicked();
+        await Wait.UntilAsync(() => opener.Opened.Count == 1, "the link to be opened");
+
+        Assert.Equal([ProjectLinks.NewIssue], opener.Opened);
+    }
 }
