@@ -200,6 +200,26 @@ must agree, or the release run fails at its first job. This is the last change b
 
 ## 6. Backlog hygiene
 
+> **Done, 2026-09-12.** Milestone `v0.5.0` created (the repository's first) and assigned to #48, #71 and #75.
+> #22 was already closed. #19 closed as completed, with a comment recording what Preferences actually carries.
+> #55 amended **and retitled** to "Preferences and profiles: export and import as one bundle". #48 amended.
+> Amendments were appended rather than written over the original bodies, following #22's own precedent and the
+> repository's rule about not rewriting a record to match the code.
+>
+> **Two decisions taken while doing it, neither derivable from the list below:**
+>
+> - **A fixed cell size is withdrawn, not deferred.** The residue list below names it; Robert's call is that
+>   `CellGeometry.Fit` scaling the screen to the available space is right for a 3270 client, because the
+>   screen is a fixed grid and filling the window with it is what someone resizing the window is asking for.
+>   Vista sizing the window to the font is a defensible alternative, not a better one. Recorded in #19's
+>   closing comment so it is not re-raised as an omission.
+> - **The residue splits three ways, not one.** #78 (color themes, and cursor shape and blink), #79 (wire log
+>   defaults — which the list below missed, and which had shipped nowhere), and #18, which already existed for
+>   the keymap editor and needed only a cross-reference.
+>
+> **House style, from here on: American English.** These issues say "color". The repository's existing prose
+> still says "colour" and "licence"; no sweep was made, so the two conventions currently coexist.
+
 No code. The backlog currently misrepresents itself in three places, and a public debut is when strangers
 start reading it.
 
@@ -266,10 +286,9 @@ Ticked as of 2026-09-12.
 1. ~~**Merge PR #74.**~~ **Done** — merged as `3966ee5`.
 2. **Section 6 (backlog hygiene) and sections 5.1, 5.2 and 5.4** — independent of each other and of the
    code; can land in any order, and none of them blocks anything.
-   **5.1, 5.2 and 5.4 are done. Section 6 is not started**, so the `v0.5.0` milestone still does not exist
-   and this scope remains invisible outside this file.
-3. **Design spec for 4.1**, then its plan, then the work. This is the long pole. **Not started** — now the
-   only substantial item left before section 7.
+   **Done** — 5.1, 5.2 and 5.4, and section 6. The `v0.5.0` milestone now exists and carries #48, #71 and #75.
+3. **Design spec for 4.1**, then its plan, then the work. This is the long pole. **Not started** — the only
+   substantial item left before section 7.
 4. **4.2 and 4.3**, at any point after step 1. Neither blocks anything else. **4.3 is done** (PR #77);
    **4.2 is not started**.
 5. ~~**5.3**, once 4.1's shape is settled~~ — **done early**, with 5.2, for the reason recorded in 5.3.
@@ -278,7 +297,7 @@ Ticked as of 2026-09-12.
 7. **Section 7**, the rehearsal and the cross-platform pass.
 8. **Tag `v0.5.0`.**
 
-**What is left:** section 6, 4.1, 4.2, 5.5, then section 7 and the tag.
+**What is left:** 4.1 (#48), 4.2 (#71), 5.5, then section 7 and the tag.
 
 ## 10. Risks
 
