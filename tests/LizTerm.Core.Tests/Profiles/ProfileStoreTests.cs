@@ -23,6 +23,9 @@ public class ProfileStoreTests : IDisposable
         Assert.Empty(store.LoadAll());
     }
 
+    /// <summary>The Assert.Equal is the point, not the fields: SessionProfile is a record, and a record
+    /// compares a COLLECTION member by reference, so a Tags held as a list would make a profile read back from
+    /// disk unequal to the one written. TagSet's value equality is what keeps this assertion true.</summary>
     [Fact]
     public void Save_then_LoadAll_round_trips_every_field()
     {
@@ -31,10 +34,68 @@ public class ProfileStoreTests : IDisposable
         {
             Name = "TK5", Host = "mvs.local", Port = 3270, UseTls = true, VerifyCertificate = false,
             Model = 4, Extended = false, CodePage = "bracket", LuName = "LU01", DestructiveBackspace = true,
+            Tags = TagSet.From(["FAVORITE", "PROD", "MVS"]), Note = "IND$FILE test box, no live data",
         };
         store.Save(profile);
         var loaded = Assert.Single(store.LoadAll());
         Assert.Equal(profile, loaded);
+        Assert.Equal(["FAVORITE", "PROD", "MVS"], loaded.Tags.Names);
+        Assert.Equal("IND$FILE test box, no live data", loaded.Note);
+    }
+
+    [Fact]
+    public void Tags_are_written_as_a_json_string_array()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "p", Host = "h", Tags = TagSet.From(["PROD", "MVS"]) });
+        var json = File.ReadAllText(Directory.GetFiles(_dir, "*.json").Single());
+        Assert.Contains("\"PROD\"", json);
+        Assert.Contains("\"MVS\"", json);
+        Assert.DoesNotContain("\"color\"", json);
+    }
+
+    /// <summary>A profile file written before either field existed. Both must read as their declared defaults,
+    /// which is what makes this change need no migration (spec 3.1).</summary>
+    [Fact]
+    public void A_file_without_tags_or_a_note_reads_as_an_empty_set_and_null()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "old.json"), """
+            { "name": "old", "host": "h", "port": 23 }
+            """);
+
+        var old = Assert.Single(new ProfileStore(_dir).LoadAll());
+        Assert.True(old.Tags.IsEmpty);
+        Assert.Null(old.Note);
+        Assert.Equal(default, old.Tags);
+    }
+
+    /// <summary>A hand-edited file is repaired on load rather than refused, the same choice Read already makes
+    /// for a pin with no PEM. Nothing here should cost the profile.</summary>
+    [Fact]
+    public void A_hand_edited_tags_array_is_repaired_on_load()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "messy.json"), """
+            { "name": "messy", "host": "h", "tags": ["#PROD", " prod ", "", "MVS"] }
+            """);
+
+        var messy = Assert.Single(new ProfileStore(_dir).LoadAll());
+        Assert.Equal(["PROD", "MVS"], messy.Tags.Names);
+    }
+
+    /// <summary>Not an array at all. The whole profile must survive: losing a saved host because one key was
+    /// mistyped by hand is the outcome LoadAll's leniency exists to avoid.</summary>
+    [Fact]
+    public void A_tags_key_that_is_not_an_array_costs_the_tags_not_the_profile()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "single.json"), """{ "name": "single", "host": "h", "tags": "PROD" }""");
+        File.WriteAllText(Path.Combine(_dir, "object.json"), """{ "name": "object", "host": "h", "tags": { "a": 1 } }""");
+
+        var loaded = new ProfileStore(_dir).LoadAll();
+        Assert.Equal(["PROD"], loaded.Single(p => p.Name == "single").Tags.Names);
+        Assert.True(loaded.Single(p => p.Name == "object").Tags.IsEmpty);
     }
 
     [Fact]
