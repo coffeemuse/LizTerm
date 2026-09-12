@@ -4,14 +4,24 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- The Win32 icon resource inside the executable, which is what Windows draws in the Start menu, on the
+         taskbar and in Explorer. Nothing else in the repository produces one: Window.Icon is an Avalonia
+         resource the shell cannot read, and LizTerm.parcel's Win32Settings.InstallerIcon dresses the installer
+         rather than the application it installs. 0.5.0's rehearsal proved the distinction the hard way, with
+         an installer that carried the icon and an installed executable that did not. ApplicationIconTests holds
+         this in place. The path is relative to this project, not the repository root. No effect off Windows. -->
+    <ApplicationIcon>Assets\Icons\lizterm.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
-    <!-- lizterm.icns and lizterm.ico are inputs Parcel reads from disk (MacOsSettings.AppIcon,
-         Win32Settings.InstallerIcon in LizTerm.parcel), never loaded by the app itself. Embedding them cost
-         1.71 MB + 0.13 MB of a 3.41 MB assembly for no benefit; excluding them leaves them on disk for Parcel
-         while dropping them from the build. lizterm.png stays embedded and full-size: Parcel's
+    <!-- lizterm.icns and lizterm.ico are read from disk at build and package time, never loaded by the app
+         itself: the .icns by Parcel (MacOsSettings.AppIcon), the .ico by Parcel for
+         Win32Settings.InstallerIcon and by the SDK for the ApplicationIcon above, which embeds it as a Win32
+         resource, a different mechanism from an Avalonia one and the only one the Windows shell reads.
+         Embedding them as Avalonia resources cost
+         1.71 MB + 0.13 MB of a 3.41 MB assembly for no benefit; excluding them leaves them on disk for their
+         real readers while dropping them from the bundle. lizterm.png stays embedded and full-size: Parcel's
          LinuxSettings.AppIcon reads it from disk too, and it is also the 1254x1254 master lizterm-256.png (what
          every Window.Icon actually points at) and every other packaged size derives from, so do not resize it. -->
     <AvaloniaResource Remove="Assets\Icons\lizterm.icns" />
