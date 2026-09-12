@@ -54,6 +54,15 @@ public class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void The_keypad_fields_round_trip_and_the_dock_is_written_by_name()
+    {
+        Store.Update(s => s with { Keypad = true, KeypadDock = KeypadDock.Right });
+
+        Assert.Equal(new AppSettings(Keypad: true, KeypadDock: KeypadDock.Right), Store.Load());
+        Assert.Equal("Right", ReadFile()["keypadDock"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void A_first_change_writes_only_that_key()
     {
         Store.Update(s => s with { Blink = false });
