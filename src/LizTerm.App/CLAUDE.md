@@ -154,6 +154,14 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - The run list is cached for as long as the snapshot instance and the `CellGeometry` are unchanged, so a blink phase
   flip (a full `InvalidateVisual` twice a second, for as long as anything blinks) redraws prepared runs instead of
   re-segmenting and re-shaping every cell. A new snapshot or geometry rebuilds it; `RunPlanBuilds` is the test seam.
+- `OiaFontSize` is the status bar's font size, the cells' own, and it is set from `ArrangeOverride` only, never from
+  `Render`. The bar's height is part of what the screen fits into, so following the cells can feed back;
+  `StatusBarFont` follows that echo like any change and holds only a bounce — the cells returning, inside the same
+  layout pass (ended by `LayoutUpdated`), to the size the bar just left, a fit with no consistent answer — and keeps
+  holding it on later repaints at the same fit, so a host screen update never flips the bar. Everything else is
+  followed, one size included: cell sizes are whole pixels, and holding any one-size move left the bar a size off
+  the screen. `TerminalScreenLayoutTests` walks a real bar through every height and fails if the bar sits off a size
+  that would have settled.
 - Blink uses a 750 ms phase, never below 500 ms, and asks `ScreenSnapshot.HasBlink` rather than rescanning the grid.
 - **Overlays are painted, never folded into the run plan.** `Selection`, `Crosshair`, and `FindMatches` with
   `CurrentMatch` are styled properties painted in `Render` after `EnsureRunPlan`'s cached runs. A crosshair mode or a
@@ -560,9 +568,10 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
 - `ProfileStore` keeps one JSON file per profile under `AppPaths`' profiles directory and silently skips unreadable
   files.
 - The IBM 3270 font is embedded (`avares://LizTerm.App/Assets/Fonts#IBM 3270`) and used for the status bar too, so it
-  reads as one instrument. Status text comes from `StatusFormatter`; the padlock glyph is U+E0A2 because the font's
-  true OIA glyphs are unencoded. Assertions on status strings are exact, so change `StatusFormatter` and its tests
-  together.
+  reads as one instrument. The bar is x3270's Operator Information Area: `StatusFormatter` builds its fields from
+  `OiaGlyphs`, the font's own OIA symbols at the private-use block `tools/patch-3270-oia-font.py` gives them
+  (`docs/development.md`, "The 3270 font"); the padlock is the font's Powerline one, U+E0A2. The words go on
+  tooltips. Assertions on status strings are exact, so change `StatusFormatter` and its tests together.
 - `Assets/Icons/` holds the app icon in the three shapes packaging needs (`lizterm.icns`, `lizterm.ico`,
   `lizterm.png`, referenced from `LizTerm.parcel`). The csproj's `<AvaloniaResource Include="Assets\**" />` already
   covers a new or replaced one.

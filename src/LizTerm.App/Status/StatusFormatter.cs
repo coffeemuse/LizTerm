@@ -7,12 +7,14 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.App.Status;
 
-/// <summary>Plain-language status text. Glyphs are ones the IBM 3270 font encodes: its padlock (U+E0A2) and ordinary check/cross marks.</summary>
+/// <summary>Status bar text. The bar itself speaks x3270's Operator Information Area (see <see cref="OiaGlyphs"/>
+/// and the x3270 wiki's "Operator Information Area" page); the plain-language sentences here go on tooltips, error
+/// bars and the About window. The padlock is the font's Powerline one (U+E0A2).</summary>
 public static class StatusFormatter
 {
     public const string PadlockGlyph = "\uE0A2";
-    public const string ReadyGlyph = "✓";
-    public const string BlockedGlyph = "✕";
+    public const string VerifiedMark = "✓";
+    public const string UnverifiedMark = "!";
 
     public static string Connection(ConnectionState state, string host) => state switch
     {
@@ -32,40 +34,107 @@ public static class StatusFormatter
         _ => state.ToString(),
     };
 
-    public static string Tls(TlsInfo? tls) => tls is { Secure: true }
-        ? $"{PadlockGlyph} TLS, certificate {(tls.Verified == true ? "verified" : "not verified")}"
-        : "";
-
-    public static string Keyboard(KeyboardStatus status) => status.Lock switch
+    /// <summary>x3270's mode field: the boxed 4 a 3270 always shows, A or B underlined for TN3270 or TN3270E once a
+    /// connection is up, then the session: a solid box when bound, N for NVT, the boxed human for SSCP-LU, a boxed
+    /// ? when there is none. x3270 takes the A/B from the host's own "under A" indication; deriving it from the
+    /// connection state is the nearest thing the engine reports to the App.</summary>
+    public static string Mode(ConnectionState state) => state switch
     {
-        KeyboardLock.Unlocked => $"{ReadyGlyph} Ready",
-        KeyboardLock.NotConnected => $"{BlockedGlyph} Not connected",
-        KeyboardLock.WaitingForHost => $"{BlockedGlyph} Waiting for host",
-        KeyboardLock.TerminalWait => $"{BlockedGlyph} Please wait",
-        KeyboardLock.Deferred => $"{BlockedGlyph} Waiting for host",
-        KeyboardLock.MinusFunction => $"{BlockedGlyph} Not available here, press Esc",
-        KeyboardLock.ProtectedField => $"{BlockedGlyph} Protected field, press Esc",
-        KeyboardLock.NumericOnly => $"{BlockedGlyph} Numbers only here, press Esc",
-        KeyboardLock.Overflow => $"{BlockedGlyph} Field is full, press Esc",
-        KeyboardLock.Dbcs => $"{BlockedGlyph} Invalid double-byte input, press Esc",
-        KeyboardLock.Scrolled => $"{BlockedGlyph} Scrolled back",
-        KeyboardLock.Disabled => $"{BlockedGlyph} Keyboard disabled",
-        KeyboardLock.FieldWait => $"{BlockedGlyph} Waiting for field",
-        KeyboardLock.FileTransfer => $"{BlockedGlyph} File transfer in progress",
-        _ => $"{BlockedGlyph} {status.LockDetail ?? "Locked"}",
+        ConnectionState.ConnectedNvt or ConnectionState.ConnectedNvtCharMode => OiaGlyphs.Box4 + OiaGlyphs.UnderA + "N",
+        ConnectionState.Connected3270 => OiaGlyphs.Box4 + OiaGlyphs.UnderA + OiaGlyphs.BoxSolid,
+        ConnectionState.ConnectedUnbound => OiaGlyphs.Box4 + OiaGlyphs.UnderB + OiaGlyphs.BoxQuestion,
+        ConnectionState.ConnectedENvt => OiaGlyphs.Box4 + OiaGlyphs.UnderB + "N",
+        ConnectionState.ConnectedSscp => OiaGlyphs.Box4 + OiaGlyphs.UnderB + OiaGlyphs.BoxHuman,
+        ConnectionState.ConnectedTn3270E => OiaGlyphs.Box4 + OiaGlyphs.UnderB + OiaGlyphs.BoxSolid,
+        _ => OiaGlyphs.Box4 + " " + OiaGlyphs.BoxQuestion,
     };
 
-    public static string Insert(bool on) => on ? "INS" : "";
+    /// <summary>The words behind the mode field: the connection sentence, then the full terminal type the way a 3270
+    /// user writes one (3278 or 3279 is the colour distinction), which the OIA has no cell for.</summary>
+    public static string ModeTip(ConnectionState state, SessionProfile profile) =>
+        $"{Connection(state, profile.Host)}\n{TerminalType.For(profile)}";
 
-    public static string Cursor(CursorPosition cursor) => $"{cursor.Row + 1:D2}/{cursor.Column + 1:D3}";
+    /// <summary>Padlock, mark and tooltip: green check when the certificate was verified, orange ! when it was not,
+    /// nothing on a plain connection. Both the mark and the colour carry the verdict, so neither has to alone.</summary>
+    public static (string Glyph, string Mark, string Tip) Tls(TlsInfo? tls) => tls is { Secure: true }
+        ? tls.Verified == true
+            ? (PadlockGlyph, VerifiedMark, "TLS, certificate verified")
+            : (PadlockGlyph, UnverifiedMark, "TLS, certificate not verified")
+        : ("", "", "");
 
-    /// <summary>The full terminal type, the way a 3270 user writes one. "Model 2" dropped the family, so it did
-    /// not say 3278 or 3279 — the colour distinction — in the one place a user can read what terminal they are.</summary>
-    public static string Model(SessionProfile profile, string? luName)
+    /// <summary>The message area. Until a session is bound it belongs to the connection, as in x3270: the lock, the
+    /// broken wire, the step in brackets. TN3270E negotiated with nothing bound yet is still a step, x3270's
+    /// [TN3270E]: b3270 reports the keyboard as not connected there, and reading that would draw the broken wire
+    /// beside a mode field saying the connection is up. Once bound it is the keyboard's: blank when free, otherwise
+    /// the lock and x3270's symbol for why. Operator errors are the ones x3270 paints red.</summary>
+    public static OiaMessage Message(ConnectionState state, KeyboardStatus status, string host)
     {
-        var model = TerminalType.For(profile);
-        return luName is null ? model : $"{model}  LU {luName}";
+        if (!state.IsConnected() || state == ConnectionState.ConnectedUnbound)
+        {
+            var text = state switch
+            {
+                ConnectionState.Disconnected => Locked(OiaGlyphs.NoConnection),
+                ConnectionState.Reconnecting => Locked(OiaGlyphs.NoConnection + " " + OiaGlyphs.Clock),
+                ConnectionState.Resolving => Locked(OiaGlyphs.NoConnection + " [DNS]"),
+                ConnectionState.TcpPending => Locked(OiaGlyphs.NoConnection + " [TCP]"),
+                ConnectionState.TlsPending or ConnectionState.TlsPasswordPending => Locked(OiaGlyphs.NoConnection + " [TLS]"),
+                ConnectionState.ProxyPending => Locked(OiaGlyphs.NoConnection + " [Proxy]"),
+                ConnectionState.TelnetPending => Locked("[TELNET]"),
+                ConnectionState.ConnectedUnbound => Locked("[TN3270E]"),
+                _ => Locked(state.ToString()),
+            };
+            return new OiaMessage(text, false, Connection(state, host));
+        }
+        var (symbol, isError) = status.Lock switch
+        {
+            KeyboardLock.Unlocked => ((string?)null, false),
+            KeyboardLock.NotConnected => (OiaGlyphs.NoConnection, false),
+            KeyboardLock.WaitingForHost => ("SYSTEM", false),
+            KeyboardLock.TerminalWait => (OiaGlyphs.Clock, false),
+            KeyboardLock.Deferred => ("", false),
+            KeyboardLock.MinusFunction => ("-f", true),
+            KeyboardLock.ProtectedField => (OiaGlyphs.LeftArrow + OiaGlyphs.Human + OiaGlyphs.RightArrow, true),
+            KeyboardLock.NumericOnly => (OiaGlyphs.Human + "NUM", true),
+            KeyboardLock.Overflow => (OiaGlyphs.Human + ">", true),
+            KeyboardLock.Dbcs => ("<S>", true),
+            KeyboardLock.Scrolled => ("Scrolled", false),
+            KeyboardLock.Disabled => (OiaGlyphs.KeyLeft + OiaGlyphs.KeyRight, true),
+            KeyboardLock.FieldWait => ("[Field]", false),
+            KeyboardLock.FileTransfer => ("File Transfer", false),
+            _ => (status.LockDetail ?? "Locked", false),
+        };
+        return new OiaMessage(symbol is null ? "" : Locked(symbol), isError, Keyboard(status));
     }
+
+    private static string Locked(string symbol) => symbol.Length == 0 ? OiaGlyphs.Lock : OiaGlyphs.Lock + " " + symbol;
+
+    /// <summary>The keyboard state in words, for the message area's tooltip.</summary>
+    public static string Keyboard(KeyboardStatus status) => status.Lock switch
+    {
+        KeyboardLock.Unlocked => "Ready",
+        KeyboardLock.NotConnected => "Not connected",
+        KeyboardLock.WaitingForHost => "Waiting for host",
+        KeyboardLock.TerminalWait => "Please wait",
+        KeyboardLock.Deferred => "Waiting for host",
+        KeyboardLock.MinusFunction => "Not available here, press Esc",
+        KeyboardLock.ProtectedField => "Protected field, press Esc",
+        KeyboardLock.NumericOnly => "Numbers only here, press Esc",
+        KeyboardLock.Overflow => "Field is full, press Esc",
+        KeyboardLock.Dbcs => "Invalid double-byte input, press Esc",
+        KeyboardLock.Scrolled => "Scrolled back",
+        KeyboardLock.Disabled => "Keyboard disabled",
+        KeyboardLock.FieldWait => "Waiting for field",
+        KeyboardLock.FileTransfer => "File transfer in progress",
+        _ => status.LockDetail ?? "Locked",
+    };
+
+    public static string Insert(bool on) => on ? OiaGlyphs.Insert : "";
+
+    /// <summary>The LU name the host assigned, bare, as x3270 draws it.</summary>
+    public static string Lu(string? luName) => luName ?? "";
+
+    /// <summary>Row and column, one-based, in x3270's rrr/ccc form.</summary>
+    public static string Cursor(CursorPosition cursor) => $"{cursor.Row + 1:D3}/{cursor.Column + 1:D3}";
 
     public static string Fault(BackendFault fault)
     {

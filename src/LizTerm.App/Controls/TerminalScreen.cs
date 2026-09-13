@@ -95,6 +95,8 @@ public sealed class TerminalScreen : Control
     /// one state rather than two to keep in step. Test seam, like BlinkTimerRunning.</summary>
     internal bool BellFlashing => _flashTimer.IsEnabled;
 
+    private readonly StatusBarFont _oiaFont = new();
+
     public TerminalScreen()
     {
         _blinkTimer.Tick += (_, _) =>
@@ -103,6 +105,9 @@ public sealed class TerminalScreen : Control
             InvalidateVisual();
         };
         _flashTimer.Tick += (_, _) => EndFlash();
+        // The end of a layout pass is what tells a bounce from the bar's own resize apart from a real change
+        // (StatusBarFont).
+        LayoutUpdated += (_, _) => _oiaFont.LayoutSettled();
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -199,6 +204,20 @@ public sealed class TerminalScreen : Control
     }
 
     internal CellGeometry LastGeometry { get; private set; }
+
+    /// <summary>The status bar's font size: the cell font size, followed from ArrangeOverride through
+    /// <see cref="StatusBarFont"/>, which holds only a bounce the bar's own resize causes. Read-only; the window's OIA
+    /// text binds to it.</summary>
+    public static readonly DirectProperty<TerminalScreen, double> OiaFontSizeProperty =
+        AvaloniaProperty.RegisterDirect<TerminalScreen, double>(nameof(OiaFontSize), o => o.OiaFontSize);
+
+    private double _oiaFontSize = StatusBarFont.Default;
+
+    public double OiaFontSize
+    {
+        get => _oiaFontSize;
+        private set => SetAndRaise(OiaFontSizeProperty, ref _oiaFontSize, value);
+    }
 
     public event EventHandler<TerminalKey>? KeyRequested;
     public event EventHandler<string>? TextEntered;
@@ -400,6 +419,9 @@ public sealed class TerminalScreen : Control
     protected override Size ArrangeOverride(Size finalSize)
     {
         UpdateGeometry(finalSize);
+        // Here and never from Render: the bar's size is layout, and StatusBarFont tells a bounce from its own resize
+        // by its arriving within the same layout pass.
+        OiaFontSize = _oiaFont.Follow(LastGeometry.FontSize);
         return base.ArrangeOverride(finalSize);
     }
 

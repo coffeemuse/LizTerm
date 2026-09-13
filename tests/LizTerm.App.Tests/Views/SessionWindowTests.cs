@@ -11,6 +11,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using LizTerm.App.Controls;
+using LizTerm.App.Rendering;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -625,5 +626,36 @@ public class SessionWindowTests
 
         settings.ShowTagsInStatusBar = false;
         Assert.False(chips.IsVisible);
+    }
+
+    /// <summary>x3270 rules its OIA off from the screen with a line in the palette's blue. The bar does the same,
+    /// so the only colours on it are the screen's own.</summary>
+    [AvaloniaFact]
+    public void The_status_bar_is_ruled_off_in_the_palettes_blue()
+    {
+        var (window, _, _, _, _) = Show();
+        var bar = window.FindControl<Border>("StatusBar")!;
+        Assert.Equal(new Thickness(0, 1, 0, 0), bar.BorderThickness);
+        Assert.Same(Palette.OiaRule, bar.BorderBrush);
+    }
+
+    /// <summary>The bar's text, its operator errors and its padlock take the palette's colours, like the rule above
+    /// them, so a palette change reaches the whole bar.</summary>
+    [AvaloniaFact]
+    public void The_status_bar_draws_in_the_palettes_colours()
+    {
+        var (window, _, _, session, _) = Show();
+        session.RaiseConnection(ConnectionState.ConnectedTn3270E, new TlsInfo(true, true, null, null));
+        session.RaiseStatus(new KeyboardStatus(KeyboardLock.ProtectedField, null, false, false, null));
+
+        Assert.Same(Palette.OiaText, window.FindControl<TextBlock>("ModeField")!.Foreground);
+        Assert.Same(Palette.OiaError, window.FindControl<TextBlock>("MessageArea")!.Foreground);
+        Assert.Same(Palette.OiaError, window.FindControl<TextBlock>("WireLogStatus")!.Foreground);
+        var tls = window.FindControl<StackPanel>("TlsField")!.Children.OfType<TextBlock>().ToList();
+        Assert.Equal(2, tls.Count);
+        Assert.All(tls, block => Assert.Same(Palette.TlsVerified, block.Foreground));
+
+        session.RaiseConnection(ConnectionState.ConnectedTn3270E, new TlsInfo(true, false, null, null));
+        Assert.All(tls, block => Assert.Same(Palette.TlsUnverified, block.Foreground));
     }
 }

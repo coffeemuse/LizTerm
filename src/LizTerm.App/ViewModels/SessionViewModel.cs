@@ -85,13 +85,21 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(CanFind))]
     private ScreenSnapshot? _screen;
 
-    [ObservableProperty] private string _connectionText = "";
-    [ObservableProperty] private string _tlsText = "";
-    [ObservableProperty] private string _keyboardText = "";
+    // The status bar is x3270's Operator Information Area (StatusFormatter): glyphs on the bar, sentences on the tips.
+    [ObservableProperty] private string _modeText = "";
+    [ObservableProperty] private string _modeTip = "";
+    [ObservableProperty] private string _tlsGlyph = "";
+    [ObservableProperty] private string _tlsMark = "";
+    [ObservableProperty] private bool _tlsVerified;
+    [ObservableProperty] private string? _tlsTip;
+    [ObservableProperty] private string _messageText = "";
+    [ObservableProperty] private bool _messageIsError;
+    [ObservableProperty] private string _messageTip = "";
     [ObservableProperty] private string _insertText = "";
+    [ObservableProperty] private string _luText = "";
     [ObservableProperty] private string _cursorText = "";
-    [ObservableProperty] private string _modelText = "";
     [ObservableProperty] private string? _errorMessage;
+    private KeyboardStatus _keyboard = KeyboardStatus.Initial;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PasteCommand))]
@@ -390,9 +398,20 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private void ApplyStatus(KeyboardStatus status)
     {
         if (_disposed) return;
-        KeyboardText = StatusFormatter.Keyboard(status);
+        _keyboard = status;
         InsertText = StatusFormatter.Insert(status.InsertMode);
-        ModelText = StatusFormatter.Model(Profile, status.LuName);
+        LuText = StatusFormatter.Lu(status.LuName);
+        UpdateMessage();
+    }
+
+    /// <summary>The message area reads both events: the connection owns it until a session is up, the keyboard
+    /// after, so whichever arrives recomputes it from the pair.</summary>
+    private void UpdateMessage()
+    {
+        var message = StatusFormatter.Message(Connection, _keyboard, Profile.Host);
+        MessageText = message.Text;
+        MessageIsError = message.IsError;
+        MessageTip = message.Tip;
     }
 
     private void ApplyConnection(ConnectionState state)
@@ -400,8 +419,14 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         if (_disposed) return;
         IsConnected = state.IsConnected();
         Connection = state;
-        ConnectionText = StatusFormatter.Connection(state, Profile.Host);
-        TlsText = StatusFormatter.Tls(_session.Tls);
+        ModeText = StatusFormatter.Mode(state);
+        ModeTip = StatusFormatter.ModeTip(state, Profile);
+        var (glyph, mark, tip) = StatusFormatter.Tls(_session.Tls);
+        TlsGlyph = glyph;
+        TlsMark = mark;
+        TlsVerified = mark == StatusFormatter.VerifiedMark;
+        TlsTip = tip.Length == 0 ? null : tip;
+        UpdateMessage();
         if (state.HasSocket()) _socketOpened = true;
         if (IsConnected && !_wasConnected && (HasNote || Chips.Count > 0)) IsBannerVisible = true;
         _wasConnected = IsConnected;

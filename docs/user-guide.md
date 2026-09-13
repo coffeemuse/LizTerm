@@ -81,9 +81,21 @@ name matches the argument, ignoring case, always wins.
 
 ## The session window
 
-The status bar along the bottom shows, in order: a small note icon, the connection state, the TLS state, the
-keyboard state (for example *Ready*, or why the keyboard is locked), insert mode, the cursor position, the model and
-LU name, and — while a wire log is recording — a red **● wire log** marker.
+The status bar along the bottom is a 3270 Operator Information Area, drawn with the symbols x3270 uses. Every
+symbol has its plain words on a tooltip. From left to right:
+
+- A small note icon (see below).
+- The mode field: a boxed **4**, then an underlined **A** or **B** for a TN3270 or TN3270E connection, then a solid
+  box once a 3270 session is bound, a boxed **?** while there is none, or **N** for a host in NVT mode. Its tooltip
+  also names the terminal model.
+- On a TLS connection, a padlock with a green **✓** when the host's certificate was verified, or an orange **!** when
+  it was not.
+- The message area: blank while the keyboard is free, otherwise a lock **X** and why. While connecting it shows the
+  broken wire and the step in brackets; then a clock while the host works, **SYSTEM** once the host has acknowledged
+  and is still busy, and in red the operator errors — for example the little figure between arrows for typing into
+  a protected field, which Esc clears.
+- On the right: the insert-mode caret, the LU name the host assigned, the cursor as row/column, and — while a wire
+  log is recording — a red **● wire log** marker.
 
 When a session connects, a banner above the status bar names the profile, its host and port, its tags and its note,
 for the moment you have forgotten which box you are on. It goes away on your first keystroke or click on the screen;
@@ -194,8 +206,8 @@ connection.
 The profile editor shows a pinned certificate's fingerprint. **Forget** removes the pin and returns the profile to
 normal verification.
 
-Turning **Verify host certificate** off in a profile skips the check entirely. On a TLS connection, the status bar
-says whether the certificate was verified.
+Turning **Verify host certificate** off in a profile skips the check entirely. On a TLS connection, the status bar's
+padlock shows whether the certificate was verified: green with a **✓**, or orange with a **!**.
 
 ## File transfer (IND$FILE)
 
