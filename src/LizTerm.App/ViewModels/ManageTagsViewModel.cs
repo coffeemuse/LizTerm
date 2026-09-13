@@ -104,7 +104,7 @@ public partial class ManageTagsViewModel : ObservableObject
         var merge = !target.Equals(from, StringComparison.OrdinalIgnoreCase) && _snapshot.Registry.Contains(target);
         if (!merge)
         {
-            RunRename(from, target);
+            RunRename(from, target, merge: false);
             return;
         }
 
@@ -113,7 +113,7 @@ public partial class ManageTagsViewModel : ObservableObject
         Ask(row.IsUnused
                 ? $"{shownTo} already exists. Merge {shownFrom} into it? No profile uses {shownFrom}, so only its colour is dropped."
                 : $"{shownTo} already exists. Merge {shownFrom} into it? {ProfileList(row.UsedBy)} will carry {shownTo} instead, and {shownFrom}'s colour is dropped.",
-            "Merge", () => RunRename(from, target));
+            "Merge", () => RunRename(from, target, merge: true));
     }
 
     [RelayCommand(CanExecute = nameof(IsTagSelected))]
@@ -132,9 +132,9 @@ public partial class ManageTagsViewModel : ObservableObject
         if (SelectedRow is not { IsReserved: false } row) return;
         CancelPending();
         var name = row.Name;
-        _maintenance.Recolour(name, color);
+        var result = _maintenance.Recolour(name, color);
         Refresh(name);
-        StatusMessage = null;
+        StatusMessage = result.Succeeded ? null : $"Could not save the colour: {result.Error}";
     }
 
     [RelayCommand]
@@ -148,21 +148,47 @@ public partial class ManageTagsViewModel : ObservableObject
     [RelayCommand]
     private void CancelConfirmation() => CancelPending();
 
-    private void RunRename(string from, string target)
+    private void RunRename(string from, string target, bool merge)
     {
         CancelPending();
-        _maintenance.Rename(from, target);
+        var result = _maintenance.Rename(from, target);
         Refresh(target, from);
-        StatusMessage = null;
+        StatusMessage = RenameStatus(result, from, target, merge);
     }
 
     private void RunDelete(string name)
     {
         CancelPending();
-        _maintenance.Delete(name);
+        var result = _maintenance.Delete(name);
         Refresh(name);
-        StatusMessage = null;
+        var shown = name.ToUpperInvariant();
+        StatusMessage = result switch
+        {
+            { Succeeded: true } => null,
+            { FailedProfile: { } failed } =>
+                $"Removed from {result.Changed.Count} of {result.Carriers} profiles. Could not write {failed}: {result.Error}\nDelete {shown} again to finish.",
+            _ => $"{RegistryNotSaved(result)}\n{shown} may still be listed.",
+        };
     }
+
+    /// <summary>Spec 6.2. Tag names are uppercased as the chips are, except in a case-only rename, whose casing is the
+    /// whole change — "Rename DEV to DEV" would say nothing.</summary>
+    private static string? RenameStatus(TagChangeResult result, string from, string target, bool merge)
+    {
+        if (result.Succeeded) return null;
+        var caseOnly = from.Equals(target, StringComparison.OrdinalIgnoreCase);
+        var shownFrom = caseOnly ? from : from.ToUpperInvariant();
+        var shownTo = caseOnly ? target : target.ToUpperInvariant();
+        if (result.FailedProfile is { } failed)
+            return $"Renamed on {result.Changed.Count} of {result.Carriers} profiles. Could not write {failed}: {result.Error}\nRename {shownFrom} to {shownTo} again to finish.";
+        if (caseOnly) return RegistryNotSaved(result);
+        return merge
+            ? $"{RegistryNotSaved(result)}\n{shownFrom} may still be listed."
+            : $"{RegistryNotSaved(result)}\n{shownTo} may show a different colour next time.";
+    }
+
+    private static string RegistryNotSaved(TagChangeResult result) =>
+        $"Every profile was updated, but tags.json could not be saved: {result.Error}";
 
     private void Ask(string message, string confirmLabel, Action run)
     {

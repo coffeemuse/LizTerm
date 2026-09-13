@@ -278,4 +278,145 @@ public class ManageTagsViewModelTests : IDisposable
 
         Assert.Equal("PROD", vm.SelectedRow?.Name);
     }
+
+    private string TagsFile => Path.Combine(_dir, "tags.json");
+
+    private string ProfileFile(string name) => Path.Combine(_dir, "profiles", ProfileStore.FileNameFor(name));
+
+    /// <summary>A directory at the file's .tmp path makes its next save fail (see TagMaintenanceTests.Block).</summary>
+    private static void Block(string file) => Directory.CreateDirectory(file + ".tmp");
+
+    [Fact]
+    public void A_rename_that_fails_partway_says_how_far_it_got_and_how_to_finish()
+    {
+        Save("alpha", "DEV");
+        Save("beta", "DEV");
+        Save("gamma", "DEV");
+        Define(("DEV", TagColor.Teal));
+        Block(ProfileFile("beta"));
+        var vm = Open();
+        vm.SelectedRow = Row(vm, "DEV");
+        vm.NameText = "test";
+
+        vm.RenameCommand.Execute(null);
+
+        Assert.StartsWith("Renamed on 1 of 3 profiles. Could not write beta: ", vm.StatusMessage);
+        Assert.EndsWith("\nRename DEV to TEST again to finish.", vm.StatusMessage);
+        Assert.Equal("test", vm.SelectedRow?.Name);
+        Assert.Contains(vm.Rows, r => r.Name == "DEV");
+    }
+
+    [Fact]
+    public void A_case_only_rename_that_fails_partway_shows_both_names_as_typed()
+    {
+        Save("alpha", "dev");
+        Save("beta", "dev");
+        Define(("dev", TagColor.Teal));
+        Block(ProfileFile("beta"));
+        var vm = Open();
+        vm.SelectedRow = Row(vm, "dev");
+        vm.NameText = "DEV";
+
+        vm.RenameCommand.Execute(null);
+
+        Assert.StartsWith("Renamed on 1 of 2 profiles. Could not write beta: ", vm.StatusMessage);
+        Assert.EndsWith("\nRename dev to DEV again to finish.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public void A_registry_that_cannot_be_saved_after_a_rename_or_a_merge_says_what_that_costs()
+    {
+        Seed();
+        Block(TagsFile);
+        var vm = Open();
+
+        vm.SelectedRow = Row(vm, "TLS");
+        vm.NameText = "SSL";
+        vm.RenameCommand.Execute(null);
+        Assert.StartsWith("Every profile was updated, but tags.json could not be saved: ", vm.StatusMessage);
+        Assert.EndsWith("\nSSL may show a different colour next time.", vm.StatusMessage);
+
+        vm.SelectedRow = Row(vm, "PRDO");
+        vm.NameText = "PROD";
+        vm.RenameCommand.Execute(null);
+        vm.ConfirmCommand.Execute(null);
+        Assert.StartsWith("Every profile was updated, but tags.json could not be saved: ", vm.StatusMessage);
+        Assert.EndsWith("\nPRDO may still be listed.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public void A_registry_that_cannot_be_saved_after_a_case_only_rename_says_only_that()
+    {
+        Save("a", "dev");
+        Define(("dev", TagColor.Teal));
+        Block(TagsFile);
+        var vm = Open();
+        vm.SelectedRow = Row(vm, "dev");
+        vm.NameText = "DEV";
+
+        vm.RenameCommand.Execute(null);
+
+        Assert.StartsWith("Every profile was updated, but tags.json could not be saved: ", vm.StatusMessage);
+        Assert.DoesNotContain("\n", vm.StatusMessage);
+    }
+
+    [Fact]
+    public void A_delete_that_fails_says_how_far_it_got_or_what_it_costs()
+    {
+        Save("alpha", "LAB");
+        Save("beta", "LAB");
+        Define(("LAB", TagColor.Teal));
+        Block(ProfileFile("beta"));
+        var vm = Open();
+        vm.SelectedRow = Row(vm, "LAB");
+
+        vm.DeleteCommand.Execute(null);
+        vm.ConfirmCommand.Execute(null);
+
+        Assert.StartsWith("Removed from 1 of 2 profiles. Could not write beta: ", vm.StatusMessage);
+        Assert.EndsWith("\nDelete LAB again to finish.", vm.StatusMessage);
+        Assert.Equal("LAB", vm.SelectedRow?.Name);
+
+        Directory.Delete(ProfileFile("beta") + ".tmp");
+        Block(TagsFile);
+        vm.DeleteCommand.Execute(null);
+        vm.ConfirmCommand.Execute(null);
+
+        Assert.StartsWith("Every profile was updated, but tags.json could not be saved: ", vm.StatusMessage);
+        Assert.EndsWith("\nLAB may still be listed.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public void A_recolour_that_cannot_be_saved_says_so_and_the_swatch_stays()
+    {
+        Save("a", "MVS");
+        Define(("MVS", TagColor.Blue));
+        Block(TagsFile);
+        var vm = Open();
+        vm.SelectedRow = Row(vm, "MVS");
+
+        vm.RecolourCommand.Execute(TagColor.Green);
+
+        Assert.StartsWith("Could not save the colour: ", vm.StatusMessage);
+        Assert.Equal(TagColor.Blue, vm.Swatches.Single(s => s.IsSelected).Color);
+    }
+
+    [Fact]
+    public void A_failure_message_outlasts_a_change_of_selection_and_goes_with_the_next_action()
+    {
+        Save("a", "LAB", "MVS");
+        Define(("LAB", TagColor.Teal), ("MVS", TagColor.Blue));
+        Block(TagsFile);
+        var vm = Open();
+        vm.SelectedRow = Row(vm, "MVS");
+        vm.RecolourCommand.Execute(TagColor.Green);
+        Assert.NotNull(vm.StatusMessage);
+
+        vm.SelectedRow = Row(vm, "LAB");
+        Assert.NotNull(vm.StatusMessage);
+
+        Directory.Delete(TagsFile + ".tmp");
+        vm.RecolourCommand.Execute(TagColor.Red);
+        Assert.Null(vm.StatusMessage);
+    }
 }
