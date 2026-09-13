@@ -3,49 +3,49 @@
   Copyright 2026 by CoffeeMuse
   SPDX-License-Identifier: BSD-3-Clause
 -->
-<!-- 480 rather than 400: the Quick Connect row, the filter row and three-line rows together left about
+<!-- 480 rather than 400: the Quick Connect footer, the filter row and three-line rows together left about
      four profiles visible at 400. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LizTerm.App.ViewModels"
         xmlns:render="using:LizTerm.App.Rendering"
+        xmlns:sys="using:System"
         x:Class="LizTerm.App.Views.ProfilePickerWindow"
         x:DataType="vm:ProfilePickerViewModel"
         Title="LizTerm" Width="520" Height="480" MinWidth="400" MinHeight="360"
         Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         WindowStartupLocation="CenterScreen">
-  <DockPanel Margin="16">
-    <TextBlock DockPanel.Dock="Top" Text="Sessions" FontSize="20" Margin="0,0,0,10" />
-    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12" Spacing="4">
-      <!-- Docked rather than a horizontal StackPanel with a fixed-width box: at the window's own MinWidth of 400
-           the row is 368px, and a 300px box plus the button ran past the right edge. The button keeps its natural
-           width and the box takes whatever is left. -->
-      <DockPanel LastChildFill="True">
-        <Button x:Name="QuickConnectButton" DockPanel.Dock="Right" Content="Quick Connect" Command="{Binding QuickConnectCommand}" Margin="8,0,0,0" />
-        <TextBox x:Name="QuickConnectBox" Text="{Binding QuickConnectText}"
-                 PlaceholderText="host, host:port, or L:host for TLS" KeyDown="OnQuickConnectKeyDown" />
-      </DockPanel>
-      <TextBlock Text="{Binding QuickConnectError}" Foreground="#FF8080" FontSize="12" TextWrapping="Wrap"
-                 IsVisible="{Binding QuickConnectError, Converter={x:Static ObjectConverters.IsNotNull}}" />
-    </StackPanel>
-    <!-- A second text box a few pixels from Quick Connect's, so the two are told apart by placeholder and by
-         position: this one sits directly on the list it narrows. It deliberately has NO KeyDown handler, unlike
-         Quick Connect — Refilter always leaves the selection on a visible row, so the window's default Connect
-         button already does the right thing when you narrow to one profile and press Enter. -->
-    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" LastChildFill="True">
-      <ComboBox x:Name="ScopeBox" DockPanel.Dock="Right" Width="130" Margin="8,0,0,0"
-                ItemsSource="{Binding Scopes}" SelectedItem="{Binding SelectedScope}" />
+  <!-- Two zones: the saved sessions (heading, filter, list and its buttons) and, below a divider, Quick Connect.
+       They used to be two look-alike text boxes stacked 12px apart under one heading, with the Quick Connect button
+       and the scope drop-down lined up into what read as a single form. A Grid rather than a DockPanel because
+       document order is tab order: the filter comes first, and a DockPanel would need the footer declared ahead
+       of the list it sits under. -->
+  <Grid Margin="16" RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="*,Auto">
+    <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Sessions" FontSize="20" Margin="0,0,0,10" />
+    <!-- Exactly as wide as the list it narrows, so it reads as the list's own search rather than the window's.
+         It deliberately has NO KeyDown handler, unlike Quick Connect: Refilter always leaves the selection on a
+         visible row, so the window's default Connect button already does the right thing when you narrow to one
+         profile and press Enter. A Grid for the same tab-order reason as the window's: a docked drop-down would
+         have to be declared ahead of the box, and Tab would reach it first. -->
+    <Grid Grid.Row="1" Grid.Column="0" Margin="0,0,0,8" ColumnDefinitions="*,Auto">
       <TextBox x:Name="FilterBox" Text="{Binding FilterText}" PlaceholderText="Filter sessions" />
-    </DockPanel>
-    <StackPanel DockPanel.Dock="Right" Margin="12,0,0,0" Spacing="8" Width="120">
-      <Button Content="Connect" Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch" IsDefault="True" />
-      <Button Content="New..." Command="{Binding NewCommand}" HorizontalAlignment="Stretch" />
-      <Button Content="Edit..." Command="{Binding EditCommand}" HorizontalAlignment="Stretch" />
-      <Button Content="Delete" Command="{Binding DeleteCommand}" HorizontalAlignment="Stretch" />
-      <Button x:Name="TagsButton" Content="Tags..." Command="{Binding ManageTagsCommand}" HorizontalAlignment="Stretch" />
-      <Button Content="Quit" Command="{Binding QuitCommand}" HorizontalAlignment="Stretch" Margin="0,24,0,0" />
-    </StackPanel>
-    <ListBox ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}" DoubleTapped="OnDoubleTapped"
+      <ComboBox x:Name="ScopeBox" Grid.Column="1" Width="130" Margin="8,0,0,0"
+                ItemsSource="{Binding Scopes}" SelectedItem="{Binding SelectedScope}" />
+    </Grid>
+    <!-- Starts level with the filter row and ends level with the list, with Quit on the list's bottom edge. Connect
+         is the accent button because it is the default one; the label still says what it does. -->
+    <Grid Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Width="120" Margin="12,0,0,0" RowDefinitions="Auto,*">
+      <StackPanel Spacing="8">
+        <Button Content="Connect" Classes="accent" Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch" IsDefault="True" />
+        <Button Content="New..." Command="{Binding NewCommand}" HorizontalAlignment="Stretch" />
+        <Button Content="Edit..." Command="{Binding EditCommand}" HorizontalAlignment="Stretch" />
+        <Button Content="Delete" Command="{Binding DeleteCommand}" HorizontalAlignment="Stretch" />
+        <Button x:Name="TagsButton" Content="Tags..." Command="{Binding ManageTagsCommand}" HorizontalAlignment="Stretch" />
+      </StackPanel>
+      <Button Grid.Row="1" Content="Quit" Command="{Binding QuitCommand}" HorizontalAlignment="Stretch"
+              VerticalAlignment="Bottom" Margin="0,24,0,0" />
+    </Grid>
+    <ListBox Grid.Row="2" Grid.Column="0" ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}" DoubleTapped="OnDoubleTapped"
              PointerReleased="OnListPointerReleased">
       <!-- The row menu is on the container rather than inside the item template, so a right click anywhere in the
            row opens it, padding included. A Template so each row builds its own menu, bound to its own row, and
@@ -98,5 +98,56 @@
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
-  </DockPanel>
+    <!-- Quick Connect: its own strip under a divider, labelled on the left, so a host is typed somewhere that is
+         plainly not the list. A star column rather than a horizontal StackPanel with a fixed-width box: at the
+         window's own MinWidth of 400 the row is 368px, and a fixed box plus the button ran past the right edge. The
+         label and button keep their natural widths and the box takes whatever is left, and the box comes before
+         its button in tab order. -->
+    <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,12,0,0" Spacing="4">
+      <Separator Margin="0,0,0,8" />
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <TextBlock Text="Quick Connect" VerticalAlignment="Center" Margin="0,0,8,0" />
+        <!-- Editable, so typing is plain typing; the drop-down recalls recent ad hoc hosts. Its Enter and Delete are
+             handled on the tunnel in code-behind, ahead of the ComboBox's own key handling. -->
+        <ComboBox x:Name="QuickConnectBox" Grid.Column="1" IsEditable="True" HorizontalAlignment="Stretch"
+                  Text="{Binding QuickConnectText}" ItemsSource="{Binding RecentEntries}"
+                  PlaceholderText="host, host:port, or L:host for TLS">
+          <ComboBox.Styles>
+            <!-- Always drawn, dimmed until hovered: a hover-only control is one nobody finds. -->
+            <Style Selector="Button.forget">
+              <Setter Property="Background" Value="Transparent" />
+              <Setter Property="BorderThickness" Value="0" />
+              <Setter Property="Padding" Value="6,0" />
+              <Setter Property="MinWidth" Value="0" />
+              <Setter Property="Opacity" Value="0.55" />
+            </Style>
+            <Style Selector="Button.forget:pointerover">
+              <Setter Property="Opacity" Value="1" />
+            </Style>
+            <!-- Red under the pointer, the same red as the error line. On the template's presenter, because Fluent's
+                 Button theme sets the presenter's Foreground for :pointerover and :pressed, which a setter on the
+                 Button itself would lose to. The colour is never the only signal: the × and the brightening are. -->
+            <Style Selector="Button.forget:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.forget:pressed /template/ ContentPresenter#PART_ContentPresenter">
+              <Setter Property="Foreground" Value="#FF8080" />
+            </Style>
+          </ComboBox.Styles>
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="sys:String">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <!-- Not focusable, so a press never takes the keyboard out of the box. -->
+                <Button x:Name="ForgetButton" Grid.Column="1" Classes="forget" Content="✕" Focusable="False"
+                        Margin="8,0,0,0" ToolTip.Tip="Remove from recent hosts"
+                        Command="{Binding $parent[ComboBox].((vm:ProfilePickerViewModel)DataContext).RemoveRecentHostCommand}"
+                        CommandParameter="{Binding}" />
+              </Grid>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button x:Name="QuickConnectButton" Grid.Column="2" Content="Connect" Command="{Binding QuickConnectCommand}" Margin="8,0,0,0" />
+      </Grid>
+      <TextBlock Text="{Binding QuickConnectError}" Foreground="#FF8080" FontSize="12" TextWrapping="Wrap"
+                 IsVisible="{Binding QuickConnectError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </StackPanel>
+  </Grid>
 </Window>

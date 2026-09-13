@@ -58,11 +58,15 @@ first. **FAVORITE** is fixed: it can't be renamed, recoloured or deleted.
 
 ### Quick Connect and the command line
 
-To connect without saving a profile first, type a host into the **Quick Connect** box: a name with a dot or an
-address (`mvs.example.org`, `192.168.1.10`), `host:port`, or `L:host` for TLS. A one-word name needs a port
+To connect without saving a profile first, type a host into the **Quick Connect** box below the list: a name
+with a dot or an address (`mvs.example.org`, `192.168.1.10`), `host:port`, or `L:host` for TLS. A one-word name needs a port
 (`tk5:3270`), or it is taken as a profile name. The box accepts the same forms as the command line, below, and a
 saved profile's name too. Once connected, **File > Save as Profile...** turns the session into a saved profile — including
 any certificate you chose to trust.
+
+The box remembers the last 10 hosts you connected to this way, newest first, exactly as you typed them. Open its
+drop-down to pick one again, and press Enter to connect. To forget one, select the **✕** beside it, or highlight it
+and press Delete. The name of a saved profile is not remembered, because the list already has it.
 
 You can also start LizTerm with a profile name or a host on the command line, which skips the list:
 
@@ -294,7 +298,8 @@ Profiles are in `profiles/`, one JSON file each, and wire logs in `logs/`, named
 `wire-<profile>-<date>-<time>.log`. `settings.json` holds your preferences — only the ones you have changed, so
 deleting it puts everything back to the defaults. `tags.json` holds one colour per tag name; deleting it loses
 only the colours, because the tag names themselves live in the profiles and are given fresh colours the next
-time LizTerm starts.
+time LizTerm starts. `recent-hosts.json` holds the hosts Quick Connect remembers; deleting it empties the
+drop-down.
 
 ## Known limitations
 

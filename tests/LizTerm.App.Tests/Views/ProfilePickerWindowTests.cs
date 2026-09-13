@@ -4,10 +4,12 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -43,7 +45,7 @@ public class ProfilePickerWindowTests : IDisposable
         vm.SelectedRow = vm.VisibleRows.Single();
         Assert.True(vm.ConnectCommand.CanExecute(null));
 
-        var box = window.FindControl<TextBox>("QuickConnectBox")!;
+        var box = window.FindControl<ComboBox>("QuickConnectBox")!;
         vm.QuickConnectText = "other.example:3270";
         box.Focus();
         window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
@@ -64,7 +66,7 @@ public class ProfilePickerWindowTests : IDisposable
         window.Width = window.MinWidth;
         window.Show();
 
-        var box = window.FindControl<TextBox>("QuickConnectBox")!;
+        var box = window.FindControl<ComboBox>("QuickConnectBox")!;
         var button = window.FindControl<Button>("QuickConnectButton")!;
         var row = (Panel)box.Parent!;
 
@@ -75,6 +77,227 @@ public class ProfilePickerWindowTests : IDisposable
             $"the Quick Connect button ends at {button.Bounds.Right} in a {row.Bounds.Width} row");
         Assert.True(box.Bounds.Right <= button.Bounds.Left + 0.5,
             $"the box ends at {box.Bounds.Right} and the button starts at {button.Bounds.Left}");
+    }
+
+    private static Rect InWindow(Window window, Control control) =>
+        new(control.TranslatePoint(new Point(0, 0), window)!.Value, control.Bounds.Size);
+
+    /// <summary>Quick Connect and the filter are both a text box beside a control, and stacked a few pixels apart
+    /// they read as one form: a profile name typed into the wrong one connects nowhere or filters to nothing. So
+    /// Quick Connect is a footer, below the list, and the list's own search stays above it.</summary>
+    [AvaloniaFact]
+    public void Quick_connect_is_a_footer_below_the_list()
+    {
+        var store = new ProfileStore(_dir);
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Show();
+        window.UpdateLayout();
+
+        var list = InWindow(window, Descendants<ListBox>(window).Single());
+        var filter = InWindow(window, window.FindControl<TextBox>("FilterBox")!);
+        var quick = InWindow(window, window.FindControl<ComboBox>("QuickConnectBox")!);
+
+        Assert.True(filter.Bottom <= list.Top + 0.5, $"the filter ends at {filter.Bottom} and the list starts at {list.Top}");
+        Assert.True(quick.Top >= list.Bottom, $"Quick Connect starts at {quick.Top} and the list ends at {list.Bottom}");
+    }
+
+    /// <summary>The filter row belongs to the list, so it ends where the list ends rather than running over the
+    /// button column — at the minimum width too, where a fixed-width drop-down would be the first thing to spill.</summary>
+    [AvaloniaFact]
+    public void The_filter_row_is_exactly_as_wide_as_the_list()
+    {
+        var store = new ProfileStore(_dir);
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Width = window.MinWidth;
+        window.Show();
+        window.UpdateLayout();
+
+        var list = InWindow(window, Descendants<ListBox>(window).Single());
+        var filter = InWindow(window, window.FindControl<TextBox>("FilterBox")!);
+        var scope = InWindow(window, window.FindControl<ComboBox>("ScopeBox")!);
+
+        Assert.Equal(list.Left, filter.Left, 0.5);
+        Assert.Equal(list.Right, scope.Right, 0.5);
+    }
+
+    /// <summary>Tab from a picker with nothing focused lands in the filter, not Quick Connect: the list is what most
+    /// openings are for.</summary>
+    [AvaloniaFact]
+    public void The_first_tab_lands_in_the_filter()
+    {
+        var store = new ProfileStore(_dir);
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Show();
+        window.UpdateLayout();
+
+        window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+
+        Assert.Same(window.FindControl<TextBox>("FilterBox"), window.FocusManager?.GetFocusedElement());
+    }
+
+    private ProfilePickerWindow PickerWithRecent(params string[] entries)
+    {
+        var recent = new RecentHostsStore(Path.Combine(_dir, "config", "recent-hosts.json"));
+        recent.Save(RecentHosts.From(entries));
+        var window = new ProfilePickerWindow(new ProfileStore(_dir), (_, _) => { }, () => { }, recentHosts: recent);
+        window.Show();
+        window.UpdateLayout();
+        return window;
+    }
+
+    private static ComboBox QuickConnect(Window window) => window.FindControl<ComboBox>("QuickConnectBox")!;
+
+    /// <summary>Opens the drop-down and lets the popup position itself. Without the jobs and a render tick the
+    /// overlay popup is still at the window's origin, and a pointer aimed at an item hits nothing.</summary>
+    private static void OpenList(Window window, ComboBox box)
+    {
+        box.IsDropDownOpen = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        window.UpdateLayout();
+    }
+
+    private static ComboBoxItem RecentItem(ComboBox box, string entry) =>
+        box.GetRealizedContainers().OfType<ComboBoxItem>().Single(i => (i.DataContext as string) == entry);
+
+    [AvaloniaFact]
+    public void Picking_a_recent_host_puts_it_in_the_box()
+    {
+        var window = PickerWithRecent("a.example", "L:b.example:992");
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+
+        QuickConnect(window).SelectedItem = "L:b.example:992";
+
+        Assert.Equal("L:b.example:992", vm.QuickConnectText);
+    }
+
+    /// <summary>A real press and release on the ×, because the risk is the pointer: the press landing on the row
+    /// as well would pick the entry into the box and close the drop-down.</summary>
+    [AvaloniaFact]
+    public void The_cross_forgets_that_entry_without_picking_it()
+    {
+        var window = PickerWithRecent("a.example", "b.example");
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        var box = QuickConnect(window);
+        vm.QuickConnectText = "typed.example";
+        OpenList(window, box);
+
+        var cross = RecentItem(box, "a.example").GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ForgetButton");
+        var host = TopLevel.GetTopLevel(cross)!;
+        var centre = cross.TranslatePoint(new Point(cross.Bounds.Width / 2, cross.Bounds.Height / 2), host)!.Value;
+        host.MouseDown(centre, MouseButton.Left);
+        host.MouseUp(centre, MouseButton.Left);
+
+        Assert.Equal(["b.example"], vm.RecentEntries);
+        Assert.Equal("typed.example", vm.QuickConnectText);
+        Assert.True(box.IsDropDownOpen);
+    }
+
+    /// <summary>Read from the template's presenter, which is what draws the glyph: Fluent's theme sets its
+    /// Foreground on hover, so a colour set on the Button alone would pass a property check and never show.</summary>
+    [AvaloniaFact]
+    public void The_cross_turns_red_under_the_pointer()
+    {
+        var window = PickerWithRecent("a.example");
+        var box = QuickConnect(window);
+        OpenList(window, box);
+
+        var cross = RecentItem(box, "a.example").GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ForgetButton");
+        var presenter = cross.GetVisualDescendants().OfType<ContentPresenter>().First(p => p.Name == "PART_ContentPresenter");
+        Assert.NotEqual(Color.Parse("#FF8080"), (presenter.Foreground as ISolidColorBrush)?.Color);
+
+        window.MouseMove(Centre(window, cross));
+
+        Assert.Equal(Color.Parse("#FF8080"), (presenter.Foreground as ISolidColorBrush)?.Color);
+    }
+
+    [AvaloniaFact]
+    public void Delete_forgets_the_highlighted_entry()
+    {
+        var window = PickerWithRecent("a.example", "b.example");
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        var box = QuickConnect(window);
+        box.Focus();
+        OpenList(window, box);
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        var highlighted = (string)box.SelectedItem!;
+        window.KeyPressQwerty(PhysicalKey.Delete, RawInputModifiers.None);
+
+        Assert.Equal(new[] { "a.example", "b.example" }.Where(e => e != highlighted), vm.RecentEntries);
+    }
+
+    /// <summary>Typing a remembered host selects it, because the editable ComboBox matches its text against the
+    /// items, so with the list open Delete is still text editing until the arrow keys have moved to an entry.</summary>
+    [AvaloniaFact]
+    public void Delete_in_typed_text_forgets_nothing_even_when_the_text_names_an_entry()
+    {
+        var window = PickerWithRecent("a.example", "b.example");
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        var box = QuickConnect(window);
+        box.Focus();
+        vm.QuickConnectText = "a.example";
+        OpenList(window, box);
+        Assert.Equal("a.example", box.SelectedItem);
+
+        window.KeyPressQwerty(PhysicalKey.Delete, RawInputModifiers.None);
+
+        Assert.Equal(["a.example", "b.example"], vm.RecentEntries);
+    }
+
+    /// <summary>Removing the ComboBox's selected item empties an editable one's text, and typing a remembered host is
+    /// what selects it, so forgetting the entry the box names must take it out of the list and not out of the box.</summary>
+    [AvaloniaFact]
+    public void Forgetting_the_entry_the_box_names_keeps_the_text()
+    {
+        var window = PickerWithRecent("a.example", "b.example");
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        var box = QuickConnect(window);
+        vm.QuickConnectText = "a.example";
+        Assert.Equal("a.example", box.SelectedItem);
+
+        vm.RemoveRecentHostCommand.Execute("a.example");
+
+        Assert.Equal(["b.example"], vm.RecentEntries);
+        Assert.Equal("a.example", vm.QuickConnectText);
+        Assert.Equal("a.example", box.Text);
+    }
+
+    /// <summary>Enter connects what is in the box whether or not the list is open, and highlighting an entry is
+    /// what put it there, so one Enter recalls and connects — the address bar's behaviour. The editable ComboBox
+    /// never closes its own list on Enter, so the handler does.</summary>
+    [AvaloniaFact]
+    public void Enter_with_the_list_open_connects_the_highlighted_entry_and_closes_the_list()
+    {
+        var recent = new RecentHostsStore(Path.Combine(_dir, "config", "recent-hosts.json"));
+        recent.Save(RecentHosts.From(["a.example", "b.example"]));
+        SessionProfile? opened = null;
+        var window = new ProfilePickerWindow(new ProfileStore(_dir), (p, _) => opened = p, () => { }, recentHosts: recent);
+        window.Show();
+        window.UpdateLayout();
+        var box = QuickConnect(window);
+        box.Focus();
+        OpenList(window, box);
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        var highlighted = (string)box.SelectedItem!;
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.Equal(highlighted, opened?.Host);
+        Assert.False(box.IsDropDownOpen);
+    }
+
+    [AvaloniaFact]
+    public void Forgetting_the_last_entry_closes_the_list()
+    {
+        var window = PickerWithRecent("a.example");
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        var box = QuickConnect(window);
+        box.IsDropDownOpen = true;
+
+        vm.RemoveRecentHostCommand.Execute("a.example");
+
+        Assert.False(box.IsDropDownOpen);
     }
 
     /// <summary>Walks the realised row rather than the view model, so the template's own bindings are what is

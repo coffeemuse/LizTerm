@@ -19,6 +19,8 @@ public class AppPathsTests
         Assert.Equal(AppPaths.ProfilesDirectory(), ProfileStore.DefaultDirectory());
         Assert.Equal(Path.Combine(root, "settings.json"), AppPaths.SettingsFile());
         Assert.Equal(AppPaths.SettingsFile(), SettingsStore.DefaultFile());
+        Assert.Equal(Path.Combine(root, "recent-hosts.json"), AppPaths.RecentHostsFile());
+        Assert.Equal(AppPaths.RecentHostsFile(), RecentHostsStore.DefaultFile());
     }
 
     [Fact]

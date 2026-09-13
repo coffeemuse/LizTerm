@@ -597,6 +597,70 @@ public class ProfileViewModelsTests : IDisposable
     private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession) =>
         new(_store, openSession, _ => Task.FromResult<ProfileEdit?>(null), () => { });
 
+    /// <summary>In a subdirectory, so the profile store's directory read never meets it.</summary>
+    private RecentHostsStore RecentStore() => new(Path.Combine(_dir, "config", "recent-hosts.json"));
+
+    private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession, RecentHostsStore recent) =>
+        new(_store, openSession, _ => Task.FromResult<ProfileEdit?>(null), () => { }, recentHosts: recent);
+
+    [Fact]
+    public void Quick_connect_remembers_ad_hoc_hosts_as_typed_newest_first()
+    {
+        var recent = RecentStore();
+        var vm = NewPicker((_, _) => { }, recent);
+
+        vm.QuickConnectText = " tk5:3270 ";
+        vm.QuickConnectCommand.Execute(null);
+        vm.QuickConnectText = "L:mvs.example";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.Equal(["L:mvs.example", "tk5:3270"], vm.RecentEntries);
+        Assert.Equal(["L:mvs.example", "tk5:3270"], recent.Load().Entries);
+    }
+
+    /// <summary>The list already recalls a saved profile, and a renamed or deleted one would leave a stale entry.</summary>
+    [Fact]
+    public void Quick_connect_does_not_remember_a_saved_profiles_name()
+    {
+        _store.Save(new SessionProfile { Name = "mvs.local", Host = "elsewhere" });
+        var recent = RecentStore();
+        var vm = NewPicker((_, _) => { }, recent);
+
+        vm.QuickConnectText = "mvs.local";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.Empty(vm.RecentEntries);
+        Assert.Empty(recent.Load().Entries);
+    }
+
+    [Fact]
+    public void Quick_connect_does_not_remember_text_that_opened_nothing()
+    {
+        var recent = RecentStore();
+        var vm = NewPicker((_, _) => { }, recent);
+
+        vm.QuickConnectText = "mvs.local:99999";
+        vm.QuickConnectCommand.Execute(null);
+        vm.QuickConnectText = "tk5";
+        vm.QuickConnectCommand.Execute(null);
+
+        Assert.Empty(vm.RecentEntries);
+    }
+
+    [Fact]
+    public void The_picker_opens_with_the_saved_recent_hosts_and_forgets_one_on_request()
+    {
+        var recent = RecentStore();
+        recent.Save(RecentHosts.From(["a.example", "b.example", "c.example"]));
+        var vm = NewPicker((_, _) => { }, recent);
+        Assert.Equal(["a.example", "b.example", "c.example"], vm.RecentEntries);
+
+        vm.RemoveRecentHostCommand.Execute("b.example");
+
+        Assert.Equal(["a.example", "c.example"], vm.RecentEntries);
+        Assert.Equal(["a.example", "c.example"], recent.Load().Entries);
+    }
+
     [Fact]
     public void Editor_round_trips_tags_and_a_note()
     {

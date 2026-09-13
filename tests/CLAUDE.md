@@ -66,6 +66,10 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   fire its command; a raised click bypasses the interaction handler's enabled gate, so assert
   `IsEffectivelyEnabled` for greying. A headless press never activates a window, so the reload-versus-press
   ordering of a real platform is not something these tests can see.
+- A ComboBox drop-down is an overlay popup inside the headless window. After `IsDropDownOpen = true`, run
+  `Dispatcher.UIThread.RunJobs()` and `AvaloniaHeadlessPlatform.ForceRenderTimerTick()` before `UpdateLayout()`, or
+  the popup is still at the window's origin and a pointer aimed at an item hits nothing
+  (`ProfilePickerWindowTests.OpenList`).
 - The App tests name the backend in exactly one place:
   `SessionFactoryTests.The_session_it_builds_verifies_against_the_system_trust_anchors` casts the factory's result to
   `B3270Session` to read `TrustAnchors`, because what the factory injects is the one thing about the backend the App

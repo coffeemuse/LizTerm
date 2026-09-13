@@ -91,11 +91,14 @@ first. <strong>FAVORITE</strong> is fixed: it can't be renamed, recoloured or de
 </tbody>
 </table>
 <h3 id="quick-connect-and-the-command-line">Quick Connect and the command line</h3>
-<p>To connect without saving a profile first, type a host into the <strong>Quick Connect</strong> box: a name with a dot or an
-address (<code>mvs.example.org</code>, <code>192.168.1.10</code>), <code>host:port</code>, or <code>L:host</code> for TLS. A one-word name needs a port
+<p>To connect without saving a profile first, type a host into the <strong>Quick Connect</strong> box below the list: a name
+with a dot or an address (<code>mvs.example.org</code>, <code>192.168.1.10</code>), <code>host:port</code>, or <code>L:host</code> for TLS. A one-word name needs a port
 (<code>tk5:3270</code>), or it is taken as a profile name. The box accepts the same forms as the command line, below, and a
 saved profile's name too. Once connected, <strong>File &gt; Save as Profile...</strong> turns the session into a saved profile — including
 any certificate you chose to trust.</p>
+<p>The box remembers the last 10 hosts you connected to this way, newest first, exactly as you typed them. Open its
+drop-down to pick one again, and press Enter to connect. To forget one, select the <strong>✕</strong> beside it, or highlight it
+and press Delete. The name of a saved profile is not remembered, because the list already has it.</p>
 <p>You can also start LizTerm with a profile name or a host on the command line, which skips the list:</p>
 <pre><code>LizTerm [profile | [L:][Y:][lu@]host[:port]]
 </code></pre>
@@ -298,7 +301,8 @@ View &gt; Keypad submenu carries both of the same settings.</li>
 <code>wire-&lt;profile&gt;-&lt;date&gt;-&lt;time&gt;.log</code>. <code>settings.json</code> holds your preferences — only the ones you have changed, so
 deleting it puts everything back to the defaults. <code>tags.json</code> holds one colour per tag name; deleting it loses
 only the colours, because the tag names themselves live in the profiles and are given fresh colours the next
-time LizTerm starts.</p>
+time LizTerm starts. <code>recent-hosts.json</code> holds the hosts Quick Connect remembers; deleting it empties the
+drop-down.</p>
 <h2 id="known-limitations">Known limitations</h2>
 <ul>
 <li><strong>Unsigned Windows builds.</strong> Windows SmartScreen warns about the app the first time you open it; the

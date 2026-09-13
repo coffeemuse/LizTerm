@@ -33,6 +33,7 @@ public partial class App : Application
     private ProfilePickerWindow? _picker;
     private ProfileStore? _store;
     private TagRegistryStore? _tags;
+    private RecentHostsStore? _recentHosts;
     private SettingsViewModel? _settings;
 
     /// <summary>The process's one settings object, for every session window and for Preferences. Lazy with ??=
@@ -194,7 +195,8 @@ public partial class App : Application
         // spellings a few lines apart read as a distinction that does not exist.
         _picker = new ProfilePickerWindow(_store ??= new ProfileStore(AppPaths.ProfilesDirectory()),
             (profile, fromStore) => OpenSession(profile, fromStore), Quit,
-            _tags ??= new TagRegistryStore(TagRegistryStore.DefaultFile()));
+            _tags ??= new TagRegistryStore(TagRegistryStore.DefaultFile()),
+            _recentHosts ??= new RecentHostsStore(RecentHostsStore.DefaultFile()));
         // The same reason test the session windows get, for the mirror-image failure: a shutdown that closes the
         // picker would otherwise be answered with Quit() -> Shutdown(), a second DoShutdown re-entered inside the
         // first, which fires Exit twice.
