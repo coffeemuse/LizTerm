@@ -131,6 +131,28 @@ public class B3270SessionLifecycleTests
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
     }
 
+    /// <summary>The interleaving behind the 2026-09-13 CI hang (main run 34774090588): Faulted was raised before the
+    /// process slot was cleared, so a caller reacting to the fault still passed RequireProcess, registered a run
+    /// after the pending table had been drained, and waited on it forever. Starting the run inside the handler is
+    /// the deterministic form of what a thread-pool continuation only sometimes manages on a slow runner. The
+    /// fault must be the session's whole state by the time anyone hears of it.</summary>
+    [Fact]
+    public async Task A_run_started_from_inside_the_fault_handler_fails_with_the_fault_instead_of_hanging()
+    {
+        var fake = new FakeB3270Process { RunResponder = _ => [] };
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(CancellationToken.None);
+        var started = new TaskCompletionSource<Task<RunResultIndication>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, _) => started.TrySetResult(session.RunRawAsync([new B3270Action("Enter")]));
+
+        fake.Exit(1);
+
+        var run = await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        var ex = await Assert.ThrowsAsync<BackendUnavailableException>(() => run.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        Assert.Contains("exited unexpectedly", ex.Message);
+        Assert.Equal(0, session.PendingCount);
+    }
+
     [Fact]
     public async Task Dispose_sends_quit_and_does_not_fault()
     {

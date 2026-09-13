@@ -159,7 +159,11 @@ public class B3270SessionTransferTests
         fake.Exit(1);
         await faulted.Task.WaitAsync(WaitTime, TestContext.Current.CancellationToken);
 
-        var ex = await Assert.ThrowsAsync<BackendUnavailableException>(() => session.TransferAsync(Request, cancellationToken: TestContext.Current.CancellationToken));
+        // Bounded like every other await here: this one hung CI for the 5-minute blame timeout on 2026-09-13
+        // (see the lifecycle test A_run_started_from_inside_the_fault_handler_fails_with_the_fault_instead_of_hanging),
+        // and a regression should fail in seconds with a TimeoutException rather than wedge the run.
+        var ex = await Assert.ThrowsAsync<BackendUnavailableException>(
+            () => session.TransferAsync(Request, cancellationToken: TestContext.Current.CancellationToken).WaitAsync(WaitTime, TestContext.Current.CancellationToken));
         Assert.Contains("exited unexpectedly", ex.Message);
         Assert.False(session.IsTransferInProgress);
     }

@@ -25,7 +25,9 @@ public sealed class B3270Session : IEmulatorSession
     private readonly object _writeLock = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<RunResultIndication>> _pending = new();
     private readonly ScreenBuffer _buffer = new(24, 80);
-    private IB3270Process? _process;
+    /// <summary>Volatile because RunAsync re-reads it on a caller thread to catch the reader thread clearing it
+    /// (see OnProcessEnded for the order that makes the re-read sufficient).</summary>
+    private volatile IB3270Process? _process;
     private Thread? _readerThread;
     private TaskCompletionSource<HelloIndication>? _hello;
     /// <summary>The Set() toggle names the engine's own tls-hello reported (plan 3d task 8), or null when
@@ -295,18 +297,21 @@ public sealed class B3270Session : IEmulatorSession
         try
         {
             var fault = new BackendFault("The emulator engine (b3270) exited unexpectedly.", process.StderrTail, exitCode);
-            foreach (var tag in _pending.Keys.ToArray())
-                if (_pending.TryRemove(tag, out var tcs))
-                    tcs.TrySetException(new BackendUnavailableException(fault.Message));
             _hello?.TrySetException(new BackendUnavailableException(fault.Message + " stderr: " + string.Join(" | ", process.StderrTail)));
 
             SetConnectionState(ConnectionState.Disconnected);
             if (!_shuttingDown)
             {
+                // The fault is the session's whole state before anyone hears of it. The slot is cleared and _fault
+                // set here, ahead of both the drain below and the Faulted event after it, so that a caller who
+                // reacts to the event by calling straight back in meets RequireProcess's
+                // BackendUnavailableException and not a process about to vanish. The old order (drain, raise,
+                // then clear) let such a call pass RequireProcess, register a run after the drain and wait on it
+                // forever; CI hung for the blame timeout on exactly that on 2026-09-13.
+                //
+                // Clearing the slot also lets a later ConnectAsync spawn a fresh process through the factory
+                // instead of being stuck thinking the dead one is still usable.
                 _fault = fault;
-                Faulted?.Invoke(this, fault);
-                // Let a later ConnectAsync spawn a fresh process through the factory instead of
-                // being stuck thinking the dead one is still usable.
                 process.Dispose();
                 _process = null;
                 _hello = null;
@@ -315,6 +320,15 @@ public sealed class B3270Session : IEmulatorSession
                 // as "not yet known" (null), not as whatever this process happened to report.
                 _tlsOptions = null;
             }
+
+            // Drained after the slot is cleared, never before: a run that passed RequireProcess earlier is either
+            // already registered here, or registers later and fails RunAsync's own re-read of the slot. Either
+            // way it ends with the fault. A shutdown keeps the slot (DisposeAsync owns it) but drains all the same.
+            foreach (var tag in _pending.Keys.ToArray())
+                if (_pending.TryRemove(tag, out var tcs))
+                    tcs.TrySetException(new BackendUnavailableException(fault.Message));
+
+            if (!_shuttingDown) Faulted?.Invoke(this, fault);
         }
         catch (Exception)
         {
@@ -392,10 +406,19 @@ public sealed class B3270Session : IEmulatorSession
     private async Task<RunResultIndication> RunAsync(IReadOnlyList<B3270Action> actions, bool throwOnFailure,
         TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
-        RequireProcess();
+        var process = RequireProcess();
         var tag = Interlocked.Increment(ref _tagCounter).ToString();
         var tcs = new TaskCompletionSource<RunResultIndication>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[tag] = tcs;
+        // The reader thread clears the slot before it drains _pending (OnProcessEnded), so re-reading the slot
+        // after registering closes the one window a dying engine leaves: if the slot still holds this process,
+        // the drain has not run yet and will fault this tag; if it does not, nothing ever will, so the tag goes
+        // and the caller gets the fault now rather than a wait with no end.
+        if (!ReferenceEquals(_process, process))
+        {
+            _pending.TryRemove(tag, out _);
+            throw NoProcess();
+        }
         try
         {
             WriteLine(RunOperation.Serialize(tag, actions));
@@ -445,10 +468,12 @@ public sealed class B3270Session : IEmulatorSession
 
     /// <summary>The live process, or the reason there is none: the engine's last fault when it died, otherwise a
     /// session that was never started.</summary>
-    private IB3270Process RequireProcess() =>
-        _process ?? throw (_fault is { } fault
+    private IB3270Process RequireProcess() => _process ?? throw NoProcess();
+
+    private Exception NoProcess() =>
+        _fault is { } fault
             ? new BackendUnavailableException(fault.Message)
-            : new InvalidOperationException("The session has not been started."));
+            : new InvalidOperationException("The session has not been started.");
 
     // ---- indications ----
 
