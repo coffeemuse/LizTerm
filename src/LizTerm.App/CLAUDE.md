@@ -444,7 +444,14 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   menu is in `tests/CLAUDE.md`.
 - **Manage Tags** (`Views/ManageTagsWindow`, #88) is modal over the picker. Its swatches are `Button`s, and a
   window style on `ContentPresenter#PART_ContentPresenter` keeps each one's own colour on `:pointerover` and
-  `:pressed`, which Fluent's `Button` theme would otherwise swap for a grey. Done is `IsCancel` but not
+  `:pressed`, which Fluent's `Button` theme would otherwise swap for a grey. **That setter must read the colour
+  through `$parent[Button].Background`**: a `/template/` style outside a `ControlTemplate` may use neither
+  `TemplateBinding` nor a `TemplatedParent` source, and a plain `{Binding Brush}` resolves against the presenter's
+  DataContext, which is its `Content` — null for a swatch. The first version did exactly that, and the 2026-09-13
+  in-app pass found two symptoms of one cause: a hovered swatch drew as a hole, and a pointer click never
+  recoloured, because `Button` hit-tests the release and a presenter with a null background is nothing to hit.
+  Keyboard Enter still worked, and so did a test that raised `ClickEvent` directly, which is why
+  `ManageTagsWindowTests` now presses and releases the mouse at the swatch's centre. Done is `IsCancel` but not
   `IsDefault`, so Enter in the name box renames instead of closing the window. The failure line sits under the
   panel, not in it, so it survives a change of selection.
 

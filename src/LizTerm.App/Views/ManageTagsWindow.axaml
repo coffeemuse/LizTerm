@@ -26,10 +26,14 @@
     </Style>
     <!-- A swatch keeps its own colour under the pointer and while pressed. Fluent's Button theme swaps the content
          presenter's background and border for theme brushes on :pointerover and :pressed, which would turn every
-         swatch grey exactly when it is being chosen (plan D6). -->
-    <Style Selector="Button.swatch:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.swatch:pressed /template/ ContentPresenter#PART_ContentPresenter"
-           x:DataType="vm:SwatchOption">
-      <Setter Property="Background" Value="{Binding Brush}" />
+         swatch grey exactly when it is being chosen (plan D6). The value must come from the Button's own Background
+         (a TemplateBinding and a TemplatedParent source are both refused outside a ControlTemplate, so it is a
+         $parent[Button] binding):
+         the presenter's DataContext is its Content, which is null here, so a {Binding Brush} on it
+         resolved to nothing — the hovered swatch drew as a hole, and with no background under the pointer the
+         release hit-tested nothing, so a pointer click never raised Click (found in the 2026-09-13 in-app pass). -->
+    <Style Selector="Button.swatch:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.swatch:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
       <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <Style Selector="Button.swatch.selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.swatch.selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
