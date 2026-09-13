@@ -6,6 +6,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Settings;
@@ -219,13 +220,32 @@ public class PreferencesWindowTests
         Assert.False(window.IsVisible);
     }
 
+    /// <summary>A fixed size rather than SizeToContent: only the selected tab is measured, so a window sized to
+    /// its content would change height on every tab switch.</summary>
     [AvaloniaFact]
-    public void It_is_titled_preferences_and_sizes_to_its_content()
+    public void It_is_titled_preferences_and_has_a_fixed_size()
     {
         var (window, _) = Show();
 
         Assert.Equal("Preferences", window.Title);
-        Assert.Equal(SizeToContent.Height, window.SizeToContent);
+        Assert.Equal(SizeToContent.Manual, window.SizeToContent);
+        Assert.False(window.CanResize);
+        Assert.Equal(520, window.Width);
+        Assert.Equal(410, window.Height);
+    }
+
+    /// <summary>The tabs are the window's structure: Display, Bell and Window in that order, the last read top of
+    /// the window to bottom (menu bar, status bar, keypad). Every control keeps its name, so the other tests here
+    /// find it whichever tab is selected.</summary>
+    [AvaloniaFact]
+    public void The_settings_sit_on_display_bell_and_window_tabs_in_that_order()
+    {
+        var (window, _) = Show();
+        var tabs = window.FindControl<TabControl>("Tabs")!;
+
+        Assert.Equal(["Display", "Bell", "Window"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header!));
+        Assert.Equal(0, tabs.SelectedIndex);
+        Assert.Same(window.FindControl<RadioButton>("CrosshairNone"), tabs.Items.Cast<TabItem>().First().FindLogicalDescendantOfType<RadioButton>());
     }
 
     /// <summary>App's one-at-a-time rule, through the internal seam that takes a settings object so the test
@@ -293,10 +313,10 @@ public class PreferencesWindowTests
     public void The_menu_style_group_is_shown_only_where_the_choice_means_something()
     {
         var (mac, _) = Show(menuStyleChoosable: true);
-        Assert.True(mac.FindControl<StackPanel>("MenuStyleGroup")!.IsVisible);
+        Assert.True(mac.FindControl<Control>("MenuStyleGroup")!.IsVisible);
 
         var (elsewhere, _) = Show(menuStyleChoosable: false);
-        Assert.False(elsewhere.FindControl<StackPanel>("MenuStyleGroup")!.IsVisible);
+        Assert.False(elsewhere.FindControl<Control>("MenuStyleGroup")!.IsVisible);
     }
 
     /// <summary>The Status bar group (#93): one box, two-way, live like everything else here.</summary>

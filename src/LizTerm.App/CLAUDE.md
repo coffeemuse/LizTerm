@@ -135,8 +135,16 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.
-- The Preferences **Keypad** group is a two-way `KeypadBox` for `Settings.Keypad` plus the two dock radios over
-  `KeypadDockConverter`, the Crosshair shape. Both settings are also on the View > Keypad submenu (#71); the group
+- **The window is three tabs** — Display, Bell, Window — on a `TabControl` named `Tabs`, each tab a `StackPanel`
+  of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short enum is one
+  horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. A new setting joins
+  the tab it belongs to (#78's theme and cursor go in Display); a new area (#79's logging, #18's keyboard) is a new
+  tab. The size is fixed rather than `SizeToContent`, because only the selected tab is measured and a window sized
+  to its content would change height on every tab switch; the Window tab is the tallest and sets the height.
+  `FindControl` reaches a control on an unselected tab (the name scope is the window's), so the tests never select
+  a tab first.
+- The Preferences **Keypad** row is a two-way `KeypadBox` for `Settings.Keypad` plus the two dock radios over
+  `KeypadDockConverter`, the Crosshair shape. Both settings are also on the View > Keypad submenu (#71); the row
   stays because Preferences is where a user goes looking for settings, and both doors write the same properties.
 
 ## Terminal screen (`Controls/TerminalScreen.cs`)
@@ -243,7 +251,7 @@ is what gives the picker a menu bar on macOS. Each window's menu is rendered nat
   in-window bar beside the one that already works or a bar the desktop moved. Decided 2026-09-12; revisit through
   #22 only if Avalonia's support grows. Do not reintroduce a way to reach `Native` or `Both` off macOS.
 - **`Resolve` answers `InWindow` for everything off macOS**, and `MenuStyleChoosable` is the same rule seen from
-  Preferences — a style offered where `Resolve` ignores it, or honoured where Preferences hides the group, is the
+  Preferences — a style offered where `Resolve` ignores it, or honoured where Preferences hides the row, is the
   bug. `Both` off macOS is two bars stacked (both renderers draw in-window there, both docked `Top`) and `Native`
   is the unreviewed renderer or a global-menu registrar; a settings file carried from a Mac, or hand-edited, is
   how those states would otherwise be reached with no control to leave them. `Resolve` is also where a value that
