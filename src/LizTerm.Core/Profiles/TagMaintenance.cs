@@ -77,12 +77,18 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         var snapshot = Load();
         var registry = snapshot.Registry;
         if (!registry.Contains(from)) return TagChangeResult.Nothing;
+        // A merge writes the existing tag as the registry spells it, not as the user typed it (spec 2.3), so the
+        // profiles and the file cannot end up holding three spellings of one definition. A case-only rename is
+        // the one time the typed spelling IS the point.
+        var caseOnly = target.Equals(TagSet.Normalize(from), StringComparison.OrdinalIgnoreCase);
+        var existing = registry.Stored.FirstOrDefault(d => d.Name.Equals(target, StringComparison.OrdinalIgnoreCase));
+        var written = existing is not null && !caseOnly ? existing.Name : target;
         // After a partial PLAIN rename both names stay defined in from's colour, so the list stays consistent and
         // the retry is a merge. A merge or a case-only rename (Contains is true for both) leaves the registry alone.
         var partial = registry.Contains(target)
             ? null
             : new TagRegistry([.. registry.Stored, new TagDefinition(target, registry.ColorOf(from))]);
-        return Apply(snapshot, from, set => set.Rename(from, target), registry.Rename(from, target), partial);
+        return Apply(snapshot, from, set => set.Rename(from, written), registry.Rename(from, target), partial);
     }
 
     public TagChangeResult Delete(string name)

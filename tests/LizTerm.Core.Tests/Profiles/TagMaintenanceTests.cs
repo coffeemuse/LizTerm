@@ -147,6 +147,22 @@ public class TagMaintenanceTests : IDisposable
 
     /// <summary>Spec 4.3's regression: a "did it change?" check built on TagSet.Equals, which ignores case, would
     /// skip this write and the rename would silently do nothing.</summary>
+    /// <summary>Spec 2.3: a merged carrier gets the EXISTING tag, spelt as the registry stores it, whatever the user
+    /// typed. Otherwise one definition ends up spelt three ways across the profiles and the file.</summary>
+    [Fact]
+    public void A_merge_writes_the_stored_spelling_of_the_existing_tag_not_the_typed_one()
+    {
+        Save("gateway", "PRDO");
+        Save("mvsce", "Prod");
+        Define(("PRDO", TagColor.Purple), ("Prod", TagColor.Amber));
+
+        _maintenance.Rename("PRDO", "prod");
+
+        Assert.Equal(["Prod"], TagsOf("gateway"));
+        Assert.Equal(["Prod"], TagsOf("mvsce"));
+        Assert.Equal(["Prod"], _tags.Load().Stored.Select(d => d.Name));
+    }
+
     [Fact]
     public void A_case_only_rename_really_writes_the_new_casing()
     {
