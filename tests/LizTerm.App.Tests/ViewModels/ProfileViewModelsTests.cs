@@ -1035,4 +1035,31 @@ public class ProfileViewModelsTests : IDisposable
 
         Assert.Equal(["MVS", "PROD"], tags.Load().Stored.Select(d => d.Name));
     }
+
+    /// <summary>Reconcile saves only when TagRegistry.Register reports something changed. This test proves the
+    /// conditional save gate works by verifying no write is attempted when reconciliation has nothing new to
+    /// register. Using the blocking-directory technique: create a directory at the tags.json path so any Save
+    /// attempt throws IOException. Set up the profiles with no tags so Reconcile finds nothing new to register.</summary>
+    [Fact]
+    public void Reload_does_not_save_when_reconciliation_has_no_changes()
+    {
+        var tagFile = Path.Combine(_dir, "tags.json");
+        var tags = new TagRegistryStore(tagFile);
+        // Pre-create the registry file so Load() can read it
+        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
+
+        // Profile with no tags (all profiles carry no tags that need registering)
+        _store.Save(new SessionProfile { Name = "a", Host = "h" });
+        var vm = Picker(tags);
+
+        // Create a blocking directory at the tags.json path to detect any Save attempt.
+        // The constructor's Reload() already read from disk; now block writes.
+        if (File.Exists(tagFile)) File.Delete(tagFile);
+        Directory.CreateDirectory(tagFile);
+
+        // Reload should not throw because Reconcile finds no new tags to register and doesn't call Save
+        vm.Reload();
+
+        // If Save had been attempted, it would have thrown IOException when trying to move to a directory
+    }
 }
