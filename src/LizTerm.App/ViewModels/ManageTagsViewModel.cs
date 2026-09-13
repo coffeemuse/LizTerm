@@ -100,13 +100,14 @@ public partial class ManageTagsViewModel : ObservableObject
     {
         if (SelectedRow is not { IsReserved: false } row || !CanRename) return;
         // Read fresh rather than trust the cached snapshot: another window (File > Save as Profile..., spec 7.1)
-        // may have defined a tag while this dialog was open, and a merge cannot be undone (spec 2.3), so whether
-        // this is one has to be decided from the registry as it is now. Rows is not rebuilt here -- that would
-        // reset the selection and the name the user just typed.
-        _snapshot = _maintenance.Load();
+        // may have defined a tag or saved a carrier while this dialog was open, and a merge cannot be undone
+        // (spec 2.3), so whether this is one, and which profiles it names, come from the files as they are now. A
+        // local, not _snapshot: Rows is not rebuilt here -- that would reset the selection and the name the user
+        // just typed -- and _snapshot is what Rows were built from.
+        var now = _maintenance.Load();
         var from = row.Name;
         var target = TagSet.Normalize(NameText);
-        var merge = !target.Equals(from, StringComparison.OrdinalIgnoreCase) && _snapshot.Registry.Contains(target);
+        var merge = !target.Equals(from, StringComparison.OrdinalIgnoreCase) && now.Registry.Contains(target);
         if (!merge)
         {
             RunRename(from, target, merge: false);
@@ -115,9 +116,10 @@ public partial class ManageTagsViewModel : ObservableObject
 
         var shownFrom = from.ToUpperInvariant();
         var shownTo = target.ToUpperInvariant();
-        Ask(row.IsUnused
+        var carriers = Carriers(now, from);
+        Ask(carriers.Count == 0
                 ? $"{shownTo} already exists. Merge {shownFrom} into it? No profile uses {shownFrom}, so only its colour is dropped."
-                : $"{shownTo} already exists. Merge {shownFrom} into it? {ProfileList(row.UsedBy)} will carry {shownTo} instead, and {shownFrom}'s colour is dropped.",
+                : $"{shownTo} already exists. Merge {shownFrom} into it? {ProfileList(carriers)} will carry {shownTo} instead, and {shownFrom}'s colour is dropped.",
             "Merge", () => RunRename(from, target, merge: true));
     }
 
@@ -127,9 +129,14 @@ public partial class ManageTagsViewModel : ObservableObject
         if (SelectedRow is not { IsReserved: false } row) return;
         var name = row.Name;
         var shown = name.ToUpperInvariant();
-        Ask(row.IsUnused ? $"Delete {shown}? No profile uses it." : $"Delete {shown}? It is removed from {ProfileList(row.UsedBy)}.",
+        // Fresh for the same reason Rename reads fresh: the question names what the delete will touch.
+        var carriers = Carriers(_maintenance.Load(), name);
+        Ask(carriers.Count == 0 ? $"Delete {shown}? No profile uses it." : $"Delete {shown}? It is removed from {ProfileList(carriers)}.",
             "Delete", () => RunDelete(name));
     }
+
+    private static List<string> Carriers(TagSnapshot snapshot, string tag) =>
+        snapshot.Profiles.Where(p => p.Tags.Contains(tag)).Select(p => p.Name).ToList();
 
     [RelayCommand(CanExecute = nameof(IsTagSelected))]
     private void Recolour(TagColor color)
@@ -224,10 +231,7 @@ public partial class ManageTagsViewModel : ObservableObject
     {
         Rows.Clear();
         foreach (var definition in _snapshot.Registry.All)
-        {
-            var usedBy = _snapshot.Profiles.Where(p => p.Tags.Contains(definition.Name)).Select(p => p.Name).ToList();
-            Rows.Add(new TagListRow(definition, usedBy));
-        }
+            Rows.Add(new TagListRow(definition, Carriers(_snapshot, definition.Name)));
         SelectedRow = preferred
             .Select(name => Rows.FirstOrDefault(r => r.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
             .FirstOrDefault(row => row is not null);

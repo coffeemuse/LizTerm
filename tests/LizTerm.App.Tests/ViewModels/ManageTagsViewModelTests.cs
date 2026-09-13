@@ -159,6 +159,36 @@ public class ManageTagsViewModelTests : IDisposable
         Assert.DoesNotContain("LIVE", TagsOf("gateway"));
     }
 
+    /// <summary>The question names the carriers the action will change, so it has to come from the same fresh read
+    /// the merge decision does: a profile saved from a session window while the dialog is open is a carrier too.</summary>
+    [Fact]
+    public void The_merge_question_names_the_carriers_as_they_are_now()
+    {
+        Seed();
+        var vm = Open();
+        vm.SelectedRow = Row(vm, "TLS");
+        Save("tk5", "TLS");
+
+        vm.NameText = "PROD";
+        vm.RenameCommand.Execute(null);
+
+        Assert.Equal("PROD already exists. Merge TLS into it? gateway and tk5 will carry PROD instead, and TLS's colour is dropped.",
+            vm.PendingConfirmation);
+    }
+
+    [Fact]
+    public void The_delete_question_names_the_carriers_as_they_are_now()
+    {
+        Seed();
+        var vm = Open();
+        vm.SelectedRow = Row(vm, "LAB");
+        Save("tk5", "LAB");
+
+        vm.DeleteCommand.Execute(null);
+
+        Assert.Equal("Delete LAB? It is removed from tk5.", vm.PendingConfirmation);
+    }
+
     [Fact]
     public void Merging_an_unused_tag_says_only_its_colour_goes()
     {
