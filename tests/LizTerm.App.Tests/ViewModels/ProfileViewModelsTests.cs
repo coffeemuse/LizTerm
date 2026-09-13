@@ -801,9 +801,11 @@ public class ProfileViewModelsTests : IDisposable
     }
 
     /// <summary>Reconciliation: a tag name seen on a profile but absent from the registry registers itself, so
-    /// a profile copied from another machine gets colours locally rather than rendering colourless.</summary>
+    /// a profile copied from another machine gets colours locally rather than rendering colourless. Reload also
+    /// re-reads tags.json every time, so a registry deleted out from under the picker (Manage Tags writes the
+    /// file while the picker waits behind it) is recreated rather than staying gone.</summary>
     [Fact]
-    public void An_unknown_tag_registers_itself_and_the_registry_is_written_once()
+    public void An_unknown_tag_registers_itself_and_a_deleted_registry_is_recreated_on_reload()
     {
         _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
         var tagFile = Path.Combine(_dir, "tags.json");
@@ -1036,31 +1038,25 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(["MVS", "PROD"], tags.Load().Stored.Select(d => d.Name));
     }
 
-    /// <summary>Reconcile saves only when TagRegistry.Register reports something changed. This test proves the
-    /// conditional save gate works by verifying no write is attempted when reconciliation has nothing new to
-    /// register. Using the blocking-directory technique: create a directory at the tags.json path so any Save
-    /// attempt throws IOException. Set up the profiles with no tags so Reconcile finds nothing new to register.</summary>
+    /// <summary>Reconcile saves only when TagRegistry.Register reports something changed. F1 made a blocked save
+    /// survivable, so a throwing Save can no longer be observed at all -- this has to detect a write by its effect
+    /// on the file's text instead, the way TagMaintenanceTests.Load_does_not_rewrite_the_registry_when_every_tag_is_known
+    /// does: a profile whose every tag is already known must leave a hand-written registry file untouched, byte for
+    /// byte. TagRegistryStore writes indented JSON, so any save reformats this one-line file.</summary>
     [Fact]
-    public void Reload_does_not_save_when_reconciliation_has_no_changes()
+    public void Reload_does_not_rewrite_tags_json_when_every_tag_is_already_known()
     {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
         var tagFile = Path.Combine(_dir, "tags.json");
+        const string handWritten = """{"tags":[{"name":"PROD","color":"Red"}]}""";
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(tagFile, handWritten);
         var tags = new TagRegistryStore(tagFile);
-        // Pre-create the registry file so Load() can read it
-        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
 
-        // Profile with no tags (all profiles carry no tags that need registering)
-        _store.Save(new SessionProfile { Name = "a", Host = "h" });
         var vm = Picker(tags);
-
-        // Create a blocking directory at the tags.json path to detect any Save attempt.
-        // The constructor's Reload() already read from disk; now block writes.
-        if (File.Exists(tagFile)) File.Delete(tagFile);
-        Directory.CreateDirectory(tagFile);
-
-        // Reload should not throw because Reconcile finds no new tags to register and doesn't call Save
         vm.Reload();
 
-        // If Save had been attempted, it would have thrown IOException when trying to move to a directory
+        Assert.Equal(handWritten, File.ReadAllText(tagFile));
     }
 
     /// <summary>Manage Tags reports a failed tags.json save as survivable ("... TEST may show a different colour
