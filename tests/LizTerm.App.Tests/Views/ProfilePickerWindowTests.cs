@@ -4,10 +4,12 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -189,6 +191,24 @@ public class ProfilePickerWindowTests : IDisposable
         Assert.Equal(["b.example"], vm.RecentEntries);
         Assert.Equal("typed.example", vm.QuickConnectText);
         Assert.True(box.IsDropDownOpen);
+    }
+
+    /// <summary>Read from the template's presenter, which is what draws the glyph: Fluent's theme sets its
+    /// Foreground on hover, so a colour set on the Button alone would pass a property check and never show.</summary>
+    [AvaloniaFact]
+    public void The_cross_turns_red_under_the_pointer()
+    {
+        var window = PickerWithRecent("a.example");
+        var box = QuickConnect(window);
+        OpenList(window, box);
+
+        var cross = RecentItem(box, "a.example").GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ForgetButton");
+        var presenter = cross.GetVisualDescendants().OfType<ContentPresenter>().First(p => p.Name == "PART_ContentPresenter");
+        Assert.NotEqual(Color.Parse("#FF8080"), (presenter.Foreground as ISolidColorBrush)?.Color);
+
+        window.MouseMove(Centre(window, cross));
+
+        Assert.Equal(Color.Parse("#FF8080"), (presenter.Foreground as ISolidColorBrush)?.Color);
     }
 
     [AvaloniaFact]

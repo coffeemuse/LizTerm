@@ -124,6 +124,12 @@
             <Style Selector="Button.forget:pointerover">
               <Setter Property="Opacity" Value="1" />
             </Style>
+            <!-- Red under the pointer, the same red as the error line. On the template's presenter, because Fluent's
+                 Button theme sets the presenter's Foreground for :pointerover and :pressed, which a setter on the
+                 Button itself would lose to. The colour is never the only signal: the × and the brightening are. -->
+            <Style Selector="Button.forget:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.forget:pressed /template/ ContentPresenter#PART_ContentPresenter">
+              <Setter Property="Foreground" Value="#FF8080" />
+            </Style>
           </ComboBox.Styles>
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="sys:String">
