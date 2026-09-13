@@ -83,44 +83,52 @@
               </StackPanel>
             </StackPanel>
           </Border>
-          <StackPanel Spacing="4">
-            <TextBlock Text="Name" Foreground="#A0A0A0" FontSize="12" />
-            <DockPanel IsVisible="{Binding IsTagSelected}">
-              <Button x:Name="RenameButton" DockPanel.Dock="Right" Content="Rename" Margin="6,0,0,0" Command="{Binding RenameCommand}" />
-              <TextBox x:Name="NameBox" Text="{Binding NameText}" KeyDown="OnNameBoxKeyDown" />
-            </DockPanel>
-            <TextBox x:Name="ReservedNameBox" Text="{Binding NameText, Mode=OneWay}" IsReadOnly="True"
-                     IsVisible="{Binding IsReservedSelected}" />
-            <TextBlock x:Name="ValidationText" Text="{Binding ValidationMessage}" Foreground="#FF8080" FontSize="12"
-                       TextWrapping="Wrap" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
-            <TextBlock Text="Colour" Foreground="#A0A0A0" FontSize="12" Margin="0,8,0,0" />
-            <ItemsControl x:Name="SwatchList" ItemsSource="{Binding Swatches}" IsVisible="{Binding IsTagSelected}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <StackPanel Orientation="Horizontal" Spacing="6" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <!-- The colour's name is the tooltip AND the accessible name, so the choice is not carried by colour
-                     alone. A Click handler, not a Command binding, as Preferences' radios are. -->
-                <DataTemplate x:DataType="vm:SwatchOption">
-                  <Button Classes="swatch" Classes.selected="{Binding IsSelected}" Background="{Binding Brush}"
-                          ToolTip.Tip="{Binding Name}" AutomationProperties.Name="{Binding Name}" Click="OnSwatchClick" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReservedSelected}">
-              <TextBlock Text="★" Foreground="{x:Static render:TagPalette.Star}" FontSize="16" VerticalAlignment="Center" />
-              <TextBlock Text="Reserved: always a gold star." Foreground="#8F8F8F" FontStyle="Italic" FontSize="12"
-                         VerticalAlignment="Center" />
+          <!-- The fill region, wrapped in a scroller rather than left as a bare StackPanel: a StackPanel neither
+               scrolls nor clips, so when the docked Delete row / confirmation strip and the status line below the
+               panel take enough height, the stack was arranged shorter than its content and its children drew
+               past its bounds, over the Delete row and the confirmation strip (review finding, #88 whole-branch
+               review). Scrolling instead keeps every row reachable without ever drawing over what is docked
+               below it. -->
+          <ScrollViewer x:Name="PanelScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Name" Foreground="#A0A0A0" FontSize="12" />
+              <DockPanel IsVisible="{Binding IsTagSelected}">
+                <Button x:Name="RenameButton" DockPanel.Dock="Right" Content="Rename" Margin="6,0,0,0" Command="{Binding RenameCommand}" />
+                <TextBox x:Name="NameBox" Text="{Binding NameText}" KeyDown="OnNameBoxKeyDown" />
+              </DockPanel>
+              <TextBox x:Name="ReservedNameBox" Text="{Binding NameText, Mode=OneWay}" IsReadOnly="True"
+                       IsVisible="{Binding IsReservedSelected}" />
+              <TextBlock x:Name="ValidationText" Text="{Binding ValidationMessage}" Foreground="#FF8080" FontSize="12"
+                         TextWrapping="Wrap" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <TextBlock Text="Colour" Foreground="#A0A0A0" FontSize="12" Margin="0,8,0,0" />
+              <ItemsControl x:Name="SwatchList" ItemsSource="{Binding Swatches}" IsVisible="{Binding IsTagSelected}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="6" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <!-- The colour's name is the tooltip AND the accessible name, so the choice is not carried by colour
+                       alone. A Click handler, not a Command binding, as Preferences' radios are. -->
+                  <DataTemplate x:DataType="vm:SwatchOption">
+                    <Button Classes="swatch" Classes.selected="{Binding IsSelected}" Background="{Binding Brush}"
+                            ToolTip.Tip="{Binding Name}" AutomationProperties.Name="{Binding Name}" Click="OnSwatchClick" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReservedSelected}">
+                <TextBlock Text="★" Foreground="{x:Static render:TagPalette.Star}" FontSize="16" VerticalAlignment="Center" />
+                <TextBlock Text="Reserved: always a gold star." Foreground="#8F8F8F" FontStyle="Italic" FontSize="12"
+                           VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="Used by" Foreground="#A0A0A0" FontSize="12" Margin="0,8,0,0" />
+              <TextBlock Text="No profile uses this tag." Foreground="#8F8F8F" FontStyle="Italic" FontSize="12"
+                         IsVisible="{Binding SelectedRow.IsUnused, FallbackValue=False}" />
+              <ScrollViewer MaxHeight="120">
+                <ItemsControl x:Name="UsedByList" ItemsSource="{Binding SelectedRow.UsedBy}" />
+              </ScrollViewer>
             </StackPanel>
-            <TextBlock Text="Used by" Foreground="#A0A0A0" FontSize="12" Margin="0,8,0,0" />
-            <TextBlock Text="No profile uses this tag." Foreground="#8F8F8F" FontStyle="Italic" FontSize="12"
-                       IsVisible="{Binding SelectedRow.IsUnused, FallbackValue=False}" />
-            <ScrollViewer MaxHeight="120">
-              <ItemsControl x:Name="UsedByList" ItemsSource="{Binding SelectedRow.UsedBy}" />
-            </ScrollViewer>
-          </StackPanel>
+          </ScrollViewer>
         </DockPanel>
       </Panel>
     </DockPanel>

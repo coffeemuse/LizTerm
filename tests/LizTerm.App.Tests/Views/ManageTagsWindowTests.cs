@@ -158,6 +158,45 @@ public class ManageTagsWindowTests : IDisposable
         }
     }
 
+    /// <summary>Review finding: at the default window size, with a failure message up from a partial rename AND
+    /// the merge confirmation strip up over it, the fill StackPanel neither scrolls nor clips, so its content
+    /// draws past the Delete row and the strip instead of yielding to them. The fill region must scroll instead.
+    /// Reproduces the review's own retry flow: a partial rename DEV -&gt; TEST over 4 carriers (one blocked), then
+    /// reselecting DEV and renaming to TEST again, which is now a merge because the partial rename already
+    /// defined TEST.</summary>
+    [AvaloniaFact]
+    public void The_panel_scrolls_rather_than_drawing_over_the_strip_when_a_failure_and_a_merge_are_both_up()
+    {
+        for (var i = 0; i < 4; i++)
+            _profiles.Save(new SessionProfile { Name = $"p{i}", Host = "h", Tags = TagSet.From(["DEV"]) });
+        _tags.Save(new TagRegistry([new TagDefinition("DEV", TagColor.Teal)]));
+        Directory.CreateDirectory(Path.Combine(_dir, "profiles", ProfileStore.FileNameFor("p2")) + ".tmp");
+        var vm = new ManageTagsViewModel(new TagMaintenance(_profiles, _tags));
+        var window = new ManageTagsWindow(vm);
+        window.Show();
+        window.UpdateLayout();
+
+        vm.SelectedRow = vm.Rows.Single(r => r.Name == "DEV");
+        vm.NameText = "TEST";
+        vm.RenameCommand.Execute(null);
+        window.UpdateLayout();
+        Assert.NotNull(vm.StatusMessage);
+
+        vm.SelectedRow = vm.Rows.Single(r => r.Name == "DEV");
+        window.UpdateLayout();
+        vm.NameText = "TEST";
+        vm.RenameCommand.Execute(null);
+        window.UpdateLayout();
+        Assert.NotNull(vm.PendingConfirmation);
+
+        var scroll = window.FindControl<ScrollViewer>("PanelScroll")!;
+        var strip = window.FindControl<Border>("ConfirmationStrip")!;
+        var scrollBottom = scroll.TranslatePoint(new Point(0, scroll.Bounds.Height), window)!.Value.Y;
+        var stripTop = strip.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+        Assert.True(scrollBottom <= stripTop + 0.5,
+            $"the panel's scroll region ends at {scrollBottom} but the confirmation strip starts at {stripTop}");
+    }
+
     [AvaloniaFact]
     public void Done_closes_the_window()
     {
