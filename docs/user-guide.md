@@ -22,6 +22,10 @@ LizTerm opens on the **Sessions** list. Select a saved profile and choose **Conn
 **Edit...** and **Delete** to manage them. Each session opens in its own window. Closing the last session window
 brings the list back; closing the list with no sessions open quits.
 
+Right-click a profile for **Connect**, **Edit...** and **Mark as FAVORITE**, which stars it without opening the
+editor. On a starred profile the same entry reads **Remove from FAVORITE**. A profile already carrying 8 tags has
+no room for FAVORITE until you remove one.
+
 Above the list, the **Filter** box narrows it to profiles whose name or tag contains what you type, and the
 drop-down beside it narrows to **FAVORITE** or to one tag first. The two work together: the drop-down chooses
 the scope, the box searches inside it. Whatever the filter shows, **Quick Connect** still reaches every saved
