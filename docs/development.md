@@ -94,8 +94,9 @@ converter rather than the guard.
 with one change. The font carries x3270's Operator Information Area glyphs — the boxed 4, the underlined A and B,
 the broken wire, the clock, the human figure, the lock X and the rest — but upstream ships them without code points,
 so no text can reach them. `tools/patch-3270-oia-font.py` maps them to U+E180 through U+E198, in the font's own
-glyph order; `OiaGlyphs` in the App project names each code point and `OiaGlyphsTests` fails the suite if the shipped
-file lacks any of them. After a font refresh, run the script on the new file:
+glyph order; `OiaGlyphs` in the App project names each code point, spelled as `\u` escapes because the characters
+themselves are invisible in an editor or a diff. `OiaGlyphsTests` fails the suite if the script's list, those names
+and code points, and the shipped file disagree. After a font refresh, run the script on the new file:
 
 ```bash
 pip install fonttools

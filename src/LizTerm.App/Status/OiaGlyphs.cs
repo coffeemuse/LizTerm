@@ -7,38 +7,37 @@ namespace LizTerm.App.Status;
 /// <summary>The x3270 Operator Information Area symbols, as the bundled 3270 font encodes them. Upstream 3270font
 /// carries these glyphs without code points; tools/patch-3270-oia-font.py assigns them the private-use block
 /// U+E180 onward, in the font's own glyph order, and this class is the one place that block is spelled out
-/// (docs/development.md, "The 3270 font").</summary>
+/// (docs/development.md, "The 3270 font"). OiaGlyphsTests reads these constants to hold the script's list, the code
+/// points and the shipped file to one another, so each single-character constant is one symbol of the block.</summary>
 public static class OiaGlyphs
 {
-    public const string BoxA = "";
-    public const string Insert = "";
-    public const string BoxB = "";
-    public const string Box6 = "";
-    public const string RightArrow = "";
-    public const string UpShift = "";
-    public const string Human = "";
-    public const string UnderB = "";
-    public const string DownShift = "";
-    public const string BoxQuestion = "";
-    public const string BoxSolid = "";
-    public const string BadCommHi = "";
-    public const string CommHi = "";
-    public const string CommJag = "";
-    public const string CommLo = "";
-    public const string ClockLeft = "";
-    public const string ClockRight = "";
-    public const string Lock = "";
-    public const string LeftArrow = "";
-    public const string KeyLeft = "";
-    public const string KeyRight = "";
-    public const string Box4 = "";
-    public const string UnderA = "";
-    public const string MagCard = "";
-    public const string BoxHuman = "";
+    public const string BoxA = "\uE180";
+    public const string Insert = "\uE181";
+    public const string BoxB = "\uE182";
+    public const string Box6 = "\uE183";
+    public const string RightArrow = "\uE184";
+    public const string UpShift = "\uE185";
+    public const string Human = "\uE186";
+    public const string UnderB = "\uE187";
+    public const string DownShift = "\uE188";
+    public const string BoxQuestion = "\uE189";
+    public const string BoxSolid = "\uE18A";
+    public const string BadCommHi = "\uE18B";
+    public const string CommHi = "\uE18C";
+    public const string CommJag = "\uE18D";
+    public const string CommLo = "\uE18E";
+    public const string ClockLeft = "\uE18F";
+    public const string ClockRight = "\uE190";
+    public const string Lock = "\uE191";
+    public const string LeftArrow = "\uE192";
+    public const string KeyLeft = "\uE193";
+    public const string KeyRight = "\uE194";
+    public const string Box4 = "\uE195";
+    public const string UnderA = "\uE196";
+    public const string MagCard = "\uE197";
+    public const string BoxHuman = "\uE198";
 
     /// <summary>x3270's "no connection" symbol: a wire with a break in it.</summary>
     public const string NoConnection = CommHi + BadCommHi + CommHi + CommJag + CommLo;
     public const string Clock = ClockLeft + ClockRight;
-
-    public static IReadOnlyList<int> All { get; } = Enumerable.Range(0xE180, 25).ToList();
 }

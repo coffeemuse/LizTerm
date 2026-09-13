@@ -25,16 +25,16 @@ public class StatusFormatterTests
     // The mode field is x3270's: the boxed 4, then A or B underlined for TN3270 or TN3270E, then what the
     // session is (solid box: bound; boxed ?: none; N: NVT; the boxed human: SSCP-LU).
     [Theory]
-    [InlineData(ConnectionState.Disconnected, " ")]
-    [InlineData(ConnectionState.TcpPending, " ")]
-    [InlineData(ConnectionState.TelnetPending, " ")]
-    [InlineData(ConnectionState.ConnectedNvt, "N")]
-    [InlineData(ConnectionState.ConnectedNvtCharMode, "N")]
-    [InlineData(ConnectionState.Connected3270, "")]
-    [InlineData(ConnectionState.ConnectedUnbound, "")]
-    [InlineData(ConnectionState.ConnectedENvt, "N")]
-    [InlineData(ConnectionState.ConnectedSscp, "")]
-    [InlineData(ConnectionState.ConnectedTn3270E, "")]
+    [InlineData(ConnectionState.Disconnected, "\uE195 \uE189")]
+    [InlineData(ConnectionState.TcpPending, "\uE195 \uE189")]
+    [InlineData(ConnectionState.TelnetPending, "\uE195 \uE189")]
+    [InlineData(ConnectionState.ConnectedNvt, "\uE195\uE196N")]
+    [InlineData(ConnectionState.ConnectedNvtCharMode, "\uE195\uE196N")]
+    [InlineData(ConnectionState.Connected3270, "\uE195\uE196\uE18A")]
+    [InlineData(ConnectionState.ConnectedUnbound, "\uE195\uE187\uE189")]
+    [InlineData(ConnectionState.ConnectedENvt, "\uE195\uE187N")]
+    [InlineData(ConnectionState.ConnectedSscp, "\uE195\uE187\uE198")]
+    [InlineData(ConnectionState.ConnectedTn3270E, "\uE195\uE187\uE18A")]
     public void Mode_field_is_the_x3270_one(ConnectionState state, string expected) =>
         Assert.Equal(expected, StatusFormatter.Mode(state));
 
@@ -51,23 +51,25 @@ public class StatusFormatterTests
     {
         Assert.Equal(("", "", ""), StatusFormatter.Tls(null));
         Assert.Equal(("", "", ""), StatusFormatter.Tls(new TlsInfo(false, null, null, null)));
-        Assert.Equal(("", "✓", "TLS, certificate verified"), StatusFormatter.Tls(new TlsInfo(true, true, null, null)));
-        Assert.Equal(("", "!", "TLS, certificate not verified"), StatusFormatter.Tls(new TlsInfo(true, false, null, null)));
-        Assert.Equal(("", "!", "TLS, certificate not verified"), StatusFormatter.Tls(new TlsInfo(true, null, null, null)));
+        Assert.Equal(("\uE0A2", "✓", "TLS, certificate verified"), StatusFormatter.Tls(new TlsInfo(true, true, null, null)));
+        Assert.Equal(("\uE0A2", "!", "TLS, certificate not verified"), StatusFormatter.Tls(new TlsInfo(true, false, null, null)));
+        Assert.Equal(("\uE0A2", "!", "TLS, certificate not verified"), StatusFormatter.Tls(new TlsInfo(true, null, null, null)));
     }
 
-    // While no session is up the message area belongs to the connection, as in x3270: the lock, the broken wire,
-    // and the step in brackets. The tooltip is the plain sentence.
+    // While no session is bound the message area belongs to the connection, as in x3270: the lock, the broken wire,
+    // and the step in brackets. The tooltip is the plain sentence. TN3270E unbound is x3270's [TN3270E] step even
+    // though b3270 calls the keyboard not connected there (the test passes a keyboard reason it must ignore).
     [Theory]
-    [InlineData(ConnectionState.Disconnected, " ", "Not connected")]
-    [InlineData(ConnectionState.Reconnecting, "  ", "Reconnecting to mvs.local")]
-    [InlineData(ConnectionState.Resolving, "  [DNS]", "Looking up mvs.local")]
-    [InlineData(ConnectionState.TcpPending, "  [TCP]", "Connecting to mvs.local")]
-    [InlineData(ConnectionState.TlsPending, "  [TLS]", "Securing connection to mvs.local")]
-    [InlineData(ConnectionState.TlsPasswordPending, "  [TLS]", "Waiting for TLS key password")]
-    [InlineData(ConnectionState.ProxyPending, "  [Proxy]", "Connecting to mvs.local through proxy")]
-    [InlineData(ConnectionState.TelnetPending, " [TELNET]", "Negotiating with mvs.local")]
-    public void Message_area_follows_the_connection_until_a_session_is_up(ConnectionState state, string text, string tip)
+    [InlineData(ConnectionState.Disconnected, "\uE191 \uE18C\uE18B\uE18C\uE18D\uE18E", "Not connected")]
+    [InlineData(ConnectionState.Reconnecting, "\uE191 \uE18C\uE18B\uE18C\uE18D\uE18E \uE18F\uE190", "Reconnecting to mvs.local")]
+    [InlineData(ConnectionState.Resolving, "\uE191 \uE18C\uE18B\uE18C\uE18D\uE18E [DNS]", "Looking up mvs.local")]
+    [InlineData(ConnectionState.TcpPending, "\uE191 \uE18C\uE18B\uE18C\uE18D\uE18E [TCP]", "Connecting to mvs.local")]
+    [InlineData(ConnectionState.TlsPending, "\uE191 \uE18C\uE18B\uE18C\uE18D\uE18E [TLS]", "Securing connection to mvs.local")]
+    [InlineData(ConnectionState.TlsPasswordPending, "\uE191 \uE18C\uE18B\uE18C\uE18D\uE18E [TLS]", "Waiting for TLS key password")]
+    [InlineData(ConnectionState.ProxyPending, "\uE191 \uE18C\uE18B\uE18C\uE18D\uE18E [Proxy]", "Connecting to mvs.local through proxy")]
+    [InlineData(ConnectionState.TelnetPending, "\uE191 [TELNET]", "Negotiating with mvs.local")]
+    [InlineData(ConnectionState.ConnectedUnbound, "\uE191 [TN3270E]", "Connected to mvs.local (TN3270E, unbound)")]
+    public void Message_area_follows_the_connection_until_a_session_is_bound(ConnectionState state, string text, string tip)
     {
         var locked = KeyboardStatus.Initial with { Lock = KeyboardLock.ProtectedField };
         Assert.Equal(new OiaMessage(text, false, tip), StatusFormatter.Message(state, locked, "mvs.local"));
@@ -77,19 +79,19 @@ public class StatusFormatterTests
     // Operator errors are the red ones.
     [Theory]
     [InlineData(KeyboardLock.Unlocked, "", false, "Ready")]
-    [InlineData(KeyboardLock.NotConnected, " ", false, "Not connected")]
-    [InlineData(KeyboardLock.WaitingForHost, " SYSTEM", false, "Waiting for host")]
-    [InlineData(KeyboardLock.TerminalWait, " ", false, "Please wait")]
-    [InlineData(KeyboardLock.Deferred, "", false, "Waiting for host")]
-    [InlineData(KeyboardLock.MinusFunction, " -f", true, "Not available here, press Esc")]
-    [InlineData(KeyboardLock.ProtectedField, " ", true, "Protected field, press Esc")]
-    [InlineData(KeyboardLock.NumericOnly, " NUM", true, "Numbers only here, press Esc")]
-    [InlineData(KeyboardLock.Overflow, " >", true, "Field is full, press Esc")]
-    [InlineData(KeyboardLock.Dbcs, " <S>", true, "Invalid double-byte input, press Esc")]
-    [InlineData(KeyboardLock.Scrolled, " Scrolled", false, "Scrolled back")]
-    [InlineData(KeyboardLock.Disabled, " ", true, "Keyboard disabled")]
-    [InlineData(KeyboardLock.FieldWait, " [Field]", false, "Waiting for field")]
-    [InlineData(KeyboardLock.FileTransfer, " File Transfer", false, "File transfer in progress")]
+    [InlineData(KeyboardLock.NotConnected, "\uE191 \uE18C\uE18B\uE18C\uE18D\uE18E", false, "Not connected")]
+    [InlineData(KeyboardLock.WaitingForHost, "\uE191 SYSTEM", false, "Waiting for host")]
+    [InlineData(KeyboardLock.TerminalWait, "\uE191 \uE18F\uE190", false, "Please wait")]
+    [InlineData(KeyboardLock.Deferred, "\uE191", false, "Waiting for host")]
+    [InlineData(KeyboardLock.MinusFunction, "\uE191 -f", true, "Not available here, press Esc")]
+    [InlineData(KeyboardLock.ProtectedField, "\uE191 \uE192\uE186\uE184", true, "Protected field, press Esc")]
+    [InlineData(KeyboardLock.NumericOnly, "\uE191 \uE186NUM", true, "Numbers only here, press Esc")]
+    [InlineData(KeyboardLock.Overflow, "\uE191 \uE186>", true, "Field is full, press Esc")]
+    [InlineData(KeyboardLock.Dbcs, "\uE191 <S>", true, "Invalid double-byte input, press Esc")]
+    [InlineData(KeyboardLock.Scrolled, "\uE191 Scrolled", false, "Scrolled back")]
+    [InlineData(KeyboardLock.Disabled, "\uE191 \uE193\uE194", true, "Keyboard disabled")]
+    [InlineData(KeyboardLock.FieldWait, "\uE191 [Field]", false, "Waiting for field")]
+    [InlineData(KeyboardLock.FileTransfer, "\uE191 File Transfer", false, "File transfer in progress")]
     public void Message_area_is_the_keyboards_once_connected(KeyboardLock lockState, string text, bool isError, string tip)
     {
         var status = KeyboardStatus.Initial with { Lock = lockState };
@@ -100,7 +102,7 @@ public class StatusFormatterTests
     public void Unknown_lock_shows_its_detail()
     {
         var status = KeyboardStatus.Initial with { Lock = KeyboardLock.Unknown, LockDetail = "weird-state" };
-        Assert.Equal(new OiaMessage(" weird-state", false, "weird-state"),
+        Assert.Equal(new OiaMessage("\uE191 weird-state", false, "weird-state"),
             StatusFormatter.Message(ConnectionState.Connected3270, status, "mvs.local"));
     }
 
@@ -111,7 +113,7 @@ public class StatusFormatterTests
     [Fact]
     public void Insert_is_the_caret_glyph()
     {
-        Assert.Equal("", StatusFormatter.Insert(true));
+        Assert.Equal("\uE181", StatusFormatter.Insert(true));
         Assert.Equal("", StatusFormatter.Insert(false));
     }
 

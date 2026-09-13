@@ -12,7 +12,7 @@ namespace LizTerm.App.Status;
 /// bars and the About window. The padlock is the font's Powerline one (U+E0A2).</summary>
 public static class StatusFormatter
 {
-    public const string PadlockGlyph = "";
+    public const string PadlockGlyph = "\uE0A2";
     public const string VerifiedMark = "✓";
     public const string UnverifiedMark = "!";
 
@@ -62,12 +62,14 @@ public static class StatusFormatter
             : (PadlockGlyph, UnverifiedMark, "TLS, certificate not verified")
         : ("", "", "");
 
-    /// <summary>The message area. Until a session is up it belongs to the connection, as in x3270: the lock, the
-    /// broken wire, the step in brackets. Once connected it is the keyboard's: blank when free, otherwise the lock
-    /// and x3270's symbol for why. Operator errors are the ones x3270 paints red.</summary>
+    /// <summary>The message area. Until a session is bound it belongs to the connection, as in x3270: the lock, the
+    /// broken wire, the step in brackets. TN3270E negotiated with nothing bound yet is still a step, x3270's
+    /// [TN3270E]: b3270 reports the keyboard as not connected there, and reading that would draw the broken wire
+    /// beside a mode field saying the connection is up. Once bound it is the keyboard's: blank when free, otherwise
+    /// the lock and x3270's symbol for why. Operator errors are the ones x3270 paints red.</summary>
     public static OiaMessage Message(ConnectionState state, KeyboardStatus status, string host)
     {
-        if (!state.IsConnected())
+        if (!state.IsConnected() || state == ConnectionState.ConnectedUnbound)
         {
             var text = state switch
             {
@@ -78,6 +80,7 @@ public static class StatusFormatter
                 ConnectionState.TlsPending or ConnectionState.TlsPasswordPending => Locked(OiaGlyphs.NoConnection + " [TLS]"),
                 ConnectionState.ProxyPending => Locked(OiaGlyphs.NoConnection + " [Proxy]"),
                 ConnectionState.TelnetPending => Locked("[TELNET]"),
+                ConnectionState.ConnectedUnbound => Locked("[TN3270E]"),
                 _ => Locked(state.ToString()),
             };
             return new OiaMessage(text, false, Connection(state, host));

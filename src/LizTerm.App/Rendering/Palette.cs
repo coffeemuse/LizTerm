@@ -81,4 +81,13 @@ public static class Palette
     /// <summary>The rule above the status bar: x3270 draws its OIA line in the 3279 palette's blue. Declared last
     /// because it is built from the palette above it, and static fields initialise in order.</summary>
     public static readonly IBrush OiaRule = Brush(HostColor.Blue, false);
+
+    /// <summary>The status bar's colours, taken from the same palette so the bar and the screen agree: text in
+    /// neutral white, as x3270 draws its message area; operator errors, and the wire log marker, in red, as x3270
+    /// paints operator errors; the padlock green when the certificate was verified and orange when not, with a mark
+    /// that says the same so the colour never carries it alone.</summary>
+    public static readonly IBrush OiaText = Brush(HostColor.NeutralWhite, false);
+    public static readonly IBrush OiaError = Brush(HostColor.Red, false);
+    public static readonly IBrush TlsVerified = Brush(HostColor.Green, false);
+    public static readonly IBrush TlsUnverified = Brush(HostColor.Orange, false);
 }

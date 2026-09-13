@@ -6,30 +6,80 @@ using LizTerm.App.Rendering;
 
 namespace LizTerm.App.Tests.Rendering;
 
-/// <summary>The status bar's glyphs take the screen's cell size, but a taller bar shrinks the screen, which can
-/// re-fit the cells a pixel smaller, which shrinks the bar, which re-fits them a pixel larger: a layout that never
-/// settles. So the bar follows the cells only when they move by more than a pixel.</summary>
+/// <summary>The status bar's glyphs take the screen's cell size. The bar's own resize can re-fit the cells; that echo
+/// is followed like any change, unless it returns the cells inside the same layout pass to the size the bar just
+/// left — a fit with no consistent answer, and the one thing held.</summary>
 public class StatusBarFontTests
 {
     [Fact]
-    public void Follows_a_cell_size_that_moved_by_more_than_a_pixel()
+    public void Starts_at_the_default_and_follows_the_first_fit()
     {
-        Assert.Equal(20, StatusBarFont.Follow(current: 14, cellFontSize: 20));
-        Assert.Equal(18, StatusBarFont.Follow(current: 20, cellFontSize: 18));
+        var font = new StatusBarFont();
+        Assert.Equal(StatusBarFont.Default, font.Size);
+        Assert.Equal(15, font.Follow(15));
     }
 
     [Fact]
-    public void Holds_through_a_one_pixel_wobble()
+    public void Follows_a_one_size_change_once_layout_has_settled()
     {
-        Assert.Equal(20, StatusBarFont.Follow(current: 20, cellFontSize: 21));
-        Assert.Equal(20, StatusBarFont.Follow(current: 20, cellFontSize: 19));
-        Assert.Equal(20, StatusBarFont.Follow(current: 20, cellFontSize: 20));
+        var font = new StatusBarFont();
+        font.Follow(16);
+        font.LayoutSettled();
+        Assert.Equal(15, font.Follow(15));
+        font.LayoutSettled();
+        Assert.Equal(16, font.Follow(16));
     }
 
     [Fact]
-    public void Ignores_a_screen_with_no_geometry_yet()
+    public void Follows_an_echo_that_settles()
     {
-        Assert.Equal(14, StatusBarFont.Follow(current: 14, cellFontSize: 0));
-        Assert.Equal(14, StatusBarFont.Default);
+        var font = new StatusBarFont();
+        Assert.Equal(28, font.Follow(28)); // the first fit
+        Assert.Equal(27, font.Follow(27)); // the bar's jump from the default re-fit the cells a size smaller, same pass
     }
+
+    [Fact]
+    public void Holds_a_bounce_back_to_the_size_it_just_left_and_keeps_holding_it_on_repaint()
+    {
+        var font = new StatusBarFont();
+        font.Follow(16);
+        font.LayoutSettled();
+        Assert.Equal(17, font.Follow(17)); // the window grew a size
+        Assert.Equal(17, font.Follow(16)); // the taller bar re-fit the cells back to 16 in the same pass: no answer settles
+        font.LayoutSettled();
+        Assert.Equal(17, font.Follow(16)); // a host repaint re-arranges at the same fit: no flip
+    }
+
+    [Fact]
+    public void Lets_go_of_a_hold_once_the_cells_move_on()
+    {
+        var font = new StatusBarFont();
+        font.Follow(16);
+        font.LayoutSettled();
+        font.Follow(17);
+        font.Follow(16);
+        font.LayoutSettled();
+        Assert.Equal(15, font.Follow(15));
+    }
+
+    [Fact]
+    public void Only_a_one_size_return_inside_the_pass_is_a_bounce()
+    {
+        var twoBack = new StatusBarFont();
+        twoBack.Follow(16);
+        twoBack.LayoutSettled();
+        twoBack.Follow(18);
+        Assert.Equal(16, twoBack.Follow(16));
+
+        var afterSettling = new StatusBarFont();
+        afterSettling.Follow(16);
+        afterSettling.LayoutSettled();
+        afterSettling.Follow(17);
+        afterSettling.LayoutSettled();
+        Assert.Equal(16, afterSettling.Follow(16)); // the window shrank back: a real change
+    }
+
+    [Fact]
+    public void Ignores_a_screen_with_no_geometry_yet() =>
+        Assert.Equal(StatusBarFont.Default, new StatusBarFont().Follow(0));
 }

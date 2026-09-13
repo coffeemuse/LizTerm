@@ -146,6 +146,14 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - The run list is cached for as long as the snapshot instance and the `CellGeometry` are unchanged, so a blink phase
   flip (a full `InvalidateVisual` twice a second, for as long as anything blinks) redraws prepared runs instead of
   re-segmenting and re-shaping every cell. A new snapshot or geometry rebuilds it; `RunPlanBuilds` is the test seam.
+- `OiaFontSize` is the status bar's font size, the cells' own, and it is set from `ArrangeOverride` only, never from
+  `Render`. The bar's height is part of what the screen fits into, so following the cells can feed back;
+  `StatusBarFont` follows that echo like any change and holds only a bounce — the cells returning, inside the same
+  layout pass (ended by `LayoutUpdated`), to the size the bar just left, a fit with no consistent answer — and keeps
+  holding it on later repaints at the same fit, so a host screen update never flips the bar. Everything else is
+  followed, one size included: cell sizes are whole pixels, and holding any one-size move left the bar a size off
+  the screen. `TerminalScreenLayoutTests` walks a real bar through every height and fails if the bar sits off a size
+  that would have settled.
 - Blink uses a 750 ms phase, never below 500 ms, and asks `ScreenSnapshot.HasBlink` rather than rescanning the grid.
 - **Overlays are painted, never folded into the run plan.** `Selection`, `Crosshair`, and `FindMatches` with
   `CurrentMatch` are styled properties painted in `Render` after `EnsureRunPlan`'s cached runs. A crosshair mode or a

@@ -260,26 +260,27 @@
             BorderThickness="0,1,0,0" BorderBrush="{x:Static rendering:Palette.OiaRule}">
       <Grid ColumnDefinitions="Auto,10,Auto,16,Auto,16,Auto,*,Auto,16,Auto,16,Auto,16,Auto">
         <Grid.Styles>
-          <!-- The OIA's colours: x3270's neutral white for text, red for operator errors; the TLS pair is green
-               when the certificate was verified and amber when not, and its mark says the same, so a reader who
-               cannot tell the two apart is not left guessing (Robert's own call, 2026-09-13). -->
+          <!-- The OIA's colours, all the palette's (Palette.OiaText and beside it): x3270's neutral white for
+               text, red for operator errors; the TLS pair is green when the certificate was verified and orange
+               when not, and its mark says the same, so a reader who cannot tell the two apart is not left guessing
+               (Robert's own call, 2026-09-13). -->
           <Style Selector="TextBlock.oia">
             <Setter Property="FontFamily" Value="{x:Static controls:TerminalScreen.TerminalFont}" />
             <!-- One more row of the screen's own cells, as a real 3270's OIA is: the size follows the screen's
-                 fit (Robert's ask at first QA, 2026-09-13). The screen holds it through one-pixel wobbles, since
-                 the bar's height is part of what the screen fits into; see StatusBarFont. -->
+                 fit (Robert's ask at first QA, 2026-09-13). The bar's height is part of what the screen fits into,
+                 so the screen holds only a bounce the bar's own resize causes; see StatusBarFont. -->
             <Setter Property="FontSize" Value="{Binding #Screen.OiaFontSize}" />
-            <Setter Property="Foreground" Value="#C0C0C0" />
+            <Setter Property="Foreground" Value="{x:Static rendering:Palette.OiaText}" />
             <Setter Property="VerticalAlignment" Value="Center" />
           </Style>
           <Style Selector="TextBlock.oia.error">
-            <Setter Property="Foreground" Value="#FF8080" />
+            <Setter Property="Foreground" Value="{x:Static rendering:Palette.OiaError}" />
           </Style>
           <Style Selector="TextBlock.oia.tls">
-            <Setter Property="Foreground" Value="#E8B04B" />
+            <Setter Property="Foreground" Value="{x:Static rendering:Palette.TlsUnverified}" />
           </Style>
           <Style Selector="TextBlock.oia.tls.verified">
-            <Setter Property="Foreground" Value="#5FD35F" />
+            <Setter Property="Foreground" Value="{x:Static rendering:Palette.TlsVerified}" />
           </Style>
         </Grid.Styles>
         <!-- The session's identity leads the bar and its state follows (#93): the note icon, then the profile's
