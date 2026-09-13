@@ -455,6 +455,28 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   `IsDefault`, so Enter in the name box renames instead of closing the window. The failure line sits under the
   panel, not in it, so it survives a change of selection.
 
+## Quick Connect's recent hosts
+
+- The picker has two zones: the saved sessions (heading, filter, list, button column) and a Quick Connect footer
+  under a divider. The outer layout is a `Grid`, not a `DockPanel`, because document order is tab order and the
+  filter must come first; the filter row is a `Grid` for the same reason.
+- `QuickConnectBox` is an editable `ComboBox` over `ProfilePickerViewModel.RecentEntries`. The history is
+  `RecentHosts` (Core; newest first, unique ignoring case, at most 10, kept as typed) in `recent-hosts.json` through
+  `RecentHostsStore`, a history rather than a preference and so not a key in `settings.json`. Only an **ad hoc**
+  connect records (`fromStore` false); a saved profile's name never does, and neither does text that opened nothing.
+  The file is loaded once, in the constructor rather than `Reload`, since the picker is its only writer, and
+  `RecentEntries` changes by single inserts and removes rather than a rebuild, because a Reset makes a bound
+  ComboBox drop its selection.
+- **Its keys are handled on the tunnel** (`AddHandler(..., RoutingStrategies.Tunnel)`), because the ComboBox marks
+  keys handled itself. Enter always connects what is in the box and closes the list: highlighting an entry already
+  put its text there, and in Avalonia 12.1.2 the editable ComboBox never closes its own list on Enter. Delete forgets
+  the highlighted entry only while the list is open (the focused `ComboBoxItem`'s entry, else `SelectedItem`); with
+  it closed it is text editing.
+- Each entry's **×** (`ForgetButton`) is a non-focusable `Button` binding `RemoveRecentHostCommand` through
+  `$parent[ComboBox]`. The `Button` handles the press, so a press on it neither picks the entry nor closes the list;
+  `ProfilePickerWindowTests` proves that with a real pointer, since a raised `ClickEvent` never runs a bound
+  `Command`. Emptying the list closes the drop-down.
+
 ## The profile inside the session (#93)
 
 - `SessionViewModel` carries the profile as the window shows it — `HostPort`, `Note` (trimmed or null),

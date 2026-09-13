@@ -9,6 +9,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LizTerm.App.ViewModels"
         xmlns:render="using:LizTerm.App.Rendering"
+        xmlns:sys="using:System"
         x:Class="LizTerm.App.Views.ProfilePickerWindow"
         x:DataType="vm:ProfilePickerViewModel"
         Title="LizTerm" Width="520" Height="480" MinWidth="400" MinHeight="360"
@@ -106,8 +107,37 @@
       <Separator Margin="0,0,0,8" />
       <Grid ColumnDefinitions="Auto,*,Auto">
         <TextBlock Text="Quick Connect" VerticalAlignment="Center" Margin="0,0,8,0" />
-        <TextBox x:Name="QuickConnectBox" Grid.Column="1" Text="{Binding QuickConnectText}"
-                 PlaceholderText="host, host:port, or L:host for TLS" KeyDown="OnQuickConnectKeyDown" />
+        <!-- Editable, so typing is plain typing; the drop-down recalls recent ad hoc hosts. Its Enter and Delete are
+             handled on the tunnel in code-behind, ahead of the ComboBox's own key handling. -->
+        <ComboBox x:Name="QuickConnectBox" Grid.Column="1" IsEditable="True" HorizontalAlignment="Stretch"
+                  Text="{Binding QuickConnectText}" ItemsSource="{Binding RecentEntries}"
+                  PlaceholderText="host, host:port, or L:host for TLS">
+          <ComboBox.Styles>
+            <!-- Always drawn, dimmed until hovered: a hover-only control is one nobody finds. -->
+            <Style Selector="Button.forget">
+              <Setter Property="Background" Value="Transparent" />
+              <Setter Property="BorderThickness" Value="0" />
+              <Setter Property="Padding" Value="6,0" />
+              <Setter Property="MinWidth" Value="0" />
+              <Setter Property="Opacity" Value="0.55" />
+            </Style>
+            <Style Selector="Button.forget:pointerover">
+              <Setter Property="Opacity" Value="1" />
+            </Style>
+          </ComboBox.Styles>
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="sys:String">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <!-- Not focusable, so a press never takes the keyboard out of the box. -->
+                <Button x:Name="ForgetButton" Grid.Column="1" Classes="forget" Content="✕" Focusable="False"
+                        Margin="8,0,0,0" ToolTip.Tip="Remove from recent hosts"
+                        Command="{Binding $parent[ComboBox].((vm:ProfilePickerViewModel)DataContext).RemoveRecentHostCommand}"
+                        CommandParameter="{Binding}" />
+              </Grid>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
         <Button x:Name="QuickConnectButton" Grid.Column="2" Content="Connect" Command="{Binding QuickConnectCommand}" Margin="8,0,0,0" />
       </Grid>
       <TextBlock Text="{Binding QuickConnectError}" Foreground="#FF8080" FontSize="12" TextWrapping="Wrap"

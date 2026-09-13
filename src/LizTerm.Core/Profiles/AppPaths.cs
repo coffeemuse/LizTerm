@@ -33,4 +33,8 @@ public static class AppPaths
     /// synthesised rather than stored, so deleting this file loses only the chosen colours — every tag name
     /// travels in its profiles and re-registers with a fresh colour.</summary>
     public static string TagsFile() => Path.Combine(ConfigRoot(), "tags.json");
+
+    /// <summary>The hosts typed into Quick Connect, newest first, one file beside tags.json. A history rather than a
+    /// preference, which is why it is not a key in settings.json; deleting it only empties the drop-down.</summary>
+    public static string RecentHostsFile() => Path.Combine(ConfigRoot(), "recent-hosts.json");
 }

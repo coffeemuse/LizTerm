@@ -19,6 +19,8 @@ public partial class ProfilePickerViewModel : ObservableObject
     private readonly Action _quit;
     private readonly TagRegistryStore? _tags;
     private readonly Func<Task>? _manageTags;
+    private readonly RecentHostsStore? _recentHosts;
+    private RecentHosts _recent;
     private TagRegistry _registry = TagRegistry.Empty;
 
     [ObservableProperty]
@@ -60,9 +62,10 @@ public partial class ProfilePickerViewModel : ObservableObject
     /// which is what a test wants.</param>
     /// <param name="manageTags">Shows Manage Tags and completes when it closes, or null where there is no tag file
     /// to manage — which is also what a test that does not care wants.</param>
+    /// <param name="recentHosts">Quick Connect's history file, or null for a history kept in memory only.</param>
     public ProfilePickerViewModel(ProfileStore store, Action<SessionProfile, bool> openSession,
         Func<SessionProfile?, Task<ProfileEdit?>> editProfile, Action quit, TagRegistryStore? tags = null,
-        Func<Task>? manageTags = null)
+        Func<Task>? manageTags = null, RecentHostsStore? recentHosts = null)
     {
         _store = store;
         _openSession = openSession;
@@ -70,6 +73,11 @@ public partial class ProfilePickerViewModel : ObservableObject
         _quit = quit;
         _tags = tags;
         _manageTags = manageTags;
+        _recentHosts = recentHosts;
+        // Once, not in Reload: this picker is the file's only writer (App keeps one picker at a time), and
+        // rebuilding a collection an open drop-down is showing on every activation would buy nothing.
+        _recent = recentHosts?.Load() ?? RecentHosts.Empty;
+        foreach (var entry in _recent.Entries) RecentEntries.Add(entry);
         Reload();
     }
 
@@ -294,6 +302,33 @@ public partial class ProfilePickerViewModel : ObservableObject
     /// <summary>Connect to what the box names, without saving anything. The parse and the profile-name
     /// precedence are the command line's own — the same Parse and Resolve, so the box cannot drift from it —
     /// which is why a saved profile called "CONS01@tk5" stays reachable by its own name here too (spec 7.1).</summary>
+    /// <summary>Quick Connect's drop-down: the recent ad hoc hosts, newest first, as typed.</summary>
+    public ObservableCollection<string> RecentEntries { get; } = [];
+
+    /// <summary>Moves the entry to the top with the fewest collection changes, rather than rebuilding: a Reset
+    /// makes a bound ComboBox drop its selection, which an editable one can carry into its text.</summary>
+    private void Remember(string text)
+    {
+        _recent = _recent.With(text);
+        if (RecentEntries.FirstOrDefault(e => e.Equals(text, StringComparison.OrdinalIgnoreCase)) is { } older)
+            RecentEntries.Remove(older);
+        RecentEntries.Insert(0, text);
+        while (RecentEntries.Count > RecentHosts.Max) RecentEntries.RemoveAt(RecentEntries.Count - 1);
+        // TrySave, as the tag registry's reconciliation does: an unwritable history costs retyping, not the picker.
+        _recentHosts?.TrySave(_recent);
+    }
+
+    /// <summary>The × on a drop-down entry, and Delete on a highlighted one.</summary>
+    [RelayCommand]
+    private void RemoveRecentHost(string? entry)
+    {
+        if (entry is null) return;
+        _recent = _recent.Without(entry);
+        if (RecentEntries.FirstOrDefault(e => e.Equals(entry, StringComparison.OrdinalIgnoreCase)) is { } shown)
+            RecentEntries.Remove(shown);
+        _recentHosts?.TrySave(_recent);
+    }
+
     [RelayCommand]
     private void QuickConnect()
     {
@@ -316,7 +351,10 @@ public partial class ProfilePickerViewModel : ObservableObject
             // let a pin get written into that unrelated profile's file. If Resolve ever returned a copy instead of
             // the list's own instance, this would fail safe -- no pin write-back -- rather than write into the
             // wrong file.
-            _openSession(profile, Profiles.Any(p => ReferenceEquals(p, profile)));
+            var fromStore = Profiles.Any(p => ReferenceEquals(p, profile));
+            _openSession(profile, fromStore);
+            // Ad hoc hosts only: the list already recalls a saved profile, and a renamed one would leave a stale entry.
+            if (!fromStore) Remember(text);
             return;
         }
 
