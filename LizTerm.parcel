@@ -3,7 +3,7 @@
     "NetProjectPath": "src/LizTerm.App/LizTerm.App.csproj",
     "ApplicationName": "LizTerm",
     "Company": "CoffeeMuse",
-    "Version": "0.5.1",
+    "Version": "0.5.2",
     "PackageName": "LizTerm"
   },
   "PublishSettings": {
