@@ -113,7 +113,18 @@ public partial class ProfilePickerViewModel : ObservableObject
     {
         var (registry, changed) = _registry.Register(Profiles.SelectMany(p => p.Tags.Names));
         _registry = registry;
-        if (changed) _tags?.Save(registry);
+        if (!changed) return;
+        try
+        {
+            _tags?.Save(registry);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The registry in memory is still correct for drawing this list; the colours are only lost if the
+            // file stays unwritable, and the next reconciliation that registers something retries the write.
+            // Crashing the picker (and every open session window with it) over a colour file is worse. Same
+            // stance as TagMaintenance.Load.
+        }
     }
 
     private void RebuildScopes()

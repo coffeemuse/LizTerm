@@ -1063,6 +1063,26 @@ public class ProfileViewModelsTests : IDisposable
         // If Save had been attempted, it would have thrown IOException when trying to move to a directory
     }
 
+    /// <summary>Manage Tags reports a failed tags.json save as survivable ("... TEST may show a different colour
+    /// next time"), so the picker's own reconciliation must swallow the same failure rather than crash: the
+    /// constructor's Reload(), a second Reload(), and ManageTagsCommand's own reload all run Reconcile() against a
+    /// tags.json this test has already made unwritable.</summary>
+    [Fact]
+    public async Task A_blocked_tags_file_does_not_crash_reconciliation()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["TEST"]) });
+        var tagFile = Path.Combine(_dir, "tags.json");
+        Directory.CreateDirectory(tagFile + ".tmp");
+        var tags = new TagRegistryStore(tagFile);
+
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { },
+            tags, () => Task.CompletedTask);
+        vm.Reload();
+        await vm.ManageTagsCommand.ExecuteAsync(null);
+
+        Assert.Equal(["TEST"], vm.VisibleRows.Single().Chips.Select(c => c.Text));
+    }
+
     [Fact]
     public async Task Tags_opens_manage_tags_and_reloads_when_it_closes()
     {
