@@ -53,7 +53,7 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         if (registry.Contains(name) && registry.ColorOf(name) == color) return TagChangeResult.Nothing;
         var recoloured = registry.Recolour(name, color);
         if (ReferenceEquals(recoloured, registry)) return TagChangeResult.Nothing;
-        return TrySave(recoloured) is { } error ? new TagChangeResult(0, [], null, error) : TagChangeResult.Nothing;
+        return tags.TrySave(recoloured) is { } error ? new TagChangeResult(0, [], null, error) : TagChangeResult.Nothing;
     }
 
     /// <summary>Renames <paramref name="from"/> to <paramref name="to"/> across the registry and every profile
@@ -115,26 +115,12 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 // A failure saving the partial registry is secondary to the one being reported, so it is not.
-                if (changed.Count > 0 && partial is not null) TrySave(partial);
+                if (changed.Count > 0 && partial is not null) tags.TrySave(partial);
                 return new TagChangeResult(carriers.Count, changed, profile.Name, ex.Message);
             }
             changed.Add(profile.Name);
         }
-        return new TagChangeResult(carriers.Count, changed, null, TrySave(done));
-    }
-
-    /// <summary>Saves the registry, answering the failure's message, or null when it was saved.</summary>
-    private string? TrySave(TagRegistry registry)
-    {
-        try
-        {
-            tags.Save(registry);
-            return null;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return ex.Message;
-        }
+        return new TagChangeResult(carriers.Count, changed, null, tags.TrySave(done));
     }
 
     private static void Guard(string name, string parameter)

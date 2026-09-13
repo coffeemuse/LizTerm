@@ -102,6 +102,25 @@ public class TagRegistryStoreTests : IDisposable
 
     /// <summary>Written through a sibling temp file renamed over the target, as ProfileStore and SettingsStore
     /// both are, so a reader never sees a partial file and a crash mid-write leaves the old one.</summary>
+    /// <summary>The one home for "a colour file that cannot be written is not worth a crash": the picker's
+    /// reconciliation and TagMaintenance both report or swallow through this rather than each catching the same
+    /// two exceptions.</summary>
+    [Fact]
+    public void TrySave_answers_null_when_it_saved_and_the_failure_message_when_it_could_not()
+    {
+        var store = new TagRegistryStore(File_);
+        var registry = new TagRegistry([new TagDefinition("PROD", TagColor.Red)]);
+
+        Assert.Null(store.TrySave(registry));
+        Assert.True(store.Load().Contains("PROD"));
+
+        Directory.CreateDirectory(File_ + ".tmp");
+        var error = store.TrySave(new TagRegistry([new TagDefinition("PROD", TagColor.Green)]));
+
+        Assert.False(string.IsNullOrEmpty(error));
+        Assert.Equal(TagColor.Red, store.Load().ColorOf("PROD"));
+    }
+
     [Fact]
     public void Save_leaves_no_temp_file_behind()
     {

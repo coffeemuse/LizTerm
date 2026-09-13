@@ -45,6 +45,22 @@ public sealed class TagRegistryStore(string filePath)
         return new TagRegistry(definitions);
     }
 
+    /// <summary>Saves, answering null, or the failure's message when the file could not be written. The one home
+    /// for the stance that a colour file which cannot be written is not worth a crash: the names all travel in the
+    /// profiles, so the cost is re-assigned colours, and a caller either shows the message or carries on.</summary>
+    public string? TrySave(TagRegistry registry)
+    {
+        try
+        {
+            Save(registry);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ex.Message;
+        }
+    }
+
     /// <summary>Writes <see cref="TagRegistry.Stored"/>, so the synthesised FAVORITE never reaches the file.</summary>
     public void Save(TagRegistry registry)
     {

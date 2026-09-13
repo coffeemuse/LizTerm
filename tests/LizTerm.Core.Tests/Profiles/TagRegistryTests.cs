@@ -117,6 +117,14 @@ public class TagRegistryTests
         Assert.Same(registry, registry.Remove("LAB"));
     }
 
+    /// <summary>So a caller can tell a no-op from a change by identity, as it already can for an unknown name.</summary>
+    [Fact]
+    public void Recolour_to_the_colour_a_tag_already_has_returns_the_same_registry()
+    {
+        var registry = Defined(("PROD", TagColor.Red));
+        Assert.Same(registry, registry.Recolour("prod", TagColor.Red));
+    }
+
     [Fact]
     public void Recolour_refuses_the_reserved_tag_the_reserved_colour_and_an_undefined_one()
     {
