@@ -299,9 +299,6 @@ public partial class ProfilePickerViewModel : ObservableObject
     /// retyped reads as a complaint about what they are typing now.</summary>
     partial void OnQuickConnectTextChanged(string value) => QuickConnectError = null;
 
-    /// <summary>Connect to what the box names, without saving anything. The parse and the profile-name
-    /// precedence are the command line's own — the same Parse and Resolve, so the box cannot drift from it —
-    /// which is why a saved profile called "CONS01@tk5" stays reachable by its own name here too (spec 7.1).</summary>
     /// <summary>Quick Connect's drop-down: the recent ad hoc hosts, newest first, as typed.</summary>
     public ObservableCollection<string> RecentEntries { get; } = [];
 
@@ -310,10 +307,13 @@ public partial class ProfilePickerViewModel : ObservableObject
     private void Remember(string text)
     {
         _recent = _recent.With(text);
-        if (RecentEntries.FirstOrDefault(e => e.Equals(text, StringComparison.OrdinalIgnoreCase)) is { } older)
-            RecentEntries.Remove(older);
-        RecentEntries.Insert(0, text);
-        while (RecentEntries.Count > RecentHosts.Max) RecentEntries.RemoveAt(RecentEntries.Count - 1);
+        KeepingText(() =>
+        {
+            if (RecentEntries.FirstOrDefault(e => e.Equals(text, StringComparison.OrdinalIgnoreCase)) is { } older)
+                RecentEntries.Remove(older);
+            RecentEntries.Insert(0, text);
+            while (RecentEntries.Count > RecentHosts.Max) RecentEntries.RemoveAt(RecentEntries.Count - 1);
+        });
         // TrySave, as the tag registry's reconciliation does: an unwritable history costs retyping, not the picker.
         _recentHosts?.TrySave(_recent);
     }
@@ -324,11 +324,27 @@ public partial class ProfilePickerViewModel : ObservableObject
     {
         if (entry is null) return;
         _recent = _recent.Without(entry);
-        if (RecentEntries.FirstOrDefault(e => e.Equals(entry, StringComparison.OrdinalIgnoreCase)) is { } shown)
-            RecentEntries.Remove(shown);
+        KeepingText(() =>
+        {
+            if (RecentEntries.FirstOrDefault(e => e.Equals(entry, StringComparison.OrdinalIgnoreCase)) is { } shown)
+                RecentEntries.Remove(shown);
+        });
         _recentHosts?.TrySave(_recent);
     }
 
+    /// <summary>Changes the drop-down's entries without changing the box. Typing a remembered host makes the
+    /// editable ComboBox select it, removing a selected item empties that ComboBox's text, and the two-way binding
+    /// writes the empty text here.</summary>
+    private void KeepingText(Action change)
+    {
+        var text = QuickConnectText;
+        change();
+        QuickConnectText = text;
+    }
+
+    /// <summary>Connect to what the box names, without saving anything. The parse and the profile-name
+    /// precedence are the command line's own — the same Parse and Resolve, so the box cannot drift from it —
+    /// which is why a saved profile called "CONS01@tk5" stays reachable by its own name here too (spec 7.1).</summary>
     [RelayCommand]
     private void QuickConnect()
     {

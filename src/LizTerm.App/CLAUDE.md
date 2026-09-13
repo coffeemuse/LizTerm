@@ -466,12 +466,16 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   connect records (`fromStore` false); a saved profile's name never does, and neither does text that opened nothing.
   The file is loaded once, in the constructor rather than `Reload`, since the picker is its only writer, and
   `RecentEntries` changes by single inserts and removes rather than a rebuild, because a Reset makes a bound
-  ComboBox drop its selection.
+  ComboBox drop its selection. Even a single remove empties the box when it takes the selected item, and **typing a
+  remembered host selects it** (the editable ComboBox matches its text against the items), so every change goes
+  through `KeepingText`, which puts `QuickConnectText` back.
 - **Its keys are handled on the tunnel** (`AddHandler(..., RoutingStrategies.Tunnel)`), because the ComboBox marks
   keys handled itself. Enter always connects what is in the box and closes the list: highlighting an entry already
   put its text there, and in Avalonia 12.1.2 the editable ComboBox never closes its own list on Enter. Delete forgets
-  the highlighted entry only while the list is open (the focused `ComboBoxItem`'s entry, else `SelectedItem`); with
-  it closed it is text editing.
+  the highlighted entry only while the list is open: the focused `ComboBoxItem`'s entry, else the selection an
+  unmodified Up or Down last moved to (`_arrowedTo`, read by a bubbling `handledEventsToo` handler and cleared by
+  any other key or the list closing). Never `SelectedItem` alone, which typed text sets too. With the list closed,
+  Delete is text editing.
 - Each entry's **×** (`ForgetButton`) is a non-focusable `Button` binding `RemoveRecentHostCommand` through
   `$parent[ComboBox]`. The `Button` handles the press, so a press on it neither picks the entry nor closes the list;
   `ProfilePickerWindowTests` proves that with a real pointer, since a raised `ClickEvent` never runs a bound

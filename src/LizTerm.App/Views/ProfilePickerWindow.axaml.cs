@@ -21,6 +21,9 @@ public partial class ProfilePickerWindow : Window
         // Tunnel, not the XAML KeyDown: the ComboBox handles Enter and Delete itself, and a bubbling handler would
         // never see them.
         QuickConnectBox.AddHandler(KeyDownEvent, OnQuickConnectKeyDown, RoutingStrategies.Tunnel);
+        // Bubbling with handledEventsToo, so it reads the selection after the ComboBox has moved it.
+        QuickConnectBox.AddHandler(KeyDownEvent, OnQuickConnectArrowKey, RoutingStrategies.Bubble, handledEventsToo: true);
+        QuickConnectBox.DropDownClosed += (_, _) => _arrowedTo = null;
         // A picker opened from File > New Session sits alongside running sessions, and nothing tells it when one
         // writes a pin into a profile. Reload() already preserves the selection by name; the cost is a directory
         // read on focus.
@@ -78,7 +81,7 @@ public partial class ProfilePickerWindow : Window
     /// entry only while the list is open; with it closed, Delete is ordinary text editing.</summary>
     private void OnQuickConnectKeyDown(object? sender, KeyEventArgs e)
     {
-        if (DataContext is not ProfilePickerViewModel vm) return;
+        if (DataContext is not ProfilePickerViewModel vm || e.Key is Key.Up or Key.Down) return;
         if (e.Key is Key.Enter or Key.Return)
         {
             e.Handled = true;
@@ -90,11 +93,22 @@ public partial class ProfilePickerWindow : Window
             e.Handled = true;
             vm.RemoveRecentHostCommand.Execute(entry);
         }
+        _arrowedTo = null;
+    }
+
+    /// <summary>The entry an unmodified Up or Down last moved the selection to, or null once any other key has
+    /// reached the box or the list has closed. The selection alone cannot say the keyboard is on an entry: typing a
+    /// remembered host selects it too, because the editable ComboBox matches its text against the items.</summary>
+    private string? _arrowedTo;
+
+    private void OnQuickConnectArrowKey(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Up or Key.Down && e.KeyModifiers == KeyModifiers.None) _arrowedTo = QuickConnectBox.SelectedItem as string;
     }
 
     /// <summary>The entry the keyboard is on: the item holding focus when the drop-down has taken it, else the
-    /// ComboBox's own selection, which is what its arrow keys move.</summary>
+    /// selection the arrow keys moved to, if it is still selected.</summary>
     private string? Highlighted(KeyEventArgs e) =>
         (e.Source as Visual)?.FindAncestorOfType<ComboBoxItem>(includeSelf: true)?.DataContext as string
-        ?? QuickConnectBox.SelectedItem as string;
+        ?? (_arrowedTo is { } entry && Equals(QuickConnectBox.SelectedItem, entry) ? entry : null);
 }

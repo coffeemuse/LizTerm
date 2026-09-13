@@ -227,6 +227,42 @@ public class ProfilePickerWindowTests : IDisposable
         Assert.Equal(new[] { "a.example", "b.example" }.Where(e => e != highlighted), vm.RecentEntries);
     }
 
+    /// <summary>Typing a remembered host selects it, because the editable ComboBox matches its text against the
+    /// items, so with the list open Delete is still text editing until the arrow keys have moved to an entry.</summary>
+    [AvaloniaFact]
+    public void Delete_in_typed_text_forgets_nothing_even_when_the_text_names_an_entry()
+    {
+        var window = PickerWithRecent("a.example", "b.example");
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        var box = QuickConnect(window);
+        box.Focus();
+        vm.QuickConnectText = "a.example";
+        OpenList(window, box);
+        Assert.Equal("a.example", box.SelectedItem);
+
+        window.KeyPressQwerty(PhysicalKey.Delete, RawInputModifiers.None);
+
+        Assert.Equal(["a.example", "b.example"], vm.RecentEntries);
+    }
+
+    /// <summary>Removing the ComboBox's selected item empties an editable one's text, and typing a remembered host is
+    /// what selects it, so forgetting the entry the box names must take it out of the list and not out of the box.</summary>
+    [AvaloniaFact]
+    public void Forgetting_the_entry_the_box_names_keeps_the_text()
+    {
+        var window = PickerWithRecent("a.example", "b.example");
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        var box = QuickConnect(window);
+        vm.QuickConnectText = "a.example";
+        Assert.Equal("a.example", box.SelectedItem);
+
+        vm.RemoveRecentHostCommand.Execute("a.example");
+
+        Assert.Equal(["b.example"], vm.RecentEntries);
+        Assert.Equal("a.example", vm.QuickConnectText);
+        Assert.Equal("a.example", box.Text);
+    }
+
     /// <summary>Enter connects what is in the box whether or not the list is open, and highlighting an entry is
     /// what put it there, so one Enter recalls and connects — the address bar's behaviour. The editable ComboBox
     /// never closes its own list on Enter, so the handler does.</summary>
