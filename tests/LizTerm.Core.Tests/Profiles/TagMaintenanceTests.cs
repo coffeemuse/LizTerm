@@ -251,4 +251,113 @@ public class TagMaintenanceTests : IDisposable
         Assert.Equal(["FAVORITE", "DEV"], TagsOf("a"));
         Assert.Equal(TagColor.Teal, _tags.Load().ColorOf("DEV"));
     }
+
+    [Fact]
+    public void A_rename_that_fails_partway_reports_what_changed_and_defines_both_names_in_one_colour()
+    {
+        Save("alpha", "DEV");
+        Save("beta", "DEV");
+        Save("gamma", "DEV");
+        Define(("DEV", TagColor.Teal));
+        Block(ProfileFile("beta"));
+
+        var result = _maintenance.Rename("DEV", "TEST");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(3, result.Carriers);
+        Assert.Equal(["alpha"], result.Changed);
+        Assert.Equal("beta", result.FailedProfile);
+        Assert.NotNull(result.Error);
+        Assert.Equal(["TEST"], TagsOf("alpha"));
+        Assert.Equal(["DEV"], TagsOf("beta"));
+        Assert.Equal(["DEV"], TagsOf("gamma"));
+        var registry = _tags.Load();
+        Assert.Equal(TagColor.Teal, registry.ColorOf("DEV"));
+        Assert.Equal(TagColor.Teal, registry.ColorOf("TEST"));
+    }
+
+    /// <summary>The retry is a merge, because the partial rename defined the new name; merging finishes it.</summary>
+    [Fact]
+    public void Retrying_a_partial_rename_merges_the_rest_across()
+    {
+        Save("alpha", "DEV");
+        Save("beta", "DEV");
+        Save("gamma", "DEV");
+        Define(("DEV", TagColor.Teal));
+        Block(ProfileFile("beta"));
+        _ = _maintenance.Rename("DEV", "TEST");
+        Directory.Delete(ProfileFile("beta") + ".tmp");
+
+        var retry = _maintenance.Rename("DEV", "TEST");
+
+        Assert.True(retry.Succeeded);
+        Assert.Equal(["beta", "gamma"], retry.Changed);
+        Assert.All(new[] { "alpha", "beta", "gamma" }, name => Assert.Equal(["TEST"], TagsOf(name)));
+        var registry = _tags.Load();
+        Assert.False(registry.Contains("DEV"));
+        Assert.Equal(TagColor.Teal, registry.ColorOf("TEST"));
+    }
+
+    [Theory]
+    [InlineData("merge")]
+    [InlineData("delete")]
+    public void A_merge_or_delete_that_fails_partway_leaves_the_registry_alone(string action)
+    {
+        Save("alpha", "PRDO");
+        Save("beta", "PRDO");
+        Define(("PRDO", TagColor.Purple), ("PROD", TagColor.Amber));
+        Block(ProfileFile("beta"));
+
+        var result = action == "merge" ? _maintenance.Rename("PRDO", "PROD") : _maintenance.Delete("PRDO");
+
+        Assert.Equal(["alpha"], result.Changed);
+        Assert.Equal("beta", result.FailedProfile);
+        Assert.Equal(["PRDO", "PROD"], _tags.Load().Stored.Select(d => d.Name));
+    }
+
+    [Fact]
+    public void A_rename_that_fails_on_its_first_carrier_changes_neither_profiles_nor_registry()
+    {
+        Save("alpha", "DEV");
+        Save("beta", "DEV");
+        Define(("DEV", TagColor.Teal));
+        Block(ProfileFile("alpha"));
+
+        var result = _maintenance.Rename("DEV", "TEST");
+
+        Assert.Empty(result.Changed);
+        Assert.Equal("alpha", result.FailedProfile);
+        Assert.Equal(["DEV"], TagsOf("beta"));
+        Assert.Equal(["DEV"], _tags.Load().Stored.Select(d => d.Name));
+    }
+
+    [Fact]
+    public void A_registry_that_cannot_be_saved_after_every_profile_is_reported_without_a_profile()
+    {
+        Save("alpha", "DEV");
+        Save("beta", "DEV");
+        Define(("DEV", TagColor.Teal));
+        Block(TagsFile);
+
+        var result = _maintenance.Rename("DEV", "TEST");
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.FailedProfile);
+        Assert.Equal(["alpha", "beta"], result.Changed);
+        Assert.Equal(["TEST"], TagsOf("beta"));
+    }
+
+    [Fact]
+    public void A_recolour_that_cannot_be_saved_is_reported()
+    {
+        Save("a", "MVS");
+        Define(("MVS", TagColor.Blue));
+        Block(TagsFile);
+
+        var result = _maintenance.Recolour("MVS", TagColor.Green);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.FailedProfile);
+        Assert.Equal(TagColor.Blue, _tags.Load().ColorOf("MVS"));
+    }
 }

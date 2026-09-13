@@ -53,8 +53,8 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
             throw new ArgumentException($"{color} cannot be chosen for a tag.", nameof(color));
         var registry = Load().Registry;
         var recoloured = registry.Recolour(name, color);
-        if (!ReferenceEquals(recoloured, registry)) tags.Save(recoloured);
-        return TagChangeResult.Nothing;
+        if (ReferenceEquals(recoloured, registry)) return TagChangeResult.Nothing;
+        return TrySave(recoloured) is { } error ? new TagChangeResult(0, [], null, error) : TagChangeResult.Nothing;
     }
 
     public TagChangeResult Rename(string from, string to)
@@ -65,8 +65,14 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         if (TagSet.Normalize(from).Equals(target, StringComparison.Ordinal)) return TagChangeResult.Nothing;
 
         var snapshot = Load();
-        if (!snapshot.Registry.Contains(from)) return TagChangeResult.Nothing;
-        return Apply(snapshot, from, set => set.Rename(from, target), snapshot.Registry.Rename(from, target));
+        var registry = snapshot.Registry;
+        if (!registry.Contains(from)) return TagChangeResult.Nothing;
+        // After a partial PLAIN rename both names stay defined in from's colour, so the list stays consistent and
+        // the retry is a merge. A merge or a case-only rename (Contains is true for both) leaves the registry alone.
+        var partial = registry.Contains(target)
+            ? null
+            : new TagRegistry([.. registry.Stored, new TagDefinition(target, registry.ColorOf(from))]);
+        return Apply(snapshot, from, set => set.Rename(from, target), registry.Rename(from, target), partial);
     }
 
     public TagChangeResult Delete(string name)
@@ -74,10 +80,14 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         Guard(name, nameof(name));
         var snapshot = Load();
         if (!snapshot.Registry.Contains(name)) return TagChangeResult.Nothing;
-        return Apply(snapshot, name, set => set.Without(name), snapshot.Registry.Remove(name));
+        return Apply(snapshot, name, set => set.Without(name), snapshot.Registry.Remove(name), partial: null);
     }
 
-    private TagChangeResult Apply(TagSnapshot snapshot, string name, Func<TagSet, TagSet> change, TagRegistry done)
+    /// <summary>Spec 4.2 steps 3 to 5. Carriers are written in LoadAll's order, stopping at the first failure;
+    /// the registry is then written as <paramref name="done"/> when every carrier was, as
+    /// <paramref name="partial"/> when some were and there is one, and not at all otherwise.</summary>
+    private TagChangeResult Apply(TagSnapshot snapshot, string name, Func<TagSet, TagSet> change, TagRegistry done,
+        TagRegistry? partial)
     {
         var carriers = snapshot.Profiles.Where(p => p.Tags.Contains(name)).ToList();
         var changed = new List<string>();
@@ -87,11 +97,33 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
             // Ordinal, never TagSet.Equals: that ignores case, so a case-only rename would look unchanged and never
             // be written (spec 4.3).
             if (updated.Names.SequenceEqual(profile.Tags.Names, StringComparer.Ordinal)) continue;
-            profiles.Save(profile with { Tags = updated });
+            try
+            {
+                profiles.Save(profile with { Tags = updated });
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A failure saving the partial registry is secondary to the one being reported, so it is not.
+                if (changed.Count > 0 && partial is not null) TrySave(partial);
+                return new TagChangeResult(carriers.Count, changed, profile.Name, ex.Message);
+            }
             changed.Add(profile.Name);
         }
-        tags.Save(done);
-        return new TagChangeResult(carriers.Count, changed, null, null);
+        return new TagChangeResult(carriers.Count, changed, null, TrySave(done));
+    }
+
+    /// <summary>Saves the registry, answering the failure's message, or null when it was saved.</summary>
+    private string? TrySave(TagRegistry registry)
+    {
+        try
+        {
+            tags.Save(registry);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ex.Message;
+        }
     }
 
     private static void Guard(string name, string parameter)
