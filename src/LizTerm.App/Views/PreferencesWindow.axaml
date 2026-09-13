@@ -9,77 +9,140 @@
         x:Class="LizTerm.App.Views.PreferencesWindow"
         x:DataType="vm:SettingsViewModel"
         Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
-        Title="Preferences" Width="440" SizeToContent="Height" CanResize="False"
+        Title="Preferences" Width="520" Height="410" CanResize="False"
         WindowStartupLocation="CenterScreen">
   <!-- Every control applies the moment it changes, to every open session window: the data context is the
-       process's one SettingsViewModel. No OK or Cancel, only Done. Adding a group later is adding controls. -->
-  <StackPanel Margin="16" Spacing="6">
-    <TextBlock Text="Crosshair" FontWeight="SemiBold" />
-    <!-- One-way check marks plus Click handlers, the same shape as View > Crosshair: four two-way bools over
-         one enum cannot drive each other (CrosshairModeConverter says why). -->
-    <RadioButton x:Name="CrosshairNone" GroupName="Crosshair" Content="None" Click="OnCrosshairNoneClick"
-                 IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
-    <RadioButton x:Name="CrosshairHorizontal" GroupName="Crosshair" Content="Horizontal" Click="OnCrosshairHorizontalClick"
-                 IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
-    <RadioButton x:Name="CrosshairVertical" GroupName="Crosshair" Content="Vertical" Click="OnCrosshairVerticalClick"
-                 IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
-    <RadioButton x:Name="CrosshairBoth" GroupName="Crosshair" Content="Both" Click="OnCrosshairBothClick"
-                 IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+       process's one SettingsViewModel. No OK or Cancel, only Done.
 
-    <TextBlock Text="Blink" FontWeight="SemiBold" Margin="0,10,0,0" />
-    <CheckBox x:Name="BlinkBox" Content="Blink text the host marks as blinking" IsChecked="{Binding Blink, Mode=TwoWay}" />
+       Three tabs, each the profile editor's grid (a 120 px label column, controls on the right). A short enum is
+       one horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. The size
+       is fixed rather than SizeToContent: only the selected tab is measured, so a window sized to its content
+       would change height on every tab switch. The Window tab is the tallest and sets the height. A new setting
+       joins the tab it belongs to; a new area (logging, keyboard) is a new tab. -->
+  <Window.Styles>
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Padding" Value="12,0" />
+    </Style>
+    <Style Selector="Grid.settings > TextBlock">
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,6,0,0" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#A0A0A0" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+  </Window.Styles>
+  <DockPanel Margin="16">
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+      <Button x:Name="DoneButton" DockPanel.Dock="Right" Content="Done" IsDefault="True" IsCancel="True" Click="OnDoneClick" />
+      <!-- Empty until a save fails; the session windows show the same message in their banners. -->
+      <TextBlock x:Name="SaveErrorText" Text="{Binding LastSaveError}" Foreground="#FF8080" TextWrapping="Wrap"
+                 VerticalAlignment="Center" Margin="0,0,12,0" />
+    </DockPanel>
+    <TabControl x:Name="Tabs" Padding="0,12,0,0">
+      <!-- Each row is its own two-column grid inside a StackPanel rather than a row of one shared grid, so a row
+           can be hidden as a unit (the menu bar) and every tab has the same shape. -->
+      <TabItem Header="Display">
+        <StackPanel Spacing="12">
+          <Grid Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Crosshair" />
+            <!-- One-way check marks plus Click handlers, the same shape as View > Crosshair: four two-way bools
+                 over one enum cannot drive each other (CrosshairModeConverter says why). -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
+              <RadioButton x:Name="CrosshairNone" GroupName="Crosshair" Content="None" Click="OnCrosshairNoneClick"
+                           IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
+              <RadioButton x:Name="CrosshairHorizontal" GroupName="Crosshair" Content="Horizontal" Click="OnCrosshairHorizontalClick"
+                           IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Horizontal, Mode=OneWay}" />
+              <RadioButton x:Name="CrosshairVertical" GroupName="Crosshair" Content="Vertical" Click="OnCrosshairVerticalClick"
+                           IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Vertical, Mode=OneWay}" />
+              <RadioButton x:Name="CrosshairBoth" GroupName="Crosshair" Content="Both" Click="OnCrosshairBothClick"
+                           IsChecked="{Binding Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Blinking" />
+            <CheckBox x:Name="BlinkBox" Grid.Column="1" Content="Blink text the host marks as blinking" IsChecked="{Binding Blink, Mode=TwoWay}" />
+          </Grid>
+        </StackPanel>
+      </TabItem>
 
-    <TextBlock Text="Bell" FontWeight="SemiBold" Margin="0,10,0,0" />
-    <CheckBox x:Name="VisualBellBox" Content="Flash the screen when the host rings the bell" IsChecked="{Binding VisualBell, Mode=TwoWay}" />
-    <!-- The same one-way-plus-Click shape as the Crosshair radios above, over BellSoundConverter. A third radio
-         and a Choose... button for a sound file join this group later (bell spec §8). -->
-    <RadioButton x:Name="BellSoundNone" GroupName="BellSound" Content="No sound" Click="OnBellSoundNoneClick"
-                 IsChecked="{Binding BellSound, Converter={x:Static vm:BellSoundConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
-    <RadioButton x:Name="BellSoundSystemAlert" GroupName="BellSound" Content="System alert sound" Click="OnBellSoundSystemAlertClick"
-                 IsChecked="{Binding BellSound, Converter={x:Static vm:BellSoundConverter.Instance}, ConverterParameter=SystemAlert, Mode=OneWay}" />
-    <!-- Shown only where the constructor disabled the radio above (the ringer's CanRing said no). -->
-    <TextBlock x:Name="BellSoundNote" Text="The system alert sound is not available on Linux." Foreground="#A0A0A0" TextWrapping="Wrap" IsVisible="False" />
+      <TabItem Header="Bell">
+        <StackPanel Spacing="12">
+          <Grid Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Flash" />
+            <CheckBox x:Name="VisualBellBox" Grid.Column="1" Content="Flash the screen when the host rings the bell" IsChecked="{Binding VisualBell, Mode=TwoWay}" />
+          </Grid>
+          <Grid Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Sound" />
+            <!-- The Crosshair radios' shape over BellSoundConverter. A third radio and a Choose... button for a
+                 sound file join this row later (bell spec §8). -->
+            <StackPanel Grid.Column="1" Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <RadioButton x:Name="BellSoundNone" GroupName="BellSound" Content="No sound" Click="OnBellSoundNoneClick"
+                             IsChecked="{Binding BellSound, Converter={x:Static vm:BellSoundConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
+                <RadioButton x:Name="BellSoundSystemAlert" GroupName="BellSound" Content="System alert sound" Click="OnBellSoundSystemAlertClick"
+                             IsChecked="{Binding BellSound, Converter={x:Static vm:BellSoundConverter.Instance}, ConverterParameter=SystemAlert, Mode=OneWay}" />
+              </StackPanel>
+              <!-- Shown only where the constructor disabled the radio above (the ringer's CanRing said no). -->
+              <TextBlock x:Name="BellSoundNote" Classes="hint" Text="The system alert sound is not available on Linux." IsVisible="False" />
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+      </TabItem>
 
-    <TextBlock Text="Keypad" FontWeight="SemiBold" Margin="0,10,0,0" />
-    <!-- The show box is here as well as in View so the group makes sense on its own: a position with no way to
-         show the thing would be a puzzle (keypad spec §7). -->
-    <CheckBox x:Name="KeypadBox" Content="Show the keypad" IsChecked="{Binding Keypad, Mode=TwoWay}" />
-    <!-- The Crosshair radios' shape over KeypadDockConverter: one-way check marks plus Click handlers. -->
-    <RadioButton x:Name="KeypadBottom" GroupName="KeypadDock" Content="At the bottom of the window" Click="OnKeypadBottomClick"
-                 IsChecked="{Binding KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Bottom, Mode=OneWay}" />
-    <RadioButton x:Name="KeypadRight" GroupName="KeypadDock" Content="On the right of the window" Click="OnKeypadRightClick"
-                 IsChecked="{Binding KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Right, Mode=OneWay}" />
+      <TabItem Header="Window">
+        <!-- Rows in the order the things sit on the screen: menu bar, status bar, keypad. -->
+        <StackPanel Spacing="12">
+          <!-- macOS only: elsewhere both renderers draw inside the window, so "Both" would be two stacked bars
+               and "in the system menu bar" would name nowhere. The constructor hides the whole row there rather
+               than disabling it, because there is no choice to explain. The same one-way-plus-Click shape as
+               the radios above.
 
-    <TextBlock Text="Status bar" FontWeight="SemiBold" Margin="0,10,0,0" />
-    <!-- The one part of #93 behind a setting: the connect banner and the note icon cost no width and are
-         always on; the chips in the bar are what some people will call clutter. -->
-    <CheckBox x:Name="StatusBarTagsBox" Content="Show the profile's tags in the status bar" IsChecked="{Binding ShowTagsInStatusBar, Mode=TwoWay}" />
-
-    <!-- macOS only: elsewhere both renderers draw inside the window, so "Both" would be two stacked bars and
-         "in the system menu bar" would name nowhere. The constructor hides the whole group there rather than
-         disabling it, because there is no choice to explain. The same one-way-plus-Click shape as the radios
-         above.
-
-         The first radio is Auto, which the other groups have no equivalent of because their enums' defaults are
-         real members with a radio each. Auto is the absence of a choice and what an untouched settings file
-         reads as, so without a radio of its own the whole group would render with nothing selected on every
-         install that has never named a style — and once a style was named there would be no way back to
-         following the platform. -->
-    <StackPanel x:Name="MenuStyleGroup" Spacing="6">
-      <TextBlock Text="Menu bar" FontWeight="SemiBold" Margin="0,10,0,0" />
-      <RadioButton x:Name="MenuStyleAuto" GroupName="MenuStyle" Content="Wherever this platform puts it" Click="OnMenuStyleAutoClick"
-                   IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=Auto, Mode=OneWay}" />
-      <RadioButton x:Name="MenuStyleNative" GroupName="MenuStyle" Content="In the system menu bar" Click="OnMenuStyleNativeClick"
-                   IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=Native, Mode=OneWay}" />
-      <RadioButton x:Name="MenuStyleInWindow" GroupName="MenuStyle" Content="Inside the window" Click="OnMenuStyleInWindowClick"
-                   IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=InWindow, Mode=OneWay}" />
-      <RadioButton x:Name="MenuStyleBoth" GroupName="MenuStyle" Content="Both" Click="OnMenuStyleBothClick"
-                   IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
-    </StackPanel>
-
-    <!-- Empty until a save fails; the session windows show the same message in their banners. -->
-    <TextBlock x:Name="SaveErrorText" Text="{Binding LastSaveError}" Foreground="#FF8080" TextWrapping="Wrap" Margin="0,10,0,0" />
-
-    <Button x:Name="DoneButton" Content="Done" HorizontalAlignment="Right" Margin="0,10,0,0" IsDefault="True" IsCancel="True" Click="OnDoneClick" />
-  </StackPanel>
+               The first radio is Auto, which the other groups have no equivalent of because their enums'
+               defaults are real members with a radio each. Auto is the absence of a choice and what an untouched
+               settings file reads as, so without a radio of its own the whole group would render with nothing
+               selected on every install that has never named a style — and once a style was named there would
+               be no way back to following the platform. -->
+          <Grid x:Name="MenuStyleGroup" Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Menu bar" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <RadioButton x:Name="MenuStyleAuto" GroupName="MenuStyle" Content="Wherever this platform puts it" Click="OnMenuStyleAutoClick"
+                           IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=Auto, Mode=OneWay}" />
+              <RadioButton x:Name="MenuStyleNative" GroupName="MenuStyle" Content="In the system menu bar" Click="OnMenuStyleNativeClick"
+                           IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=Native, Mode=OneWay}" />
+              <RadioButton x:Name="MenuStyleInWindow" GroupName="MenuStyle" Content="Inside the window" Click="OnMenuStyleInWindowClick"
+                           IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=InWindow, Mode=OneWay}" />
+              <RadioButton x:Name="MenuStyleBoth" GroupName="MenuStyle" Content="Both" Click="OnMenuStyleBothClick"
+                           IsChecked="{Binding MenuStyle, Converter={x:Static vm:MenuStyleConverter.Instance}, ConverterParameter=Both, Mode=OneWay}" />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Status bar" />
+            <!-- The one part of #93 behind a setting: the connect banner and the note icon cost no width and are
+                 always on; the chips in the bar are what some people will call clutter. -->
+            <CheckBox x:Name="StatusBarTagsBox" Grid.Column="1" Content="Show the profile's tags in the status bar"
+                      IsChecked="{Binding ShowTagsInStatusBar, Mode=TwoWay}" />
+          </Grid>
+          <Grid Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Keypad" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <!-- The show box is here as well as in View so the row makes sense on its own: a position with no
+                   way to show the thing would be a puzzle (keypad spec §7). -->
+              <CheckBox x:Name="KeypadBox" Content="Show the keypad" IsChecked="{Binding Keypad, Mode=TwoWay}" />
+              <!-- The Crosshair radios' shape over KeypadDockConverter. -->
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <RadioButton x:Name="KeypadBottom" GroupName="KeypadDock" Content="At the bottom" Click="OnKeypadBottomClick"
+                             IsChecked="{Binding KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Bottom, Mode=OneWay}" />
+                <RadioButton x:Name="KeypadRight" GroupName="KeypadDock" Content="On the right" Click="OnKeypadRightClick"
+                             IsChecked="{Binding KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Right, Mode=OneWay}" />
+              </StackPanel>
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
 </Window>

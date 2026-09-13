@@ -260,18 +260,27 @@ The macOS LizTerm application menu (About, Preferences, and Apple's standard ite
 ## Preferences
 
 **Preferences...** is in the LizTerm application menu on macOS (Cmd-comma), and at the bottom of a session
-window's **Edit** menu on Windows and Linux. Changes apply as you make them, to every open session window:
+window's **Edit** menu on Windows and Linux. Changes apply as you make them, to every open session window. The
+settings sit on three tabs:
+
+**Display**
 
 - **Crosshair** — the same choice as View > Crosshair.
-- **Blink** — whether text the host marks as blinking actually blinks. Off draws it steady.
-- **Bell** — whether the screen flashes when the host rings the bell (on by default), and what sound plays: none, or
-  the system alert sound, at the volume your system uses for alerts. The system alert sound is not available on
-  Linux.
-- **Keypad** — whether the on-screen keypad is shown, and whether it docks below the screen or to its right. The
-  View > Keypad submenu carries both of the same settings.
+- **Blinking** — whether text the host marks as blinking actually blinks. Off draws it steady.
+
+**Bell**
+
+- **Flash** — whether the screen flashes when the host rings the bell (on by default).
+- **Sound** — what sound plays: none, or the system alert sound, at the volume your system uses for alerts. The
+  system alert sound is not available on Linux.
+
+**Window**, top of the window to bottom
+
+- **Menu bar** — macOS only; see [Menus](#menus).
 - **Status bar** — whether the profile's tags are drawn in the session window's status bar. Off by default; the
   note icon and the connect banner are always there.
-- **Menu bar** — macOS only; see [Menus](#menus).
+- **Keypad** — whether the on-screen keypad is shown, and whether it docks below the screen or to its right. The
+  View > Keypad submenu carries both of the same settings.
 
 ## Where LizTerm keeps its files
 
