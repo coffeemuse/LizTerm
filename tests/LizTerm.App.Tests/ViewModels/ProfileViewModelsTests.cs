@@ -800,6 +800,27 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(["a", "b"], vm.VisibleRows.Select(r => r.Name));
     }
 
+    /// <summary>RebuildScopes finds the previous scope by tag name so the drop-down survives a reload; Manage
+    /// Tags' case-only rename (dev -&gt; DEV) leaves the profile and the registry defining the same tag under a new
+    /// casing, and the match has to ignore case or the scope falls back to All sessions.</summary>
+    [Fact]
+    public void A_case_only_rename_keeps_the_scope_selected()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["dev"]) });
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new TagDefinition("dev", TagColor.Teal)]));
+
+        var vm = Picker(tags);
+        vm.SelectedScope = vm.Scopes.Single(s => s.TagName == "dev");
+
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["DEV"]) });
+        tags.Save(new TagRegistry([new TagDefinition("DEV", TagColor.Teal)]));
+        vm.Reload();
+
+        Assert.NotNull(vm.SelectedScope);
+        Assert.Equal("DEV", vm.SelectedScope!.TagName, ignoreCase: true);
+    }
+
     /// <summary>Reconciliation: a tag name seen on a profile but absent from the registry registers itself, so
     /// a profile copied from another machine gets colours locally rather than rendering colourless. Reload also
     /// re-reads tags.json every time, so a registry deleted out from under the picker (Manage Tags writes the

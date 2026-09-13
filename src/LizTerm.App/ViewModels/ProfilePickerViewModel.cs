@@ -151,8 +151,12 @@ public partial class ProfilePickerViewModel : ObservableObject
         Scopes.Add(AllSessions);
         foreach (var scope in wanted) Scopes.Add(scope);
 
-        // A scope whose tag no longer exists anywhere would filter to nothing with no way back.
-        if (Scopes.FirstOrDefault(s => s.TagName == previousTagName) is { } still) SelectedScope = still;
+        // A scope whose tag no longer exists anywhere would filter to nothing with no way back. Ignoring case so
+        // a case-only rename (Manage Tags, #88) keeps the scope selected: dev -> DEV is still "the same scope" to
+        // a user, and string.Equals(string?, string?, StringComparison) already answers true for null and null,
+        // which is what AllSessions' null TagName needs.
+        if (Scopes.FirstOrDefault(s => string.Equals(s.TagName, previousTagName, StringComparison.OrdinalIgnoreCase)) is { } still)
+            SelectedScope = still;
         else SelectedScope = AllSessions;
     }
 
