@@ -32,17 +32,12 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
     }
 
     /// <summary>Every profile and the registry, from disk, with any tag name a profile carries registered — the rule
-    /// the picker's reconciliation uses. The registry is saved only when that added something, and a failed save
-    /// is swallowed: a snapshot is for display, and the next action writes the registry anyway.</summary>
+    /// the picker's reconciliation uses — but in memory only: a load must not write (Core CLAUDE.md). The list can
+    /// show the name at once, and the next action, which writes the registry anyway, is what persists it.</summary>
     public TagSnapshot Load()
     {
         var all = profiles.LoadAll();
-        var (registry, changed) = tags.Load().Register(all.SelectMany(p => p.Tags.Names));
-        if (changed)
-        {
-            try { tags.Save(registry); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* display only; see summary */ }
-        }
+        var (registry, _) = tags.Load().Register(all.SelectMany(p => p.Tags.Names));
         return new TagSnapshot(registry, all);
     }
 

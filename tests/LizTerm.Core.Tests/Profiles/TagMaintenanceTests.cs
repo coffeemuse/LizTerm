@@ -59,8 +59,10 @@ public class TagMaintenanceTests : IDisposable
     [InlineData("ABCDEFGHIJKLMNOP")]
     public void RenameProblem_accepts_a_valid_name(string name) => Assert.Null(TagMaintenance.RenameProblem(name));
 
+    /// <summary>A load must not write (Core CLAUDE.md): the name is registered in the snapshot so the list can show
+    /// it, and the next action, which writes the registry anyway, is what persists it.</summary>
     [Fact]
-    public void Load_registers_a_tag_only_a_profile_knows_and_saves_the_registry()
+    public void Load_registers_a_tag_only_a_profile_knows_without_writing_the_file()
     {
         Save("a", "PROD");
 
@@ -68,6 +70,17 @@ public class TagMaintenanceTests : IDisposable
 
         Assert.True(snapshot.Registry.Contains("PROD"));
         Assert.Equal(["a"], snapshot.Profiles.Select(p => p.Name));
+        Assert.False(File.Exists(TagsFile));
+    }
+
+    [Fact]
+    public void The_first_action_after_a_load_persists_what_the_load_registered()
+    {
+        Save("a", "PROD", "MVS");
+        Define(("MVS", TagColor.Blue));
+
+        _maintenance.Recolour("MVS", TagColor.Green);
+
         Assert.True(_tags.Load().Contains("PROD"));
     }
 
@@ -84,18 +97,6 @@ public class TagMaintenanceTests : IDisposable
         _maintenance.Load();
 
         Assert.Equal(handWritten, File.ReadAllText(TagsFile));
-    }
-
-    [Fact]
-    public void Load_survives_a_registry_it_cannot_save()
-    {
-        Save("a", "PROD");
-        Block(TagsFile);
-
-        var snapshot = _maintenance.Load();
-
-        Assert.True(snapshot.Registry.Contains("PROD"));
-        Assert.False(File.Exists(TagsFile));
     }
 
     [Fact]

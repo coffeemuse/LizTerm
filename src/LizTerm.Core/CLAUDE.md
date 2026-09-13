@@ -71,6 +71,8 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
   tag is one colour everywhere. `FAVORITE` is reserved: always present, always gold, never written to the file,
   and an entry for it in a hand-edited file is ignored. Reconciliation — registering a name the file does not
   know — belongs to the App layer, never to `ProfileStore.LoadAll`, because a load must not write.
+  `TagMaintenance.Load` registers in memory so Manage Tags can list a tag only a profile knows, and writes nothing;
+  the action that follows writes the registry anyway.
 - `TagMaintenance` (#88) is the one place a tag changes across profiles. Each action reads the profiles and
   `tags.json` fresh, writes the carriers first and `tags.json` last, and stops at the first failed write, leaving
   the registry as the Manage Tags spec's table (4.2) says. It compares `TagSet.Names` **ordinally**, never with
