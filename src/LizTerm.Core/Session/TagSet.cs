@@ -114,6 +114,20 @@ public readonly struct TagSet : IEquatable<TagSet>
             : this;
     }
 
+    /// <summary>This set with <paramref name="from"/> replaced by <paramref name="to"/> in place, then normalised as
+    /// <see cref="From"/> normalises — so when the set already carries <paramref name="to"/>, the later copy goes
+    /// and the first position wins, which is what merging one tag into another needs. Unchanged when the set does
+    /// not carry <paramref name="from"/>. Never adds a name, so it can never pass <see cref="MaxTags"/>.
+    ///
+    /// <paramref name="to"/> must already be a valid name: From drops an over-long one, which would delete the tag
+    /// rather than rename it. TagMaintenance validates before calling this.</summary>
+    public TagSet Rename(string from, string to)
+    {
+        if (!Contains(from)) return this;
+        var old = Normalize(from);
+        return From(Names.Select(name => name.Equals(old, StringComparison.OrdinalIgnoreCase) ? to : name));
+    }
+
     public bool Equals(TagSet other)
     {
         var mine = Safe;
