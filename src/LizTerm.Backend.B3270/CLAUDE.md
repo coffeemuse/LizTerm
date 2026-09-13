@@ -15,8 +15,13 @@ in `src/LizTerm.Core/CLAUDE.md`; how the engine binary is built and located is i
   `runtimes/<rid>/native/`, then beside the app. It throws the same exception type for "nothing found" and "found but
   not executable"; `B3270Locator.Candidates` is how callers tell the two apart.
 - Startup waits for the `hello` indication (default 10 s) and rejects versions below `MinimumVersion` (4.2.0).
-- Process death raises `Faulted` with the stderr tail, drops to `Disconnected`, and clears the process so a later
-  `ConnectAsync` spawns a fresh one.
+- Process death drops to `Disconnected`, sets `_fault` and clears the process slot, **then** drains `_pending`,
+  **then** raises `Faulted` with the stderr tail — in that order, so the fault is the session's whole state before
+  anyone hears of it and a later `ConnectAsync` spawns a fresh process. `RunAsync` re-reads the slot after
+  registering its tag and fails itself if the slot moved; that pairs with the drain-after-clear order to leave no
+  window in which a run can register and never be answered. The old order (drain, raise, clear) let a caller
+  reacting to `Faulted` register a run nobody would complete; CI hung for the 5-minute blame timeout on it on
+  2026-09-13 (`A_run_started_from_inside_the_fault_handler_fails_with_the_fault_instead_of_hanging` guards it).
 - `OnProcessEnded` runs on the raw reader thread and must never throw. It ignores a process that is no longer
   `_process`: a failed start (`TearDown`) clears the slot *before* killing the process, so the old reader thread
   cannot disturb a retried start. `TearDown` also covers a `process.Start` that throws (a binary deleted after the
