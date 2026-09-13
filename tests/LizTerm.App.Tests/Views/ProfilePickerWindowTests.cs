@@ -77,6 +77,63 @@ public class ProfilePickerWindowTests : IDisposable
             $"the box ends at {box.Bounds.Right} and the button starts at {button.Bounds.Left}");
     }
 
+    private static Rect InWindow(Window window, Control control) =>
+        new(control.TranslatePoint(new Point(0, 0), window)!.Value, control.Bounds.Size);
+
+    /// <summary>Quick Connect and the filter are both a text box beside a control, and stacked a few pixels apart
+    /// they read as one form: a profile name typed into the wrong one connects nowhere or filters to nothing. So
+    /// Quick Connect is a footer, below the list, and the list's own search stays above it.</summary>
+    [AvaloniaFact]
+    public void Quick_connect_is_a_footer_below_the_list()
+    {
+        var store = new ProfileStore(_dir);
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Show();
+        window.UpdateLayout();
+
+        var list = InWindow(window, Descendants<ListBox>(window).Single());
+        var filter = InWindow(window, window.FindControl<TextBox>("FilterBox")!);
+        var quick = InWindow(window, window.FindControl<TextBox>("QuickConnectBox")!);
+
+        Assert.True(filter.Bottom <= list.Top + 0.5, $"the filter ends at {filter.Bottom} and the list starts at {list.Top}");
+        Assert.True(quick.Top >= list.Bottom, $"Quick Connect starts at {quick.Top} and the list ends at {list.Bottom}");
+    }
+
+    /// <summary>The filter row belongs to the list, so it ends where the list ends rather than running over the
+    /// button column — at the minimum width too, where a fixed-width drop-down would be the first thing to spill.</summary>
+    [AvaloniaFact]
+    public void The_filter_row_is_exactly_as_wide_as_the_list()
+    {
+        var store = new ProfileStore(_dir);
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Width = window.MinWidth;
+        window.Show();
+        window.UpdateLayout();
+
+        var list = InWindow(window, Descendants<ListBox>(window).Single());
+        var filter = InWindow(window, window.FindControl<TextBox>("FilterBox")!);
+        var scope = InWindow(window, window.FindControl<ComboBox>("ScopeBox")!);
+
+        Assert.Equal(list.Left, filter.Left, 0.5);
+        Assert.Equal(list.Right, scope.Right, 0.5);
+    }
+
+    /// <summary>Tab from a picker with nothing focused lands in the filter, not Quick Connect: the list is what most
+    /// openings are for.</summary>
+    [AvaloniaFact]
+    public void The_first_tab_lands_in_the_filter()
+    {
+        var store = new ProfileStore(_dir);
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Show();
+        window.UpdateLayout();
+
+        window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+
+        var focused = window.FocusManager?.GetFocusedElement();
+        Assert.True(ReferenceEquals(window.FindControl<TextBox>("FilterBox"), focused), $"focus is on {focused} {(focused as Control)?.Name}");
+    }
+
     /// <summary>Walks the realised row rather than the view model, so the template's own bindings are what is
     /// asserted: a correct ProfileRow bound to a broken DataTemplate renders nothing and passes every view
     /// model test.</summary>
