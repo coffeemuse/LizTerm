@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using LizTerm.App.Rendering;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
@@ -811,12 +812,11 @@ public class ProfileViewModelsTests : IDisposable
         var vm = Picker(tags);
         Assert.Equal(["PROD"], tags.Load().Stored.Select(d => d.Name));
 
-        // Nothing new to learn, so no second write. Asserted by deleting the file and checking that a reload
-        // does not recreate it, rather than by comparing timestamps — two writes inside one filesystem tick
-        // would compare equal and the test would pass while the bug was present.
+        // Reload re-reads tags.json, so a deleted file is recreated with its unknown tags: the registry must
+        // forget and relearn them, because Manage Tags writes the file while the picker waits behind it.
         File.Delete(tagFile);
         vm.Reload();
-        Assert.False(File.Exists(tagFile), "Reload rewrote tags.json with nothing new to register");
+        Assert.True(File.Exists(tagFile), "Reload should recreate tags.json when it is deleted");
     }
 
     /// <summary>Scopes.Clear() in RebuildScopes makes a bound ComboBox null its own selection, and the two-way
@@ -1001,5 +1001,38 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(TagRegistry.FavoriteName, vm.SelectedScope?.TagName);
         Assert.Equal(["b"], vm.VisibleRows.Select(r => r.Name));
         Assert.Equal("b", vm.SelectedRow?.Name);
+    }
+
+    /// <summary>Manage Tags writes tags.json while this picker waits behind it, so Reload must read the file again
+    /// rather than keep the registry it read when it opened.</summary>
+    [Fact]
+    public void Reload_shows_a_colour_changed_on_disk()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
+        var vm = Picker(tags);
+
+        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Green)]));
+        vm.Reload();
+
+        Assert.Same(TagPalette.Brush(TagColor.Green), vm.VisibleRows.Single().Chips.Single().Background);
+    }
+
+    /// <summary>The other half: a registry held from construction would write a definition deleted on disk back the
+    /// next time the picker registered anything new.</summary>
+    [Fact]
+    public void Reload_does_not_write_back_a_definition_deleted_on_disk()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new TagDefinition("LAB", TagColor.Teal), new TagDefinition("PROD", TagColor.Red)]));
+        var vm = Picker(tags);
+
+        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
+        _store.Save(new SessionProfile { Name = "b", Host = "h", Tags = TagSet.From(["MVS"]) });
+        vm.Reload();
+
+        Assert.Equal(["MVS", "PROD"], tags.Load().Stored.Select(d => d.Name));
     }
 }

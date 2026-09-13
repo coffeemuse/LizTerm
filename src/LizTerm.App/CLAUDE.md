@@ -421,7 +421,9 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
 - Reconciliation — registering a tag name the registry does not know — lives in `ProfilePickerViewModel.Reload`,
   never in `ProfileStore.LoadAll`, because a load must not write. It is what gives a profile copied from another
   machine local colours, and it saves `tags.json` only when `TagRegistry.Register` reports something changed:
-  `Reload` runs on every window activation, so an unconditional save would rewrite the file constantly.
+  `Reload` runs on every window activation, so an unconditional save would rewrite the file constantly. It also
+  re-reads `tags.json` before reconciling, because Manage Tags (#88) writes the file while the picker waits
+  behind the dialog: a registry kept from construction would recolour renamed tags and write deleted ones back.
 - **A click that activates the picker reloads it, and a reload that finds a change recycles the row containers.**
   `Reload` returns early when `LoadAll` equals `Profiles` — value equality all the way down (`SessionProfile`,
   `TagSet`, `CertificatePin`) — so the usual activation click leaves every `ProfileRow` and `ListBoxItem` in place

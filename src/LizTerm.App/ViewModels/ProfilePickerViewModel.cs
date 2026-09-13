@@ -65,7 +65,6 @@ public partial class ProfilePickerViewModel : ObservableObject
         _editProfile = editProfile;
         _quit = quit;
         _tags = tags;
-        _registry = tags?.Load() ?? TagRegistry.Empty;
         Reload();
     }
 
@@ -88,6 +87,11 @@ public partial class ProfilePickerViewModel : ObservableObject
         Profiles.Clear();
         foreach (var profile in loaded) Profiles.Add(profile);
 
+        // Every time, not only at construction: Manage Tags writes tags.json while this picker waits behind it, and
+        // a registry kept from construction would give a renamed tag a fresh colour and save over the one carried
+        // across, write a deleted definition back the next time anything registers, and show an old colour until
+        // the picker reopened. With no store — the in-memory registry tests use — there is nothing to re-read.
+        if (_tags is not null) _registry = _tags.Load();
         Reconcile();
         // RebuildScopes may assign SelectedScope, whose handler calls Refilter() on its own; the explicit call
         // below then runs a second time with the remembered name. Harmless and deliberate — do not "fix" it by
