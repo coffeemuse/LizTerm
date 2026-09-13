@@ -1,0 +1,128 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LizTerm.App.ViewModels"
+        xmlns:render="using:LizTerm.App.Rendering"
+        x:Class="LizTerm.App.Views.ManageTagsWindow"
+        x:DataType="vm:ManageTagsViewModel"
+        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
+        Title="Tags" Width="560" Height="420" MinWidth="520" MinHeight="360"
+        WindowStartupLocation="CenterOwner">
+  <Window.Styles>
+    <Style Selector="Button.swatch">
+      <Setter Property="Width" Value="22" />
+      <Setter Property="Height" Value="22" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.swatch.selected">
+      <Setter Property="BorderBrush" Value="White" />
+    </Style>
+    <!-- A swatch keeps its own colour under the pointer and while pressed. Fluent's Button theme swaps the content
+         presenter's background and border for theme brushes on :pointerover and :pressed, which would turn every
+         swatch grey exactly when it is being chosen (plan D6). -->
+    <Style Selector="Button.swatch:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.swatch:pressed /template/ ContentPresenter#PART_ContentPresenter"
+           x:DataType="vm:SwatchOption">
+      <Setter Property="Background" Value="{Binding Brush}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.swatch.selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.swatch.selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="White" />
+    </Style>
+  </Window.Styles>
+  <DockPanel Margin="16">
+    <TextBlock DockPanel.Dock="Top" Text="Tags" FontSize="20" Margin="0,0,0,10" />
+    <!-- Done closes and does nothing else. IsCancel, so Escape closes too; deliberately NOT IsDefault, so Enter in
+         the name box renames rather than closing the window (spec 6.3). -->
+    <Button x:Name="DoneButton" DockPanel.Dock="Bottom" Content="Done" MinWidth="70" HorizontalAlignment="Right"
+            Margin="0,12,0,0" IsCancel="True" Click="OnDoneClick" />
+    <ListBox x:Name="TagList" DockPanel.Dock="Left" Width="200" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:TagListRow">
+          <!-- The session list's 15px gutter: the star and its name for the reserved tag, a chip for every other. -->
+          <Grid ColumnDefinitions="15,*,Auto">
+            <TextBlock Grid.Column="0" Text="★" Foreground="{x:Static render:TagPalette.Star}" FontSize="13"
+                       VerticalAlignment="Center" IsVisible="{Binding IsReserved}" />
+            <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"
+                       IsVisible="{Binding IsReserved}" />
+            <Border x:Name="Chip" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    Background="{Binding Chip.Background}" CornerRadius="3" Padding="5,1" IsVisible="{Binding IsNotReserved}">
+              <TextBlock Text="{Binding Chip.Text}" Foreground="{x:Static render:TagPalette.ChipText}" FontSize="10" FontWeight="Bold" />
+            </Border>
+            <TextBlock Grid.Column="2" Text="{Binding CountText}" Foreground="#A0A0A0" FontSize="12" VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <DockPanel Margin="12,0,0,0">
+      <!-- Under the panel rather than in it, so a failure stays readable when the selection moves or clears (plan D3). -->
+      <TextBlock x:Name="StatusText" DockPanel.Dock="Bottom" Text="{Binding StatusMessage}" Foreground="#FF8080"
+                 FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"
+                 IsVisible="{Binding StatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      <Panel>
+        <TextBlock x:Name="EmptyHint" IsVisible="{Binding !HasSelection}" HorizontalAlignment="Center"
+                   VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Foreground="#8F8F8F"
+                   FontStyle="Italic" FontSize="12"
+                   Text="Select a tag to rename, recolour or delete it.&#10;Tags are added to a profile in its editor." />
+        <DockPanel x:Name="TagPanel" IsVisible="{Binding HasSelection}">
+          <Button x:Name="DeleteButton" DockPanel.Dock="Bottom" Content="Delete..." HorizontalAlignment="Right"
+                  Command="{Binding DeleteCommand}" IsVisible="{Binding ShowDeleteButton}" />
+          <Border x:Name="ConfirmationStrip" DockPanel.Dock="Bottom" IsVisible="{Binding HasPendingConfirmation}"
+                  Background="#33291A" BorderBrush="#8A5A0F" BorderThickness="1" CornerRadius="4" Padding="10,8">
+            <StackPanel Spacing="6">
+              <TextBlock x:Name="ConfirmationText" Text="{Binding PendingConfirmation}" FontSize="12" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
+                <Button x:Name="CancelConfirmationButton" Content="Cancel" Command="{Binding CancelConfirmationCommand}" />
+                <Button x:Name="ConfirmButton" Content="{Binding ConfirmLabel}" Command="{Binding ConfirmCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <StackPanel Spacing="4">
+            <TextBlock Text="Name" Foreground="#A0A0A0" FontSize="12" />
+            <DockPanel IsVisible="{Binding IsTagSelected}">
+              <Button x:Name="RenameButton" DockPanel.Dock="Right" Content="Rename" Margin="6,0,0,0" Command="{Binding RenameCommand}" />
+              <TextBox x:Name="NameBox" Text="{Binding NameText}" KeyDown="OnNameBoxKeyDown" />
+            </DockPanel>
+            <TextBox x:Name="ReservedNameBox" Text="{Binding NameText, Mode=OneWay}" IsReadOnly="True"
+                     IsVisible="{Binding IsReservedSelected}" />
+            <TextBlock x:Name="ValidationText" Text="{Binding ValidationMessage}" Foreground="#FF8080" FontSize="12"
+                       TextWrapping="Wrap" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            <TextBlock Text="Colour" Foreground="#A0A0A0" FontSize="12" Margin="0,8,0,0" />
+            <ItemsControl x:Name="SwatchList" ItemsSource="{Binding Swatches}" IsVisible="{Binding IsTagSelected}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="6" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <!-- The colour's name is the tooltip AND the accessible name, so the choice is not carried by colour
+                     alone. A Click handler, not a Command binding, as Preferences' radios are. -->
+                <DataTemplate x:DataType="vm:SwatchOption">
+                  <Button Classes="swatch" Classes.selected="{Binding IsSelected}" Background="{Binding Brush}"
+                          ToolTip.Tip="{Binding Name}" AutomationProperties.Name="{Binding Name}" Click="OnSwatchClick" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReservedSelected}">
+              <TextBlock Text="★" Foreground="{x:Static render:TagPalette.Star}" FontSize="16" VerticalAlignment="Center" />
+              <TextBlock Text="Reserved: always a gold star." Foreground="#8F8F8F" FontStyle="Italic" FontSize="12"
+                         VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Text="Used by" Foreground="#A0A0A0" FontSize="12" Margin="0,8,0,0" />
+            <TextBlock Text="No profile uses this tag." Foreground="#8F8F8F" FontStyle="Italic" FontSize="12"
+                       IsVisible="{Binding SelectedRow.IsUnused, FallbackValue=False}" />
+            <ScrollViewer MaxHeight="120">
+              <ItemsControl x:Name="UsedByList" ItemsSource="{Binding SelectedRow.UsedBy}" />
+            </ScrollViewer>
+          </StackPanel>
+        </DockPanel>
+      </Panel>
+    </DockPanel>
+  </DockPanel>
+</Window>

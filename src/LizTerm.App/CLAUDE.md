@@ -441,6 +441,11 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   (`OnListPointerReleased`): Avalonia.Native delivers it as a plain left press, and Apple keyboards have no Menu
   key, the only gesture in `PlatformHotkeyConfiguration.OpenContextMenu`. The headless recipe for driving the
   menu is in `tests/CLAUDE.md`.
+- **Manage Tags** (`Views/ManageTagsWindow`, #88) is modal over the picker. Its swatches are `Button`s, and a
+  window style on `ContentPresenter#PART_ContentPresenter` keeps each one's own colour on `:pointerover` and
+  `:pressed`, which Fluent's `Button` theme would otherwise swap for a grey. Done is `IsCancel` but not
+  `IsDefault`, so Enter in the name box renames instead of closing the window. The failure line sits under the
+  panel, not in it, so it survives a change of selection.
 
 ## Screen capture
 
