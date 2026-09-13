@@ -88,6 +88,23 @@ The converter is `tests/LizTerm.Core.Tests/Documentation/UserGuideHtml.cs` and h
 guide uses; `The_guide_uses_no_construct_the_converter_cannot_render` fails if the guide grows another. Extend the
 converter rather than the guard.
 
+### The 3270 font
+
+`src/LizTerm.App/Assets/Fonts/3270-Regular.otf` is upstream [3270font](https://github.com/rbanffy/3270font)'s OTF
+with one change. The font carries x3270's Operator Information Area glyphs — the boxed 4, the underlined A and B,
+the broken wire, the clock, the human figure, the lock X and the rest — but upstream ships them without code points,
+so no text can reach them. `tools/patch-3270-oia-font.py` maps them to U+E180 through U+E198, in the font's own
+glyph order; `OiaGlyphs` in the App project names each code point and `OiaGlyphsTests` fails the suite if the shipped
+file lacks any of them. After a font refresh, run the script on the new file:
+
+```bash
+pip install fonttools
+tools/patch-3270-oia-font.py src/LizTerm.App/Assets/Fonts/3270-Regular.otf
+```
+
+It is idempotent, and it refuses a file in which that block already maps to something else, because `OiaGlyphs`
+would then draw the wrong symbols.
+
 ## Environment variables
 
 | Variable | Effect |

@@ -11,6 +11,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using LizTerm.App.Controls;
+using LizTerm.App.Rendering;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -625,5 +626,16 @@ public class SessionWindowTests
 
         settings.ShowTagsInStatusBar = false;
         Assert.False(chips.IsVisible);
+    }
+
+    /// <summary>x3270 rules its OIA off from the screen with a line in the palette's blue. The bar does the same,
+    /// so the only colours on it are the screen's own.</summary>
+    [AvaloniaFact]
+    public void The_status_bar_is_ruled_off_in_the_palettes_blue()
+    {
+        var (window, _, _, _, _) = Show();
+        var bar = window.FindControl<Border>("StatusBar")!;
+        Assert.Equal(new Thickness(0, 1, 0, 0), bar.BorderThickness);
+        Assert.Same(Palette.OiaRule, bar.BorderBrush);
     }
 }

@@ -200,6 +200,19 @@ public sealed class TerminalScreen : Control
 
     internal CellGeometry LastGeometry { get; private set; }
 
+    /// <summary>The status bar's font size: the cell font size, held through one-pixel wobbles
+    /// (<see cref="StatusBarFont"/>). Read-only; the window's OIA text binds to it.</summary>
+    public static readonly DirectProperty<TerminalScreen, double> OiaFontSizeProperty =
+        AvaloniaProperty.RegisterDirect<TerminalScreen, double>(nameof(OiaFontSize), o => o.OiaFontSize);
+
+    private double _oiaFontSize = StatusBarFont.Default;
+
+    public double OiaFontSize
+    {
+        get => _oiaFontSize;
+        private set => SetAndRaise(OiaFontSizeProperty, ref _oiaFontSize, value);
+    }
+
     public event EventHandler<TerminalKey>? KeyRequested;
     public event EventHandler<string>? TextEntered;
     public event EventHandler<(int Row, int Column)>? CellClicked;
@@ -439,6 +452,7 @@ public sealed class TerminalScreen : Control
         if (snapshot is null) { LastGeometry = default; return; }
         EnsureMetrics();
         LastGeometry = CellGeometry.Fit(size.Width, size.Height, snapshot.Rows, snapshot.Columns, _advancePerEm, _lineHeightPerEm);
+        OiaFontSize = StatusBarFont.Follow(OiaFontSize, LastGeometry.FontSize);
     }
 
     private void EnsureMetrics()

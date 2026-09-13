@@ -526,9 +526,10 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
 - `ProfileStore` keeps one JSON file per profile under `AppPaths`' profiles directory and silently skips unreadable
   files.
 - The IBM 3270 font is embedded (`avares://LizTerm.App/Assets/Fonts#IBM 3270`) and used for the status bar too, so it
-  reads as one instrument. Status text comes from `StatusFormatter`; the padlock glyph is U+E0A2 because the font's
-  true OIA glyphs are unencoded. Assertions on status strings are exact, so change `StatusFormatter` and its tests
-  together.
+  reads as one instrument. The bar is x3270's Operator Information Area: `StatusFormatter` builds its fields from
+  `OiaGlyphs`, the font's own OIA symbols at the private-use block `tools/patch-3270-oia-font.py` gives them
+  (`docs/development.md`, "The 3270 font"); the padlock is the font's Powerline one, U+E0A2. The words go on
+  tooltips. Assertions on status strings are exact, so change `StatusFormatter` and its tests together.
 - `Assets/Icons/` holds the app icon in the three shapes packaging needs (`lizterm.icns`, `lizterm.ico`,
   `lizterm.png`, referenced from `LizTerm.parcel`). The csproj's `<AvaloniaResource Include="Assets\**" />` already
   covers a new or replaced one.

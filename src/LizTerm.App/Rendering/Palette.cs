@@ -77,4 +77,8 @@ public static class Palette
     }
 
     private static byte Blend(byte channel) => (byte)(channel + (255 - channel) * 0.35);
+
+    /// <summary>The rule above the status bar: x3270 draws its OIA line in the 3279 palette's blue. Declared last
+    /// because it is built from the palette above it, and static fields initialise in order.</summary>
+    public static readonly IBrush OiaRule = Brush(HostColor.Blue, false);
 }

@@ -36,4 +36,19 @@ public class TerminalScreenLayoutTests
         Assert.True(screen.LastGeometry.CellHeight * 43 <= 600.01);
         Assert.NotEqual(before, screen.LastGeometry);
     }
+
+    /// <summary>The status bar draws its OIA glyphs at the screen's cell size (a real 3270's OIA is one more row
+    /// of the same cells), so the control publishes it; the bar binds to it.</summary>
+    [AvaloniaFact]
+    public void Publishes_its_cell_font_size_for_the_status_bar()
+    {
+        var screen = new TerminalScreen { Snapshot = ScreenSnapshot.Empty(24, 80) };
+        var window = new Window { Width = 800, Height = 600, Content = screen };
+        window.Show();
+        Assert.Equal(screen.LastGeometry.FontSize, screen.OiaFontSize);
+
+        screen.Snapshot = ScreenSnapshot.Empty(43, 80);
+        window.UpdateLayout();
+        Assert.Equal(screen.LastGeometry.FontSize, screen.OiaFontSize);
+    }
 }

@@ -7,6 +7,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LizTerm.App.ViewModels"
         xmlns:controls="using:LizTerm.App.Controls"
+        xmlns:rendering="using:LizTerm.App.Rendering"
         xmlns:core="using:LizTerm.Core.Session"
         xmlns:app="using:LizTerm.App"
         x:Class="LizTerm.App.Views.SessionWindow"
@@ -254,8 +255,33 @@
       </MenuItem>
     </Menu>
 
-    <Border DockPanel.Dock="Bottom" Background="#181818" Padding="10,4">
-      <Grid ColumnDefinitions="Auto,10,Auto,16,Auto,*,Auto,16,Auto,16,Auto,16,Auto,16,Auto">
+    <!-- Ruled off from the screen in the palette's blue, as x3270 rules off its OIA. -->
+    <Border x:Name="StatusBar" DockPanel.Dock="Bottom" Background="#181818" Padding="10,4"
+            BorderThickness="0,1,0,0" BorderBrush="{x:Static rendering:Palette.OiaRule}">
+      <Grid ColumnDefinitions="Auto,10,Auto,16,Auto,16,Auto,*,Auto,16,Auto,16,Auto,16,Auto">
+        <Grid.Styles>
+          <!-- The OIA's colours: x3270's neutral white for text, red for operator errors; the TLS pair is green
+               when the certificate was verified and amber when not, and its mark says the same, so a reader who
+               cannot tell the two apart is not left guessing (Robert's own call, 2026-09-13). -->
+          <Style Selector="TextBlock.oia">
+            <Setter Property="FontFamily" Value="{x:Static controls:TerminalScreen.TerminalFont}" />
+            <!-- One more row of the screen's own cells, as a real 3270's OIA is: the size follows the screen's
+                 fit (Robert's ask at first QA, 2026-09-13). The screen holds it through one-pixel wobbles, since
+                 the bar's height is part of what the screen fits into; see StatusBarFont. -->
+            <Setter Property="FontSize" Value="{Binding #Screen.OiaFontSize}" />
+            <Setter Property="Foreground" Value="#C0C0C0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+          </Style>
+          <Style Selector="TextBlock.oia.error">
+            <Setter Property="Foreground" Value="#FF8080" />
+          </Style>
+          <Style Selector="TextBlock.oia.tls">
+            <Setter Property="Foreground" Value="#E8B04B" />
+          </Style>
+          <Style Selector="TextBlock.oia.tls.verified">
+            <Setter Property="Foreground" Value="#5FD35F" />
+          </Style>
+        </Grid.Styles>
         <!-- The session's identity leads the bar and its state follows (#93): the note icon, then the profile's
              chips when Preferences says so. The icon is a filled vector rather than a glyph because the IBM 3270
              font has no such character and a fallback glyph differs per platform; its disc is the picker's
@@ -278,23 +304,35 @@
                 <Setter Property="Fill" Value="#DADADA" />
               </Style>
             </Button.Styles>
-            <Canvas Width="14" Height="14">
-              <Ellipse Classes="disc" Width="14" Height="14" Fill="#A8A8A8" />
-              <Rectangle Canvas.Left="6.2" Canvas.Top="5.9" Width="1.6" Height="4.8" RadiusX="0.5" RadiusY="0.5" Fill="#181818" />
-              <Ellipse Canvas.Left="6.05" Canvas.Top="2.9" Width="1.9" Height="1.9" Fill="#181818" />
-            </Canvas>
+            <!-- Drawn at 14 and scaled to the OIA's font size, so the icon keeps pace with the glyphs beside it. -->
+            <Viewbox Width="{Binding #Screen.OiaFontSize}" Height="{Binding #Screen.OiaFontSize}">
+              <Canvas Width="14" Height="14">
+                <Ellipse Classes="disc" Width="14" Height="14" Fill="#A8A8A8" />
+                <Rectangle Canvas.Left="6.2" Canvas.Top="5.9" Width="1.6" Height="4.8" RadiusX="0.5" RadiusY="0.5" Fill="#181818" />
+                <Ellipse Canvas.Left="6.05" Canvas.Top="2.9" Width="1.9" Height="1.9" Fill="#181818" />
+              </Canvas>
+            </Viewbox>
           </Button>
           <ItemsControl x:Name="StatusChips" ItemsSource="{Binding Chips}" IsVisible="{Binding Settings.ShowTagsInStatusBar}"
                         ItemsPanel="{StaticResource TagChipStrip}" ItemTemplate="{StaticResource TagChipTemplate}"
                         VerticalAlignment="Center" />
         </StackPanel>
-        <TextBlock Grid.Column="2" Text="{Binding ConnectionText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
-        <TextBlock Grid.Column="4" Text="{Binding TlsText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
-        <TextBlock Grid.Column="6" Text="{Binding KeyboardText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#E0E0E0" />
-        <TextBlock Grid.Column="8" Text="{Binding InsertText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#FFFF80" />
-        <TextBlock Grid.Column="10" Text="{Binding CursorText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
-        <TextBlock Grid.Column="12" Text="{Binding ModelText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
-        <TextBlock x:Name="WireLogStatus" Grid.Column="14" Text="{Binding WireLogText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#FF8080" />
+        <!-- From here the bar is x3270's Operator Information Area, in its order: the mode field, the message
+             area, then insert, LU name and cursor on the right; the padlock sits between mode and message because
+             x3270 has no cell for TLS at all. Glyphs on the bar, words on the tooltips (StatusFormatter). The
+             padlock and its mark are two blocks so the mark can stand a hair off the padlock: with none, the
+             font's monospace cells butt them together. -->
+        <TextBlock x:Name="ModeField" Grid.Column="2" Classes="oia" Text="{Binding ModeText}" ToolTip.Tip="{Binding ModeTip}" />
+        <StackPanel x:Name="TlsField" Grid.Column="4" Orientation="Horizontal" Spacing="3" ToolTip.Tip="{Binding TlsTip}">
+          <TextBlock Classes="oia tls" Classes.verified="{Binding TlsVerified}" Text="{Binding TlsGlyph}" />
+          <TextBlock Classes="oia tls" Classes.verified="{Binding TlsVerified}" Text="{Binding TlsMark}" />
+        </StackPanel>
+        <TextBlock x:Name="MessageArea" Grid.Column="6" Classes="oia" Classes.error="{Binding MessageIsError}"
+                   Text="{Binding MessageText}" ToolTip.Tip="{Binding MessageTip}" />
+        <TextBlock Grid.Column="8" Classes="oia" Text="{Binding InsertText}" ToolTip.Tip="Insert mode" />
+        <TextBlock Grid.Column="10" Classes="oia" Text="{Binding LuText}" ToolTip.Tip="LU name" />
+        <TextBlock Grid.Column="12" Classes="oia" Text="{Binding CursorText}" ToolTip.Tip="Cursor row/column" />
+        <TextBlock x:Name="WireLogStatus" Grid.Column="14" Classes="oia error" Text="{Binding WireLogText}" />
       </Grid>
     </Border>
 

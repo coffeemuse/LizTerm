@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using LizTerm.App.Status;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Screen;
@@ -24,9 +25,13 @@ public class SessionViewModelTests
         var (vm, session) = Create();
         Assert.Equal("Fake - fake.host", vm.Title);
         Assert.Same(session.CurrentScreen, vm.Screen);
-        Assert.Equal("Not connected", vm.ConnectionText);
-        Assert.Equal("✕ Not connected", vm.KeyboardText);
-        Assert.Equal("3279-2-E", vm.ModelText);
+        Assert.Equal(OiaGlyphs.Box4 + " " + OiaGlyphs.BoxQuestion, vm.ModeText);
+        Assert.Equal("Not connected\n3279-2-E", vm.ModeTip);
+        Assert.Equal(OiaGlyphs.Lock + " " + OiaGlyphs.NoConnection, vm.MessageText);
+        Assert.Equal("Not connected", vm.MessageTip);
+        Assert.Equal("", vm.TlsGlyph);
+        Assert.Null(vm.TlsTip);
+        Assert.Equal("", vm.LuText);
         Assert.False(vm.IsConnected);
     }
 
@@ -39,27 +44,56 @@ public class SessionViewModelTests
         var snapshot = buffer.Snapshot();
         session.RaiseScreen(snapshot);
         Assert.Same(snapshot, vm.Screen);
-        Assert.Equal("04/010", vm.CursorText);
+        Assert.Equal("004/010", vm.CursorText);
     }
 
     [Fact]
-    public void Connection_event_updates_texts_and_flag()
+    public void Connection_event_updates_mode_tls_and_flag()
     {
         var (vm, session) = Create();
         session.RaiseConnection(ConnectionState.ConnectedTn3270E, new TlsInfo(true, true, null, null));
         Assert.True(vm.IsConnected);
-        Assert.Equal("Connected to fake.host (TN3270E)", vm.ConnectionText);
-        Assert.Equal("\uE0A2 TLS, certificate verified", vm.TlsText);
+        Assert.Equal(OiaGlyphs.Box4 + OiaGlyphs.UnderB + OiaGlyphs.BoxSolid, vm.ModeText);
+        Assert.Equal("Connected to fake.host (TN3270E)\n3279-2-E", vm.ModeTip);
+        Assert.Equal(StatusFormatter.PadlockGlyph, vm.TlsGlyph);
+        Assert.Equal("✓", vm.TlsMark);
+        Assert.True(vm.TlsVerified);
+        Assert.Equal("TLS, certificate verified", vm.TlsTip);
+
+        session.RaiseConnection(ConnectionState.ConnectedTn3270E, new TlsInfo(true, false, null, null));
+        Assert.Equal("!", vm.TlsMark);
+        Assert.False(vm.TlsVerified);
+        Assert.Equal("TLS, certificate not verified", vm.TlsTip);
     }
 
     [Fact]
-    public void Status_event_updates_keyboard_insert_and_model()
+    public void Status_event_updates_insert_and_lu()
     {
         var (vm, session) = Create();
         session.RaiseStatus(new KeyboardStatus(KeyboardLock.Unlocked, null, true, false, "LU01"));
-        Assert.Equal("✓ Ready", vm.KeyboardText);
-        Assert.Equal("INS", vm.InsertText);
-        Assert.Equal("3279-2-E  LU LU01", vm.ModelText);
+        Assert.Equal(OiaGlyphs.Insert, vm.InsertText);
+        Assert.Equal("LU01", vm.LuText);
+    }
+
+    // The message area reads both events: the keyboard's reason only shows once a session is up, and it must
+    // appear then even though the status arrived first.
+    [Fact]
+    public void Message_area_is_recomputed_from_both_connection_and_status()
+    {
+        var (vm, session) = Create();
+        session.RaiseStatus(new KeyboardStatus(KeyboardLock.ProtectedField, null, false, false, null));
+        Assert.Equal(OiaGlyphs.Lock + " " + OiaGlyphs.NoConnection, vm.MessageText);
+        Assert.False(vm.MessageIsError);
+
+        session.RaiseConnection(ConnectionState.Connected3270);
+        Assert.Equal(OiaGlyphs.Lock + " " + OiaGlyphs.LeftArrow + OiaGlyphs.Human + OiaGlyphs.RightArrow, vm.MessageText);
+        Assert.True(vm.MessageIsError);
+        Assert.Equal("Protected field, press Esc", vm.MessageTip);
+
+        session.RaiseStatus(new KeyboardStatus(KeyboardLock.Unlocked, null, false, false, null));
+        Assert.Equal("", vm.MessageText);
+        Assert.False(vm.MessageIsError);
+        Assert.Equal("Ready", vm.MessageTip);
     }
 
     [Fact]
