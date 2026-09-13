@@ -202,6 +202,20 @@ public class ProfileStoreTests : IDisposable
         Assert.Equal(["alpha", "zeta"], names);
     }
 
+    /// <summary>Save refuses a whitespace-only name, so Read must too: a hand-edited file that loads but can never
+    /// be saved back would throw ArgumentException out of every path that rewrites profiles, TagMaintenance among them.</summary>
+    [Fact]
+    public void LoadAll_skips_a_profile_whose_name_is_only_whitespace()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "kept", Host = "k" });
+        File.WriteAllText(Path.Combine(_dir, "blank.json"), """{"name":"  ","host":"h","tags":["PROD"]}""");
+
+        var names = store.LoadAll().Select(p => p.Name).ToArray();
+
+        Assert.Equal(["kept"], names);
+    }
+
     [Fact]
     public void Delete_removes_the_profile()
     {
