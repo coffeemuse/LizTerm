@@ -399,6 +399,55 @@ public class TagMaintenanceTests : IDisposable
         Assert.Equal(0, result.Carriers);
     }
 
+    /// <summary>The result carries the profiles and registry as the action left them on disk, so a caller can
+    /// redraw from it instead of reading every file again; a partial failure is described just as exactly.</summary>
+    [Fact]
+    public void The_result_carries_the_state_on_disk_after_a_rename_that_finished()
+    {
+        Save("alpha", "DEV");
+        Save("beta", "DEV", "MVS");
+        Save("gamma", "MVS");
+        Define(("DEV", TagColor.Teal), ("MVS", TagColor.Blue));
+
+        var result = _maintenance.Rename("DEV", "TEST");
+
+        Assert.NotNull(result.After);
+        Assert.Equal(_profiles.LoadAll(), result.After.Profiles);
+        Assert.Equal(_tags.Load().Stored, result.After.Registry.Stored);
+    }
+
+    [Fact]
+    public void The_result_carries_the_state_on_disk_after_a_rename_that_stopped_partway()
+    {
+        Save("alpha", "DEV");
+        Save("beta", "DEV");
+        Save("gamma", "DEV");
+        Define(("DEV", TagColor.Teal));
+        Block(ProfileFile("beta"));
+
+        var result = _maintenance.Rename("DEV", "TEST");
+
+        Assert.NotNull(result.After);
+        Assert.Equal(_profiles.LoadAll(), result.After.Profiles);
+        Assert.Equal(_tags.Load().Stored, result.After.Registry.Stored);
+    }
+
+    [Fact]
+    public void The_result_carries_the_state_on_disk_after_a_recolour_and_a_delete()
+    {
+        Save("a", "MVS", "LAB");
+        Define(("MVS", TagColor.Blue), ("LAB", TagColor.Teal));
+
+        var recoloured = _maintenance.Recolour("MVS", TagColor.Green);
+        Assert.NotNull(recoloured.After);
+        Assert.Equal(_tags.Load().Stored, recoloured.After.Registry.Stored);
+
+        var deleted = _maintenance.Delete("LAB");
+        Assert.NotNull(deleted.After);
+        Assert.Equal(_profiles.LoadAll(), deleted.After.Profiles);
+        Assert.Equal(_tags.Load().Stored, deleted.After.Registry.Stored);
+    }
+
     [Fact]
     public void A_recolour_that_cannot_be_saved_is_reported()
     {

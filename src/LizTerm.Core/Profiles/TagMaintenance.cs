@@ -47,10 +47,12 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
     public TagChangeResult Recolour(string name, TagColor color)
     {
         TagRegistry.ThrowIfReserved(name, nameof(name));
-        var registry = Load().Registry;
-        var recoloured = registry.Recolour(name, color);
-        if (ReferenceEquals(recoloured, registry)) return TagChangeResult.Nothing;
-        return tags.TrySave(recoloured) is { } error ? new TagChangeResult(0, [], null, error) : TagChangeResult.Nothing;
+        var snapshot = Load();
+        var recoloured = snapshot.Registry.Recolour(name, color);
+        if (ReferenceEquals(recoloured, snapshot.Registry)) return TagChangeResult.Nothing;
+        return tags.TrySave(recoloured) is { } error
+            ? new TagChangeResult(0, [], null, error, snapshot)
+            : new TagChangeResult(0, [], null, null, snapshot with { Registry = recoloured });
     }
 
     /// <summary>Renames <paramref name="from"/> to <paramref name="to"/> across the registry and every profile
@@ -102,25 +104,36 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         TagRegistry? prepare)
     {
         var carriers = snapshot.Profiles.Where(p => p.Tags.Contains(name)).ToList();
-        if (carriers.Count > 0 && prepare is not null && tags.TrySave(prepare) is { } notPrepared)
-            return new TagChangeResult(carriers.Count, [], null, notPrepared);
+        // What tags.json holds as the action goes, so the result can say how it was left.
+        var onDisk = snapshot.Registry;
+        if (carriers.Count > 0 && prepare is not null)
+        {
+            if (tags.TrySave(prepare) is { } notPrepared) return new TagChangeResult(carriers.Count, [], null, notPrepared, snapshot);
+            onDisk = prepare;
+        }
         var changed = new List<string>();
+        var written = new Dictionary<string, SessionProfile>();
+        TagSnapshot After(TagRegistry registry) =>
+            new(registry, [.. snapshot.Profiles.Select(p => written.GetValueOrDefault(p.Name, p))]);
         foreach (var profile in carriers)
         {
             var updated = change(profile.Tags);
             // Ordinal, never TagSet.Equals: that ignores case, so a case-only rename would look unchanged and never
             // be written (spec 4.3).
             if (updated.Names.SequenceEqual(profile.Tags.Names, StringComparer.Ordinal)) continue;
+            var saved = profile with { Tags = updated };
             try
             {
-                profiles.Save(profile with { Tags = updated });
+                profiles.Save(saved);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                return new TagChangeResult(carriers.Count, changed, profile.Name, ex.Message);
+                return new TagChangeResult(carriers.Count, changed, profile.Name, ex.Message, After(onDisk));
             }
             changed.Add(profile.Name);
+            written[profile.Name] = saved;
         }
-        return new TagChangeResult(carriers.Count, changed, null, tags.TrySave(done));
+        var error = tags.TrySave(done);
+        return new TagChangeResult(carriers.Count, changed, null, error, After(error is null ? done : onDisk));
     }
 }

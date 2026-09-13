@@ -145,7 +145,7 @@ public partial class ManageTagsViewModel : ObservableObject
         CancelPending();
         var name = row.Name;
         var result = _maintenance.Recolour(name, color);
-        Refresh(name);
+        Refresh(result, name);
         StatusMessage = result.Succeeded ? null : $"Could not save the colour: {result.Error}";
     }
 
@@ -167,8 +167,8 @@ public partial class ManageTagsViewModel : ObservableObject
         // A rename that stopped partway through a profile says "Rename FROM to TARGET again to finish" (spec
         // 6.1), which needs FROM selected -- so prefer it there (controller ruling, F7). Every other outcome
         // (success, or a tags.json-only failure) keeps preferring the new name, as before.
-        if (result.FailedProfile is not null) Refresh(from, target);
-        else Refresh(target, from);
+        if (result.FailedProfile is not null) Refresh(result, from, target);
+        else Refresh(result, target, from);
         StatusMessage = RenameStatus(result, from, target, merge);
     }
 
@@ -176,7 +176,7 @@ public partial class ManageTagsViewModel : ObservableObject
     {
         CancelPending();
         var result = _maintenance.Delete(name);
-        Refresh(name);
+        Refresh(result, name);
         var shown = name.ToUpperInvariant();
         StatusMessage = result switch
         {
@@ -222,11 +222,11 @@ public partial class ManageTagsViewModel : ObservableObject
         PendingConfirmation = null;
     }
 
-    /// <summary>Reads everything again and selects the first of <paramref name="preferred"/> still listed, or
-    /// nothing.</summary>
-    private void Refresh(params string[] preferred)
+    /// <summary>Redraws from the state the action left on disk -- or reads everything again when it had nothing to
+    /// do -- and selects the first of <paramref name="preferred"/> still listed, or nothing.</summary>
+    private void Refresh(TagChangeResult result, params string[] preferred)
     {
-        _snapshot = _maintenance.Load();
+        _snapshot = result.After ?? _maintenance.Load();
         Rebuild(preferred);
     }
 

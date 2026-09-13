@@ -10,8 +10,12 @@ namespace LizTerm.Core.Profiles;
 /// <param name="Changed">Profile names written, in the order they were written.</param>
 /// <param name="FailedProfile">The profile whose write failed, or null.</param>
 /// <param name="Error">The failure's message, or null on success. Non-null with a null
-/// <paramref name="FailedProfile"/> means every profile was written and tags.json was not.</param>
-public sealed record TagChangeResult(int Carriers, IReadOnlyList<string> Changed, string? FailedProfile, string? Error)
+/// <paramref name="FailedProfile"/> means tags.json was not written: before any profile when
+/// <paramref name="Changed"/> is short of <paramref name="Carriers"/>, else after every one.</param>
+/// <param name="After">The profiles and registry as the action left them on disk, so a caller can redraw without
+/// reading every file again; null when the action had nothing to do.</param>
+public sealed record TagChangeResult(int Carriers, IReadOnlyList<string> Changed, string? FailedProfile, string? Error,
+    TagSnapshot? After = null)
 {
     /// <summary>An action that had nothing to do and wrote nothing.</summary>
     public static TagChangeResult Nothing { get; } = new(0, [], null, null);
