@@ -422,6 +422,12 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   never in `ProfileStore.LoadAll`, because a load must not write. It is what gives a profile copied from another
   machine local colours, and it saves `tags.json` only when `TagRegistry.Register` reports something changed:
   `Reload` runs on every window activation, so an unconditional save would rewrite the file constantly.
+- **A click that activates the picker reloads it, and a reload recycles the row containers.** The `ListBoxItem`
+  that held a profile before the click can hold a different one after it. The row menu (#89) copes because it is a
+  `ContextMenu` set on `ListBoxItem` by a style — a `<Template>` setter, so each container builds its own — which
+  opens after the reload on whichever container now holds the row, and because its handlers find rows by name
+  rather than keeping an instance. `ProfilePickerWindowTests` finds the open menu by `IsOpen`, not through the
+  container it right-clicked, for the same reason.
 
 ## Screen capture
 

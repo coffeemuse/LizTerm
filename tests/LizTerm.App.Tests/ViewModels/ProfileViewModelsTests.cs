@@ -839,4 +839,91 @@ public class ProfileViewModelsTests : IDisposable
         vm.FilterText = "";
         Assert.Equal(["a", "b"], vm.VisibleRows.Select(r => r.Name));
     }
+
+    [Fact]
+    public void Marking_a_favorite_writes_the_tag_and_keeps_the_selection()
+    {
+        _store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        _store.Save(new SessionProfile { Name = "zeta", Host = "h", Tags = TagSet.From(["PROD"]) });
+
+        var vm = Picker();
+        vm.SelectedRow = vm.VisibleRows.Single(r => r.Name == "zeta");
+        vm.ToggleFavoriteCommand.Execute(vm.SelectedRow);
+
+        Assert.Equal(["PROD", "FAVORITE"], _store.Load("zeta")!.Tags.Names);
+        Assert.True(_store.Load("alpha")!.Tags.IsEmpty);
+        Assert.True(vm.VisibleRows.Single(r => r.Name == "zeta").IsFavorite);
+        Assert.Equal("zeta", vm.SelectedRow?.Name);
+    }
+
+    [Fact]
+    public void Removing_a_favorite_keeps_the_profiles_other_tags()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["FAVORITE", "PROD", "MVS"]) });
+
+        var vm = Picker();
+        vm.ToggleFavoriteCommand.Execute(vm.VisibleRows.Single());
+
+        Assert.Equal(["PROD", "MVS"], _store.Load("a")!.Tags.Names);
+        Assert.False(vm.VisibleRows.Single().IsFavorite);
+    }
+
+    /// <summary>The entry the user clicked said "Mark", so the result is marked — even when another window starred
+    /// the file after the list was drawn. A blind flip of what is on disk would unmark it instead, doing the
+    /// opposite of what the menu offered.</summary>
+    [Fact]
+    public void A_stale_row_applies_the_choice_it_showed_rather_than_flipping_the_file()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h" });
+        var vm = Picker();
+        var stale = vm.VisibleRows.Single();
+
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["FAVORITE"]) });
+        vm.ToggleFavoriteCommand.Execute(stale);
+
+        Assert.Equal(["FAVORITE"], _store.Load("a")!.Tags.Names);
+    }
+
+    /// <summary>ProfileStore.Update would save its fallback copy here, bringing back a profile deleted since the
+    /// list was drawn.</summary>
+    [Fact]
+    public void Toggling_a_profile_whose_file_has_gone_does_not_bring_it_back()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h" });
+        var vm = Picker();
+        var row = vm.VisibleRows.Single();
+
+        _store.Delete("a");
+        vm.ToggleFavoriteCommand.Execute(row);
+
+        Assert.Null(_store.Load("a"));
+        Assert.Empty(vm.VisibleRows);
+    }
+
+    [Fact]
+    public void A_profile_at_the_tag_cap_cannot_be_marked()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["T0", "T1", "T2", "T3", "T4", "T5", "T6", "T7"]) });
+
+        var vm = Picker();
+        Assert.False(vm.ToggleFavoriteCommand.CanExecute(vm.VisibleRows.Single()));
+    }
+
+    /// <summary>The row leaves a FAVORITE-scoped list the moment it loses the star, and the selection follows the
+    /// rule every other refilter uses: the first row still visible.</summary>
+    [Fact]
+    public void Unmarking_under_the_favorite_scope_hides_the_row_and_keeps_the_scope()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["FAVORITE"]) });
+        _store.Save(new SessionProfile { Name = "b", Host = "h", Tags = TagSet.From(["FAVORITE"]) });
+
+        var vm = Picker();
+        vm.SelectedScope = vm.Scopes.Single(s => s.TagName == TagRegistry.FavoriteName);
+        vm.SelectedRow = vm.VisibleRows.Single(r => r.Name == "a");
+        vm.ToggleFavoriteCommand.Execute(vm.SelectedRow);
+
+        Assert.Equal(TagRegistry.FavoriteName, vm.SelectedScope?.TagName);
+        Assert.Equal(["b"], vm.VisibleRows.Select(r => r.Name));
+        Assert.Equal("b", vm.SelectedRow?.Name);
+    }
 }

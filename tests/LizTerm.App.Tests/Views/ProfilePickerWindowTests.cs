@@ -2,10 +2,12 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -189,5 +191,109 @@ public class ProfilePickerWindowTests : IDisposable
 
         Assert.Equal(["zeta"], Descendants<ListBoxItem>(window).Select(i => ((ProfileRow)i.DataContext!).Name));
         Assert.NotNull(window.FindControl<ComboBox>("ScopeBox"));
+    }
+
+    private static ListBoxItem Row(Window window, string name) =>
+        Descendants<ListBoxItem>(window).Single(i => ((ProfileRow)i.DataContext!).Name == name);
+
+    /// <summary>A real right button press and release at the named row's centre, returning the menu that opened.
+    /// The press activates the window and the picker reloads on activation, which recycles the row containers:
+    /// the ListBoxItem that held this row before the click can hold a different one after it. So the menu is
+    /// found by being open, not through the container that was clicked.</summary>
+    private static ContextMenu RightClickRow(Window window, string name)
+    {
+        var item = Row(window, name);
+        var centre = item.TranslatePoint(new Avalonia.Point(item.Bounds.Width / 2, item.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(centre, MouseButton.Right);
+        window.MouseUp(centre, MouseButton.Right);
+        return Descendants<ListBoxItem>(window).Select(i => i.ContextMenu).OfType<ContextMenu>().Single(m => m.IsOpen);
+    }
+
+    private static MenuItem Entry(ContextMenu menu, string header) =>
+        menu.Items.OfType<MenuItem>().Single(m => (m.Header as string) == header);
+
+    [AvaloniaFact]
+    public void Right_clicking_a_row_selects_it_and_opens_its_menu()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        store.Save(new SessionProfile { Name = "zeta", Host = "h" });
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Show();
+        window.UpdateLayout();
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        vm.SelectedRow = vm.VisibleRows.Single(r => r.Name == "alpha");
+
+        var menu = RightClickRow(window, "zeta");
+
+        Assert.Equal("zeta", vm.SelectedRow?.Name);
+        Assert.Equal("zeta", (menu.DataContext as ProfileRow)?.Name);
+        Assert.Equal(["Connect", "Edit...", "Mark as FAVORITE"], menu.Items.OfType<MenuItem>().Select(m => m.Header as string));
+    }
+
+    [AvaloniaFact]
+    public void The_row_menu_stars_the_row_it_was_opened_on()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        store.Save(new SessionProfile { Name = "zeta", Host = "h" });
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Show();
+        window.UpdateLayout();
+
+        Entry(RightClickRow(window, "zeta"), "Mark as FAVORITE").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        window.UpdateLayout();
+
+        Assert.True(store.Load("zeta")!.Tags.Contains("FAVORITE"));
+        Assert.False(store.Load("alpha")!.Tags.Contains("FAVORITE"));
+        Assert.Contains(Descendants<TextBlock>(Row(window, "zeta")), t => t.Name == "StarGlyph" && t.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void The_row_menu_connects_the_row_it_was_opened_on()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        store.Save(new SessionProfile { Name = "zeta", Host = "h" });
+        SessionProfile? opened = null;
+        var window = new ProfilePickerWindow(store, (p, _) => opened = p, () => { });
+        window.Show();
+        window.UpdateLayout();
+
+        Entry(RightClickRow(window, "zeta"), "Connect").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+        Assert.Equal("zeta", opened?.Name);
+    }
+
+    [AvaloniaFact]
+    public void The_row_menu_edits_the_row_it_was_opened_on()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        store.Save(new SessionProfile { Name = "zeta", Host = "h" });
+        SessionProfile? opened = null;
+        var window = new ProfilePickerWindow(store, (p, _) => opened = p, () => { });
+        window.Show();
+        window.UpdateLayout();
+
+        Entry(RightClickRow(window, "zeta"), "Edit...").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+        var editor = Assert.IsType<ProfileEditorWindow>(Assert.Single(window.OwnedWindows));
+        Assert.Equal("zeta", ((ProfileEditorViewModel)editor.DataContext!).Name);
+        Assert.Null(opened);
+        editor.Close();
+    }
+
+    [AvaloniaFact]
+    public void A_full_profiles_menu_offers_favorite_disabled_and_says_why()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "full", Host = "h", Tags = TagSet.From(["T0", "T1", "T2", "T3", "T4", "T5", "T6", "T7"]) });
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Show();
+        window.UpdateLayout();
+
+        var entry = Entry(RightClickRow(window, "full"), "Mark as FAVORITE (already 8 tags)");
+        Assert.False(entry.IsEnabled);
     }
 }

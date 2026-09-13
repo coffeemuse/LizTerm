@@ -66,4 +66,15 @@ public sealed class ProfileRow
     public string? OverflowTip { get; }
 
     public bool HasOverflow => OverflowText is not null;
+
+    /// <summary>Whether the row menu's FAVORITE entry is enabled. Removing always is; adding needs room under
+    /// <see cref="TagSet.MaxTags"/>, because TagSet.With on a full set drops the name it was given and the click
+    /// would silently do nothing.</summary>
+    public bool CanToggleFavorite => IsFavorite || Profile.Tags.Count < TagSet.MaxTags;
+
+    /// <summary>The row menu's FAVORITE entry, which says why it is disabled when it is.</summary>
+    public string FavoriteMenuText =>
+        IsFavorite ? "Remove from FAVORITE"
+        : CanToggleFavorite ? "Mark as FAVORITE"
+        : $"Mark as FAVORITE (already {TagSet.MaxTags} tags)";
 }

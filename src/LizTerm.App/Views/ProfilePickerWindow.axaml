@@ -45,6 +45,23 @@
       <Button Content="Quit" Command="{Binding QuitCommand}" HorizontalAlignment="Stretch" Margin="0,24,0,0" />
     </StackPanel>
     <ListBox ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}" DoubleTapped="OnDoubleTapped">
+      <!-- The row menu is on the container rather than inside the item template, so a right click anywhere in the
+           row opens it, padding included. A Template so each row builds its own menu, bound to its own row. No
+           Delete: the button deletes with no confirmation, and a right-click menu is where misclicks happen. -->
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:ProfileRow">
+          <Setter Property="ContextMenu">
+            <Template>
+              <ContextMenu>
+                <MenuItem Header="Connect" Click="OnRowConnectClick" />
+                <MenuItem Header="Edit..." Click="OnRowEditClick" />
+                <Separator />
+                <MenuItem Header="{Binding FavoriteMenuText}" IsEnabled="{Binding CanToggleFavorite}" Click="OnRowFavoriteClick" />
+              </ContextMenu>
+            </Template>
+          </Setter>
+        </Style>
+      </ListBox.Styles>
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:ProfileRow">
           <!-- A 15px gutter on all three lines, so every star lands on the same x and a column of them can be

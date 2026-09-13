@@ -203,6 +203,29 @@ public partial class ProfilePickerViewModel : ObservableObject
         Reload();
     }
 
+    /// <summary>Stars or unstars the row's profile, from the row menu. The row, not the selection, because the
+    /// menu belongs to the row it was opened on.
+    ///
+    /// Applies the choice the row SHOWED rather than flipping the file: another window may have written the
+    /// profile since the list was drawn, and With and Without are both no-ops when the file already agrees. The
+    /// file is re-read rather than using the row's copy, so that write is not lost either — and a file that has
+    /// gone stays gone, which is why this is not ProfileStore.Update, whose fallback would save it back.</summary>
+    [RelayCommand(CanExecute = nameof(CanToggleFavorite))]
+    private void ToggleFavorite(ProfileRow? row)
+    {
+        if (row is null) return;
+        if (_store.Load(row.Name) is { } onDisk)
+        {
+            var tags = row.IsFavorite
+                ? onDisk.Tags.Without(TagRegistry.FavoriteName)
+                : onDisk.Tags.With(TagRegistry.FavoriteName);
+            if (tags != onDisk.Tags) _store.Save(onDisk with { Tags = tags });
+        }
+        Reload();
+    }
+
+    private static bool CanToggleFavorite(ProfileRow? row) => row?.CanToggleFavorite == true;
+
     [RelayCommand]
     private void Quit() => _quit();
 
