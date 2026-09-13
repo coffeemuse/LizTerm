@@ -155,6 +155,22 @@ public class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void The_status_bar_tags_flag_writes_through_and_skips_an_unchanged_value()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.ShowTagsInStatusBar = false;
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.ShowTagsInStatusBar = true;
+
+        Assert.Equal(["ShowTagsInStatusBar"], changes);
+        Assert.True(new SettingsViewModel(new SettingsStore(FilePath)).ShowTagsInStatusBar);
+    }
+
+    [Fact]
     public void The_menu_style_writes_through_raises_its_own_name_and_skips_an_unchanged_value()
     {
         var settings = new SettingsViewModel(new SettingsStore(FilePath));

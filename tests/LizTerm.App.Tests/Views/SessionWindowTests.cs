@@ -547,4 +547,83 @@ public class SessionWindowTests
         Assert.Equal(located, LizTerm.App.App.AboutEngine(notASession, notASession, () => located));
         Assert.Equal(located, LizTerm.App.App.AboutEngine(null, null, () => located));
     }
+
+    // ----- The connect banner and the status bar's note icon and chips (#93) -----
+
+    private static (SessionWindow Window, SessionViewModel Vm, FakeEmulatorSession Session) ShowProfile(SessionProfile profile, SettingsViewModel? settings = null)
+    {
+        var session = new FakeEmulatorSession { Profile = profile, CurrentScreen = new ScreenBuffer(24, 80).Snapshot() };
+        var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard(), settings: settings);
+        var window = new SessionWindow { DataContext = vm };
+        window.Show();
+        return (window, vm, session);
+    }
+
+    private static SessionProfile NotedAndTagged() => new()
+    {
+        Name = "MVS/CE", Host = "10.42.37.209", Port = 3270, Note = "no live data",
+        Tags = TagSet.From(["prod", "mvs"]),
+    };
+
+    /// <summary>The icon is there for every session, even one with nothing but a name, so the banner is always
+    /// one click away; its tooltip is the note, or nothing.</summary>
+    [AvaloniaFact]
+    public void The_note_icon_is_always_present_and_carries_the_note_as_its_tooltip()
+    {
+        var (noted, _, _) = ShowProfile(NotedAndTagged());
+        var icon = noted.FindControl<Button>("NoteIcon")!;
+        Assert.True(icon.IsVisible);
+        Assert.Equal("no live data", ToolTip.GetTip(icon));
+
+        var (bare, _, _) = ShowProfile(new SessionProfile { Name = "tk5", Host = "h" });
+        var bareIcon = bare.FindControl<Button>("NoteIcon")!;
+        Assert.True(bareIcon.IsVisible);
+        Assert.Null(ToolTip.GetTip(bareIcon));
+    }
+
+    [AvaloniaFact]
+    public void Clicking_the_note_icon_shows_the_banner()
+    {
+        var (window, vm, _) = ShowProfile(new SessionProfile { Name = "tk5", Host = "h" });
+        var banner = window.FindControl<Border>("NoteBanner")!;
+        Assert.False(banner.IsVisible);
+
+        window.FindControl<Button>("NoteIcon")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.True(vm.IsBannerVisible);
+        Assert.True(banner.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void The_banner_shows_on_connect_with_the_chips_the_name_the_host_and_the_note()
+    {
+        var (window, _, session) = ShowProfile(NotedAndTagged());
+        var banner = window.FindControl<Border>("NoteBanner")!;
+        Assert.False(banner.IsVisible);
+
+        session.RaiseConnection(ConnectionState.Connected3270);
+
+        Assert.True(banner.IsVisible);
+        Assert.Equal("MVS/CE", window.FindControl<TextBlock>("BannerName")!.Text);
+        Assert.Equal("10.42.37.209:3270", window.FindControl<TextBlock>("BannerHostPort")!.Text);
+        Assert.Equal("no live data", window.FindControl<TextBlock>("BannerNote")!.Text);
+        Assert.Equal(["PROD", "MVS"], window.FindControl<ItemsControl>("BannerChips")!.ItemsSource!.Cast<TagChip>().Select(c => c.Text));
+    }
+
+    /// <summary>The chips in the bar itself are the one part behind a preference, and it applies live.</summary>
+    [AvaloniaFact]
+    public void The_status_bar_chips_follow_the_preference_and_default_off()
+    {
+        var settings = new SettingsViewModel();
+        var (window, _, _) = ShowProfile(NotedAndTagged(), settings);
+        var chips = window.FindControl<ItemsControl>("StatusChips")!;
+        Assert.False(chips.IsVisible);
+        Assert.Equal(["PROD", "MVS"], chips.ItemsSource!.Cast<TagChip>().Select(c => c.Text));
+
+        settings.ShowTagsInStatusBar = true;
+        Assert.True(chips.IsVisible);
+
+        settings.ShowTagsInStatusBar = false;
+        Assert.False(chips.IsVisible);
+    }
 }

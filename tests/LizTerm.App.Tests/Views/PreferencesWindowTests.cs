@@ -298,4 +298,19 @@ public class PreferencesWindowTests
         var (elsewhere, _) = Show(menuStyleChoosable: false);
         Assert.False(elsewhere.FindControl<StackPanel>("MenuStyleGroup")!.IsVisible);
     }
+
+    /// <summary>The Status bar group (#93): one box, two-way, live like everything else here.</summary>
+    [AvaloniaFact]
+    public void The_status_bar_tags_box_writes_through_and_follows_the_settings()
+    {
+        var (window, settings) = Show();
+        var box = window.FindControl<CheckBox>("StatusBarTagsBox")!;
+        Assert.False(box.IsChecked);
+
+        box.IsChecked = true;
+        Assert.True(settings.ShowTagsInStatusBar);
+
+        settings.ShowTagsInStatusBar = false;
+        Assert.False(box.IsChecked);
+    }
 }

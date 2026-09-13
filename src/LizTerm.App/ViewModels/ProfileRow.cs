@@ -10,7 +10,15 @@ using LizTerm.Core.Session;
 namespace LizTerm.App.ViewModels;
 
 /// <summary>One chip, ready to draw.</summary>
-public sealed record TagChip(string Text, IBrush Background);
+public sealed record TagChip(string Text, IBrush Background)
+{
+    /// <summary>The rendering rules, in one place for the picker's rows and the session window's status bar and
+    /// banner (#93): FAVORITE is the star and never a chip, the text is uppercase whatever the file holds, and
+    /// the colour is the registry's — unregistered names draw grey.</summary>
+    public static IReadOnlyList<TagChip> For(TagSet tags, TagRegistry registry) =>
+        [.. tags.Names.Where(name => !TagRegistry.IsReserved(name))
+                      .Select(name => new TagChip(name.ToUpperInvariant(), TagPalette.Brush(registry.ColorOf(name))))];
+}
 
 /// <summary>One row of the session list. The ListBox binds these rather than <see cref="SessionProfile"/>
 /// itself, because a chip needs a COLOUR and a profile does not know its tags' colours — only the registry
@@ -34,14 +42,12 @@ public sealed class ProfileRow
         Note = string.IsNullOrWhiteSpace(profile.Note) ? null : profile.Note.Trim();
         IsFavorite = profile.Tags.Contains(TagRegistry.FavoriteName);
 
-        // The reserved tag is the star, never a chip.
-        var names = profile.Tags.Names.Where(name => !TagRegistry.IsReserved(name)).ToList();
-        Chips = [.. names.Take(MaxChips)
-                         .Select(name => new TagChip(name.ToUpperInvariant(), TagPalette.Brush(registry.ColorOf(name))))];
+        var all = TagChip.For(profile.Tags, registry);
+        Chips = [.. all.Take(MaxChips)];
 
-        var hidden = names.Skip(MaxChips).ToList();
+        var hidden = all.Skip(MaxChips).ToList();
         OverflowText = hidden.Count > 0 ? $"+{hidden.Count}" : null;
-        OverflowTip = hidden.Count > 0 ? string.Join(", ", hidden.Select(name => name.ToUpperInvariant())) : null;
+        OverflowTip = hidden.Count > 0 ? string.Join(", ", hidden.Select(chip => chip.Text)) : null;
     }
 
     /// <summary>The store's own instance, unchanged. Connect, Edit and Delete act on this.</summary>
