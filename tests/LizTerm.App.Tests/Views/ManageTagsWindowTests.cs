@@ -206,4 +206,49 @@ public class ManageTagsWindowTests : IDisposable
 
         Assert.False(window.IsVisible);
     }
+
+    private static Point Centre(Window window, Control control) =>
+        control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
+
+    private static Button Swatch(ManageTagsWindow window, string colour) =>
+        Descendants<Button>(window.FindControl<ItemsControl>("SwatchList")!).Single(b => ToolTip.GetTip(b) as string == colour);
+
+    /// <summary>A real press and release at the swatch's centre, not a raised Click: the 2026-09-13 in-app pass
+    /// saw a DevTools pointer click on a swatch answer handled and change nothing, so the pointer path is what
+    /// this guards.</summary>
+    [AvaloniaFact]
+    public void A_real_pointer_click_on_a_swatch_recolours_the_tag()
+    {
+        var (window, vm) = Show();
+        Select(window, vm, "TLS");
+        var centre = Centre(window, Swatch(window, "Teal"));
+
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
+
+        Assert.Equal(TagColor.Teal, _tags.Load().ColorOf("TLS"));
+    }
+
+    /// <summary>Plan D6: Fluent swaps the content presenter's background for a theme brush on :pointerover and
+    /// :pressed. The window style that puts the swatch's own brush back must actually resolve — the in-app pass
+    /// found it bound against the presenter's null DataContext, so a hovered swatch drew as a hole.</summary>
+    [AvaloniaFact]
+    public void A_swatch_keeps_its_colour_under_the_pointer_and_while_pressed()
+    {
+        var (window, vm) = Show();
+        Select(window, vm, "PROD");
+        var swatch = Swatch(window, "Green");
+        var expected = ((SwatchOption)swatch.DataContext!).Brush;
+        var presenter = Descendants<Avalonia.Controls.Presenters.ContentPresenter>(swatch).Single();
+        var centre = Centre(window, swatch);
+
+        window.MouseMove(centre);
+        Assert.Contains(":pointerover", swatch.Classes);
+        Assert.Same(expected, presenter.Background);
+
+        window.MouseDown(centre, MouseButton.Left);
+        Assert.Contains(":pressed", swatch.Classes);
+        Assert.Same(expected, presenter.Background);
+        window.MouseUp(centre, MouseButton.Left);
+    }
 }
