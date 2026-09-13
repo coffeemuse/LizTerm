@@ -52,6 +52,10 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         if (color == TagRegistry.FavoriteColor || !Enum.IsDefined(color))
             throw new ArgumentException($"{color} cannot be chosen for a tag.", nameof(color));
         var registry = Load().Registry;
+        // TagRegistry.Recolour builds a new registry for a registered name whatever colour is asked for, even the
+        // one it already has, so ReferenceEquals below never catches a no-op recolour -- only an unknown name.
+        // Short-circuit here so choosing the colour a tag already has cannot report a blocked write as a failure.
+        if (registry.Contains(name) && registry.ColorOf(name) == color) return TagChangeResult.Nothing;
         var recoloured = registry.Recolour(name, color);
         if (ReferenceEquals(recoloured, registry)) return TagChangeResult.Nothing;
         return TrySave(recoloured) is { } error ? new TagChangeResult(0, [], null, error) : TagChangeResult.Nothing;

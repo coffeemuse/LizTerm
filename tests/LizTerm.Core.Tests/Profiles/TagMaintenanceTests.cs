@@ -209,6 +209,20 @@ public class TagMaintenanceTests : IDisposable
         Assert.False(_tags.Load().Contains("LAB"));
     }
 
+    /// <summary>TagRegistry.Recolour returns a new registry even when the requested colour is the one the tag
+    /// already has, so TagMaintenance must short-circuit itself rather than save a no-op change: a save that
+    /// cannot happen to fail should not be able to make a no-op report as a failure.</summary>
+    [Fact]
+    public void Recolouring_to_the_colour_a_tag_already_has_writes_nothing()
+    {
+        Define(("MVS", TagColor.Blue));
+        Block(TagsFile);
+
+        var result = _maintenance.Recolour("MVS", TagColor.Blue);
+
+        Assert.True(result.Succeeded);
+    }
+
     [Fact]
     public void Recolour_writes_the_registry_and_no_profile()
     {
