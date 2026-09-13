@@ -301,13 +301,13 @@
     <!-- The connect banner (#93): which box this is, for the moment you have forgotten. Docked here so it sits
          directly above the status bar, under the error and find bars, in the find bar's grey. Shown by the view
          model on the edge into a connected state (when the profile has a note or a chip) or by the icon above,
-         and gone on the first keystroke or screen click: no Dismiss, because a note is not an error. The note is
-         the line that trims; chips, name and host never shrink, and the full note is on the tooltip. -->
+         and gone on the first keystroke or screen click: no Dismiss, because a note is not an error, and no
+         "goes on first keystroke" label either — Robert's call at minimum width (2026-09-13): once learned it is
+         obvious, and the pixels belong to the note, which is the line that trims; chips, name and host never
+         shrink, and the full note is on the tooltip. -->
     <Border x:Name="NoteBanner" DockPanel.Dock="Bottom" Background="#202020" Padding="10,6"
             IsVisible="{Binding IsBannerVisible}">
       <DockPanel LastChildFill="True">
-        <TextBlock DockPanel.Dock="Right" Text="goes on first keystroke" Foreground="#777777" FontSize="11"
-                   VerticalAlignment="Center" Margin="10,0,0,0" />
         <ItemsControl x:Name="BannerChips" DockPanel.Dock="Left" ItemsSource="{Binding Chips}"
                       ItemsPanel="{StaticResource TagChipStrip}" ItemTemplate="{StaticResource TagChipTemplate}"
                       VerticalAlignment="Center" Margin="0,0,10,0" />
