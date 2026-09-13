@@ -255,15 +255,70 @@
     </Menu>
 
     <Border DockPanel.Dock="Bottom" Background="#181818" Padding="10,4">
-      <Grid ColumnDefinitions="Auto,16,Auto,*,Auto,16,Auto,16,Auto,16,Auto,16,Auto">
-        <TextBlock Grid.Column="0" Text="{Binding ConnectionText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
-        <TextBlock Grid.Column="2" Text="{Binding TlsText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
-        <TextBlock Grid.Column="4" Text="{Binding KeyboardText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#E0E0E0" />
-        <TextBlock Grid.Column="6" Text="{Binding InsertText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#FFFF80" />
-        <TextBlock Grid.Column="8" Text="{Binding CursorText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
-        <TextBlock Grid.Column="10" Text="{Binding ModelText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
-        <TextBlock x:Name="WireLogStatus" Grid.Column="12" Text="{Binding WireLogText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#FF8080" />
+      <Grid ColumnDefinitions="Auto,10,Auto,16,Auto,*,Auto,16,Auto,16,Auto,16,Auto,16,Auto">
+        <!-- The session's identity leads the bar and its state follows (#93): the note icon, then the profile's
+             chips when Preferences says so. The icon is a filled vector rather than a glyph because the IBM 3270
+             font has no such character and a fallback glyph differs per platform; its disc is the picker's
+             note grey, brighter under the pointer. Always present, even with no note, so the banner is one
+             click away in every session. The chips are the one part behind a setting: some want PROD in sight
+             at all times and others find the bar cluttered. They are also the first thing clipped when the
+             window is narrow, which is what leading the bar costs; the state text keeps its place. -->
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button x:Name="NoteIcon" Click="OnNoteIconClick" ToolTip.Tip="{Binding Note}"
+                  Background="Transparent" Padding="0" BorderThickness="0" MinWidth="0" MinHeight="0"
+                  VerticalAlignment="Center" Cursor="Hand">
+            <Button.Styles>
+              <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+              </Style>
+              <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+              </Style>
+              <Style Selector="Button:pointerover Ellipse.disc">
+                <Setter Property="Fill" Value="#DADADA" />
+              </Style>
+            </Button.Styles>
+            <Canvas Width="14" Height="14">
+              <Ellipse Classes="disc" Width="14" Height="14" Fill="#A8A8A8" />
+              <Rectangle Canvas.Left="6.2" Canvas.Top="5.9" Width="1.6" Height="4.8" RadiusX="0.5" RadiusY="0.5" Fill="#181818" />
+              <Ellipse Canvas.Left="6.05" Canvas.Top="2.9" Width="1.9" Height="1.9" Fill="#181818" />
+            </Canvas>
+          </Button>
+          <ItemsControl x:Name="StatusChips" ItemsSource="{Binding Chips}" IsVisible="{Binding Settings.ShowTagsInStatusBar}"
+                        ItemsPanel="{StaticResource TagChipStrip}" ItemTemplate="{StaticResource TagChipTemplate}"
+                        VerticalAlignment="Center" />
+        </StackPanel>
+        <TextBlock Grid.Column="2" Text="{Binding ConnectionText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
+        <TextBlock Grid.Column="4" Text="{Binding TlsText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
+        <TextBlock Grid.Column="6" Text="{Binding KeyboardText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#E0E0E0" />
+        <TextBlock Grid.Column="8" Text="{Binding InsertText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#FFFF80" />
+        <TextBlock Grid.Column="10" Text="{Binding CursorText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
+        <TextBlock Grid.Column="12" Text="{Binding ModelText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#C0C0C0" />
+        <TextBlock x:Name="WireLogStatus" Grid.Column="14" Text="{Binding WireLogText}" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" Foreground="#FF8080" />
       </Grid>
+    </Border>
+
+    <!-- The connect banner (#93): which box this is, for the moment you have forgotten. Docked here so it sits
+         directly above the status bar, under the error and find bars, in the find bar's grey. Shown by the view
+         model on the edge into a connected state (when the profile has a note or a chip) or by the icon above,
+         and gone on the first keystroke or screen click: no Dismiss, because a note is not an error, and no
+         "goes on first keystroke" label either — Robert's call at minimum width (2026-09-13): once learned it is
+         obvious, and the pixels belong to the note, which is the line that trims; chips, name and host never
+         shrink, and the full note is on the tooltip. -->
+    <Border x:Name="NoteBanner" DockPanel.Dock="Bottom" Background="#202020" Padding="10,6"
+            IsVisible="{Binding IsBannerVisible}">
+      <DockPanel LastChildFill="True">
+        <ItemsControl x:Name="BannerChips" DockPanel.Dock="Left" ItemsSource="{Binding Chips}"
+                      ItemsPanel="{StaticResource TagChipStrip}" ItemTemplate="{StaticResource TagChipTemplate}"
+                      VerticalAlignment="Center" Margin="0,0,10,0" />
+        <TextBlock x:Name="BannerName" DockPanel.Dock="Left" Text="{Binding Profile.Name}" FontWeight="SemiBold"
+                   VerticalAlignment="Center" Margin="0,0,8,0" />
+        <TextBlock x:Name="BannerHostPort" DockPanel.Dock="Left" Text="{Binding HostPort}" Foreground="#A0A0A0"
+                   VerticalAlignment="Center" Margin="0,0,10,0" />
+        <TextBlock x:Name="BannerNote" Text="{Binding Note}" Foreground="#C8C8C8" FontStyle="Italic"
+                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                   IsVisible="{Binding HasNote}" ToolTip.Tip="{Binding Note}" />
+      </DockPanel>
     </Border>
 
     <Border DockPanel.Dock="Bottom" Background="#5A2020" Padding="10,6"

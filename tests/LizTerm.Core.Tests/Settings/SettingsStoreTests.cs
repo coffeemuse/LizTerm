@@ -62,6 +62,18 @@ public class SettingsStoreTests : IDisposable
         Assert.Equal("Right", ReadFile()["keypadDock"]!.GetValue<string>());
     }
 
+    /// <summary>The status-bar tags flag (#93): off by default, so a settings file from before it reads as off.</summary>
+    [Fact]
+    public void The_status_bar_tags_flag_round_trips_and_defaults_off()
+    {
+        Assert.False(Store.Load().ShowTagsInStatusBar);
+
+        Store.Update(s => s with { ShowTagsInStatusBar = true });
+
+        Assert.Equal(new AppSettings(ShowTagsInStatusBar: true), Store.Load());
+        Assert.True(ReadFile()["showTagsInStatusBar"]!.GetValue<bool>());
+    }
+
     [Fact]
     public void A_first_change_writes_only_that_key()
     {

@@ -78,21 +78,8 @@
                  truncated long name is still recognisable. -->
             <DockPanel Grid.Row="0" Grid.Column="1" LastChildFill="True">
               <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                <ItemsControl ItemsSource="{Binding Chips}">
-                  <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                      <StackPanel Orientation="Horizontal" Spacing="3" />
-                    </ItemsPanelTemplate>
-                  </ItemsControl.ItemsPanel>
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:TagChip">
-                      <Border x:Name="Chip" Background="{Binding Background}" CornerRadius="3" Padding="5,1">
-                        <TextBlock Text="{Binding Text}" Foreground="{x:Static render:TagPalette.ChipText}"
-                                   FontSize="10" FontWeight="Bold" />
-                      </Border>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <ItemsControl ItemsSource="{Binding Chips}" ItemsPanel="{StaticResource TagChipStrip}"
+                              ItemTemplate="{StaticResource TagChipTemplate}" />
                 <Border Background="{x:Static render:TagPalette.Overflow}" CornerRadius="3" Padding="5,1"
                         IsVisible="{Binding HasOverflow}">
                   <TextBlock x:Name="OverflowChip" Text="{Binding OverflowText}" FontSize="10" FontWeight="Bold"

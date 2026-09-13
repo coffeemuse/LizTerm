@@ -54,7 +54,7 @@ first. **FAVORITE** is fixed: it can't be renamed, recoloured or deleted.
 | Backspace erases | On by default: Backspace erases the previous character. Off: Backspace only moves the cursor left. |
 | Mark as FAVORITE | Adds the reserved `FAVORITE` tag, shown as a gold star in the list. |
 | Tags | Short labels, separated by commas (`PROD, MVS`), drawn as uppercase colour chips. A tag's colour is picked automatically the first time you use it, and is the same everywhere that tag appears; **Tags...** in the Sessions list changes it. At most 8 per profile, 16 characters each. |
-| Note | One short line — "no live data", "LAN only" — shown under the host in the list. |
+| Note | One short line — "no live data", "LAN only" — shown under the host in the list, and inside the session: see [The session window](#the-session-window). |
 
 ### Quick Connect and the command line
 
@@ -77,9 +77,15 @@ name matches the argument, ignoring case, always wins.
 
 ## The session window
 
-The status bar along the bottom shows, in order: the connection state, the TLS state, the keyboard state (for
-example *Ready*, or why the keyboard is locked), insert mode, the cursor position, the model and LU name, and — while
-a wire log is recording — a red **● wire log** marker.
+The status bar along the bottom shows, in order: a small note icon, the connection state, the TLS state, the
+keyboard state (for example *Ready*, or why the keyboard is locked), insert mode, the cursor position, the model and
+LU name, and — while a wire log is recording — a red **● wire log** marker.
+
+When a session connects, a banner above the status bar names the profile, its host and port, its tags and its note,
+for the moment you have forgotten which box you are on. It goes away on your first keystroke or click on the screen;
+there is nothing to dismiss. A profile with neither tags nor a note shows no banner. Hold the pointer over the note
+icon to read the note, or click it to bring the banner back at any time. The profile's tags can also be drawn in
+the status bar itself, beside the icon: turn on **Show the profile's tags in the status bar** in Preferences.
 
 If a connection attempt has not finished within 30 seconds, LizTerm gives up and says so. **File > Disconnect**
 cancels an attempt that is still in progress.
@@ -263,6 +269,8 @@ window's **Edit** menu on Windows and Linux. Changes apply as you make them, to 
   Linux.
 - **Keypad** — whether the on-screen keypad is shown, and whether it docks below the screen or to its right. The
   View > Keypad submenu carries both of the same settings.
+- **Status bar** — whether the profile's tags are drawn in the session window's status bar. Off by default; the
+  note icon and the connect banner are always there.
 - **Menu bar** — macOS only; see [Menus](#menus).
 
 ## Where LizTerm keeps its files

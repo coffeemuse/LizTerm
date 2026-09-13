@@ -99,6 +99,18 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>The session window's status bar draws the profile's tag chips (#93). Off by default: some people
+    /// want PROD in sight at all times and others find the bar cluttered, and the bar as it was is the safer
+    /// default for an upgrade. The note icon and the connect banner are not behind this; they cost no width.</summary>
+    public bool ShowTagsInStatusBar
+    {
+        get => Current.ShowTagsInStatusBar;
+        set
+        {
+            if (Current.ShowTagsInStatusBar != value) Apply(nameof(ShowTagsInStatusBar), s => s with { ShowTagsInStatusBar = value });
+        }
+    }
+
     public MenuStyle MenuStyle
     {
         get => Current.MenuStyle;

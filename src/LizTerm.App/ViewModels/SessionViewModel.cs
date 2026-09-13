@@ -11,6 +11,7 @@ using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Documentation;
 using LizTerm.App.Files;
+using LizTerm.App.Rendering;
 using LizTerm.App.Status;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Screen;
@@ -34,6 +35,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly IBellRinger? _bellRinger;
     private readonly BellThrottle _bellThrottle;
     private bool _bellRingerFailed;
+    /// <summary>The last connection report had a session up. The banner shows on the edge, not the level:
+    /// b3270 reports Connected3270 and then ConnectedTn3270E for one arrival, and the second must not undo the
+    /// keystroke that dismissed the banner.</summary>
+    private bool _wasConnected;
     /// <summary>The pin chosen in this window. The session's profile is fixed at construction, so a pin made after
     /// the window opened travels as a one-shot option on every later connect from here (spec 5.3).</summary>
     private CertificatePin? _pinOverride;
@@ -133,11 +138,15 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     /// the real clock. A test that needs two admitted bells passes one on an explicit clock, so nothing sleeps.</param>
     /// <param name="uriOpener">Opens the Help menu's pages and the extracted user guide; null for tests that
     /// don't cover them.</param>
+    /// <param name="tags">The tag registry, for the chips' colours: a profile carries names only. Null draws
+    /// every chip in the unregistered grey. Read once here, as the profile is: a session window is a snapshot
+    /// of both, and Manage Tags reaches it on the next window, not this one.</param>
     public SessionViewModel(IEmulatorSession session, Action<Action> dispatch, ITextClipboard clipboard,
         ICertificatePrompt? certificatePrompt = null, Action<SessionProfile>? saveProfile = null,
         IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null,
         Func<SessionProfile, Task>? saveAsProfile = null, SettingsViewModel? settings = null,
-        IBellRinger? bellRinger = null, BellThrottle? bellThrottle = null, IUriOpener? uriOpener = null)
+        IBellRinger? bellRinger = null, BellThrottle? bellThrottle = null, IUriOpener? uriOpener = null,
+        TagRegistry? tags = null)
     {
         _session = session;
         _dispatch = dispatch;
@@ -190,6 +199,11 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
         Find = new FindViewModel(MoveCursorAsync);
 
+        var profile = session.Profile;
+        HostPort = $"{profile.Host}:{profile.Port}";
+        Note = string.IsNullOrWhiteSpace(profile.Note) ? null : profile.Note.Trim();
+        Chips = TagChip.For(profile.Tags, tags ?? TagRegistry.Empty);
+
         ApplyScreen(session.CurrentScreen);
         ApplyStatus(session.KeyboardStatus);
         ApplyConnection(session.ConnectionState);
@@ -200,6 +214,31 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     public SessionProfile Profile => _session.Profile;
     public string Title => $"{Profile.Name} - {Profile.Host}";
+
+    /// <summary>The profile as the session window shows it (#93): the banner on connect and the status bar's
+    /// note icon and chips, for the moment you have forgotten which box you are on. Fixed at construction like
+    /// the profile itself.</summary>
+    public string HostPort { get; }
+
+    /// <summary>Trimmed, or null when the profile has none, so the banner's note line and the icon's tooltip
+    /// collapse rather than show an empty string.</summary>
+    public string? Note { get; }
+
+    public bool HasNote => Note is not null;
+
+    /// <summary>The picker's chips, by the picker's rules (TagChip.For): every tag but FAVORITE, uppercase, in
+    /// the registry's colour. No cap: the status bar clips, and the banner has the window's width.</summary>
+    public IReadOnlyList<TagChip> Chips { get; }
+
+    /// <summary>The connect banner is showing. Set on the edge into a connected state when the profile has a
+    /// note or a chip (name and host alone are already the title), or by ShowBanner from the status bar's
+    /// icon for any profile; cleared by the first key, typed text or screen click sent to the host. No Dismiss:
+    /// a note is not an error, and a click on every connect would tax exactly the profiles that carry notes
+    /// because they are used most.</summary>
+    [ObservableProperty] private bool _isBannerVisible;
+
+    /// <summary>The status bar's note icon: the banner, one click away in every session.</summary>
+    public void ShowBanner() => IsBannerVisible = true;
     public EngineInfo Engine => _session.Engine;
 
     /// <summary>Find state for this window. Its own view model: see FindViewModel's own summary.</summary>
@@ -364,6 +403,8 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         ConnectionText = StatusFormatter.Connection(state, Profile.Host);
         TlsText = StatusFormatter.Tls(_session.Tls);
         if (state.HasSocket()) _socketOpened = true;
+        if (IsConnected && !_wasConnected && (HasNote || Chips.Count > 0)) IsBannerVisible = true;
+        _wasConnected = IsConnected;
     }
 
     /// <summary>Offered only while the engine is fully idle: any state but Disconnected means an attempt is
@@ -568,6 +609,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     public Task SendKeyAsync(TerminalKey key)
     {
         Selection = null;
+        IsBannerVisible = false;
         return Guard(_session.SendKeyAsync(key));
     }
 
@@ -605,12 +647,14 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     public Task TypeTextAsync(string text)
     {
         Selection = null;
+        IsBannerVisible = false;
         return Guard(_session.TypeTextAsync(text));
     }
 
     public Task MoveCursorAsync(int row, int column)
     {
         Selection = null;
+        IsBannerVisible = false;
         return Guard(_session.MoveCursorAsync(row, column));
     }
 

@@ -148,7 +148,11 @@ public partial class App : Application
             },
             settings: Settings,
             bellRinger: _bellRinger,
-            uriOpener: new AvaloniaUriOpener(window));
+            uriOpener: new AvaloniaUriOpener(window),
+            // Read now, like the profile: the chips' colours are a snapshot of tags.json at open, and a Manage
+            // Tags recolour reaches the next window rather than this one. Load never throws (an unreadable file
+            // is an empty registry, and every chip draws grey).
+            tags: (_tags ??= new TagRegistryStore(TagRegistryStore.DefaultFile())).Load());
         window.DataContext = viewModel;
         _sessions.Add(window);
         _lastActiveSession ??= window;

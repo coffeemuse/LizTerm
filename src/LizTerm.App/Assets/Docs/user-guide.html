@@ -87,7 +87,7 @@ first. <strong>FAVORITE</strong> is fixed: it can't be renamed, recoloured or de
 <tr><td>Backspace erases</td><td>On by default: Backspace erases the previous character. Off: Backspace only moves the cursor left.</td></tr>
 <tr><td>Mark as FAVORITE</td><td>Adds the reserved <code>FAVORITE</code> tag, shown as a gold star in the list.</td></tr>
 <tr><td>Tags</td><td>Short labels, separated by commas (<code>PROD, MVS</code>), drawn as uppercase colour chips. A tag's colour is picked automatically the first time you use it, and is the same everywhere that tag appears; <strong>Tags...</strong> in the Sessions list changes it. At most 8 per profile, 16 characters each.</td></tr>
-<tr><td>Note</td><td>One short line — "no live data", "LAN only" — shown under the host in the list.</td></tr>
+<tr><td>Note</td><td>One short line — "no live data", "LAN only" — shown under the host in the list, and inside the session: see <a href="#the-session-window">The session window</a>.</td></tr>
 </tbody>
 </table>
 <h3 id="quick-connect-and-the-command-line">Quick Connect and the command line</h3>
@@ -104,9 +104,14 @@ any certificate you chose to trust.</p>
 Bracket IPv6 addresses, as in <code>[2001:db8::1]:3270</code>. The port defaults to 23, or 992 with TLS. A saved profile whose
 name matches the argument, ignoring case, always wins.</p>
 <h2 id="the-session-window">The session window</h2>
-<p>The status bar along the bottom shows, in order: the connection state, the TLS state, the keyboard state (for
-example <em>Ready</em>, or why the keyboard is locked), insert mode, the cursor position, the model and LU name, and — while
-a wire log is recording — a red <strong>● wire log</strong> marker.</p>
+<p>The status bar along the bottom shows, in order: a small note icon, the connection state, the TLS state, the
+keyboard state (for example <em>Ready</em>, or why the keyboard is locked), insert mode, the cursor position, the model and
+LU name, and — while a wire log is recording — a red <strong>● wire log</strong> marker.</p>
+<p>When a session connects, a banner above the status bar names the profile, its host and port, its tags and its note,
+for the moment you have forgotten which box you are on. It goes away on your first keystroke or click on the screen;
+there is nothing to dismiss. A profile with neither tags nor a note shows no banner. Hold the pointer over the note
+icon to read the note, or click it to bring the banner back at any time. The profile's tags can also be drawn in
+the status bar itself, beside the icon: turn on <strong>Show the profile's tags in the status bar</strong> in Preferences.</p>
 <p>If a connection attempt has not finished within 30 seconds, LizTerm gives up and says so. <strong>File &gt; Disconnect</strong>
 cancels an attempt that is still in progress.</p>
 <p><strong>View &gt; Crosshair</strong> draws a horizontal line, a vertical line, or both through the cursor, for lining up columns.
@@ -266,6 +271,8 @@ the system alert sound, at the volume your system uses for alerts. The system al
 Linux.</li>
 <li><strong>Keypad</strong> — whether the on-screen keypad is shown, and whether it docks below the screen or to its right. The
 View &gt; Keypad submenu carries both of the same settings.</li>
+<li><strong>Status bar</strong> — whether the profile's tags are drawn in the session window's status bar. Off by default; the
+note icon and the connect banner are always there.</li>
 <li><strong>Menu bar</strong> — macOS only; see <a href="#menus">Menus</a>.</li>
 </ul>
 <h2 id="where-lizterm-keeps-its-files">Where LizTerm keeps its files</h2>

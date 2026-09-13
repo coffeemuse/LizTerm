@@ -473,6 +473,15 @@ public partial class SessionWindow : Window
     /// belongs (spec 7).</summary>
     private void OnDismissClick(object? sender, RoutedEventArgs e) => Screen.Focus();
 
+    /// <summary>The status bar's note icon (#93). A Click handler, the window's shape for the error bar's Dismiss
+    /// and the find bar's buttons; the screen keeps the keyboard, so the next keystroke can take the banner
+    /// away again.</summary>
+    private void OnNoteIconClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel?.ShowBanner();
+        Screen.Focus();
+    }
+
     private void OnNewSessionClick(object? sender, RoutedEventArgs e) =>
         (Avalonia.Application.Current as App)?.ShowPicker();
 

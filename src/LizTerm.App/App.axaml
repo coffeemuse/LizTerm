@@ -5,12 +5,29 @@
 -->
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LizTerm.App.ViewModels"
+             xmlns:render="using:LizTerm.App.Rendering"
              x:Class="LizTerm.App.App"
              Name="LizTerm"
              RequestedThemeVariant="Dark">
   <Application.Styles>
     <FluentTheme />
   </Application.Styles>
+
+  <Application.Resources>
+    <!-- The tag chip, drawn once: the picker's rows, the session window's status bar and its connect banner
+         (#93) all bind these two resources, so a chip cannot look different in the list from the bar. The
+         rendering RULES (uppercase, FAVORITE never a chip, the registry's colour) live in TagChip.For; this is
+         only the look. -->
+    <DataTemplate x:Key="TagChipTemplate" x:DataType="vm:TagChip">
+      <Border Background="{Binding Background}" CornerRadius="3" Padding="5,1">
+        <TextBlock Text="{Binding Text}" Foreground="{x:Static render:TagPalette.ChipText}" FontSize="10" FontWeight="Bold" />
+      </Border>
+    </DataTemplate>
+    <ItemsPanelTemplate x:Key="TagChipStrip">
+      <StackPanel Orientation="Horizontal" Spacing="3" />
+    </ItemsPanelTemplate>
+  </Application.Resources>
 
   <!-- The macOS application menu. It hangs off the application rather than a window, which is what gives the
        profile picker a menu bar: the picker is the app's startup state and the state it returns to when the

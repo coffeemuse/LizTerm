@@ -455,6 +455,25 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   `IsDefault`, so Enter in the name box renames instead of closing the window. The failure line sits under the
   panel, not in it, so it survives a change of selection.
 
+## The profile inside the session (#93)
+
+- `SessionViewModel` carries the profile as the window shows it — `HostPort`, `Note` (trimmed or null),
+  `Chips` — built once in the constructor from the profile and the `TagRegistry` the App passes (`tags:`; null
+  draws every chip grey). Both are snapshots at open, like the profile itself: a Manage Tags recolour reaches
+  the next window, not this one. `TagChip.For` holds the chip rules (FAVORITE never a chip, uppercase, the
+  registry's colour) for `ProfileRow` and the session alike, and `App.axaml`'s `TagChipTemplate` and
+  `TagChipStrip` resources hold the look, so the picker, the status bar and the banner cannot drift.
+- **The connect banner** (`NoteBanner`) shows on the *edge* into a connected state (`_wasConnected`), never on
+  the level: b3270 reports Connected3270 and then ConnectedTn3270E for one arrival, and the second must not undo
+  the keystroke that dismissed it. It shows itself only when the profile has a note or a chip — name and host
+  alone are the title — and `ShowBanner()` (the status bar's `NoteIcon`, a Click handler so a raised
+  `ClickEvent` reaches it) shows it for any profile. `SendKeyAsync`, `TypeTextAsync` and `MoveCursorAsync`
+  clear it, which is every path a keystroke, typed text, a keypad button or a screen click takes to the host.
+  No Dismiss button, and no timer.
+- The chips in the status bar (`StatusChips`) are the one part behind `Settings.ShowTagsInStatusBar`, default
+  off. They lead the bar with the icon and are the first thing clipped when the window is narrow; the state
+  text keeps its place.
+
 ## Screen capture
 
 - Two formats over one `ScreenSnapshot`: plain text via `ScreenSnapshot.ToText()` (Core), and `ScreenHtml.Render`
