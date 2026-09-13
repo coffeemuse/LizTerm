@@ -91,6 +91,25 @@ public class TagSetTests
         Assert.Equal(added, added.Without("nothing"));
     }
 
+    /// <summary>From drops a ninth name because it repairs a hand-edited file; With is a programmatic append,
+    /// and one that silently vanished is what the picker's FAVORITE guard once had to work around.</summary>
+    [Fact]
+    public void With_refuses_a_name_the_cap_would_drop_and_CanAdd_says_so_first()
+    {
+        var full = TagSet.From(Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}"));
+        Assert.False(full.CanAdd("MORE"));
+        Assert.True(full.CanAdd("t0"));
+        Assert.Equal(full, full.With("t0"));
+        Assert.Throws<InvalidOperationException>(() => full.With("MORE"));
+
+        var oneShort = TagSet.From(Enumerable.Range(1, TagSet.MaxTags - 1).Select(i => $"T{i}"));
+        Assert.True(oneShort.CanAdd("T0"));
+        Assert.Equal(TagSet.MaxTags, oneShort.With("T0").Count);
+
+        Assert.False(TagSet.Empty.CanAdd(" "));
+        Assert.False(TagSet.Empty.CanAdd(new string('x', TagSet.MaxNameLength + 1)));
+    }
+
     [Fact]
     public void ToString_round_trips_through_Split_and_From()
     {

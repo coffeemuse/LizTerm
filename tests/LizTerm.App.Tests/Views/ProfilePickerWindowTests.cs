@@ -196,18 +196,24 @@ public class ProfilePickerWindowTests : IDisposable
     private static ListBoxItem Row(Window window, string name) =>
         Descendants<ListBoxItem>(window).Single(i => ((ProfileRow)i.DataContext!).Name == name);
 
+    private static Point Centre(Window window, Control control) =>
+        control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
+
     /// <summary>A real right button press and release at the named row's centre, returning the menu that opened.
-    /// The press activates the window and the picker reloads on activation, which recycles the row containers:
-    /// the ListBoxItem that held this row before the click can hold a different one after it. So the menu is
-    /// found by being open, not through the container that was clicked.</summary>
+    /// Found by being open rather than through the clicked container: Show() posts the window's activation and
+    /// the first headless input flushes it, so a Reload runs inside that click — one that now keeps the containers
+    /// when the store is unchanged, but the lookup does not lean on that. A headless press never activates a
+    /// window itself, so the reload-versus-press ordering of a real platform is not something this can see.</summary>
     private static ContextMenu RightClickRow(Window window, string name)
     {
-        var item = Row(window, name);
-        var centre = item.TranslatePoint(new Avalonia.Point(item.Bounds.Width / 2, item.Bounds.Height / 2), window)!.Value;
+        var centre = Centre(window, Row(window, name));
         window.MouseDown(centre, MouseButton.Right);
         window.MouseUp(centre, MouseButton.Right);
-        return Descendants<ListBoxItem>(window).Select(i => i.ContextMenu).OfType<ContextMenu>().Single(m => m.IsOpen);
+        return OpenMenu(window);
     }
+
+    private static ContextMenu OpenMenu(Window window) =>
+        Descendants<ListBoxItem>(window).Select(i => i.ContextMenu).OfType<ContextMenu>().Single(m => m.IsOpen);
 
     private static MenuItem Entry(ContextMenu menu, string header) =>
         menu.Items.OfType<MenuItem>().Single(m => (m.Header as string) == header);
@@ -288,12 +294,82 @@ public class ProfilePickerWindowTests : IDisposable
     public void A_full_profiles_menu_offers_favorite_disabled_and_says_why()
     {
         var store = new ProfileStore(_dir);
-        store.Save(new SessionProfile { Name = "full", Host = "h", Tags = TagSet.From(["T0", "T1", "T2", "T3", "T4", "T5", "T6", "T7"]) });
+        store.Save(new SessionProfile { Name = "full", Host = "h", Tags = TagSet.From(Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}")) });
         var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
         window.Show();
         window.UpdateLayout();
 
-        var entry = Entry(RightClickRow(window, "full"), "Mark as FAVORITE (already 8 tags)");
-        Assert.False(entry.IsEnabled);
+        var entry = Entry(RightClickRow(window, "full"), $"Mark as FAVORITE (already {TagSet.MaxTags} tags)");
+        // Effectively: a command-driven item greys through CanExecute, not through its own IsEnabled.
+        Assert.False(entry.IsEffectivelyEnabled);
+
+        entry.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.False(store.Load("full")!.Tags.Contains("FAVORITE"));
+    }
+
+    /// <summary>Opened without a pointer, as the context-menu key does, on a row that is NOT the selection: an entry
+    /// must act on the row the menu belongs to. A right click selects its row on the press, so the pointer tests
+    /// above cannot tell "the menu's row" from "the selection" apart.</summary>
+    [AvaloniaFact]
+    public void A_menu_opened_from_the_keyboard_connects_its_own_row_not_the_selection()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        store.Save(new SessionProfile { Name = "zeta", Host = "h" });
+        SessionProfile? opened = null;
+        var window = new ProfilePickerWindow(store, (p, _) => opened = p, () => { });
+        window.Show();
+        window.UpdateLayout();
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        vm.SelectedRow = vm.VisibleRows.Single(r => r.Name == "alpha");
+
+        Row(window, "zeta").RaiseEvent(new ContextRequestedEventArgs());
+        var menu = OpenMenu(window);
+        Assert.Equal("zeta", (menu.DataContext as ProfileRow)?.Name);
+        Assert.Equal("alpha", vm.SelectedRow?.Name);
+
+        Entry(menu, "Connect").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal("zeta", opened?.Name);
+    }
+
+    [AvaloniaFact]
+    public void A_menu_opened_from_the_keyboard_stars_its_own_row_not_the_selection()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        store.Save(new SessionProfile { Name = "zeta", Host = "h" });
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Show();
+        window.UpdateLayout();
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+        vm.SelectedRow = vm.VisibleRows.Single(r => r.Name == "alpha");
+
+        Row(window, "zeta").RaiseEvent(new ContextRequestedEventArgs());
+        Entry(OpenMenu(window), "Mark as FAVORITE").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+        Assert.True(store.Load("zeta")!.Tags.Contains("FAVORITE"));
+        Assert.False(store.Load("alpha")!.Tags.Contains("FAVORITE"));
+    }
+
+    /// <summary>Control-click is how a one-button Mac right-clicks, and the macOS backend delivers it as a left
+    /// press carrying the Control modifier; the window turns that into the ContextRequested a right button raises.
+    /// Elsewhere Control toggles the selection and the row menu stays on the right button, so this is macOS-only
+    /// in production and here.</summary>
+    [AvaloniaFact]
+    public void Control_click_opens_the_row_menu_on_macOS()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "Control-click is the macOS gesture");
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "alpha", Host = "h" });
+        store.Save(new SessionProfile { Name = "zeta", Host = "h" });
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { });
+        window.Show();
+        window.UpdateLayout();
+
+        var centre = Centre(window, Row(window, "zeta"));
+        window.MouseDown(centre, MouseButton.Left, RawInputModifiers.Control);
+        window.MouseUp(centre, MouseButton.Left, RawInputModifiers.Control);
+
+        Assert.Equal("zeta", (OpenMenu(window).DataContext as ProfileRow)?.Name);
     }
 }

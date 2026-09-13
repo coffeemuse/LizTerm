@@ -44,19 +44,22 @@
       <Button Content="Delete" Command="{Binding DeleteCommand}" HorizontalAlignment="Stretch" />
       <Button Content="Quit" Command="{Binding QuitCommand}" HorizontalAlignment="Stretch" Margin="0,24,0,0" />
     </StackPanel>
-    <ListBox ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}" DoubleTapped="OnDoubleTapped">
+    <ListBox ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}" DoubleTapped="OnDoubleTapped"
+             PointerReleased="OnListPointerReleased">
       <!-- The row menu is on the container rather than inside the item template, so a right click anywhere in the
-           row opens it, padding included. A Template so each row builds its own menu, bound to its own row. No
-           Delete: the button deletes with no confirmation, and a right-click menu is where misclicks happen. -->
+           row opens it, padding included. A Template so each row builds its own menu, bound to its own row, and
+           each entry hands that row to the picker's command, so it acts on the row the menu belongs to whether a
+           pointer opened it (which already selected the row) or the keyboard did. Greying comes from CanExecute.
+           No Delete: the button deletes with no confirmation, and a right-click menu is where misclicks happen. -->
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ProfileRow">
           <Setter Property="ContextMenu">
             <Template>
               <ContextMenu>
-                <MenuItem Header="Connect" Click="OnRowConnectClick" />
-                <MenuItem Header="Edit..." Click="OnRowEditClick" />
+                <MenuItem Header="Connect" Command="{Binding $parent[ListBox].((vm:ProfilePickerViewModel)DataContext).ConnectCommand}" CommandParameter="{Binding}" />
+                <MenuItem Header="Edit..." Command="{Binding $parent[ListBox].((vm:ProfilePickerViewModel)DataContext).EditCommand}" CommandParameter="{Binding}" />
                 <Separator />
-                <MenuItem Header="{Binding FavoriteMenuText}" IsEnabled="{Binding CanToggleFavorite}" Click="OnRowFavoriteClick" />
+                <MenuItem Header="{Binding FavoriteMenuText}" Command="{Binding $parent[ListBox].((vm:ProfilePickerViewModel)DataContext).ToggleFavoriteCommand}" CommandParameter="{Binding}" />
               </ContextMenu>
             </Template>
           </Setter>

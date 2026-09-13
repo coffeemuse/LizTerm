@@ -850,7 +850,7 @@ public class ProfileViewModelsTests : IDisposable
         vm.SelectedRow = vm.VisibleRows.Single(r => r.Name == "zeta");
         vm.ToggleFavoriteCommand.Execute(vm.SelectedRow);
 
-        Assert.Equal(["PROD", "FAVORITE"], _store.Load("zeta")!.Tags.Names);
+        Assert.Equal(["FAVORITE", "PROD"], _store.Load("zeta")!.Tags.Names);
         Assert.True(_store.Load("alpha")!.Tags.IsEmpty);
         Assert.True(vm.VisibleRows.Single(r => r.Name == "zeta").IsFavorite);
         Assert.Equal("zeta", vm.SelectedRow?.Name);
@@ -903,10 +903,86 @@ public class ProfileViewModelsTests : IDisposable
     [Fact]
     public void A_profile_at_the_tag_cap_cannot_be_marked()
     {
-        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["T0", "T1", "T2", "T3", "T4", "T5", "T6", "T7"]) });
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}")) });
 
         var vm = Picker();
         Assert.False(vm.ToggleFavoriteCommand.CanExecute(vm.VisibleRows.Single()));
+    }
+
+    /// <summary>#50 again, for the star: a session window can pin a certificate into the file after the list was
+    /// drawn, and the toggle must write the file it re-read, not the row's copy.</summary>
+    [Fact]
+    public void Toggling_a_stale_row_keeps_a_pin_written_since_the_list_was_drawn()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h" });
+        var vm = Picker();
+        var stale = vm.VisibleRows.Single();
+
+        var pin = new CertificatePin("AA:BB", "CN=a", "pem");
+        _store.Save(new SessionProfile { Name = "a", Host = "h", PinnedCertificate = pin });
+        vm.ToggleFavoriteCommand.Execute(stale);
+
+        var saved = _store.Load("a")!;
+        Assert.Equal(pin, saved.PinnedCertificate);
+        Assert.True(saved.Tags.Contains("FAVORITE"));
+    }
+
+    /// <summary>A stale row whose choice the file already reflects has nothing to write, and must not rewrite the
+    /// file from a copy that may be older than what is there.</summary>
+    [Fact]
+    public void A_toggle_the_file_already_agrees_with_does_not_rewrite_it()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h" });
+        var vm = Picker();
+        var stale = vm.VisibleRows.Single();
+
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["FAVORITE"]) });
+        var file = Path.Combine(_dir, ProfileStore.FileNameFor("a"));
+        var written = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(file, written);
+        vm.ToggleFavoriteCommand.Execute(stale);
+
+        Assert.Equal(written, File.GetLastWriteTimeUtc(file));
+        Assert.Equal(["FAVORITE"], _store.Load("a")!.Tags.Names);
+    }
+
+    /// <summary>The entry was enabled for a row with room, but the file has filled up since. TagSet.From would keep
+    /// the first eight and drop the last of the file's own tags; the command must leave the file alone instead.</summary>
+    [Fact]
+    public void Marking_a_row_whose_file_has_since_filled_up_leaves_the_file_alone()
+    {
+        var seven = Enumerable.Range(0, TagSet.MaxTags - 1).Select(i => $"T{i}").ToList();
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(seven) });
+        var vm = Picker();
+        var stale = vm.VisibleRows.Single();
+        Assert.True(vm.ToggleFavoriteCommand.CanExecute(stale));
+
+        var eight = Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}").ToList();
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(eight) });
+        vm.ToggleFavoriteCommand.Execute(stale);
+
+        Assert.Equal(eight, _store.Load("a")!.Tags.Names);
+        Assert.False(vm.VisibleRows.Single().CanToggleFavorite);
+    }
+
+    /// <summary>Every window activation reloads. When the store has not changed, the rows — and with them the
+    /// list's containers — survive, so the click that activated the picker lands on the row it aimed at.</summary>
+    [Fact]
+    public void A_reload_that_finds_nothing_changed_keeps_the_rows()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h" });
+        var vm = Picker();
+        var before = vm.VisibleRows.Single();
+        vm.SelectedRow = before;
+
+        vm.Reload();
+        Assert.Same(before, vm.VisibleRows.Single());
+        Assert.Same(before, vm.SelectedRow);
+
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Note = "changed" });
+        vm.Reload();
+        Assert.NotSame(before, vm.VisibleRows.Single());
+        Assert.Equal("changed", vm.VisibleRows.Single().Note);
     }
 
     /// <summary>The row leaves a FAVORITE-scoped list the moment it loses the star, and the selection follows the

@@ -114,13 +114,13 @@ public class ProfileRowTests
     public void A_full_profile_cannot_be_marked_but_a_full_starred_one_can_still_be_unmarked()
     {
         var full = new ProfileRow(
-            new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(["T0", "T1", "T2", "T3", "T4", "T5", "T6", "T7"]) },
+            new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}")) },
             TagRegistry.Empty);
         Assert.False(full.CanToggleFavorite);
-        Assert.Equal("Mark as FAVORITE (already 8 tags)", full.FavoriteMenuText);
+        Assert.Equal($"Mark as FAVORITE (already {TagSet.MaxTags} tags)", full.FavoriteMenuText);
 
         var fullStarred = new ProfileRow(
-            new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(["FAVORITE", "T0", "T1", "T2", "T3", "T4", "T5", "T6"]) },
+            new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(["FAVORITE", .. Enumerable.Range(0, TagSet.MaxTags - 1).Select(i => $"T{i}")]) },
             TagRegistry.Empty);
         Assert.True(fullStarred.CanToggleFavorite);
         Assert.Equal("Remove from FAVORITE", fullStarred.FavoriteMenuText);

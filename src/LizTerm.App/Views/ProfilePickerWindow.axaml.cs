@@ -2,9 +2,10 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
@@ -37,34 +38,20 @@ public partial class ProfilePickerWindow : Window
         if (DataContext is ProfilePickerViewModel vm && vm.ConnectCommand.CanExecute(null)) vm.ConnectCommand.Execute(null);
     }
 
-    private void OnRowConnectClick(object? sender, RoutedEventArgs e)
+    /// <summary>Control-click is how a one-button Mac right-clicks, and Avalonia's macOS backend delivers it as a
+    /// plain left press carrying the Control modifier (AvnView.mm maps mouseDown: to LeftButtonDown outright), so
+    /// nothing raises ContextRequested and the row menu never opens. Raised here on the row's container, the same
+    /// event a right button release raises. macOS only: elsewhere Control is the selection-toggle modifier, and a
+    /// right-click habit already has a right button. The row is selected by then — Avalonia selects on the press,
+    /// and the macOS toggle modifier is Cmd, not Control.</summary>
+    private void OnListPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (SelectMenuRow(sender) is { } vm && vm.ConnectCommand.CanExecute(null)) vm.ConnectCommand.Execute(null);
-    }
-
-    private void OnRowEditClick(object? sender, RoutedEventArgs e)
-    {
-        if (SelectMenuRow(sender) is { } vm && vm.EditCommand.CanExecute(null)) vm.EditCommand.Execute(null);
-    }
-
-    private void OnRowFavoriteClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is ProfilePickerViewModel vm && (sender as MenuItem)?.DataContext is ProfileRow row
-            && vm.ToggleFavoriteCommand.CanExecute(row))
+        if (!OperatingSystem.IsMacOS() || e.InitialPressMouseButton != MouseButton.Left
+            || !e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is { } item)
         {
-            vm.ToggleFavoriteCommand.Execute(row);
+            item.RaiseEvent(new ContextRequestedEventArgs(e));
         }
-    }
-
-    /// <summary>Selects the row a menu entry belongs to, because Connect and Edit act on the selection. A right
-    /// click already selects its row, but a menu opened from the keyboard acts on the focused one. By name
-    /// rather than by instance: a reload rebuilds every row, and a row the list no longer holds cannot be
-    /// selected — it would come back as null through the two-way binding.</summary>
-    private ProfilePickerViewModel? SelectMenuRow(object? sender)
-    {
-        if (DataContext is not ProfilePickerViewModel vm || (sender as MenuItem)?.DataContext is not ProfileRow row) return null;
-        vm.SelectedRow = vm.VisibleRows.FirstOrDefault(r => r.Name == row.Name);
-        return vm;
     }
 
     /// <summary>Enter connects what is in the box. Handled here so the window's default button — Connect, for
