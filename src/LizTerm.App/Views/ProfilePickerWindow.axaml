@@ -42,6 +42,7 @@
       <Button Content="New..." Command="{Binding NewCommand}" HorizontalAlignment="Stretch" />
       <Button Content="Edit..." Command="{Binding EditCommand}" HorizontalAlignment="Stretch" />
       <Button Content="Delete" Command="{Binding DeleteCommand}" HorizontalAlignment="Stretch" />
+      <Button x:Name="TagsButton" Content="Tags..." Command="{Binding ManageTagsCommand}" HorizontalAlignment="Stretch" />
       <Button Content="Quit" Command="{Binding QuitCommand}" HorizontalAlignment="Stretch" Margin="0,24,0,0" />
     </StackPanel>
     <ListBox ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}" DoubleTapped="OnDoubleTapped"

@@ -71,6 +71,16 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
   tag is one colour everywhere. `FAVORITE` is reserved: always present, always gold, never written to the file,
   and an entry for it in a hand-edited file is ignored. Reconciliation — registering a name the file does not
   know — belongs to the App layer, never to `ProfileStore.LoadAll`, because a load must not write.
+  `TagMaintenance.Load` registers in memory so Manage Tags can list a tag only a profile knows, and writes nothing;
+  the action that follows writes the registry anyway.
+- `TagMaintenance` (#88) is the one place a tag changes across profiles. Each action reads the profiles and
+  `tags.json` fresh, writes the carriers and then `tags.json`, and stops at the first failed write. A plain rename
+  first defines the new name beside the old one, in the old colour, so wherever it stops both names are one colour
+  and the retry is a merge that keeps it — a departure from the Manage Tags spec's table (4.2), which wrote that
+  pair only after a partial failure and so left a crash between two writes with two colours for one tag. A merge,
+  a case-only rename and a delete have nothing to prepare. It compares `TagSet.Names` **ordinally**, never with
+  `TagSet.Equals`: equality ignores case, so a case-only rename would look unchanged and never be written. Its
+  tests force a failed write by putting a directory at the file's `.tmp` path, which both stores write first.
 
 ## Settings (`LizTerm.Core.Settings`)
 

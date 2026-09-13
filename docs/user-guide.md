@@ -31,6 +31,11 @@ drop-down beside it narrows to **FAVORITE** or to one tag first. The two work to
 the scope, the box searches inside it. Whatever the filter shows, **Quick Connect** still reaches every saved
 profile by name.
 
+**Tags...** lists every tag, including ones no profile uses any more. Select one to rename it, give it another
+colour, or delete it: each change applies at once to every profile carrying the tag, and the tag's **Used by** list
+shows which those are. Renaming a tag to one that already exists merges the two, and both a merge and a delete ask
+first. **FAVORITE** is fixed: it can't be renamed, recoloured or deleted.
+
 ### Profile settings
 
 | Setting | Meaning |
@@ -48,7 +53,7 @@ profile by name.
 | LU name | Request a specific logical unit from the host. Optional. |
 | Backspace erases | On by default: Backspace erases the previous character. Off: Backspace only moves the cursor left. |
 | Mark as FAVORITE | Adds the reserved `FAVORITE` tag, shown as a gold star in the list. |
-| Tags | Short labels, separated by commas (`PROD, MVS`), drawn as uppercase colour chips. A tag's colour is picked automatically the first time you use it, and is the same everywhere that tag appears. At most 8 per profile, 16 characters each. |
+| Tags | Short labels, separated by commas (`PROD, MVS`), drawn as uppercase colour chips. A tag's colour is picked automatically the first time you use it, and is the same everywhere that tag appears; **Tags...** in the Sessions list changes it. At most 8 per profile, 16 characters each. |
 | Note | One short line — "no live data", "LAN only" — shown under the host in the list. |
 
 ### Quick Connect and the command line

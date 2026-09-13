@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using LizTerm.App.Rendering;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
@@ -780,8 +781,8 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(["All sessions", "FAVORITE", "#MVS", "#ZETA"], vm.Scopes.Select(s => s.Label));
     }
 
-    /// <summary>A scope whose tag has vanished would otherwise filter the list to nothing with no way back —
-    /// there is no Manage Tags window in this phase to remove the definition.</summary>
+    /// <summary>A scope whose tag no profile carries any more would otherwise filter the list to nothing, with no
+    /// way back from the list itself; Manage Tags is where the unused definition gets deleted.</summary>
     [Fact]
     public void A_scope_whose_tag_no_longer_exists_falls_back_to_all_sessions()
     {
@@ -799,10 +800,33 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(["a", "b"], vm.VisibleRows.Select(r => r.Name));
     }
 
-    /// <summary>Reconciliation: a tag name seen on a profile but absent from the registry registers itself, so
-    /// a profile copied from another machine gets colours locally rather than rendering colourless.</summary>
+    /// <summary>RebuildScopes finds the previous scope by tag name so the drop-down survives a reload; Manage
+    /// Tags' case-only rename (dev -&gt; DEV) leaves the profile and the registry defining the same tag under a new
+    /// casing, and the match has to ignore case or the scope falls back to All sessions.</summary>
     [Fact]
-    public void An_unknown_tag_registers_itself_and_the_registry_is_written_once()
+    public void A_case_only_rename_keeps_the_scope_selected()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["dev"]) });
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new TagDefinition("dev", TagColor.Teal)]));
+
+        var vm = Picker(tags);
+        vm.SelectedScope = vm.Scopes.Single(s => s.TagName == "dev");
+
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["DEV"]) });
+        tags.Save(new TagRegistry([new TagDefinition("DEV", TagColor.Teal)]));
+        vm.Reload();
+
+        Assert.NotNull(vm.SelectedScope);
+        Assert.Equal("DEV", vm.SelectedScope!.TagName, ignoreCase: true);
+    }
+
+    /// <summary>Reconciliation: a tag name seen on a profile but absent from the registry registers itself, so
+    /// a profile copied from another machine gets colours locally rather than rendering colourless. Reload also
+    /// re-reads tags.json every time, so a registry deleted out from under the picker (Manage Tags writes the
+    /// file while the picker waits behind it) is recreated rather than staying gone.</summary>
+    [Fact]
+    public void An_unknown_tag_registers_itself_and_a_deleted_registry_is_recreated_on_reload()
     {
         _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
         var tagFile = Path.Combine(_dir, "tags.json");
@@ -811,12 +835,11 @@ public class ProfileViewModelsTests : IDisposable
         var vm = Picker(tags);
         Assert.Equal(["PROD"], tags.Load().Stored.Select(d => d.Name));
 
-        // Nothing new to learn, so no second write. Asserted by deleting the file and checking that a reload
-        // does not recreate it, rather than by comparing timestamps — two writes inside one filesystem tick
-        // would compare equal and the test would pass while the bug was present.
+        // Reload re-reads tags.json, so a deleted file is recreated with its unknown tags: the registry must
+        // forget and relearn them, because Manage Tags writes the file while the picker waits behind it.
         File.Delete(tagFile);
         vm.Reload();
-        Assert.False(File.Exists(tagFile), "Reload rewrote tags.json with nothing new to register");
+        Assert.True(File.Exists(tagFile), "Reload should recreate tags.json when it is deleted");
     }
 
     /// <summary>Scopes.Clear() in RebuildScopes makes a bound ComboBox null its own selection, and the two-way
@@ -1001,5 +1024,125 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(TagRegistry.FavoriteName, vm.SelectedScope?.TagName);
         Assert.Equal(["b"], vm.VisibleRows.Select(r => r.Name));
         Assert.Equal("b", vm.SelectedRow?.Name);
+    }
+
+    /// <summary>Manage Tags writes tags.json while this picker waits behind it, so Reload must read the file again
+    /// rather than keep the registry it read when it opened.</summary>
+    [Fact]
+    public void Reload_shows_a_colour_changed_on_disk()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
+        var vm = Picker(tags);
+
+        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Green)]));
+        vm.Reload();
+
+        Assert.Same(TagPalette.Brush(TagColor.Green), vm.VisibleRows.Single().Chips.Single().Background);
+    }
+
+    /// <summary>The other half: a registry held from construction would write a definition deleted on disk back the
+    /// next time the picker registered anything new.</summary>
+    [Fact]
+    public void Reload_does_not_write_back_a_definition_deleted_on_disk()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new TagDefinition("LAB", TagColor.Teal), new TagDefinition("PROD", TagColor.Red)]));
+        var vm = Picker(tags);
+
+        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
+        _store.Save(new SessionProfile { Name = "b", Host = "h", Tags = TagSet.From(["MVS"]) });
+        vm.Reload();
+
+        Assert.Equal(["MVS", "PROD"], tags.Load().Stored.Select(d => d.Name));
+    }
+
+    /// <summary>Reconcile saves only when TagRegistry.Register reports something changed. F1 made a blocked save
+    /// survivable, so a throwing Save can no longer be observed at all -- this has to detect a write by its effect
+    /// on the file's text instead, the way TagMaintenanceTests.Load_does_not_rewrite_the_registry_when_every_tag_is_known
+    /// does: a profile whose every tag is already known must leave a hand-written registry file untouched, byte for
+    /// byte. TagRegistryStore writes indented JSON, so any save reformats this one-line file.</summary>
+    [Fact]
+    public void Reload_does_not_rewrite_tags_json_when_every_tag_is_already_known()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        var tagFile = Path.Combine(_dir, "tags.json");
+        const string handWritten = """{"tags":[{"name":"PROD","color":"Red"}]}""";
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(tagFile, handWritten);
+        var tags = new TagRegistryStore(tagFile);
+
+        var vm = Picker(tags);
+        vm.Reload();
+
+        Assert.Equal(handWritten, File.ReadAllText(tagFile));
+    }
+
+    /// <summary>Manage Tags reports a failed tags.json save as survivable ("... TEST may show a different colour
+    /// next time"), so the picker's own reconciliation must swallow the same failure rather than crash: the
+    /// constructor's Reload(), a second Reload(), and ManageTagsCommand's own reload all run Reconcile() against a
+    /// tags.json this test has already made unwritable.</summary>
+    [Fact]
+    public async Task A_blocked_tags_file_does_not_crash_reconciliation()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["TEST"]) });
+        var tagFile = Path.Combine(_dir, "tags.json");
+        Directory.CreateDirectory(tagFile + ".tmp");
+        var tags = new TagRegistryStore(tagFile);
+
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { },
+            tags, () => Task.CompletedTask);
+        vm.Reload();
+        await vm.ManageTagsCommand.ExecuteAsync(null);
+
+        Assert.Equal(["TEST"], vm.VisibleRows.Single().Chips.Select(c => c.Text));
+    }
+
+    [Fact]
+    public async Task Tags_opens_manage_tags_and_reloads_when_it_closes()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h" });
+        var opened = 0;
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, null,
+            () =>
+            {
+                opened++;
+                _store.Save(new SessionProfile { Name = "b", Host = "h" });
+                return Task.CompletedTask;
+            });
+
+        await vm.ManageTagsCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, opened);
+        Assert.Equal(["a", "b"], vm.VisibleRows.Select(r => r.Name));
+    }
+
+    /// <summary>A recolour changes tags.json and no profile, so the reload's "nothing changed" shortcut must look
+    /// at the registry too, or the picker keeps drawing the old colour until some profile file happens to change.</summary>
+    [Fact]
+    public async Task A_recolour_in_manage_tags_shows_in_the_picker_when_it_closes()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, tags,
+            () =>
+            {
+                tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Green)]));
+                return Task.CompletedTask;
+            });
+        vm.Reload();
+
+        await vm.ManageTagsCommand.ExecuteAsync(null);
+
+        Assert.Same(TagPalette.Brush(TagColor.Green), vm.VisibleRows.Single().Chips.Single().Background);
+    }
+
+    [Fact]
+    public void Tags_is_unavailable_without_a_way_to_open_it()
+    {
+        Assert.False(Picker().ManageTagsCommand.CanExecute(null));
     }
 }

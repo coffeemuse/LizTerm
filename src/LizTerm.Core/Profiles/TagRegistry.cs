@@ -66,6 +66,59 @@ public sealed class TagRegistry
         return _byName.TryGetValue(TagSet.Normalize(name), out var definition) ? definition.Color : UnregisteredColor;
     }
 
+    /// <summary>Whether a definition of that name exists, ignoring case and a leading '#'. Always true for the
+    /// reserved tag, which is always present.</summary>
+    public bool Contains(string name) => IsReserved(name) || _byName.ContainsKey(TagSet.Normalize(name));
+
+    /// <summary>This registry with one tag's colour changed; an unknown name, or the colour the tag already has,
+    /// changes nothing and answers this same instance, so a caller can tell a no-op by identity. The reserved tag,
+    /// the reserved colour and a value outside the enum throw — Manage Tags never offers them, so reaching one is
+    /// a bug rather than a user error.</summary>
+    public TagRegistry Recolour(string name, TagColor color)
+    {
+        ThrowIfReserved(name, nameof(name));
+        if (color == FavoriteColor || !Enum.IsDefined(color))
+            throw new ArgumentException($"{color} cannot be chosen for a tag.", nameof(color));
+        var key = TagSet.Normalize(name);
+        if (!_byName.TryGetValue(key, out var current) || current.Color == color) return this;
+        return new TagRegistry(Stored.Select(d => Same(d.Name, key) ? d with { Color = color } : d));
+    }
+
+    /// <summary>This registry with <paramref name="from"/> renamed, in one of three ways decided by what
+    /// <paramref name="to"/> is: the same tag in a new casing keeps its colour and takes the new casing; another
+    /// definition is a merge, so <paramref name="from"/> goes and <paramref name="to"/> keeps its own colour; any
+    /// other name takes <paramref name="from"/>'s colour. An unknown <paramref name="from"/> changes nothing.
+    /// <paramref name="to"/> must be valid (TagMaintenance.RenameProblem): the constructor drops an over-long name,
+    /// which would lose the definition.</summary>
+    public TagRegistry Rename(string from, string to)
+    {
+        ThrowIfReserved(from, nameof(from));
+        ThrowIfReserved(to, nameof(to));
+        if (!_byName.TryGetValue(TagSet.Normalize(from), out var source)) return this;
+        var target = TagSet.Normalize(to);
+        var others = Stored.Where(d => !Same(d.Name, source.Name)).ToList();
+        // Same() first: the dictionary ignores case, so a case-only rename would otherwise look like a merge.
+        return Same(target, source.Name) || !_byName.ContainsKey(target)
+            ? new TagRegistry([.. others, new TagDefinition(target, source.Color)])
+            : new TagRegistry(others);
+    }
+
+    /// <summary>This registry without that definition; an unknown name changes nothing.</summary>
+    public TagRegistry Remove(string name)
+    {
+        ThrowIfReserved(name, nameof(name));
+        var key = TagSet.Normalize(name);
+        return _byName.ContainsKey(key) ? new TagRegistry(Stored.Where(d => !Same(d.Name, key))) : this;
+    }
+
+    private static bool Same(string a, string b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The one wording for "FAVORITE cannot be changed", for this class and for TagMaintenance's guards.</summary>
+    public static void ThrowIfReserved(string name, string parameter)
+    {
+        if (IsReserved(name)) throw new ArgumentException($"{FavoriteName} is reserved and cannot be changed.", parameter);
+    }
+
     /// <summary>This registry plus a definition for every name it does not already know, each taking the
     /// assignable colour fewest definitions currently use. Existing definitions are never touched, so a colour
     /// chosen in Manage Tags survives every later reconciliation.</summary>

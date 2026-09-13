@@ -30,7 +30,11 @@ public partial class ProfilePickerWindow : Window
             openSession,
             existing => new ProfileEditorWindow(existing).ShowDialog<ProfileEdit?>(this),
             quit,
-            tags);
+            tags,
+            // Modal over this picker, so it cannot be open at the same time as the picker's own editor (spec 2.1).
+            tags is null
+                ? null
+                : () => new ManageTagsWindow(new ManageTagsViewModel(new TagMaintenance(store, tags))).ShowDialog(this));
     }
 
     private void OnDoubleTapped(object? sender, TappedEventArgs e)

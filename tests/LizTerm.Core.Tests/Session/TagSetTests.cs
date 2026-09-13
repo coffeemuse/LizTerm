@@ -124,4 +124,39 @@ public class TagSetTests
         Assert.Equal(["PROD", "MVS"], TagSet.Split(" PROD , #MVS ,, "));
         Assert.Empty(TagSet.Split("   "));
     }
+
+    [Fact]
+    public void Rename_replaces_a_name_in_place()
+    {
+        var renamed = TagSet.From(["DEV", "MVS", "LAB"]).Rename("mvs", "TEST");
+        Assert.Equal(["DEV", "TEST", "LAB"], renamed.Names);
+    }
+
+    /// <summary>A merge: the set already carried the name being renamed to. One copy survives, at the earlier of
+    /// the two positions.</summary>
+    [Fact]
+    public void Rename_onto_a_name_already_carried_keeps_one_copy_at_the_first_position()
+    {
+        Assert.Equal(["PROD", "MVS"], TagSet.From(["PRDO", "MVS", "PROD"]).Rename("PRDO", "PROD").Names);
+        Assert.Equal(["PROD"], TagSet.From(["PROD", "PRDO"]).Rename("PRDO", "PROD").Names);
+    }
+
+    [Fact]
+    public void Rename_of_a_name_the_set_does_not_carry_changes_nothing()
+    {
+        Assert.Equal(["MVS"], TagSet.From(["MVS"]).Rename("PRDO", "PROD").Names);
+        TagSet none = default;
+        Assert.True(none.Rename("A", "B").IsEmpty);
+    }
+
+    /// <summary>Equality ignores case, so a case-only rename is "equal" to the set it came from and only Names
+    /// shows the change. TagMaintenance compares Names ordinally for exactly this reason (spec 4.3).</summary>
+    [Fact]
+    public void A_case_only_rename_changes_the_stored_casing_while_equality_still_holds()
+    {
+        var before = TagSet.From(["dev", "MVS"]);
+        var after = before.Rename("dev", "DEV");
+        Assert.Equal(["DEV", "MVS"], after.Names);
+        Assert.Equal(before, after);
+    }
 }

@@ -48,7 +48,9 @@ public sealed class ProfileStore(string directory)
         {
             return null;
         }
-        if (profile is null || profile.Name.Length == 0) return null;
+        // Whitespace as well as empty, because Save refuses the same: a profile that loads but can never be written
+        // back would throw out of every path that rewrites profiles (TagMaintenance among them).
+        if (profile is null || string.IsNullOrWhiteSpace(profile.Name)) return null;
         if (profile.PinnedCertificate is { } pin && (string.IsNullOrWhiteSpace(pin.Pem) || string.IsNullOrWhiteSpace(pin.Sha256)))
             profile = profile with { PinnedCertificate = null };
         return profile;

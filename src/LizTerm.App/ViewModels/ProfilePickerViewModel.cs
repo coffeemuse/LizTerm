@@ -18,6 +18,7 @@ public partial class ProfilePickerViewModel : ObservableObject
     private readonly Func<SessionProfile?, Task<ProfileEdit?>> _editProfile;
     private readonly Action _quit;
     private readonly TagRegistryStore? _tags;
+    private readonly Func<Task>? _manageTags;
     private TagRegistry _registry = TagRegistry.Empty;
 
     [ObservableProperty]
@@ -57,15 +58,18 @@ public partial class ProfilePickerViewModel : ObservableObject
     /// <param name="editProfile">Shows the editor for an existing profile (or null for a new one); returns null when cancelled.</param>
     /// <param name="tags">The tag registry's file, or null for an in-memory registry that is never written,
     /// which is what a test wants.</param>
+    /// <param name="manageTags">Shows Manage Tags and completes when it closes, or null where there is no tag file
+    /// to manage — which is also what a test that does not care wants.</param>
     public ProfilePickerViewModel(ProfileStore store, Action<SessionProfile, bool> openSession,
-        Func<SessionProfile?, Task<ProfileEdit?>> editProfile, Action quit, TagRegistryStore? tags = null)
+        Func<SessionProfile?, Task<ProfileEdit?>> editProfile, Action quit, TagRegistryStore? tags = null,
+        Func<Task>? manageTags = null)
     {
         _store = store;
         _openSession = openSession;
         _editProfile = editProfile;
         _quit = quit;
         _tags = tags;
-        _registry = tags?.Load() ?? TagRegistry.Empty;
+        _manageTags = manageTags;
         Reload();
     }
 
@@ -76,18 +80,26 @@ public partial class ProfilePickerViewModel : ObservableObject
     public void Reload()
     {
         var loaded = _store.LoadAll();
+        // Both files, every time, not only at construction: Manage Tags writes tags.json while this picker waits
+        // behind it, and a registry kept from construction would give a renamed tag a fresh colour and save over
+        // the one carried across, write a deleted definition back the next time anything registers, and show an
+        // old colour until the picker reopened. With no store — the in-memory registry tests use — there is
+        // nothing to re-read, so the registry in memory is the registry.
+        var registry = _tags?.Load() ?? _registry;
         // Every window activation reloads, and most find nothing changed. Returning here keeps every ProfileRow
         // and every ListBoxItem, which is what lets the click that activates the picker land on the row it aimed
         // at (App CLAUDE.md, "The session picker's tags"). Exact, not a heuristic: SessionProfile is a record whose
-        // only non-BCL members, TagSet and CertificatePin, carry value equality. Never on the first load, so an
-        // empty store still gets its scopes.
-        if (_loadedOnce && loaded.SequenceEqual(Profiles)) return;
+        // only non-BCL members, TagSet and CertificatePin, carry value equality, and TagDefinition is a record.
+        // The registry is part of the test, or a recolour (which changes no profile) would never be drawn. Never
+        // on the first load, so an empty store still gets its scopes.
+        if (_loadedOnce && loaded.SequenceEqual(Profiles) && registry.Stored.SequenceEqual(_registry.Stored)) return;
         _loadedOnce = true;
 
         var selectedName = SelectedProfile?.Name;
         Profiles.Clear();
         foreach (var profile in loaded) Profiles.Add(profile);
 
+        _registry = registry;
         Reconcile();
         // RebuildScopes may assign SelectedScope, whose handler calls Refilter() on its own; the explicit call
         // below then runs a second time with the remembered name. Harmless and deliberate — do not "fix" it by
@@ -104,7 +116,10 @@ public partial class ProfilePickerViewModel : ObservableObject
     {
         var (registry, changed) = _registry.Register(Profiles.SelectMany(p => p.Tags.Names));
         _registry = registry;
-        if (changed) _tags?.Save(registry);
+        // TrySave, not Save: the registry in memory is still correct for drawing this list, the colours are only
+        // lost if the file stays unwritable, and the next Reload re-reads the file and so retries the write.
+        // Crashing the picker (and every open session window with it) over a colour file is worse.
+        if (changed) _tags?.TrySave(registry);
     }
 
     private void RebuildScopes()
@@ -117,9 +132,9 @@ public partial class ProfilePickerViewModel : ObservableObject
         // a later edit could silently break.
         var previousTagName = SelectedScope?.TagName;
 
-        // Tags some profile actually carries, not every registered tag (spec 5.3 says registered). Deliberate:
-        // Manage Tags is a later issue, so nothing can delete a definition yet, and a scope whose tag no longer
-        // exists anywhere filters to nothing with no way to clear it from the list.
+        // Tags some profile actually carries, not every registered tag (the tags spec's 5.3 says registered).
+        // Deliberate, and kept when Manage Tags arrived (#88, its spec 2.7): a scope for a tag no profile carries
+        // filters the list to nothing, and Manage Tags is where an unused definition is found and deleted.
         var wanted = _registry.All
             .Where(definition => Profiles.Any(p => p.Tags.Contains(definition.Name)) || TagRegistry.IsReserved(definition.Name))
             .Select(definition => TagRegistry.IsReserved(definition.Name)
@@ -131,8 +146,12 @@ public partial class ProfilePickerViewModel : ObservableObject
         Scopes.Add(AllSessions);
         foreach (var scope in wanted) Scopes.Add(scope);
 
-        // A scope whose tag no longer exists anywhere would filter to nothing with no way back.
-        if (Scopes.FirstOrDefault(s => s.TagName == previousTagName) is { } still) SelectedScope = still;
+        // A scope whose tag no longer exists anywhere would filter to nothing with no way back. Ignoring case so
+        // a case-only rename (Manage Tags, #88) keeps the scope selected: dev -> DEV is still "the same scope" to
+        // a user, and string.Equals(string?, string?, StringComparison) already answers true for null and null,
+        // which is what AllSessions' null TagName needs.
+        if (Scopes.FirstOrDefault(s => string.Equals(s.TagName, previousTagName, StringComparison.OrdinalIgnoreCase)) is { } still)
+            SelectedScope = still;
         else SelectedScope = AllSessions;
     }
 
@@ -218,6 +237,17 @@ public partial class ProfilePickerViewModel : ObservableObject
         SelectedRow = null;
         Reload();
     }
+
+    /// <summary>Tags...: Manage Tags over this picker, then a reload, since it may have renamed, recoloured or deleted
+    /// any tag on any profile.</summary>
+    [RelayCommand(CanExecute = nameof(CanManageTags))]
+    private async Task ManageTagsAsync()
+    {
+        await _manageTags!();
+        Reload();
+    }
+
+    private bool CanManageTags() => _manageTags is not null;
 
     /// <summary>Stars or unstars the row's profile, from the row menu. The row, not the selection, because the
     /// menu belongs to the row it was opened on.

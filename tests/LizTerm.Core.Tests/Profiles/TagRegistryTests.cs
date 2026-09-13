@@ -86,4 +86,91 @@ public class TagRegistryTests
             [new TagDefinition("zeta", TagColor.Red), new TagDefinition("Alpha", TagColor.Blue), new TagDefinition("mvs", TagColor.Green)]);
         Assert.Equal(["FAVORITE", "Alpha", "mvs", "zeta"], registry.All.Select(d => d.Name));
     }
+
+    private static TagRegistry Defined(params (string Name, TagColor Color)[] definitions) =>
+        new(definitions.Select(d => new TagDefinition(d.Name, d.Color)));
+
+    [Fact]
+    public void Contains_ignores_case_and_a_hash_and_always_knows_the_reserved_tag()
+    {
+        var registry = Defined(("PROD", TagColor.Red));
+        Assert.True(registry.Contains("prod"));
+        Assert.True(registry.Contains("#PROD"));
+        Assert.False(registry.Contains("MVS"));
+        Assert.True(TagRegistry.Empty.Contains("FAVORITE"));
+    }
+
+    [Fact]
+    public void Recolour_changes_one_definition_and_leaves_the_rest()
+    {
+        var registry = Defined(("PROD", TagColor.Red), ("MVS", TagColor.Blue)).Recolour("prod", TagColor.Green);
+        Assert.Equal(TagColor.Green, registry.ColorOf("PROD"));
+        Assert.Equal(TagColor.Blue, registry.ColorOf("MVS"));
+    }
+
+    [Fact]
+    public void Recolour_Rename_and_Remove_of_an_unknown_tag_return_the_same_registry()
+    {
+        var registry = Defined(("PROD", TagColor.Red));
+        Assert.Same(registry, registry.Recolour("MVS", TagColor.Green));
+        Assert.Same(registry, registry.Rename("DEV", "TEST"));
+        Assert.Same(registry, registry.Remove("LAB"));
+    }
+
+    /// <summary>So a caller can tell a no-op from a change by identity, as it already can for an unknown name.</summary>
+    [Fact]
+    public void Recolour_to_the_colour_a_tag_already_has_returns_the_same_registry()
+    {
+        var registry = Defined(("PROD", TagColor.Red));
+        Assert.Same(registry, registry.Recolour("prod", TagColor.Red));
+    }
+
+    [Fact]
+    public void Recolour_refuses_the_reserved_tag_the_reserved_colour_and_an_undefined_one()
+    {
+        var registry = Defined(("PROD", TagColor.Red));
+        Assert.Throws<ArgumentException>(() => registry.Recolour("FAVORITE", TagColor.Red));
+        Assert.Throws<ArgumentException>(() => registry.Recolour("PROD", TagColor.Gold));
+        Assert.Throws<ArgumentException>(() => registry.Recolour("PROD", (TagColor)99));
+    }
+
+    [Fact]
+    public void A_plain_rename_carries_the_colour_to_the_new_name()
+    {
+        var registry = Defined(("DEV", TagColor.Teal), ("MVS", TagColor.Blue)).Rename("DEV", "TEST");
+        Assert.Equal(["MVS", "TEST"], registry.Stored.Select(d => d.Name));
+        Assert.Equal(TagColor.Teal, registry.ColorOf("TEST"));
+    }
+
+    [Fact]
+    public void A_case_only_rename_keeps_the_colour_and_takes_the_new_casing()
+    {
+        var registry = Defined(("dev", TagColor.Teal)).Rename("dev", "DEV");
+        Assert.Equal(["DEV"], registry.Stored.Select(d => d.Name));
+        Assert.Equal(TagColor.Teal, registry.ColorOf("DEV"));
+    }
+
+    [Fact]
+    public void Renaming_onto_another_definition_merges_and_keeps_the_targets_colour()
+    {
+        var registry = Defined(("PRDO", TagColor.Purple), ("PROD", TagColor.Amber)).Rename("PRDO", "PROD");
+        Assert.Equal(["PROD"], registry.Stored.Select(d => d.Name));
+        Assert.Equal(TagColor.Amber, registry.ColorOf("PROD"));
+    }
+
+    [Fact]
+    public void Rename_and_Remove_refuse_the_reserved_tag()
+    {
+        var registry = Defined(("PROD", TagColor.Red));
+        Assert.Throws<ArgumentException>(() => registry.Rename("FAVORITE", "STAR"));
+        Assert.Throws<ArgumentException>(() => registry.Rename("PROD", "favorite"));
+        Assert.Throws<ArgumentException>(() => registry.Remove("FAVORITE"));
+    }
+
+    [Fact]
+    public void Remove_drops_one_definition()
+    {
+        var registry = Defined(("PROD", TagColor.Red), ("MVS", TagColor.Blue));
+        Assert.Equal(["MVS"], registry.Remove("prod").Stored.Select(d => d.Name));
+    }
 }

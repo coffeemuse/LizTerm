@@ -421,10 +421,13 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
 - Reconciliation — registering a tag name the registry does not know — lives in `ProfilePickerViewModel.Reload`,
   never in `ProfileStore.LoadAll`, because a load must not write. It is what gives a profile copied from another
   machine local colours, and it saves `tags.json` only when `TagRegistry.Register` reports something changed:
-  `Reload` runs on every window activation, so an unconditional save would rewrite the file constantly.
+  `Reload` runs on every window activation, so an unconditional save would rewrite the file constantly. It also
+  re-reads `tags.json` every time, because Manage Tags (#88) writes the file while the picker waits behind the
+  dialog: a registry kept from construction would recolour renamed tags and write deleted ones back.
 - **A click that activates the picker reloads it, and a reload that finds a change recycles the row containers.**
   `Reload` returns early when `LoadAll` equals `Profiles` — value equality all the way down (`SessionProfile`,
-  `TagSet`, `CertificatePin`) — so the usual activation click leaves every `ProfileRow` and `ListBoxItem` in place
+  `TagSet`, `CertificatePin`) — and `tags.json` equals the registry it holds (a recolour changes no profile, so
+  the registry has to be part of the test), so the usual activation click leaves every `ProfileRow` and `ListBoxItem` in place
   and a right-click that brings the picker forward opens its menu on the row it aimed at. When the store DID
   change while the picker was inactive, the activation reload removes every container synchronously and the
   layout that re-realises them is deferred, so on a platform where activation precedes the press (Windows, in
@@ -439,6 +442,11 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   (`OnListPointerReleased`): Avalonia.Native delivers it as a plain left press, and Apple keyboards have no Menu
   key, the only gesture in `PlatformHotkeyConfiguration.OpenContextMenu`. The headless recipe for driving the
   menu is in `tests/CLAUDE.md`.
+- **Manage Tags** (`Views/ManageTagsWindow`, #88) is modal over the picker. Its swatches are `Button`s, and a
+  window style on `ContentPresenter#PART_ContentPresenter` keeps each one's own colour on `:pointerover` and
+  `:pressed`, which Fluent's `Button` theme would otherwise swap for a grey. Done is `IsCancel` but not
+  `IsDefault`, so Enter in the name box renames instead of closing the window. The failure line sits under the
+  panel, not in it, so it survives a change of selection.
 
 ## Screen capture
 
