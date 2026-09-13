@@ -70,16 +70,17 @@ public sealed class TagRegistry
     /// reserved tag, which is always present.</summary>
     public bool Contains(string name) => IsReserved(name) || _byName.ContainsKey(TagSet.Normalize(name));
 
-    /// <summary>This registry with one tag's colour changed; an unknown name changes nothing. The reserved tag, the
-    /// reserved colour and a value outside the enum throw — Manage Tags never offers them, so reaching one is a
-    /// bug rather than a user error.</summary>
+    /// <summary>This registry with one tag's colour changed; an unknown name, or the colour the tag already has,
+    /// changes nothing and answers this same instance, so a caller can tell a no-op by identity. The reserved tag,
+    /// the reserved colour and a value outside the enum throw — Manage Tags never offers them, so reaching one is
+    /// a bug rather than a user error.</summary>
     public TagRegistry Recolour(string name, TagColor color)
     {
         ThrowIfReserved(name, nameof(name));
         if (color == FavoriteColor || !Enum.IsDefined(color))
             throw new ArgumentException($"{color} cannot be chosen for a tag.", nameof(color));
         var key = TagSet.Normalize(name);
-        if (!_byName.ContainsKey(key)) return this;
+        if (!_byName.TryGetValue(key, out var current) || current.Color == color) return this;
         return new TagRegistry(Stored.Select(d => Same(d.Name, key) ? d with { Color = color } : d));
     }
 
@@ -112,7 +113,8 @@ public sealed class TagRegistry
 
     private static bool Same(string a, string b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
 
-    private static void ThrowIfReserved(string name, string parameter)
+    /// <summary>The one wording for "FAVORITE cannot be changed", for this class and for TagMaintenance's guards.</summary>
+    public static void ThrowIfReserved(string name, string parameter)
     {
         if (IsReserved(name)) throw new ArgumentException($"{FavoriteName} is reserved and cannot be changed.", parameter);
     }

@@ -41,16 +41,12 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         return new TagSnapshot(registry, all);
     }
 
+    /// <summary>One tags.json write, or none: TagRegistry.Recolour answers the same instance for an unknown name
+    /// and for the colour the tag already has, and throws for the reserved tag and colour.</summary>
     public TagChangeResult Recolour(string name, TagColor color)
     {
-        Guard(name, nameof(name));
-        if (color == TagRegistry.FavoriteColor || !Enum.IsDefined(color))
-            throw new ArgumentException($"{color} cannot be chosen for a tag.", nameof(color));
+        TagRegistry.ThrowIfReserved(name, nameof(name));
         var registry = Load().Registry;
-        // TagRegistry.Recolour builds a new registry for a registered name whatever colour is asked for, even the
-        // one it already has, so ReferenceEquals below never catches a no-op recolour -- only an unknown name.
-        // Short-circuit here so choosing the colour a tag already has cannot report a blocked write as a failure.
-        if (registry.Contains(name) && registry.ColorOf(name) == color) return TagChangeResult.Nothing;
         var recoloured = registry.Recolour(name, color);
         if (ReferenceEquals(recoloured, registry)) return TagChangeResult.Nothing;
         return tags.TrySave(recoloured) is { } error ? new TagChangeResult(0, [], null, error) : TagChangeResult.Nothing;
@@ -64,7 +60,7 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
     /// no-op. The view model always passes the stored name; a future caller (#55's import) might not.</summary>
     public TagChangeResult Rename(string from, string to)
     {
-        Guard(from, nameof(from));
+        TagRegistry.ThrowIfReserved(from, nameof(from));
         if (RenameProblem(to) is { } problem) throw new ArgumentException(problem, nameof(to));
         var target = TagSet.Normalize(to);
         if (TagSet.Normalize(from).Equals(target, StringComparison.Ordinal)) return TagChangeResult.Nothing;
@@ -88,7 +84,7 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
 
     public TagChangeResult Delete(string name)
     {
-        Guard(name, nameof(name));
+        TagRegistry.ThrowIfReserved(name, nameof(name));
         var snapshot = Load();
         if (!snapshot.Registry.Contains(name)) return TagChangeResult.Nothing;
         return Apply(snapshot, name, set => set.Without(name), snapshot.Registry.Remove(name), partial: null);
@@ -121,11 +117,5 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
             changed.Add(profile.Name);
         }
         return new TagChangeResult(carriers.Count, changed, null, tags.TrySave(done));
-    }
-
-    private static void Guard(string name, string parameter)
-    {
-        if (TagRegistry.IsReserved(name))
-            throw new ArgumentException($"{TagRegistry.FavoriteName} is reserved and cannot be changed.", parameter);
     }
 }
