@@ -99,6 +99,11 @@ public partial class ManageTagsViewModel : ObservableObject
     private void Rename()
     {
         if (SelectedRow is not { IsReserved: false } row || !CanRename) return;
+        // Read fresh rather than trust the cached snapshot: another window (File > Save as Profile..., spec 7.1)
+        // may have defined a tag while this dialog was open, and a merge cannot be undone (spec 2.3), so whether
+        // this is one has to be decided from the registry as it is now. Rows is not rebuilt here -- that would
+        // reset the selection and the name the user just typed.
+        _snapshot = _maintenance.Load();
         var from = row.Name;
         var target = TagSet.Normalize(NameText);
         var merge = !target.Equals(from, StringComparison.OrdinalIgnoreCase) && _snapshot.Registry.Contains(target);

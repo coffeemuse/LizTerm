@@ -135,6 +135,30 @@ public class ManageTagsViewModelTests : IDisposable
         Assert.DoesNotContain(vm.Rows, r => r.Name == "PRDO");
     }
 
+    /// <summary>Rename decides merge-or-not from the registry as it is NOW, not the snapshot cached when the
+    /// dialog opened: another window (File > Save as Profile..., spec 7.1) can define a tag while Manage Tags is
+    /// open, and a merge cannot be undone (spec 2.3), so it must still ask.</summary>
+    [Fact]
+    public void A_tag_defined_elsewhere_while_the_dialog_is_open_still_asks_before_merging()
+    {
+        Seed();
+        var vm = Open();
+        vm.SelectedRow = Row(vm, "TLS");
+
+        // Stands in for another window defining a tag while this one is open: written straight through the
+        // store, never through this view model, so the snapshot Open() read knows nothing about it.
+        var current = _tags.Load();
+        _tags.Save(new TagRegistry([.. current.Stored, new TagDefinition("LIVE", TagColor.Red)]));
+
+        vm.NameText = "LIVE";
+        vm.RenameCommand.Execute(null);
+
+        Assert.Equal("LIVE already exists. Merge TLS into it? gateway will carry LIVE instead, and TLS's colour is dropped.",
+            vm.PendingConfirmation);
+        Assert.Contains("TLS", TagsOf("gateway"));
+        Assert.DoesNotContain("LIVE", TagsOf("gateway"));
+    }
+
     [Fact]
     public void Merging_an_unused_tag_says_only_its_colour_goes()
     {
