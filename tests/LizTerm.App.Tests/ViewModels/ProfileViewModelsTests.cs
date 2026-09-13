@@ -781,8 +781,8 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(["All sessions", "FAVORITE", "#MVS", "#ZETA"], vm.Scopes.Select(s => s.Label));
     }
 
-    /// <summary>A scope whose tag has vanished would otherwise filter the list to nothing with no way back —
-    /// there is no Manage Tags window in this phase to remove the definition.</summary>
+    /// <summary>A scope whose tag no profile carries any more would otherwise filter the list to nothing, with no
+    /// way back from the list itself; Manage Tags is where the unused definition gets deleted.</summary>
     [Fact]
     public void A_scope_whose_tag_no_longer_exists_falls_back_to_all_sessions()
     {
@@ -1061,5 +1061,30 @@ public class ProfileViewModelsTests : IDisposable
         vm.Reload();
 
         // If Save had been attempted, it would have thrown IOException when trying to move to a directory
+    }
+
+    [Fact]
+    public async Task Tags_opens_manage_tags_and_reloads_when_it_closes()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h" });
+        var opened = 0;
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, null,
+            () =>
+            {
+                opened++;
+                _store.Save(new SessionProfile { Name = "b", Host = "h" });
+                return Task.CompletedTask;
+            });
+
+        await vm.ManageTagsCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, opened);
+        Assert.Equal(["a", "b"], vm.VisibleRows.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void Tags_is_unavailable_without_a_way_to_open_it()
+    {
+        Assert.False(Picker().ManageTagsCommand.CanExecute(null));
     }
 }

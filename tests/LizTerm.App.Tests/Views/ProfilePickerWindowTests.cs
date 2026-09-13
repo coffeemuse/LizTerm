@@ -372,4 +372,25 @@ public class ProfilePickerWindowTests : IDisposable
 
         Assert.Equal("zeta", (OpenMenu(window).DataContext as ProfileRow)?.Name);
     }
+
+    [AvaloniaFact]
+    public void Tags_opens_manage_tags_over_the_picker()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        var window = new ProfilePickerWindow(store, (_, _) => { }, () => { }, new TagRegistryStore(Path.Combine(_dir, "tags.json")));
+        window.Show();
+        var vm = (ProfilePickerViewModel)window.DataContext!;
+
+        var button = window.FindControl<Button>("TagsButton")!;
+        Assert.Same(vm.ManageTagsCommand, button.Command);
+        Assert.True(button.IsEffectivelyEnabled);
+
+        // Through the command, because raising Button.ClickEvent runs Click handlers but never a bound Command.
+        vm.ManageTagsCommand.Execute(null);
+
+        var dialog = Assert.IsType<ManageTagsWindow>(Assert.Single(window.OwnedWindows));
+        Assert.Contains(((ManageTagsViewModel)dialog.DataContext!).Rows, r => r.Name == "PROD");
+        dialog.Close();
+    }
 }
