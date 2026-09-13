@@ -85,9 +85,26 @@ public readonly struct TagSet : IEquatable<TagSet>
         return Safe.Any(n => n.Equals(wanted, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Whether <see cref="With"/> can take <paramref name="name"/>: it is already here, or it is a valid
+    /// name and there is room under <see cref="MaxTags"/>. The profile editor counts what was typed before
+    /// <see cref="From"/> runs for the same reason; a caller adding one name checks here first.</summary>
+    public bool CanAdd(string name)
+    {
+        var wanted = Normalize(name);
+        return wanted.Length > 0 && wanted.Length <= MaxNameLength && (Contains(wanted) || Count < MaxTags);
+    }
+
     /// <summary>This set with <paramref name="name"/> appended, or this set unchanged when it is already there.
-    /// The profile editor's FAVORITE checkbox is the caller.</summary>
-    public TagSet With(string name) => Contains(name) ? this : From([.. Names, name]);
+    /// Throws when <see cref="CanAdd"/> is false rather than returning this set unchanged: <see cref="From"/>
+    /// silently keeps the first <see cref="MaxTags"/> because it repairs a hand-edited file, but a programmatic
+    /// append that vanishes is a bug, and a caller that checked <see cref="CanAdd"/> never sees the throw. No
+    /// production caller yet: the picker's row menu puts FAVORITE first with <see cref="From"/>, matching the
+    /// editor's order, so the two doors write the same file.</summary>
+    public TagSet With(string name)
+    {
+        if (!CanAdd(name)) throw new InvalidOperationException($"Cannot add tag '{name}': the set is full or the name is not valid.");
+        return Contains(name) ? this : From([.. Names, name]);
+    }
 
     public TagSet Without(string name)
     {

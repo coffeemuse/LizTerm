@@ -71,11 +71,22 @@ public partial class ProfilePickerViewModel : ObservableObject
 
     public bool HasSelection => SelectedRow is not null;
 
+    private bool _loadedOnce;
+
     public void Reload()
     {
+        var loaded = _store.LoadAll();
+        // Every window activation reloads, and most find nothing changed. Returning here keeps every ProfileRow
+        // and every ListBoxItem, which is what lets the click that activates the picker land on the row it aimed
+        // at (App CLAUDE.md, "The session picker's tags"). Exact, not a heuristic: SessionProfile is a record whose
+        // only non-BCL members, TagSet and CertificatePin, carry value equality. Never on the first load, so an
+        // empty store still gets its scopes.
+        if (_loadedOnce && loaded.SequenceEqual(Profiles)) return;
+        _loadedOnce = true;
+
         var selectedName = SelectedProfile?.Name;
         Profiles.Clear();
-        foreach (var profile in _store.LoadAll()) Profiles.Add(profile);
+        foreach (var profile in loaded) Profiles.Add(profile);
 
         Reconcile();
         // RebuildScopes may assign SelectedScope, whose handler calls Refilter() on its own; the explicit call
@@ -161,8 +172,13 @@ public partial class ProfilePickerViewModel : ObservableObject
         || profile.Name.Contains(text, StringComparison.OrdinalIgnoreCase)
         || profile.Tags.Names.Any(name => name.Contains(text, StringComparison.OrdinalIgnoreCase));
 
-    [RelayCommand(CanExecute = nameof(HasSelection))]
-    private void Connect() => _openSession(SelectedProfile!, true);
+    /// <summary>Whether Connect and Edit have a subject: the row they were handed (the row menu passes its own,
+    /// so an entry acts on the row the menu belongs to even when a keyboard opened it on an unselected row), else
+    /// the selection (the buttons and the double-tap pass null).</summary>
+    private bool CanActOn(ProfileRow? row) => (row ?? SelectedRow) is not null;
+
+    [RelayCommand(CanExecute = nameof(CanActOn))]
+    private void Connect(ProfileRow? row) => _openSession((row ?? SelectedRow)!.Profile, true);
 
     [RelayCommand]
     private async Task NewAsync()
@@ -174,10 +190,10 @@ public partial class ProfilePickerViewModel : ObservableObject
         SelectedRow = VisibleRows.FirstOrDefault(r => r.Name == edit.Profile.Name) ?? SelectedRow;
     }
 
-    [RelayCommand(CanExecute = nameof(HasSelection))]
-    private async Task EditAsync()
+    [RelayCommand(CanExecute = nameof(CanActOn))]
+    private async Task EditAsync(ProfileRow? row)
     {
-        var original = SelectedProfile!;
+        var original = (row ?? SelectedRow)!.Profile;
         Reload();
         // Read the file, not the copy this picker has been holding: a session window may have written a pin into
         // it since Reload last ran, and the editor was handed the older copy.
@@ -201,6 +217,37 @@ public partial class ProfilePickerViewModel : ObservableObject
         _store.Delete(SelectedProfile!.Name);
         SelectedRow = null;
         Reload();
+    }
+
+    /// <summary>Stars or unstars the row's profile, from the row menu. The row, not the selection, because the
+    /// menu belongs to the row it was opened on.
+    ///
+    /// Applies the choice the row SHOWED rather than flipping the file: another window may have written the
+    /// profile since the list was drawn, and Starred leaves a file that already agrees alone. The file is re-read
+    /// rather than using the row's copy, so that write is not lost either — and a file that has gone stays gone,
+    /// which is why this is not ProfileStore.Update, whose fallback would save it back. A file that filled up
+    /// since the row was drawn cannot take the star; the reload then shows why in the entry itself.</summary>
+    [RelayCommand(CanExecute = nameof(CanToggleFavorite))]
+    private void ToggleFavorite(ProfileRow? row)
+    {
+        if (row is null) return;
+        if (_store.Load(row.Name) is { } onDisk)
+        {
+            var tags = Starred(onDisk.Tags, star: !row.IsFavorite);
+            if (tags != onDisk.Tags) _store.Save(onDisk with { Tags = tags });
+        }
+        Reload();
+    }
+
+    private static bool CanToggleFavorite(ProfileRow? row) => row?.CanToggleFavorite == true;
+
+    /// <summary>The tags with the star added or removed. FAVORITE goes first, as the editor writes it, so the two
+    /// doors produce the same file; a set that already agrees, or has no room, comes back unchanged.</summary>
+    private static TagSet Starred(TagSet tags, bool star)
+    {
+        if (!star) return tags.Without(TagRegistry.FavoriteName);
+        if (tags.Contains(TagRegistry.FavoriteName) || !tags.CanAdd(TagRegistry.FavoriteName)) return tags;
+        return TagSet.From([TagRegistry.FavoriteName, .. tags.Names]);
     }
 
     [RelayCommand]

@@ -422,6 +422,23 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   never in `ProfileStore.LoadAll`, because a load must not write. It is what gives a profile copied from another
   machine local colours, and it saves `tags.json` only when `TagRegistry.Register` reports something changed:
   `Reload` runs on every window activation, so an unconditional save would rewrite the file constantly.
+- **A click that activates the picker reloads it, and a reload that finds a change recycles the row containers.**
+  `Reload` returns early when `LoadAll` equals `Profiles` — value equality all the way down (`SessionProfile`,
+  `TagSet`, `CertificatePin`) — so the usual activation click leaves every `ProfileRow` and `ListBoxItem` in place
+  and a right-click that brings the picker forward opens its menu on the row it aimed at. When the store DID
+  change while the picker was inactive, the activation reload removes every container synchronously and the
+  layout that re-realises them is deferred, so on a platform where activation precedes the press (Windows, in
+  `WndProc` order) that first right-click opens no menu, and a list whose order changed can put a different row
+  under the pointer. That is the residual of #89; a second right-click works.
+- The row menu (#89) is a `ContextMenu` set on `ListBoxItem` by a style — a `<Template>` setter, so each container
+  builds its own — whose entries bind the picker's commands through `$parent[ListBox]` with the row as
+  `CommandParameter`, so an entry acts on the row the menu belongs to whether a right click (which selects on the
+  press) or the keyboard opened it. `Connect` and `Edit` take an optional row and fall back to the selection for
+  the buttons and the double-tap; greying comes from `CanExecute`, so a test asserts `IsEffectivelyEnabled`. On
+  macOS the window turns a Control-click into the `ContextRequested` a right button raises
+  (`OnListPointerReleased`): Avalonia.Native delivers it as a plain left press, and Apple keyboards have no Menu
+  key, the only gesture in `PlatformHotkeyConfiguration.OpenContextMenu`. The headless recipe for driving the
+  menu is in `tests/CLAUDE.md`.
 
 ## Screen capture
 

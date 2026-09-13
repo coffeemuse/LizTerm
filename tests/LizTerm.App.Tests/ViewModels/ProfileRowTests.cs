@@ -92,4 +92,37 @@ public class ProfileRowTests
         Assert.False(row.HasOverflow);
         Assert.Null(row.OverflowText);
     }
+
+    [Fact]
+    public void The_favorite_menu_entry_marks_an_unstarred_profile_and_removes_a_starred_one()
+    {
+        var plain = new ProfileRow(new SessionProfile { Name = "n", Host = "h" }, TagRegistry.Empty);
+        Assert.Equal("Mark as FAVORITE", plain.FavoriteMenuText);
+        Assert.True(plain.CanToggleFavorite);
+
+        var starred = new ProfileRow(
+            new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(["FAVORITE", "PROD"]) },
+            Registry("PROD"));
+        Assert.Equal("Remove from FAVORITE", starred.FavoriteMenuText);
+        Assert.True(starred.CanToggleFavorite);
+    }
+
+    /// <summary>TagSet.With on a set already at the cap drops the name it was given, so an enabled entry on a
+    /// full profile would click and silently do nothing. Removing needs no room, so a full starred profile can
+    /// still be unmarked.</summary>
+    [Fact]
+    public void A_full_profile_cannot_be_marked_but_a_full_starred_one_can_still_be_unmarked()
+    {
+        var full = new ProfileRow(
+            new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}")) },
+            TagRegistry.Empty);
+        Assert.False(full.CanToggleFavorite);
+        Assert.Equal($"Mark as FAVORITE (already {TagSet.MaxTags} tags)", full.FavoriteMenuText);
+
+        var fullStarred = new ProfileRow(
+            new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(["FAVORITE", .. Enumerable.Range(0, TagSet.MaxTags - 1).Select(i => $"T{i}")]) },
+            TagRegistry.Empty);
+        Assert.True(fullStarred.CanToggleFavorite);
+        Assert.Equal("Remove from FAVORITE", fullStarred.FavoriteMenuText);
+    }
 }

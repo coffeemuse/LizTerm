@@ -57,6 +57,15 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   `CanRing` answers, and an optional `Exception`).
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
   `src/LizTerm.App/CLAUDE.md` say why.
+- The picker's row menu is a classic `ContextMenu` on each `ListBoxItem`. Open it with a headless right
+  `MouseDown`/`MouseUp` at the row's centre (after `window.UpdateLayout()`), or without a pointer by raising
+  `new ContextRequestedEventArgs()` on the container — what the context-menu key does, and the only way to open it
+  on a row that is not the selection. Find it by `IsOpen` across the containers rather than through the one
+  clicked: `Show()` posts the window's activation and the first headless input flushes it, so a `Reload` runs
+  inside that click and, if the store changed, recycles the containers. Raise `MenuItem.ClickEvent` on an entry to
+  fire its command; a raised click bypasses the interaction handler's enabled gate, so assert
+  `IsEffectivelyEnabled` for greying. A headless press never activates a window, so the reload-versus-press
+  ordering of a real platform is not something these tests can see.
 - The App tests name the backend in exactly one place:
   `SessionFactoryTests.The_session_it_builds_verifies_against_the_system_trust_anchors` casts the factory's result to
   `B3270Session` to read `TrustAnchors`, because what the factory injects is the one thing about the backend the App
