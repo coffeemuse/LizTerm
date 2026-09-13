@@ -157,7 +157,11 @@ public partial class ManageTagsViewModel : ObservableObject
     {
         CancelPending();
         var result = _maintenance.Rename(from, target);
-        Refresh(target, from);
+        // A rename that stopped partway through a profile says "Rename FROM to TARGET again to finish" (spec
+        // 6.1), which needs FROM selected -- so prefer it there (controller ruling, F7). Every other outcome
+        // (success, or a tags.json-only failure) keeps preferring the new name, as before.
+        if (result.FailedProfile is not null) Refresh(from, target);
+        else Refresh(target, from);
         StatusMessage = RenameStatus(result, from, target, merge);
     }
 

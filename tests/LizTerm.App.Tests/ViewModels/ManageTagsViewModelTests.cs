@@ -326,7 +326,9 @@ public class ManageTagsViewModelTests : IDisposable
 
         Assert.StartsWith("Renamed on 1 of 3 profiles. Could not write beta: ", vm.StatusMessage);
         Assert.EndsWith("\nRename DEV to TEST again to finish.", vm.StatusMessage);
-        Assert.Equal("test", vm.SelectedRow?.Name);
+        // The message says "Rename DEV to TEST again to finish", which needs DEV selected, not the name the
+        // rename stopped partway through (controller ruling, F7).
+        Assert.Equal("DEV", vm.SelectedRow?.Name);
         Assert.Contains(vm.Rows, r => r.Name == "DEV");
     }
 
