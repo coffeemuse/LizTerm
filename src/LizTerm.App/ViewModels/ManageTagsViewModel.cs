@@ -198,9 +198,12 @@ public partial class ManageTagsViewModel : ObservableObject
         if (result.FailedProfile is { } failed)
             return $"Renamed on {result.Changed.Count} of {result.Carriers} profiles. Could not write {failed}: {result.Error}\nRename {shownFrom} to {shownTo} again to finish.";
         if (caseOnly) return RegistryNotSaved(result);
-        return merge
-            ? $"{RegistryNotSaved(result)}\n{shownFrom} may still be listed."
-            : $"{RegistryNotSaved(result)}\n{shownTo} may show a different colour next time.";
+        // A plain rename prepares tags.json before it touches a profile, so a registry failure with carriers left
+        // unwritten stopped it before anything changed. Otherwise every carrier was written and both names are
+        // still defined, the same state a merge's failed final save leaves.
+        if (!merge && result.Changed.Count < result.Carriers)
+            return $"Nothing was renamed: tags.json could not be saved: {result.Error}";
+        return $"{RegistryNotSaved(result)}\n{shownFrom} may still be listed.";
     }
 
     private static string RegistryNotSaved(TagChangeResult result) =>

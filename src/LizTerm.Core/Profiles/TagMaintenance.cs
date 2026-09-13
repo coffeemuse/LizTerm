@@ -11,7 +11,8 @@ public sealed record TagSnapshot(TagRegistry Registry, IReadOnlyList<SessionProf
 
 /// <summary>The one place a tag is changed across profiles: Manage Tags' rename (merges and case-only renames
 /// included), recolour and delete (spec 4). Each action reads the profiles and tags.json fresh, writes the profiles
-/// that carry the tag first and tags.json last, and returns what it did.
+/// that carry the tag and then tags.json, and returns what it did. A plain rename first defines the new name
+/// beside the old one in tags.json, so that wherever it stops both names are one colour and a retry is a merge.
 ///
 /// Synchronous, for the UI thread, like every other picker command: a rename touches a handful of small files.
 /// It works from a fresh LoadAll rather than ProfileStore.Update, whose fallback would save back a profile deleted
@@ -74,12 +75,15 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         var caseOnly = target.Equals(TagSet.Normalize(from), StringComparison.OrdinalIgnoreCase);
         var existing = registry.Stored.FirstOrDefault(d => d.Name.Equals(target, StringComparison.OrdinalIgnoreCase));
         var written = existing is not null && !caseOnly ? existing.Name : target;
-        // After a partial PLAIN rename both names stay defined in from's colour, so the list stays consistent and
-        // the retry is a merge. A merge or a case-only rename (Contains is true for both) leaves the registry alone.
-        var partial = registry.Contains(target)
+        // A PLAIN rename defines to beside from, in from's colour, before any profile is touched. Every point it
+        // can then stop at -- a carrier that fails, a crash between two writes, a final save that fails -- leaves
+        // both names in one colour, and the retry is a merge that keeps it. (Spec 4.2 wrote the pair only after a
+        // partial failure, which left a crash, or a failed fallback save, with two colours for one tag.) A merge or
+        // a case-only rename (Contains is true for both) has nothing to prepare.
+        var prepare = registry.Contains(target)
             ? null
             : new TagRegistry([.. registry.Stored, new TagDefinition(target, registry.ColorOf(from))]);
-        return Apply(snapshot, from, set => set.Rename(from, written), registry.Rename(from, target), partial);
+        return Apply(snapshot, from, set => set.Rename(from, written), registry.Rename(from, target), prepare);
     }
 
     public TagChangeResult Delete(string name)
@@ -87,16 +91,19 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         TagRegistry.ThrowIfReserved(name, nameof(name));
         var snapshot = Load();
         if (!snapshot.Registry.Contains(name)) return TagChangeResult.Nothing;
-        return Apply(snapshot, name, set => set.Without(name), snapshot.Registry.Remove(name), partial: null);
+        return Apply(snapshot, name, set => set.Without(name), snapshot.Registry.Remove(name), prepare: null);
     }
 
-    /// <summary>Spec 4.2 steps 3 to 5. Carriers are written in LoadAll's order, stopping at the first failure;
-    /// the registry is then written as <paramref name="done"/> when every carrier was, as
-    /// <paramref name="partial"/> when some were and there is one, and not at all otherwise.</summary>
+    /// <summary>Spec 4.2 steps 3 to 5, with one change: when there is a <paramref name="prepare"/> registry and a
+    /// carrier to write, it is saved first, and a failure there stops the action before any profile changed.
+    /// Carriers are then written in LoadAll's order, stopping at the first failure, and <paramref name="done"/>
+    /// is written only when every carrier was.</summary>
     private TagChangeResult Apply(TagSnapshot snapshot, string name, Func<TagSet, TagSet> change, TagRegistry done,
-        TagRegistry? partial)
+        TagRegistry? prepare)
     {
         var carriers = snapshot.Profiles.Where(p => p.Tags.Contains(name)).ToList();
+        if (carriers.Count > 0 && prepare is not null && tags.TrySave(prepare) is { } notPrepared)
+            return new TagChangeResult(carriers.Count, [], null, notPrepared);
         var changed = new List<string>();
         foreach (var profile in carriers)
         {
@@ -110,8 +117,6 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // A failure saving the partial registry is secondary to the one being reported, so it is not.
-                if (changed.Count > 0 && partial is not null) tags.TrySave(partial);
                 return new TagChangeResult(carriers.Count, changed, profile.Name, ex.Message);
             }
             changed.Add(profile.Name);

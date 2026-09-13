@@ -346,8 +346,12 @@ public class TagMaintenanceTests : IDisposable
         Assert.Equal(["PRDO", "PROD"], _tags.Load().Stored.Select(d => d.Name));
     }
 
+    /// <summary>A plain rename defines the new name beside the old, in the old colour, BEFORE it touches a profile.
+    /// Then every point it can stop at — a carrier that fails, a crash between two writes, a final save that
+    /// fails — leaves both names in one colour, and the retry is a merge that keeps it. (Spec 4.2 wrote the pair
+    /// only after a partial failure, which left a crash and a failed fallback save with two colours for one tag.)</summary>
     [Fact]
-    public void A_rename_that_fails_on_its_first_carrier_changes_neither_profiles_nor_registry()
+    public void A_rename_that_fails_on_its_first_carrier_leaves_the_profiles_alone_and_both_names_defined()
     {
         Save("alpha", "DEV");
         Save("beta", "DEV");
@@ -358,12 +362,13 @@ public class TagMaintenanceTests : IDisposable
 
         Assert.Empty(result.Changed);
         Assert.Equal("alpha", result.FailedProfile);
+        Assert.Equal(["DEV"], TagsOf("alpha"));
         Assert.Equal(["DEV"], TagsOf("beta"));
-        Assert.Equal(["DEV"], _tags.Load().Stored.Select(d => d.Name));
+        Assert.Equal([("DEV", TagColor.Teal), ("TEST", TagColor.Teal)], _tags.Load().Stored.Select(d => (d.Name, d.Color)));
     }
 
     [Fact]
-    public void A_registry_that_cannot_be_saved_after_every_profile_is_reported_without_a_profile()
+    public void A_rename_whose_registry_cannot_be_prepared_changes_no_profile_and_reports_it()
     {
         Save("alpha", "DEV");
         Save("beta", "DEV");
@@ -374,8 +379,24 @@ public class TagMaintenanceTests : IDisposable
 
         Assert.False(result.Succeeded);
         Assert.Null(result.FailedProfile);
-        Assert.Equal(["alpha", "beta"], result.Changed);
-        Assert.Equal(["TEST"], TagsOf("beta"));
+        Assert.Equal(2, result.Carriers);
+        Assert.Empty(result.Changed);
+        Assert.Equal(["DEV"], TagsOf("alpha"));
+        Assert.Equal(["DEV"], TagsOf("beta"));
+    }
+
+    /// <summary>No carrier, so nothing to prepare for: the one write is the final one, and it is reported as such.</summary>
+    [Fact]
+    public void Renaming_an_unused_tag_when_the_registry_cannot_be_saved_is_reported_without_a_profile()
+    {
+        Define(("DEV", TagColor.Teal));
+        Block(TagsFile);
+
+        var result = _maintenance.Rename("DEV", "TEST");
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.FailedProfile);
+        Assert.Equal(0, result.Carriers);
     }
 
     [Fact]

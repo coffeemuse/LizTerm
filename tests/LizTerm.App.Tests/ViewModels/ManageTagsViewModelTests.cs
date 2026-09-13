@@ -386,11 +386,15 @@ public class ManageTagsViewModelTests : IDisposable
         Block(TagsFile);
         var vm = Open();
 
+        // A plain rename prepares tags.json before it touches a profile, so a registry that cannot be written
+        // stops it before anything changed, and the message says exactly that.
         vm.SelectedRow = Row(vm, "TLS");
         vm.NameText = "SSL";
         vm.RenameCommand.Execute(null);
-        Assert.StartsWith("Every profile was updated, but tags.json could not be saved: ", vm.StatusMessage);
-        Assert.EndsWith("\nSSL may show a different colour next time.", vm.StatusMessage);
+        Assert.StartsWith("Nothing was renamed: tags.json could not be saved: ", vm.StatusMessage);
+        Assert.DoesNotContain("\n", vm.StatusMessage);
+        Assert.Equal(["PROD", "TLS"], TagsOf("gateway"));
+        Assert.Equal("TLS", vm.SelectedRow?.Name);
 
         vm.SelectedRow = Row(vm, "PRDO");
         vm.NameText = "PROD";
