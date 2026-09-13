@@ -61,6 +61,12 @@ public sealed class TagMaintenance(ProfileStore profiles, TagRegistryStore tags)
         return TrySave(recoloured) is { } error ? new TagChangeResult(0, [], null, error) : TagChangeResult.Nothing;
     }
 
+    /// <summary>Renames <paramref name="from"/> to <paramref name="to"/> across the registry and every profile
+    /// that carries it -- a plain rename, a case-only rename, or a merge onto an existing definition, decided by
+    /// what <paramref name="to"/> already is. Pass the STORED spelling of <paramref name="from"/>: the
+    /// identical-name no-op below compares it as given, ordinally, against <paramref name="to"/>, so
+    /// <c>Rename("DEV", "DEV")</c> against a registry that actually holds "dev" would not be recognised as a
+    /// no-op. The view model always passes the stored name; a future caller (#55's import) might not.</summary>
     public TagChangeResult Rename(string from, string to)
     {
         Guard(from, nameof(from));
