@@ -1119,6 +1119,27 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(["a", "b"], vm.VisibleRows.Select(r => r.Name));
     }
 
+    /// <summary>A recolour changes tags.json and no profile, so the reload's "nothing changed" shortcut must look
+    /// at the registry too, or the picker keeps drawing the old colour until some profile file happens to change.</summary>
+    [Fact]
+    public async Task A_recolour_in_manage_tags_shows_in_the_picker_when_it_closes()
+    {
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, tags,
+            () =>
+            {
+                tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Green)]));
+                return Task.CompletedTask;
+            });
+        vm.Reload();
+
+        await vm.ManageTagsCommand.ExecuteAsync(null);
+
+        Assert.Same(TagPalette.Brush(TagColor.Green), vm.VisibleRows.Single().Chips.Single().Background);
+    }
+
     [Fact]
     public void Tags_is_unavailable_without_a_way_to_open_it()
     {

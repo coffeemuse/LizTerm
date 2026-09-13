@@ -80,23 +80,26 @@ public partial class ProfilePickerViewModel : ObservableObject
     public void Reload()
     {
         var loaded = _store.LoadAll();
+        // Both files, every time, not only at construction: Manage Tags writes tags.json while this picker waits
+        // behind it, and a registry kept from construction would give a renamed tag a fresh colour and save over
+        // the one carried across, write a deleted definition back the next time anything registers, and show an
+        // old colour until the picker reopened. With no store — the in-memory registry tests use — there is
+        // nothing to re-read, so the registry in memory is the registry.
+        var registry = _tags?.Load() ?? _registry;
         // Every window activation reloads, and most find nothing changed. Returning here keeps every ProfileRow
         // and every ListBoxItem, which is what lets the click that activates the picker land on the row it aimed
         // at (App CLAUDE.md, "The session picker's tags"). Exact, not a heuristic: SessionProfile is a record whose
-        // only non-BCL members, TagSet and CertificatePin, carry value equality. Never on the first load, so an
-        // empty store still gets its scopes.
-        if (_loadedOnce && loaded.SequenceEqual(Profiles)) return;
+        // only non-BCL members, TagSet and CertificatePin, carry value equality, and TagDefinition is a record.
+        // The registry is part of the test, or a recolour (which changes no profile) would never be drawn. Never
+        // on the first load, so an empty store still gets its scopes.
+        if (_loadedOnce && loaded.SequenceEqual(Profiles) && registry.Stored.SequenceEqual(_registry.Stored)) return;
         _loadedOnce = true;
 
         var selectedName = SelectedProfile?.Name;
         Profiles.Clear();
         foreach (var profile in loaded) Profiles.Add(profile);
 
-        // Every time, not only at construction: Manage Tags writes tags.json while this picker waits behind it, and
-        // a registry kept from construction would give a renamed tag a fresh colour and save over the one carried
-        // across, write a deleted definition back the next time anything registers, and show an old colour until
-        // the picker reopened. With no store — the in-memory registry tests use — there is nothing to re-read.
-        if (_tags is not null) _registry = _tags.Load();
+        _registry = registry;
         Reconcile();
         // RebuildScopes may assign SelectedScope, whose handler calls Refilter() on its own; the explicit call
         // below then runs a second time with the remembered name. Harmless and deliberate — do not "fix" it by
