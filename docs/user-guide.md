@@ -84,7 +84,7 @@ symbol has its plain words on a tooltip. From left to right:
 - The mode field: a boxed **4**, then an underlined **A** or **B** for a TN3270 or TN3270E connection, then a solid
   box once a 3270 session is bound, a boxed **?** while there is none, or **N** for a host in NVT mode. Its tooltip
   also names the terminal model.
-- On a TLS connection, a padlock with a green **✓** when the host's certificate was verified, or an amber **!** when
+- On a TLS connection, a padlock with a green **✓** when the host's certificate was verified, or an orange **!** when
   it was not.
 - The message area: blank while the keyboard is free, otherwise a lock **X** and why. While connecting it shows the
   broken wire and the step in brackets; then a clock while the host works, **SYSTEM** once the host has acknowledged
@@ -203,7 +203,7 @@ The profile editor shows a pinned certificate's fingerprint. **Forget** removes 
 normal verification.
 
 Turning **Verify host certificate** off in a profile skips the check entirely. On a TLS connection, the status bar's
-padlock shows whether the certificate was verified: green with a **✓**, or amber with a **!**.
+padlock shows whether the certificate was verified: green with a **✓**, or orange with a **!**.
 
 ## File transfer (IND$FILE)
 

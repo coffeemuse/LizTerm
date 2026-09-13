@@ -54,7 +54,7 @@ public static class StatusFormatter
     public static string ModeTip(ConnectionState state, SessionProfile profile) =>
         $"{Connection(state, profile.Host)}\n{TerminalType.For(profile)}";
 
-    /// <summary>Padlock, mark and tooltip: green check when the certificate was verified, amber ! when it was not,
+    /// <summary>Padlock, mark and tooltip: green check when the certificate was verified, orange ! when it was not,
     /// nothing on a plain connection. Both the mark and the colour carry the verdict, so neither has to alone.</summary>
     public static (string Glyph, string Mark, string Tip) Tls(TlsInfo? tls) => tls is { Secure: true }
         ? tls.Verified == true

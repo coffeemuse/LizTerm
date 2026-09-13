@@ -111,7 +111,7 @@ symbol has its plain words on a tooltip. From left to right:</p>
 <li>The mode field: a boxed <strong>4</strong>, then an underlined <strong>A</strong> or <strong>B</strong> for a TN3270 or TN3270E connection, then a solid
 box once a 3270 session is bound, a boxed <strong>?</strong> while there is none, or <strong>N</strong> for a host in NVT mode. Its tooltip
 also names the terminal model.</li>
-<li>On a TLS connection, a padlock with a green <strong>✓</strong> when the host's certificate was verified, or an amber <strong>!</strong> when
+<li>On a TLS connection, a padlock with a green <strong>✓</strong> when the host's certificate was verified, or an orange <strong>!</strong> when
 it was not.</li>
 <li>The message area: blank while the keyboard is free, otherwise a lock <strong>X</strong> and why. While connecting it shows the
 broken wire and the step in brackets; then a clock while the host works, <strong>SYSTEM</strong> once the host has acknowledged
@@ -217,7 +217,7 @@ connection.</p>
 <p>The profile editor shows a pinned certificate's fingerprint. <strong>Forget</strong> removes the pin and returns the profile to
 normal verification.</p>
 <p>Turning <strong>Verify host certificate</strong> off in a profile skips the check entirely. On a TLS connection, the status bar's
-padlock shows whether the certificate was verified: green with a <strong>✓</strong>, or amber with a <strong>!</strong>.</p>
+padlock shows whether the certificate was verified: green with a <strong>✓</strong>, or orange with a <strong>!</strong>.</p>
 <h2 id="file-transfer-indfile">File transfer (IND$FILE)</h2>
 <p><strong>File &gt; IND$FILE Transfer...</strong> sends files to, or receives them from, a TSO, VM/CMS or CICS host using the host's
 IND$FILE program. Before you start, put the cursor at a TSO <code>READY</code> prompt or a command line.</p>
