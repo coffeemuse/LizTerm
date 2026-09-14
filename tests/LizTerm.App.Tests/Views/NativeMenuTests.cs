@@ -429,57 +429,104 @@ public class NativeMenuTests
         }
     }
 
-    /// <summary>On a CI machine this covers the visible-in-Help branch only; the macOS branch is covered by
-    /// running the app on the Mac, which the spec's section 8 requires anyway. No mutable platform static is
-    /// introduced to close that gap — it would make every menu test order-dependent.</summary>
+    /// <summary>The exported menu only; the in-window one follows no platform rule (#103, below). On a CI machine
+    /// this covers the visible-in-Help branch only, and the macOS branch runs on a Mac, where running the app is
+    /// what the spec's section 8 requires anyway. No mutable platform static is introduced to close that gap — it
+    /// would make every menu test order-dependent.</summary>
     [AvaloniaFact]
-    public void About_is_in_the_help_menu_on_this_platform_exactly_when_the_strategy_says_so()
+    public void About_is_in_the_exported_help_menu_on_this_platform_exactly_when_the_strategy_says_so()
     {
         var (window, _, _, _) = Show();
-        var expected = MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS());
+        var expected = MenuStrategy.AboutInExportedHelpMenu(OperatingSystem.IsMacOS());
 
         Assert.Equal(expected, Item(window, "_Help", "_About LizTerm...").IsVisible);
-        Assert.Equal(expected, window.FindControl<MenuItem>("AboutMenuItem")!.IsVisible);
     }
 
-    /// <summary>And the divider above it goes too. Nothing collapses a trailing separator — not NSMenu, not the
-    /// classic Menu — so hiding About on its own leaves the macOS Help menu ending in a line with nothing under
-    /// it. The exporter honours IsVisible on a separator because NativeMenuItemSeparator derives from
-    /// NativeMenuItem.</summary>
+    /// <summary>And the divider above it goes too. Nothing collapses a trailing separator in NSMenu, so hiding
+    /// About on its own leaves the macOS Help menu ending in a line with nothing under it. The exporter honours
+    /// IsVisible on a separator because NativeMenuItemSeparator derives from NativeMenuItem.</summary>
     [AvaloniaFact]
-    public void The_separator_above_about_is_hidden_with_it()
+    public void The_separator_above_the_exported_about_is_hidden_with_it()
     {
         var (window, _, _, _) = Show();
-        var expected = MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS());
+        var expected = MenuStrategy.AboutInExportedHelpMenu(OperatingSystem.IsMacOS());
 
         var separator = MenuLookup.SeparatorAbove(Item(window, "_Help", "_About LizTerm..."));
         Assert.NotNull(separator);
         Assert.Equal(expected, separator!.IsVisible);
-        Assert.Equal(expected, window.FindControl<Separator>("AboutSeparator")!.IsVisible);
     }
 
-    /// <summary>The same shape as About in Help: on a CI machine this covers the visible-in-Edit branch only,
-    /// and the macOS branch is covered by running the app on the Mac.</summary>
+    /// <summary>The same shape as About in Help, with the same coverage.</summary>
     [AvaloniaFact]
-    public void Preferences_is_in_the_edit_menu_on_this_platform_exactly_when_the_strategy_says_so()
+    public void Preferences_is_in_the_exported_edit_menu_on_this_platform_exactly_when_the_strategy_says_so()
     {
         var (window, _, _, _) = Show();
-        var expected = MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS());
+        var expected = MenuStrategy.PreferencesInExportedEditMenu(OperatingSystem.IsMacOS());
 
         Assert.Equal(expected, Item(window, "_Edit", "P_references...").IsVisible);
-        Assert.Equal(expected, window.FindControl<MenuItem>("PreferencesMenuItem")!.IsVisible);
     }
 
     [AvaloniaFact]
-    public void The_separator_above_preferences_is_hidden_with_it()
+    public void The_separator_above_the_exported_preferences_is_hidden_with_it()
     {
         var (window, _, _, _) = Show();
-        var expected = MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS());
+        var expected = MenuStrategy.PreferencesInExportedEditMenu(OperatingSystem.IsMacOS());
 
         var separator = MenuLookup.SeparatorAbove(Item(window, "_Edit", "P_references..."));
         Assert.NotNull(separator);
         Assert.Equal(expected, separator!.IsVisible);
-        Assert.Equal(expected, window.FindControl<Separator>("PreferencesSeparator")!.IsVisible);
+    }
+
+    /// <summary>#103. A user who picks the in-window menu has stopped looking at the system menu bar, and on macOS
+    /// the application menu in that bar was the only place Preferences appeared, so the setting that hid the bar
+    /// left no visible way back to itself. The in-window menu therefore carries About and Preferences, with their
+    /// separators, in every style, as it does on every other platform; Native hides the whole bar, so nothing
+    /// changes on screen there. A CI runner passed every case before #103 as well. On a Mac, where the old rule
+    /// read the real platform, every case failed.</summary>
+    [AvaloniaTheory]
+    [InlineData(MenuStyle.Native)]
+    [InlineData(MenuStyle.InWindow)]
+    [InlineData(MenuStyle.Both)]
+    public void The_in_window_menu_carries_about_and_preferences_in_every_style(MenuStyle style) =>
+        AssertInWindowAboutAndPreferencesShown(Show(style).Window, $"opened as {style}");
+
+    /// <summary>A style change re-runs ApplyPlatformMenuRules, so the in-window items have to survive every
+    /// transition and not only the style a window opened with. The sequence walks all six.</summary>
+    [AvaloniaFact]
+    public void The_in_window_about_and_preferences_survive_every_live_style_change()
+    {
+        var (window, vm, _, _) = Show(MenuStyle.Native);
+
+        foreach (var style in new[] { MenuStyle.InWindow, MenuStyle.Native, MenuStyle.Both, MenuStyle.InWindow, MenuStyle.Both, MenuStyle.Native })
+        {
+            vm.Settings.MenuStyle = style;
+            AssertInWindowAboutAndPreferencesShown(window, $"after switching to {style}");
+        }
+    }
+
+    private static void AssertInWindowAboutAndPreferencesShown(SessionWindow window, string when)
+    {
+        Assert.True(window.FindControl<MenuItem>("PreferencesMenuItem")!.IsVisible, $"Edit > Preferences... hidden {when}");
+        Assert.True(window.FindControl<Separator>("PreferencesSeparator")!.IsVisible, $"the separator above Preferences hidden {when}");
+        Assert.True(window.FindControl<MenuItem>("AboutMenuItem")!.IsVisible, $"Help > About LizTerm... hidden {when}");
+        Assert.True(window.FindControl<Separator>("AboutSeparator")!.IsVisible, $"the separator above About hidden {when}");
+    }
+
+    /// <summary>The in-window Preferences item names the chord that opens Preferences, and that chord is the
+    /// application menu's: the application menu is there under every style, so the chord works whichever window
+    /// menu is drawn, and a user who has lost the system menu bar can read the way back off the window. A label
+    /// and nothing more — MenuItem.InputGesture is display-only in 12.1.2, so the application menu's key
+    /// equivalent stays the one thing that acts on the chord. Off macOS there is no application menu and no
+    /// chord to name.</summary>
+    [AvaloniaFact]
+    public void The_in_window_preferences_item_names_the_application_menu_chord_on_macOS_only()
+    {
+        var (window, _, _, _) = Show(MenuStyle.InWindow);
+        var applicationPreferences = MenuLookup.Item(NativeMenu.GetMenu(Application.Current!), "Preferences...")!;
+
+        var expected = OperatingSystem.IsMacOS() ? applicationPreferences.Gesture : null;
+
+        Assert.Equal(expected, window.FindControl<MenuItem>("PreferencesMenuItem")!.InputGesture);
     }
 
     [AvaloniaFact]
@@ -616,12 +663,12 @@ public class NativeMenuTests
         Assert.Equal(hotkeys.SelectAll.FirstOrDefault(), MenuLookup.Item(declared, "_Edit", "Select _All")!.Gesture);
         Assert.Equal(new KeyGesture(Key.F, hotkeys.CommandModifiers), MenuLookup.Item(declared, "_Edit", "_Find...")!.Gesture);
 
-        // The application menu supplies both on macOS, so neither renderer's copy may also show one.
+        // The application menu supplies both on macOS, so the exported copy may not show a second.
         Assert.Equal(
-            MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS()),
+            MenuStrategy.AboutInExportedHelpMenu(OperatingSystem.IsMacOS()),
             MenuLookup.Item(declared, "_Help", "_About LizTerm...")!.IsVisible);
         Assert.Equal(
-            MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS()),
+            MenuStrategy.PreferencesInExportedEditMenu(OperatingSystem.IsMacOS()),
             MenuLookup.Item(declared, "_Edit", "P_references...")!.IsVisible);
     }
 

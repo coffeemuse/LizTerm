@@ -171,37 +171,40 @@ public partial class SessionWindow : Window
         _stashedMenuItems.Clear();
     }
 
-    /// <summary>Where About and Preferences belong, in both renderers. Re-run after a refill: under InWindow
-    /// ExportedMenu is null and the native half of each rule is skipped, so the items come back needing it.</summary>
+    /// <summary>Where About and Preferences belong in the exported menu, and the chord the in-window Preferences
+    /// names. Re-run after a refill: under InWindow ExportedMenu is null and the native half of each rule is
+    /// skipped, so the items come back needing it.</summary>
     private void ApplyPlatformMenuRules()
     {
-        // macOS puts About in the application menu, so neither renderer's Help item may also carry one. Both get
-        // the rule: LIZTERM_MENU=classic on macOS is reachable, and there the classic bar renders in-window while
-        // the application menu still supplies its own About. Under that strategy ExportedMenu answers null,
-        // because the block above emptied the menu — which is the point, not an omission. MenuLookup.Required
-        // answers null for that and only that: a menu that is there and does not declare the item throws.
+        // macOS puts About in the application menu, so the exported Help menu must not carry a second one. Under
+        // InWindow ExportedMenu answers null, because ApplyMenuStyle emptied the menu — which is the point, not an
+        // omission. MenuLookup.Required answers null for that and only that: a menu that is there and does not
+        // declare the item throws.
         //
-        // The separator above About goes with it, in both menus. Nothing collapses a trailing divider, so an
-        // About hidden on its own leaves the Help menu ending in one.
-        var aboutInHelp = MenuStrategy.AboutInHelpMenu(OperatingSystem.IsMacOS());
-        AboutMenuItem.IsVisible = aboutInHelp;
-        AboutSeparator.IsVisible = aboutInHelp;
+        // The separator above About goes with it. Nothing collapses a trailing divider in NSMenu, so an About
+        // hidden on its own leaves the Help menu ending in one.
+        //
+        // The in-window menu takes no part in this and carries both items in every style (#103). A user who picks
+        // it has stopped looking at the system menu bar, which is where the application menu is; with Preferences
+        // hidden in the window as well, the setting that took the bar away left no visible way back to itself.
+        var aboutInHelp = MenuStrategy.AboutInExportedHelpMenu(OperatingSystem.IsMacOS());
         if (MenuLookup.Required(ExportedMenu, "_Help", "_About LizTerm...") is { } nativeAbout)
         {
             nativeAbout.IsVisible = aboutInHelp;
             if (MenuLookup.SeparatorAbove(nativeAbout) is { } separator) separator.IsVisible = aboutInHelp;
         }
 
-        // macOS puts Preferences in the application menu, with Cmd-comma, so Edit carries one only elsewhere.
-        // The same shape as About above: both renderers, the separator included.
-        var preferencesInEdit = MenuStrategy.PreferencesInEditMenu(OperatingSystem.IsMacOS());
-        PreferencesMenuItem.IsVisible = preferencesInEdit;
-        PreferencesSeparator.IsVisible = preferencesInEdit;
+        // The same shape for Preferences, which the application menu carries with Cmd-comma.
+        var preferencesInEdit = MenuStrategy.PreferencesInExportedEditMenu(OperatingSystem.IsMacOS());
         if (MenuLookup.Required(ExportedMenu, "_Edit", "P_references...") is { } nativePreferences)
         {
             nativePreferences.IsVisible = preferencesInEdit;
             if (MenuLookup.SeparatorAbove(nativePreferences) is { } separator) separator.IsVisible = preferencesInEdit;
         }
+
+        // The in-window Preferences names that chord as a label. InputGesture is display-only, so the application
+        // menu's key equivalent is still what acts on it, under every style. Off macOS no chord opens Preferences.
+        PreferencesMenuItem.InputGesture = MenuStrategy.PreferencesGesture(OperatingSystem.IsMacOS());
     }
 
     // MenuItem.Click is EventHandler<RoutedEventArgs> and NativeMenuItem.Click is EventHandler<EventArgs>, so

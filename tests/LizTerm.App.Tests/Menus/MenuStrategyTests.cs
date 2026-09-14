@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using Avalonia.Input;
 using LizTerm.App.Menus;
 using LizTerm.Core.Settings;
 
@@ -86,17 +87,28 @@ public class MenuStrategyTests
         Assert.Null(MenuStrategy.FromVariable(variable));
 
     [Fact]
-    public void About_belongs_in_the_help_menu_everywhere_except_macOS()
+    public void About_belongs_in_the_exported_help_menu_everywhere_except_macOS()
     {
-        Assert.False(MenuStrategy.AboutInHelpMenu(isMacOS: true));
-        Assert.True(MenuStrategy.AboutInHelpMenu(isMacOS: false));
+        Assert.False(MenuStrategy.AboutInExportedHelpMenu(isMacOS: true));
+        Assert.True(MenuStrategy.AboutInExportedHelpMenu(isMacOS: false));
     }
 
-    /// <summary>macOS has Preferences in the application menu, with Cmd-comma; Edit carries one everywhere else.</summary>
+    /// <summary>macOS has Preferences in the application menu, with Cmd-comma; the exported Edit menu carries one
+    /// everywhere else.</summary>
     [Fact]
-    public void Preferences_belongs_in_the_edit_menu_everywhere_except_macOS()
+    public void Preferences_belongs_in_the_exported_edit_menu_everywhere_except_macOS()
     {
-        Assert.False(MenuStrategy.PreferencesInEditMenu(isMacOS: true));
-        Assert.True(MenuStrategy.PreferencesInEditMenu(isMacOS: false));
+        Assert.False(MenuStrategy.PreferencesInExportedEditMenu(isMacOS: true));
+        Assert.True(MenuStrategy.PreferencesInExportedEditMenu(isMacOS: false));
+    }
+
+    /// <summary>The chord the in-window Preferences item names (#103): the application menu's Cmd-comma on macOS.
+    /// Elsewhere nothing opens Preferences from the keyboard, and a label would promise a chord that does
+    /// nothing.</summary>
+    [Fact]
+    public void Preferences_names_cmd_comma_on_macOS_and_no_chord_elsewhere()
+    {
+        Assert.Equal(new KeyGesture(Key.OemComma, KeyModifiers.Meta), MenuStrategy.PreferencesGesture(isMacOS: true));
+        Assert.Null(MenuStrategy.PreferencesGesture(isMacOS: false));
     }
 }

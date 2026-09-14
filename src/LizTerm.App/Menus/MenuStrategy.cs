@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using Avalonia.Input;
 using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Menus;
@@ -66,10 +67,18 @@ internal static class MenuStrategy
     /// file — a group offered where Resolve ignores it, or ignored where it is offered, is the bug.</summary>
     public static bool MenuStyleChoosable(bool isMacOS) => isMacOS;
 
-    /// <summary>macOS puts About in the application menu, so the Help item must not also carry one.</summary>
-    public static bool AboutInHelpMenu(bool isMacOS) => !isMacOS;
+    /// <summary>macOS puts About in the application menu, so the exported Help menu must not also carry one: both
+    /// would be in the system menu bar. The in-window menu is not that bar and carries About everywhere (#103).</summary>
+    public static bool AboutInExportedHelpMenu(bool isMacOS) => !isMacOS;
 
-    /// <summary>macOS puts Preferences in the application menu, with Cmd-comma, so the Edit menu carries one
-    /// only elsewhere — the same shape as About in Help.</summary>
-    public static bool PreferencesInEditMenu(bool isMacOS) => !isMacOS;
+    /// <summary>macOS puts Preferences in the application menu, with Cmd-comma, so the exported Edit menu carries
+    /// one only elsewhere — the same shape as About in Help. The in-window menu carries it everywhere, and on
+    /// macOS it is the visible way back for a user who has taken the menu out of the system menu bar (#103).</summary>
+    public static bool PreferencesInExportedEditMenu(bool isMacOS) => !isMacOS;
+
+    /// <summary>The chord the in-window Preferences item names: the application menu's Cmd-comma on macOS, which
+    /// works under every style because the application menu is there under every style. Only a label, since
+    /// MenuItem.InputGesture dispatches nothing. Null elsewhere, where no chord opens Preferences.</summary>
+    public static KeyGesture? PreferencesGesture(bool isMacOS) =>
+        isMacOS ? new KeyGesture(Key.OemComma, KeyModifiers.Meta) : null;
 }

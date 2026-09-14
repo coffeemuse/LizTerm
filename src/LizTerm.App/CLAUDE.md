@@ -251,8 +251,9 @@ is what gives the picker a menu bar on macOS. Each window's menu is rendered nat
 
 - `MenuStyle` (`src/LizTerm.Core/Settings/`) is `Auto | Native | InWindow | Both`, saved in `AppSettings`. `Auto`
   is what an untouched file reads as and is never acted on: `MenuStrategy.Resolve` turns it into `Native` on macOS
-  and `InWindow` elsewhere. `Resolve`, `FromVariable`, `MenuStyleChoosable`, `AboutInHelpMenu` and
-  `PreferencesInEditMenu` are pure and take the platform as an argument, so every combination is testable anywhere.
+  and `InWindow` elsewhere. `Resolve`, `FromVariable`, `MenuStyleChoosable`, `AboutInExportedHelpMenu`,
+  `PreferencesInExportedEditMenu` and `PreferencesGesture` are pure and take the platform as an argument, so every
+  combination is testable anywhere.
 - **The native menu is a macOS feature and nothing else**, and that is Avalonia's shape rather than work not yet
   done: macOS is the only platform with a native menu exporter. Win32 has none and Linux's `DBusMenuExporter`
   hands the menu to whatever global-menu registrar the desktop runs, so off macOS "native" is either a second
@@ -321,6 +322,12 @@ IND$FILE transfer correctly refuses, where ours forced `Shutdown()`.
 Do not set `DisableDefaultApplicationMenuItems` to "own" the block; that means re-implementing Services, Hide, Hide
 Others and Show All to get back what is already free.
 
+Because the application menu puts About and Preferences in the system menu bar, `ApplyPlatformMenuRules` hides the
+*exported* window menu's copies on macOS, so neither is listed twice in that bar. The in-window menu is not that bar
+and keeps both, with their separators, in every style and on every platform (#103). An end user who picked **Inside
+the window** stopped looking at the system menu bar and found no visible way back to Preferences, because the
+in-window copy used to be hidden too. Do not hide the in-window copies again to match the exported ones.
+
 macOS also appends Start Dictation and Emoji & Symbols to any menu titled **Edit**. Both are harmless — they reach
 the host through the text input `TerminalScreen` already handles, and Ctrl+Cmd+Space collides with nothing in
 `DefaultKeymap` — but, like the application menu's block, they are invisible to the parity guard, which walks the
@@ -334,7 +341,11 @@ would silently swallow PF1 — `TerminalScreen` would never see the key. So View
 Screen As... and Edit > Copy Screen as HTML carry none. **The one exception is Preferences... on the application
 menu**, with Cmd-comma (settings spec §5.4): the application menu exists only on macOS, `DefaultKeymap` binds no Cmd
 chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly this class.
-`NativeMenuTests.The_application_menu_carries_cmd_comma_on_preferences_and_nothing_else` holds it to that one.
+`NativeMenuTests.The_application_menu_carries_cmd_comma_on_preferences_and_nothing_else` holds it to that one. The
+in-window Edit > Preferences... *names* the same chord on macOS through `MenuItem.InputGesture`
+(`MenuStrategy.PreferencesGesture`), which dispatches nothing. The application menu's key equivalent stays the one
+handler, and it works under every style because the application menu is there under every style. The exported
+Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it installs no second key equivalent.
 
 - Edit's Cmd/Ctrl+C, V and A come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`,
   `PasteAsync` and `SelectAll` directly, never the `[RelayCommand]`s, which disable while running.
@@ -394,9 +405,10 @@ chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly t
   under classic) and throws when a present menu lacks the item. A header renamed in both menus at once keeps the
   parity guard green, so a silent null would leave About duplicated on macOS or the Edit key equivalents quietly
   gone.
-- Hiding an item at the end of a menu means hiding its separator too (`MenuLookup.SeparatorAbove`, and
-  `AboutSeparator` in the classic menu): nothing collapses a trailing divider, and the exporter honours `IsVisible`
-  on a separator because `NativeMenuItemSeparator` derives from `NativeMenuItem`.
+- Hiding an item at the end of a menu means hiding its separator too (`MenuLookup.SeparatorAbove`): nothing
+  collapses a trailing divider, and the exporter honours `IsVisible` on a separator because `NativeMenuItemSeparator`
+  derives from `NativeMenuItem`. Only the exported menu hides anything this way now; the classic `AboutSeparator` and
+  `PreferencesSeparator` stay named so the tests can assert they are shown (#103).
 
 ## Find
 
@@ -618,8 +630,10 @@ in `Program.BuildAvaloniaApp`; Release builds carry none of it, and the headless
   leaf — not a single Click on an ID captured earlier.
 - **`NativeMenuBar` is never the way in.** Its items are generated inside the control's template, so `search`
   returns the bar alone and `tree` on the bar returns `[]` — true even when it is rendering, which on macOS takes
-  forcing `NativeMenuBarPresenter.IsVisible` (#70). For the same reason nothing driving the tree can reach About or
-  Preferences on macOS: they exist only as `NativeMenuItem`s on the application menu, in every menu style.
+  forcing `NativeMenuBarPresenter.IsVisible` (#70). For the same reason the application menu's About and
+  Preferences are out of reach on macOS. Their in-window copies are ordinary `MenuItem`s in every style (#103):
+  under `LIZTERM_MENU=classic`, clicking the Edit header and then `PreferencesMenuItem` opened `PreferencesWindow`
+  (checked 2026-09-14).
 - To reach the picker and the profile editor, launch a second instance with no profile argument.
 - `props` returns `bindingExpression` beside each value, the quickest check that a control reached the view model.
   `IsEnabled` on a command-bound button reads `True` even while the tree shows `:disabled`, so check
