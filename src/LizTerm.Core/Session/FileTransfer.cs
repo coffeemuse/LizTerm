@@ -6,7 +6,16 @@ namespace LizTerm.Core.Session;
 
 public enum TransferDirection { Send, Receive }
 
-public enum TransferHostType { Tso, Vm, Cics }
+/// <summary>The host a transfer talks to. <see cref="Ispf"/> is TSO reached from an ISPF command line: the command
+/// goes to TSO through ISPF, so everything TSO allows applies. It is last so the other members keep their values.</summary>
+public enum TransferHostType { Tso, Vm, Cics, Ispf }
+
+public static class TransferHostTypes
+{
+    /// <summary>True where IND$FILE runs under TSO: TSO itself, and ISPF, which hands the command to TSO. The one
+    /// place that says so, so no caller spells out both members.</summary>
+    public static bool IsTso(this TransferHostType type) => type is TransferHostType.Tso or TransferHostType.Ispf;
+}
 
 public enum TransferMode { Text, Binary }
 
@@ -59,7 +68,7 @@ public sealed record FileTransferRequest
         if (SecondarySpace is <= 0) return "Secondary space must be a positive number.";
         if (AverageBlock is <= 0) return "Average block size must be a positive number.";
         if (BufferSize is < MinBufferSize or > MaxBufferSize) return $"Buffer size must be between {MinBufferSize} and {MaxBufferSize}.";
-        var tsoSend = Direction == TransferDirection.Send && HostType == TransferHostType.Tso;
+        var tsoSend = Direction == TransferDirection.Send && HostType.IsTso();
         if (tsoSend && AllocationUnits != AllocationUnits.Default && PrimarySpace is null)
             return "Primary space is required when allocation units are set.";
         if (tsoSend && AllocationUnits == AllocationUnits.AvBlock && AverageBlock is null)
@@ -69,5 +78,6 @@ public sealed record FileTransferRequest
 }
 
 /// <summary>Outcome of one transfer. Message is the engine's or host's final text, unaltered, on success and on
-/// failure (a cancel included). The byte count travels through the progress callback only.</summary>
+/// failure (a cancel included), with one exception: a backend may fail a request the engine cannot perform, in its
+/// own words, without sending it. The byte count travels through the progress callback only.</summary>
 public sealed record FileTransferResult(bool Succeeded, string Message);

@@ -89,6 +89,23 @@ public class FileTransferRequestTests
         Assert.Null((r with { HostType = TransferHostType.Cics }).Validate());
     }
 
+    [Theory]
+    [InlineData(TransferHostType.Tso, true)]
+    [InlineData(TransferHostType.Ispf, true)]
+    [InlineData(TransferHostType.Vm, false)]
+    [InlineData(TransferHostType.Cics, false)]
+    public void Tso_and_ispf_run_under_tso(TransferHostType type, bool expected) =>
+        Assert.Equal(expected, type.IsTso());
+
+    [Fact]
+    public void An_ispf_send_follows_the_tso_allocation_rules()
+    {
+        var r = Send() with { HostType = TransferHostType.Ispf, AllocationUnits = AllocationUnits.AvBlock };
+        Assert.Equal("Primary space is required when allocation units are set.", r.Validate());
+        Assert.Equal("Average block size is required for AVBLOCK allocation.", (r with { PrimarySpace = 5 }).Validate());
+        Assert.Null((r with { PrimarySpace = 5, AverageBlock = 4096 }).Validate());
+    }
+
     [Fact]
     public void Result_is_a_plain_record()
     {
