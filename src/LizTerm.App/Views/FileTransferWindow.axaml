@@ -65,7 +65,7 @@
           <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding ExtraOptions}" PlaceholderText="appended to the IND$FILE command" />
         </Grid>
       </Expander>
-      <TextBlock Text="The cursor must be at a TSO READY prompt or a command line before you start." Foreground="#A0A0A0" TextWrapping="Wrap" />
+      <TextBlock x:Name="CursorHintText" Text="{Binding CursorHint}" Foreground="#A0A0A0" TextWrapping="Wrap" />
       <TextBlock Text="{Binding ValidationMessage}" Foreground="#FF8080" TextWrapping="Wrap"
                  IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

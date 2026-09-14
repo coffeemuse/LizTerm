@@ -180,6 +180,7 @@ public class FileTransferWindowTests
 
     [Theory]
     [InlineData(TransferHostType.Tso, "TSO")]
+    [InlineData(TransferHostType.Ispf, "ISPF (MVS)")]
     [InlineData(TransferHostType.Vm, "VM")]
     [InlineData(TransferHostType.Cics, "CICS")]
     [InlineData(AllocationUnits.AvBlock, "AVBLOCK")]
@@ -195,5 +196,15 @@ public class FileTransferWindowTests
     {
         Assert.Null(TransferLabels.Converter.Convert(null, typeof(string), null, CultureInfo.InvariantCulture));
         Assert.Throws<NotSupportedException>(() => TransferLabels.Converter.ConvertBack("TSO", typeof(TransferHostType), null, CultureInfo.InvariantCulture));
+    }
+
+    [AvaloniaFact]
+    public void The_cursor_hint_follows_the_host_type()
+    {
+        var (window, vm, _) = Show();
+        var hint = window.FindControl<TextBlock>("CursorHintText")!;
+        Assert.Equal(FileTransferViewModel.TsoCursorHint, hint.Text);
+        vm.HostType = TransferHostType.Ispf;
+        Assert.Equal(FileTransferViewModel.IspfCursorHint, hint.Text);
     }
 }

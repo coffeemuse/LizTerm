@@ -75,7 +75,7 @@ public partial class FileTransferViewModel : ObservableObject
     [ObservableProperty] private string _hostFile = "";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTso), nameof(RecordFormats), nameof(CanSetRecordFormat), nameof(CanSetLrecl), nameof(CanSetBlksize), nameof(CanSetSpace), nameof(CanSetAverageBlock))]
+    [NotifyPropertyChangedFor(nameof(IsTso), nameof(CursorHint), nameof(RecordFormats), nameof(CanSetRecordFormat), nameof(CanSetLrecl), nameof(CanSetBlksize), nameof(CanSetSpace), nameof(CanSetAverageBlock))]
     private TransferHostType _hostType = TransferHostType.Tso;
 
     [ObservableProperty]
@@ -111,7 +111,14 @@ public partial class FileTransferViewModel : ObservableObject
     [ObservableProperty] private string _extraOptions = "";
     [ObservableProperty] private string? _validationMessage;
 
-    public bool IsTso => HostType == TransferHostType.Tso;
+    public bool IsTso => HostType.IsTso();
+
+    public const string TsoCursorHint = "The cursor must be at a TSO READY prompt or a command line before you start.";
+    public const string IspfCursorHint = "The cursor must be on an ISPF Command ===> or Option ===> line before you start.";
+
+    /// <summary>Where the cursor has to be before Start. Transfer types its command into the input field the cursor is
+    /// in, and from ISPF that field is a command line rather than TSO's READY prompt.</summary>
+    public string CursorHint => HostType == TransferHostType.Ispf ? IspfCursorHint : TsoCursorHint;
     /// <summary>The Advanced expander describes the host file a send creates, so it hides on receive.</summary>
     public bool ShowAdvanced => IsSend;
     public bool HasRecordFormat => RecordFormat != RecordFormat.Default;
@@ -126,7 +133,7 @@ public partial class FileTransferViewModel : ObservableObject
     public bool CanSetSpace => HasAllocation && IsTso;
     public bool CanSetAverageBlock => IsAvBlock && IsTso;
 
-    public TransferHostType[] HostTypes { get; } = [TransferHostType.Tso, TransferHostType.Vm, TransferHostType.Cics];
+    public TransferHostType[] HostTypes { get; } = [TransferHostType.Tso, TransferHostType.Ispf, TransferHostType.Vm, TransferHostType.Cics];
     /// <summary>VM has no undefined-length records, so the list shrinks for it.</summary>
     public RecordFormat[] RecordFormats => HostType == TransferHostType.Vm
         ? [RecordFormat.Default, RecordFormat.Fixed, RecordFormat.Variable]

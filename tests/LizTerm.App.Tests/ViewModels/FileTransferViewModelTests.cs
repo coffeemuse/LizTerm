@@ -41,7 +41,8 @@ public class FileTransferViewModelTests
         Assert.Equal("", vm.LreclText);
         Assert.Equal("", vm.ExtraOptions);
         Assert.Null(vm.ValidationMessage);
-        Assert.Equal([TransferHostType.Tso, TransferHostType.Vm, TransferHostType.Cics], vm.HostTypes);
+        Assert.Equal([TransferHostType.Tso, TransferHostType.Ispf, TransferHostType.Vm, TransferHostType.Cics], vm.HostTypes);
+        Assert.Equal(FileTransferViewModel.TsoCursorHint, vm.CursorHint);
         Assert.Equal([RecordFormat.Default, RecordFormat.Fixed, RecordFormat.Variable, RecordFormat.Undefined], vm.RecordFormats);
         Assert.Equal([AllocationUnits.Default, AllocationUnits.Tracks, AllocationUnits.Cylinders, AllocationUnits.AvBlock], vm.AllocationUnitsList);
     }
@@ -144,6 +145,35 @@ public class FileTransferViewModelTests
         vm.HostType = TransferHostType.Cics;
         vm.RecordFormat = RecordFormat.Undefined;
         Assert.Equal(RecordFormat.Undefined, vm.RecordFormat);
+    }
+
+    [Fact]
+    public void Ispf_is_tso_in_the_form_with_its_own_cursor_hint()
+    {
+        var (vm, _, _) = Create();
+        vm.RecordFormat = RecordFormat.Undefined;
+        vm.AllocationUnits = AllocationUnits.AvBlock;
+        vm.HostType = TransferHostType.Ispf;
+        Assert.True(vm.IsTso);
+        Assert.True(vm.CanSetRecordFormat);
+        Assert.True(vm.CanSetBlksize);
+        Assert.True(vm.CanSetSpace);
+        Assert.True(vm.CanSetAverageBlock);
+        Assert.Equal(RecordFormat.Undefined, vm.RecordFormat);
+        Assert.Contains(RecordFormat.Undefined, vm.RecordFormats);
+        Assert.Equal("The cursor must be on an ISPF Command ===> or Option ===> line before you start.", vm.CursorHint);
+
+        vm.HostType = TransferHostType.Vm;
+        Assert.Equal("The cursor must be at a TSO READY prompt or a command line before you start.", vm.CursorHint);
+    }
+
+    [Fact]
+    public void An_initial_ispf_request_round_trips()
+    {
+        var initial = new FileTransferRequest { Direction = TransferDirection.Send, LocalPath = "/tmp/x", HostFile = "A.B", HostType = TransferHostType.Ispf };
+        var (vm, _, _) = Create(initial);
+        Assert.Equal(TransferHostType.Ispf, vm.HostType);
+        Assert.Equal(initial, vm.TryBuildRequest());
     }
 
     [Fact]
@@ -600,7 +630,7 @@ public class FileTransferViewModelTests
         vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName!);
 
         vm.HostType = TransferHostType.Vm;
-        Assert.Superset(new HashSet<string> { nameof(vm.IsTso), nameof(vm.RecordFormats), nameof(vm.CanSetRecordFormat), nameof(vm.CanSetLrecl), nameof(vm.CanSetBlksize), nameof(vm.CanSetSpace), nameof(vm.CanSetAverageBlock) }, changed.ToHashSet());
+        Assert.Superset(new HashSet<string> { nameof(vm.IsTso), nameof(vm.CursorHint), nameof(vm.RecordFormats), nameof(vm.CanSetRecordFormat), nameof(vm.CanSetLrecl), nameof(vm.CanSetBlksize), nameof(vm.CanSetSpace), nameof(vm.CanSetAverageBlock) }, changed.ToHashSet());
         changed.Clear();
         vm.RecordFormat = RecordFormat.Fixed;
         Assert.Superset(new HashSet<string> { nameof(vm.HasRecordFormat), nameof(vm.CanSetLrecl), nameof(vm.CanSetBlksize) }, changed.ToHashSet());

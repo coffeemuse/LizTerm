@@ -8,7 +8,7 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.App.Views;
 
-/// <summary>Labels for the transfer enums in the dialog's combo boxes: TSO, VM, CICS, AVBLOCK; every other member
+/// <summary>Labels for the transfer enums in the dialog's combo boxes: TSO, ISPF (MVS), VM, CICS, AVBLOCK; every other member
 /// shows its own name (Default, Fixed, Tracks, ...).</summary>
 public sealed class TransferLabels : IValueConverter
 {
@@ -17,6 +17,7 @@ public sealed class TransferLabels : IValueConverter
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
     {
         TransferHostType.Tso => "TSO",
+        TransferHostType.Ispf => "ISPF (MVS)",
         TransferHostType.Vm => "VM",
         TransferHostType.Cics => "CICS",
         AllocationUnits.AvBlock => "AVBLOCK",

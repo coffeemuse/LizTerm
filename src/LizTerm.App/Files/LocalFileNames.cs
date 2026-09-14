@@ -7,7 +7,7 @@ using LizTerm.Core.Session;
 namespace LizTerm.App.Files;
 
 /// <summary>Suggests a local file name for a received host file: the member name or last qualifier of a TSO
-/// dataset, FN.FT for a VM file, the name as typed for CICS. Case is preserved.</summary>
+/// dataset (TSO and ISPF alike), FN.FT for a VM file, the name as typed for CICS. Case is preserved.</summary>
 public static class LocalFileNames
 {
     public const string Fallback = "received";
@@ -18,7 +18,7 @@ public static class LocalFileNames
         if (name.Length == 0) return Fallback;
         switch (hostType)
         {
-            case TransferHostType.Tso:
+            case TransferHostType.Tso or TransferHostType.Ispf:
                 var open = name.IndexOf('(');
                 if (open >= 0)
                 {
