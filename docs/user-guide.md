@@ -271,13 +271,17 @@ decides what that run *starts* with — you can still change it in Preferences a
 new choice as your preference, including when you pick the style the variable already started you on. Leaving
 the variable unset uses whatever you last chose.
 
-The macOS LizTerm application menu (About, Preferences, and Apple's standard items) stays whatever you pick.
+The macOS LizTerm application menu (About, Preferences, and Apple's standard items) stays whatever you pick, and
+Cmd-comma opens Preferences under all of them. A menu drawn inside the window carries **Edit > Preferences...** and
+**Help > About LizTerm...** as well, so after picking **Inside the window** you can still reach this setting from the
+window itself.
 
 ## Preferences
 
-**Preferences...** is in the LizTerm application menu on macOS (Cmd-comma), and at the bottom of a session
-window's **Edit** menu on Windows and Linux. Changes apply as you make them, to every open session window. The
-settings sit on three tabs:
+**Preferences...** is in the LizTerm application menu on macOS (Cmd-comma). It is also at the bottom of the
+**Edit** menu wherever a session window draws its menu inside the window: always on Windows and Linux, and on macOS
+under **Inside the window** or **Both**. Changes apply as you make them, to every open session window. The settings
+sit on three tabs:
 
 **Display**
 

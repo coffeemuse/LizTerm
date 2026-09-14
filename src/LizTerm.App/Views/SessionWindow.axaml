@@ -50,7 +50,8 @@
             <NativeMenuItem Header="Copy Screen as _HTML" Click="OnCopyScreenClickNative" IsEnabled="{Binding CanCaptureScreen}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="_Find..." Click="OnFindClickNative" IsEnabled="{Binding CanFind}" />
-            <!-- Hidden with its separator on macOS, where Preferences lives in the application menu. -->
+            <!-- Hidden with its separator on macOS, where Preferences lives in the application menu. The in-window
+                 copy is not hidden (#103). -->
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="P_references..." Click="OnPreferencesClickNative" />
           </NativeMenu>
@@ -184,7 +185,9 @@
         <MenuItem Header="Copy Screen as _HTML" Command="{Binding CopyScreenAsHtmlCommand}" />
         <Separator />
         <MenuItem x:Name="FindMenuItem" Header="_Find..." Click="OnFindClick" IsEnabled="{Binding CanFind}" />
-        <!-- Hidden with the item below it on macOS, as AboutSeparator is. -->
+        <!-- Shown with its separator on every platform and in every style (#103): on macOS this is the visible way
+             back to the menu style for someone who took the menu out of the system menu bar. There it names the
+             application menu's Cmd-comma; see ApplyPlatformMenuRules. -->
         <Separator x:Name="PreferencesSeparator" />
         <MenuItem x:Name="PreferencesMenuItem" Header="P_references..." Click="OnPreferencesClick" />
       </MenuItem>
@@ -248,8 +251,7 @@
         <Separator />
         <MenuItem x:Name="WireLogMenuItem" Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=TwoWay}" />
         <MenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />
-        <!-- Hidden with the item below it on macOS, where About lives in the application menu: a menu that ends
-             in a divider is what leaving it behind looks like. -->
+        <!-- Shown with its separator on every platform and in every style, as Preferences is (#103). -->
         <Separator x:Name="AboutSeparator" />
         <MenuItem x:Name="AboutMenuItem" Header="_About LizTerm..." Click="OnAboutClick" />
       </MenuItem>
