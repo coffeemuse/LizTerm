@@ -10,7 +10,7 @@ LizTerm is the client experience around it. The reasoning, and the alternatives 
 
 | Project | Role | Depends on |
 |---|---|---|
-| `src/LizTerm.Core` | The domain model: screen snapshots, connection and keyboard state, profiles and settings, the `IEmulatorSession` interface, certificate utilities. | The BCL only |
+| `src/LizTerm.Core` | The domain model: screen snapshots, connection and keyboard state, profiles and settings, the `IEmulatorSession` interface, certificate utilities, the release check. | The BCL only |
 | `src/LizTerm.Backend.B3270` | `B3270Session`, the implementation of `IEmulatorSession`: process host, JSON protocol, engine locator, wire log. | Core |
 | `src/LizTerm.App` | The Avalonia UI: splash, profile picker and editor, session window, terminal control, dialogs, menus. | Core, and the backend in one file only |
 
@@ -34,6 +34,15 @@ engine possible. It is enforced in review, not by tooling.
   and the conversion happens in exactly one place in the backend.
 - **Engine faults are recoverable.** If the engine process dies, the session reports a fault with the engine's last
   stderr lines, drops to disconnected, and starts a fresh engine on the next connect.
+
+## The release check
+
+The release check is the only HTTP request in LizTerm's own code. Core's `GitHubReleaseChecker` asks GitHub's
+releases API for the latest release (`GET https://api.github.com/repos/coffeemuse/LizTerm/releases/latest`, with a
+10 s timeout and the User-Agent `LizTerm/<version>`) when the app starts, if Preferences > General > Updates is on,
+and whenever Help > Check for Updates... is chosen. The App compares that version with its own and decides whether
+to say anything. The endpoint never returns a draft, so installed copies hear about a release only once it is
+published (see [CI and release](ci-and-release.md#publishing)).
 
 ## Where the detail lives
 

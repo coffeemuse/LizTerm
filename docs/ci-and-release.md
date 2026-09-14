@@ -143,6 +143,11 @@ Parcel does not read the project's version: `LizTerm.parcel` carries its own `Ge
 `version` job fails the run if that, `Directory.Build.props`, and — on an actual tag — the tag disagree, rather than
 silently building different version numbers into one release.
 
+It also checks that `CHANGELOG.md` has entries under a heading reading exactly `## <version>`, through
+`tools/changelog-section.sh`, which the `release` job runs again to copy them into the notes. On a tag, a missing or
+empty section fails the run before anything is packaged. A rehearsal only warns, because rehearsals also exercise
+the pipeline mid-development, while the entries still sit under `## Unreleased`.
+
 Parcel also treats a missing or misnamed icon as a warning, not an error, so a typo in `LizTerm.parcel`'s icon paths
 would ship an icon-less installer with a green build. The same job asserts that every icon path `LizTerm.parcel`
 names (`Win32Settings.InstallerIcon`, `MacOsSettings.AppIcon`, `LinuxSettings.AppIcon`) exists.
@@ -290,3 +295,10 @@ downloads every `packages-*` artifact into one flat directory and passes archive
 `gh release create`, publishing a **draft** rather than a live release. The ZIP is what a first-time visitor should
 reach for; `gh release create` uploads assets concurrently, so passing archives first makes them likely, not
 certain, to be listed first.
+
+The job writes the notes itself: a short introduction, **What's new** (this version's entries from `CHANGELOG.md`),
+then the pre-1.0 status, first-run advice, and a table of which file to download.
+
+Publishing the draft is a manual step, taken after checking its packages by hand:
+`gh release edit v<version> --draft=false --latest`. Until then no installed copy hears about the release. The
+app's update check reads GitHub's `releases/latest`, which never returns a draft or a pre-release.

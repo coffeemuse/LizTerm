@@ -34,8 +34,9 @@ keyboard while I worked. She was my mainframe cat.
 - **Find on screen**, a **crosshair** cursor, and **screen capture** to text or HTML.
 - **A bell** you can see, hear, or both.
 - **Keep-alive** and **automatic reconnect**.
-- **Preferences** for the crosshair, cursor blink, the bell, the keypad, and — on macOS — whether the menu is
-  the system menu bar, the one inside the window, or both.
+- **Update notices** when a newer release is out, from one request to GitHub at startup that you can turn off.
+- **Preferences** for the crosshair, cursor blink, the bell, the keypad, the splash screen and the update check,
+  and — on macOS — whether the menu is the system menu bar, the one inside the window, or both.
 - The **IBM 3270 font**, on the screen and in the status bar.
 
 ## Where LizTerm is right now
@@ -121,6 +122,7 @@ these notices in full under **About LizTerm** — in a session window's Help men
 ## Documentation
 
 - [User guide](docs/user-guide.md): keyboard, profiles, TLS, file transfer, screen capture, wire logs.
+- [Changelog](CHANGELOG.md): what changed in each release.
 - [Development](docs/development.md): building from source, tests, conventions.
 - [Engines](docs/engines.md): how the bundled b3270 is built and verified.
 - [CI and release](docs/ci-and-release.md): workflows, packaging, signing.

@@ -18,6 +18,7 @@ Each fact has one home. When a change makes a documented statement untrue, fix i
 |---|---|
 | End users: overview, download, first run, licensing | `README.md` — keep developer detail out of it |
 | Using the app: keys, profiles, TLS, file transfer, capture | `docs/user-guide.md` |
+| What changed in each release | `CHANGELOG.md` — new entries go under `## Unreleased`; the release notes copy each version's section |
 | Building, testing, conventions, environment variables | `docs/development.md` |
 | Engine builds and their gates | `docs/engines.md` |
 | Workflows, check names, caches, release, packaging, signing | `docs/ci-and-release.md` |
