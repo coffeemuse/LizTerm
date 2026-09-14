@@ -24,7 +24,11 @@ internal sealed class TsoNavigator(IEmulatorSession session, ScreenWaiter screen
     private static readonly TimeSpan Quiet = TimeSpan.FromMilliseconds(500);
     /// <summary>How long an ISPF panel must stand still before a transfer is typed into it. After a transfer ISPF
     /// repaints its panel, and that repaint can land after the transfer's own result, so the half-second
-    /// <see cref="Quiet"/> is not enough to know the repaint is over.</summary>
+    /// <see cref="Quiet"/> is not enough to know the repaint is over. The 2 s count from the last screen update, not
+    /// from the end of the transfer. In indfile-ispf-roundtrip.jsonl the host blanks the screen as each transfer
+    /// starts, so the wait for a "===>" panel holds out for the repaint and the 2 s run from it; a host that left the
+    /// panel up through a transfer would make the typed command the last update, and after a transfer longer than 2 s
+    /// the quiet would already be over.</summary>
     private static readonly TimeSpan PanelQuiet = TimeSpan.FromSeconds(2);
 
     public static bool IsAtReady(string text)
@@ -65,7 +69,8 @@ internal sealed class TsoNavigator(IEmulatorSession session, ScreenWaiter screen
     }
 
     /// <summary>Presses Enter through "***" pauses and PF3 out of any menu (ISPF, RPF, a logon proc's panel)
-    /// until the screen is at READY.</summary>
+    /// until the screen is at READY. A READY line written over a leftover panel
+    /// (<see cref="IsReadyOverLeftoverPanel"/>) is answered with Clear, then Enter if the screen stays blank.</summary>
     public async Task ReachReadyAsync()
     {
         for (var attempt = 0; attempt < 10; attempt++)

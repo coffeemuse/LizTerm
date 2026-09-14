@@ -15,8 +15,9 @@ URL="https://downloads.sourceforge.net/project/x3270/x3270/$VERSION/suite3270-$V
 SRC=$("$(dirname "$0")/shared-fetch-tarball.sh" "$URL" "$SHA256" "$DEST" "suite3270-4.5")
 
 # shared-fetch-tarball.sh starts from a fresh tree every time, so each patch applies exactly once. Name order, in
-# the C locale so it cannot vary by machine. -F0 allows no fuzz: a version bump that moves the patched code fails
-# here instead of producing an engine without the patch. -N and --batch mean patch never stops to ask. The callers
+# the C locale so it cannot vary by machine. A patch that no longer applies fails here rather than producing an
+# engine without it. -F0 allows no fuzz, so a hunk is never applied against context that no longer matches; a hunk
+# whose code merely moved still applies at its new line. -N and --batch mean patch never stops to ask. The callers
 # read this script's stdout as the source directory, so patch's own output goes to stderr. See docs/engines.md,
 # "Patches".
 LC_ALL=C

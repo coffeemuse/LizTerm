@@ -15,7 +15,9 @@ namespace LizTerm.Integration.Tests;
 /// <summary>Runs only when LIZTERM_TEST_HOST=host[:port] is set. LIZTERM_TEST_TLS=1 connects over TLS and
 /// LIZTERM_TEST_VERIFY_CERT=0 accepts an unverifiable certificate; both default the way a profile does.
 /// Uses the bundled b3270 when this project was built after native/build/build-macos.sh; otherwise set
-/// LIZTERM_B3270_PATH.</summary>
+/// LIZTERM_B3270_PATH. The exception is Indfile_round_trip_from_ispf_matches, which runs only the bundled engine (an
+/// engine set through LIZTERM_B3270_PATH lacks LizTerm's patch) and, through BundledEngine.Require, skips when there
+/// is none.</summary>
 public class LiveHostTests
 {
     private const int LiveTimeout = 600_000;

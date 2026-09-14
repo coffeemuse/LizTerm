@@ -95,8 +95,9 @@ jobs:
       # executes, so this is the only thing between a stale cached binary and an artifact upload -- the reason
       # engine-linux and engine-windows each run their gate unconditionally too.
       #
-      # Both fixtures are compiled here rather than picked off the disk. #13 proposed /opt/homebrew/bin/openssl
-      # for the dependency arm, on the grounds that build-macos.sh requires Homebrew openssl@3 -- that stopped
+      # The dependency and TLS fixtures are compiled here rather than picked off the disk; the third, for the patch
+      # marker arm, is a defaced copy of the engine being gated. #13 proposed /opt/homebrew/bin/openssl for the
+      # dependency arm, on the grounds that build-macos.sh requires Homebrew openssl@3 -- that stopped
       # being true when OpenSSL moved to the pinned tarball. It proposed /bin/echo for the TLS arm, but
       # verify-macos.sh checks the machine type FIRST and lipo reports /bin/echo as "x86_64 arm64e" against a
       # uname of arm64, so it dies at the architecture arm and never reaches the one it was chosen to prove.
@@ -249,8 +250,8 @@ jobs:
           key: sources-${{ hashFiles('native/build/fetch-*.sh') }}
 
       # Keyed on the Linux build and verify scripts (linux-image.sh included, so changing the base image forces
-      # a real build), the fetchers, and the shared machinery -- but not on the macOS scripts, which cannot
-      # change this binary. See the macOS job's cache step for the rule.
+      # a real build), the fetchers, the shared machinery and native/patches -- but not on the macOS scripts,
+      # which cannot change this binary. See the macOS job's cache step for the rule.
       - name: Cache the built engine
         id: engine
         uses: actions/cache@v6
@@ -405,8 +406,8 @@ jobs:
           key: x3270-src-${{ hashFiles('native/build/fetch-source.sh') }}
 
       # Keyed on the Windows scripts (windows-image.sh included, so changing the base image forces a real
-      # build), the x3270 fetcher, and the shared machinery -- but not on the Linux or macOS scripts, which
-      # cannot change this binary.
+      # build), the x3270 fetcher, the shared machinery and native/patches -- but not on the Linux or macOS
+      # scripts, which cannot change this binary.
       - name: Cache the built engine
         id: engine
         uses: actions/cache@v6
@@ -434,7 +435,7 @@ jobs:
 
       # Runs whether or not the engine came from the cache: on a cache hit the build step never executes, so
       # this and the Windows-side start check below are all that stand between a stale cached binary and a
-      # published artifact -- which is why it runs the gate against the built binary and not only the fixture.
+      # published artifact -- which is why it runs the gate against the built binary and not only its two fixtures.
       # Each arm is asserted on the message it prints, never on a bare non-zero exit: the wrapper also exits
       # non-zero for a Docker Hub rate limit or a failed apt-get install, and asserting only "it failed" would
       # report every one of those as a successful rejection.

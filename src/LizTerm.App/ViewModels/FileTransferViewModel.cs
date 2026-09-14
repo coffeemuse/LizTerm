@@ -126,7 +126,8 @@ public partial class FileTransferViewModel : ObservableObject
     public bool IsAvBlock => AllocationUnits == AllocationUnits.AvBlock;
     /// <summary>Mirrors what <c>TransferMapper</c> puts on the wire, so the form never accepts a value it would
     /// drop: RECFM goes to TSO and VM only, LRECL and BLKSIZE only with a RECFM, and BLKSIZE and SPACE only to
-    /// TSO. A value entered for one host type stays in the (disabled) control when another is chosen.</summary>
+    /// TSO. TSO here includes ISPF (MVS), which reaches the engine as TSO (<see cref="IsTso"/>). A value entered for
+    /// one host type stays in the (disabled) control when another is chosen.</summary>
     public bool CanSetRecordFormat => HostType != TransferHostType.Cics;
     public bool CanSetLrecl => HasRecordFormat && CanSetRecordFormat;
     public bool CanSetBlksize => HasRecordFormat && IsTso;

@@ -41,9 +41,11 @@ The traces come from the x3270 source distribution (BSD-3-Clause, Copyright Paul
   menu, cursor on `Option ===>`) to the last line the host sent after the second transfer ended: a text-mode send to
   `LIZTERM.ISPFTEST` and a receive of it, both with host type ISPF (MVS), which the engine typed into that field as
   `TSO IND$FILE PUT ...` and `TSO IND$FILE GET ...` (the file's screen updates show both commands). Shows that ISPF
-  repaints its panel after each transfer with no `***` pause, because IND$FILE's closing message arrives through the
-  transfer's own `FT:MSG` structured field. The logon, the ISPF exit and the logoff were cut, so no credentials and
-  no host address are in the file; the TSO user id shows on the ISPF panel, as it does on any MVS/CE install.
+  repaints its panel after each transfer with no `***` pause. The file does not show why: the planning spike's
+  data-stream trace (ISPF transfer spec, §3) showed IND$FILE's closing message arriving through the transfer's own
+  `FT:MSG` structured field rather than as TSO line output. The logon, the ISPF exit and the logoff were cut, so no
+  credentials and no host address are in the file; the TSO user id shows on the ISPF panel, as it does on any MVS/CE
+  install.
 - `gateway-cert-failure.jsonl`: raw b3270 4.5ga6 stdout from a verify-on TLS connect to the same hobbyist
   gateway on 2026-09-05, recorded with run tags `set` and `connect` (the replay substitutes the session's own
   tags). The Connect run fails with `Connection failed:`, `TLS: Host certificate verification failed:`, and the

@@ -203,7 +203,9 @@ public class ReplayTests
 
     /// <summary>The trimmed ISPF fixture has no initialize block, so the fake's own starts the session and the fixture
     /// follows. What it proves is the host's behaviour LizTerm relies on: after a transfer from ISPF the host
-    /// repaints the panel, with no *** pause, because IND$FILE's closing message came through the transfer itself.</summary>
+    /// repaints the panel, with no *** pause. The cause is not in the fixture: the planning spike's data-stream trace
+    /// showed IND$FILE's closing message coming through the transfer itself (an FT:MSG structured field), not as TSO
+    /// line output.</summary>
     [Fact]
     public async Task Indfile_from_ispf_replays_back_to_the_ispf_panel()
     {
