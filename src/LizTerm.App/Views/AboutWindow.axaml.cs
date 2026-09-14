@@ -24,5 +24,8 @@ public partial class AboutWindow : Window
         LicensesText.Text = AppLicense.All;
     }
 
+    /// <summary>Modal over About, so About cannot close from under the photo and the link cannot open a second one.</summary>
+    private void OnDedicationClick(object? sender, RoutedEventArgs e) => _ = new LizWindow().ShowDialog(this);
+
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 }

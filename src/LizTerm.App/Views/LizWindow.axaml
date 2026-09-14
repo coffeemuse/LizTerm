@@ -1,0 +1,22 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LizTerm.App.Views.LizWindow"
+        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
+        Title="Liz" SizeToContent="WidthAndHeight" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <!-- The photo LizTerm's name comes from, opened from About's dedication link. The dedication is lettered into the
+       picture, so the accessible name repeats it. The asset is 960 wide so a 2x display gets every pixel; a 1x
+       display draws it at half size, hence HighQuality. The same file is the README's (README, "The name"). -->
+  <DockPanel>
+    <Button x:Name="CloseButton" DockPanel.Dock="Bottom" Content="Close" HorizontalAlignment="Right" Margin="12"
+            IsDefault="True" IsCancel="True" Click="OnCloseClick" />
+    <Image x:Name="Photo" Source="avares://LizTerm.App/Assets/Liz/liz.jpg" Width="480" Height="394" Stretch="Uniform"
+           RenderOptions.BitmapInterpolationMode="HighQuality"
+           AutomationProperties.Name="Liz, a white and ginger cat, sitting at a keyboard in front of a monitor showing the MVS/TSO logon screen. The caption reads: Dedicated to Liz, “My Mainframe Cat”, 2007–2021." />
+  </DockPanel>
+</Window>
