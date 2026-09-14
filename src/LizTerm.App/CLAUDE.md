@@ -146,11 +146,12 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.
-- **The window is three tabs** — Display, Bell, Window — on a `TabControl` named `Tabs`, each tab a `StackPanel`
-  of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short enum is one
-  horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. A new setting joins
-  the tab it belongs to (#78's theme and cursor go in Display); a new area (#79's logging, #18's keyboard) is a new
-  tab. The size is fixed rather than `SizeToContent`, because only the selected tab is measured and a window sized
+- **The window is four tabs** — General, Display, Bell, Window — on a `TabControl` named `Tabs`, each tab a
+  `StackPanel` of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short
+  enum is one horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. A new
+  setting joins the tab it belongs to (#78's theme and cursor go in Display); a new area is a new tab — General
+  itself is the most recent (#107's Updates toggle), and #79's logging and #18's keyboard are next. The size is
+  fixed rather than `SizeToContent`, because only the selected tab is measured and a window sized
   to its content would change height on every tab switch; the Window tab is the tallest and sets the height.
   `FindControl` reaches a control on an unselected tab (the name scope is the window's), so the tests never select
   a tab first.

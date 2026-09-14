@@ -82,6 +82,25 @@ public class UpdateCheckWindowTests
     }
 
     [AvaloniaFact]
+    public void Download_stays_open_and_names_the_url_when_opening_throws()
+    {
+        var window = new UpdateCheckWindow(new UpdateCheckResult.NewerAvailable("0.6.0", "https://example/release"), "0.5.2",
+            onDownload: _ => throw new InvalidOperationException("no browser"), onSkip: null);
+        window.Show();
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+
+        var button = window.FindControl<Button>("DownloadButton")!;
+        var ex = Record.Exception(() => Click(button));
+
+        Assert.Null(ex);
+        Assert.False(closed);
+        var fallback = window.FindControl<TextBlock>("FallbackText")!;
+        Assert.True(fallback.IsVisible);
+        Assert.Equal("Could not open a browser. The release is at https://example/release", fallback.Text);
+    }
+
+    [AvaloniaFact]
     public void Skip_reports_the_version_and_closes()
     {
         var skipped = new List<string>();

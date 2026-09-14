@@ -40,6 +40,8 @@ public sealed class GitHubReleaseChecker(HttpClient httpClient) : IReleaseChecke
         await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
         var release = await JsonSerializer.DeserializeAsync(body, GitHubReleaseJsonContext.Default.GitHubReleaseResponse, cancellationToken)
             ?? throw new JsonException("The releases API returned an empty body.");
+        if (release.TagName is null || release.HtmlUrl is null)
+            throw new JsonException("The releases API returned no tag_name or html_url.");
 
         var version = release.TagName.StartsWith('v') ? release.TagName[1..] : release.TagName;
         return new ReleaseInfo(version, release.HtmlUrl);

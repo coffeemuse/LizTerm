@@ -229,7 +229,16 @@ public partial class SessionWindow : Window
 
     private async Task CheckForUpdatesAsync()
     {
-        if (Avalonia.Application.Current is App app) await app.CheckForUpdatesManuallyAsync(this);
+        if (ViewModel is not { } vm) return;
+        try
+        {
+            if (Avalonia.Application.Current is App app) await app.CheckForUpdatesManuallyAsync(this);
+        }
+        catch (Exception ex)
+        {
+            vm.ErrorMessage = "Could not check for updates: " + ex.Message;
+        }
+        Screen.Focus();
     }
 
     // Deliberately the view model's methods, never the [RelayCommand]s. Each method carries its own guard; the

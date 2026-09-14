@@ -57,7 +57,17 @@ public partial class UpdateCheckWindow : Window
     private async void OnDownloadClick(object? sender, RoutedEventArgs e)
     {
         var newer = (UpdateCheckResult.NewerAvailable)_result;
-        if (_onDownload is null || await _onDownload(newer.HtmlUrl))
+        bool opened;
+        try
+        {
+            opened = _onDownload is null || await _onDownload(newer.HtmlUrl);
+        }
+        catch (Exception)
+        {
+            // Fall through to naming the URL, the same as _onDownload returning false — OpenLinkAsync's shape.
+            opened = false;
+        }
+        if (opened)
         {
             Close();
             return;

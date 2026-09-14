@@ -70,4 +70,12 @@ public class GitHubReleaseCheckerTests
 
         await Assert.ThrowsAsync<JsonException>(() => checker.GetLatestReleaseAsync(CancellationToken.None));
     }
+
+    [Fact]
+    public async Task A_body_missing_tag_name_throws_JsonException()
+    {
+        var (checker, _) = Create(HttpStatusCode.OK, """{"html_url":"https://github.com/coffeemuse/LizTerm/releases/tag/v0.6.0"}""");
+
+        await Assert.ThrowsAsync<JsonException>(() => checker.GetLatestReleaseAsync(CancellationToken.None));
+    }
 }
