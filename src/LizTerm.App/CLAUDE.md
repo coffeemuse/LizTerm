@@ -396,6 +396,10 @@ Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it install
   also why OneWay is required rather than tidy: the in-window fallback runs the same handler over a `MenuItem` bound
   two-way to the `NativeMenuItem`, so with a TwoWay binding to the view model there would be two toggles and the
   click would do nothing.
+- **Check for Updates... follows About and Preferences' wiring, not `OpenLinkCommand`'s** (#107): a `Click`
+  handler on both menus, `SessionWindow.CheckForUpdatesAsync`, which reaches `App.CheckForUpdatesManuallyAsync`
+  with `this` as the dialog's owner. `OpenLinkCommand` has no way to pass a window along, which this item needs
+  and a plain Help link does not.
 - View > Keypad is a **submenu** on *both* menus, the Crosshair's structure: a `Show the Keypad` check box
   (`ToggleKeypad`, flipping `Settings.Keypad`), a separator, then `At the Bottom` and `On the Right` radios over
   `KeypadDockConverter` (`SetKeypadDock`, writing `Settings.KeypadDock`). Every one is a one-way `IsChecked` plus a

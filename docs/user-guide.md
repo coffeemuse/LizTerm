@@ -250,6 +250,8 @@ The Help menu carries the project's own pages, ahead of Wire Log (see [Wire logs
 - **Help > Project on GitHub** opens the project's page on GitHub.
 - **Help > Report an Issue...** opens GitHub's form for a new bug report or feature request.
 - **Help > Releases** opens the project's releases page on GitHub.
+- **Help > Check for Updates...** checks now, and always tells you the result — a newer version, or that you are
+  up to date, or why the check failed. See [Preferences](#preferences) for the automatic version of this check.
 
 On macOS you can choose, under **Menu bar** in Preferences:
 

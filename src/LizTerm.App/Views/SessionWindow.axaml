@@ -150,6 +150,7 @@
                             CommandParameter="{x:Static app:ProjectLinks.NewIssue}" />
             <NativeMenuItem Header="R_eleases" Command="{Binding OpenLinkCommand}"
                             CommandParameter="{x:Static app:ProjectLinks.Releases}" />
+            <NativeMenuItem Header="_Check for Updates..." Click="OnCheckForUpdatesClickNative" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=OneWay}"
                             Click="OnWireLogClickNative" />
@@ -248,6 +249,7 @@
                   CommandParameter="{x:Static app:ProjectLinks.NewIssue}" />
         <MenuItem Header="R_eleases" Command="{Binding OpenLinkCommand}"
                   CommandParameter="{x:Static app:ProjectLinks.Releases}" />
+        <MenuItem Header="_Check for Updates..." Click="OnCheckForUpdatesClick" />
         <Separator />
         <MenuItem x:Name="WireLogMenuItem" Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=TwoWay}" />
         <MenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />
