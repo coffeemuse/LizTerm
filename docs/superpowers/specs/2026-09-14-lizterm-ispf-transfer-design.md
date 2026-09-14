@@ -2,7 +2,7 @@
 
 Date: 2026-09-14. Parent spec: `2026-09-03-lizterm-v1-design.md`. Issue: #109, requested by @mgrossmann.
 Status: brainstormed and approved section by section with Robert on 2026-09-14, after a spike against MVS/CE the
-same day.
+same day. §4.5 was corrected later that day, while planning, and Robert chose its new decision.
 
 ## 1. Purpose
 
@@ -30,6 +30,10 @@ that `TSO ` is erased before the host ever sees it:
   b3270 ignores the host's file-transfer structured fields when no `Transfer` is pending
   (`Common/ft_dft.c:98`, "no transfer in progress").
 - No existing `Transfer` keyword can carry a prefix. `OtherOptions`, the closest, is appended *after* the options.
+- And a keyword the engine does not know is **silently ignored**, not refused: in `parse_ft_keywords` the
+  `Unknown option` check sits inside the loop over the known keywords, so it never runs once that loop ends without
+  a match. A stock 4.5ga6 b3270 given `commandprefix=TSO` goes straight on to open the local file. (Found while
+  planning; §4.5 is the consequence.)
 
 The same code is unchanged in x3270 4.6pre1. So the prefix has to come from inside the engine.
 
@@ -84,10 +88,15 @@ Rejected:
 them has any bearing on LizTerm, and it is not known whether upstream wants the feature at all. The aim is the
 smallest diff that re-applies easily to future x3270 releases.
 
-**4.5 An engine without the patch fails with an explanation; there is no capability probe.** `Transfer` refuses with
-"Not connected in 3270 mode" before it looks at any keyword, so an engine cannot be asked up front. Once connected,
-an unpatched engine rejects `commandprefix` with "Unknown option" while parsing, before it types anything or opens
-the local file, so failing at transfer time costs nothing. The backend turns that failure into a sentence (§6.2).
+**4.5 An engine without the patch is caught before anything is typed.** The engine cannot be asked: `Transfer`
+refuses with "Not connected in 3270 mode" before it looks at any keyword, and once connected it silently ignores a
+keyword it does not know (§2). An unpatched engine would therefore type a bare `IND$FILE` into the ISPF command line,
+ISPF would ignore it, and the transfer would fail 30 seconds later with "Transfer did not start within 30s". Instead,
+before an ISPF transfer the backend looks for the patch's marker in the engine binary, the same byte check the CI
+gate makes (§5.6), once per session, and without it fails the transfer at once with a sentence (§6.2). Rejected: no
+detection, leaving the 30-second timeout for the docs to explain. The first version of this section assumed the
+engine refused the keyword as an unknown option; it was corrected on 2026-09-14, while planning, once a stock b3270
+was seen to accept it.
 
 **4.6 Other engine installs become a developer feature.** Users run the engine LizTerm builds and ships.
 `LIZTERM_B3270_PATH` stays, documented for development only, with the caveat that such an engine lacks LizTerm's
@@ -161,7 +170,8 @@ A new `native/build/shared-verify-patches.sh <binary>` fails unless the binary c
 Today there is one marker, `CommandPrefix`, the keyword name the patched `tp[]` table puts into the binary. The
 script reads the file directly with `LC_ALL=C grep -a` (no pipe, so no SIGPIPE under `pipefail`), which works on the
 arm64 and Windows engines the runners cannot execute. A stock 4.5ga6 b3270 contains `OtherOptions` twice and
-`CommandPrefix` zero times, so the marker cannot pass by accident.
+`CommandPrefix` zero times, so the marker cannot pass by accident. The backend reads the same marker at run time
+(§6.2).
 
 - `verify-macos.sh`, `verify-linux.sh` and `verify-windows.sh` call it as their **last arm**, after the TLS or
   Schannel check and before the final `OK` line, so each existing reject fixture still fails at the arm it was built
@@ -191,7 +201,8 @@ marker; if upstream spells the keyword differently, `TransferMapper` changes wit
   It is the one answer to "does IND$FILE run under TSO here?", so no caller spells `== Tso || == Ispf`.
 - `FileTransferRequest.Validate` computes `tsoSend` with it, so an ISPF send gets TSO's allocation rules.
 - The request gains no field. Core records "ISPF"; how the engine gets there is the backend's business.
-- `FileTransferResult`'s doc comment, which says the message is "unaltered", names the one exception in §6.2.
+- `FileTransferResult`'s doc comment, which says the message is "unaltered", names the one exception: a backend may
+  fail a request the engine cannot perform, in its own words, without sending it (§6.2).
 
 ### 6.2 Backend (`src/LizTerm.Backend.B3270`)
 
@@ -199,10 +210,15 @@ marker; if upstream spells the keyword differently, `TransferMapper` changes wit
   `tso`. For `Ispf` it adds `commandprefix=TSO` straight after `host=tso`, and every TSO-only keyword (BLKSIZE,
   allocation and space, the Undefined record format) is sent exactly as for TSO. TSO, VM and CICS never send
   `commandprefix`.
-- **`B3270Session.TransferAsync`**: when an `Ispf` request fails and a result line contains `Unknown option` and
-  `commandprefix` (ordinal, ignoring case), the returned message is the explanation in §6.4 followed by a newline and
-  the engine's own text. Only the backend knows b3270's wording, so the translation lives here and not in the App. A
-  non-ISPF failure, whatever its text, stays verbatim.
+- **`EnginePatches`** (new, internal, `Process/EnginePatches.cs`): the marker `CommandPrefix` (the string
+  `shared-verify-patches.sh` checks for), the §6.4 sentence, and `Carries(path, marker)`, which reads the file's
+  bytes and reports whether the marker's ASCII bytes occur in them.
+- **`B3270Session.TransferAsync`**: for an `Ispf` request, before claiming the transfer slot or sending anything, it
+  asks whether the engine at `Engine.Path` carries the marker, reading the file once per session (a `Lazy<bool>`). If
+  not, it returns a failed `FileTransferResult` whose message is the §6.4 sentence, and nothing reaches the engine. A
+  session with no engine path (the tests' fake process) or a file that cannot be read is assumed to carry the patch,
+  so the transfer is attempted as it would have been before the check existed. TSO, VM and CICS transfers never read
+  the file.
 - **`B3270Locator.Find`**: the "not found" message keeps its list of places looked in, and its last line changes from
   `Set LIZTERM_B3270_PATH to a b3270 executable to override.` to `Reinstalling LizTerm restores it.` The message
   reaches users through `StartupErrorWindow`. `EnvironmentOverride` itself is unchanged, and About and the status bar
@@ -271,8 +287,8 @@ Each change goes in the file that owns the fact.
   an engine for those".
 - `src/LizTerm.Core/CLAUDE.md`: `TransferHostType.Ispf` and `IsTso()`, and the one exception to "Message is the
   engine's or host's final text verbatim".
-- `src/LizTerm.Backend.B3270/CLAUDE.md`: the ISPF mapping and the unpatched-engine message under "File transfer",
-  and the reworded not-found line under the locator.
+- `src/LizTerm.Backend.B3270/CLAUDE.md`: the ISPF mapping, and the engine marker check with the reason it exists
+  (unknown keywords are silently ignored), under "File transfer"; the reworded not-found line under the locator.
 - `src/LizTerm.App/CLAUDE.md`, "File transfer": the ISPF (MVS) entry and `CursorHint`.
 - `tests/CLAUDE.md`: the `TsoNavigator` rule (§8.4) and the ISPF live test.
 - `tests/LizTerm.Backend.B3270.Tests/Fixtures/README.md`: the new fixture (§8.3).
@@ -289,9 +305,12 @@ Each change goes in the file that owns the fact.
 - **Backend, `TransferMapperTests`**: ISPF maps to `host=tso` followed by `commandprefix=TSO`, and keeps BLKSIZE,
   allocation and the Undefined record format; TSO, VM and CICS never send `commandprefix`;
   `Every_host_type_has_a_keyword` gains an ISPF → `host=tso` row.
-- **Backend, `B3270SessionTransferTests`** (fake process): an ISPF request's `Transfer` line carries
-  `commandprefix=TSO`; a failed run-result reading `Transfer(): Unknown option: 'commandprefix=TSO'` returns the
-  explanation followed by the engine's line; the same failure text on a TSO request comes back verbatim.
+- **Backend, `EnginePatchesTests`**: `Carries` finds the marker in a temp file that holds it among other bytes, and
+  does not find it in one without it.
+- **Backend, `B3270SessionTransferTests`** (fake process, with a temp file as the engine's location): on an engine
+  file without the marker, an ISPF transfer fails at once with the §6.4 sentence and no `Transfer` line is written,
+  while a TSO transfer on the same session is sent as usual; on a file with the marker, and on a session with no
+  engine path, an ISPF request's `Transfer` line carries `host=tso` followed by `commandprefix=TSO`.
 - **Backend, `B3270LocatorTests`**: the not-found message ends `Reinstalling LizTerm restores it.` and no longer
   names `LIZTERM_B3270_PATH`.
 - **App, `FileTransferViewModelTests`**: the `HostTypes` order; ISPF (MVS) enables the TSO-only fields and offers
@@ -367,6 +386,8 @@ TN3270 host today (only a TLS loopback), and the marker gate plus the live test 
 - Making ISPF (MVS) work with an engine set through `LIZTERM_B3270_PATH`.
 - Per-profile transfer defaults and a transfer history (#21).
 - z/OSMF file transfer (#17).
+- Fixing upstream's silent acceptance of unknown `Transfer` keywords (§2) in our patch. It would not help here: the
+  engine that would need the fix is the one without our patch. It can be reported upstream alongside the submission.
 
 ## 10. Where it lands
 
@@ -376,11 +397,12 @@ TN3270 host today (only a TLS loopback), and the marker gate plus the live test 
   licence header `RepositoryHeadersTests` requires of `.sh` files under `native/build`).
 - `.github/workflows/engines.yml` (cache keys, reject cases).
 - `src/LizTerm.Core/Session/FileTransfer.cs`.
-- `src/LizTerm.Backend.B3270/Protocol/TransferMapper.cs`, `B3270Session.cs`, `Process/B3270Locator.cs`.
+- `src/LizTerm.Backend.B3270/Protocol/TransferMapper.cs`, `B3270Session.cs`, `Process/B3270Locator.cs`,
+  `Process/EnginePatches.cs` (new).
 - `src/LizTerm.App/ViewModels/FileTransferViewModel.cs`, `Views/FileTransferWindow.axaml`, `Views/TransferLabels.cs`,
   `Files/LocalFileNames.cs`, `Assets/Docs/user-guide.html` (regenerated).
 - Tests: `FileTransferRequestTests`, `TransferMapperTests`, `B3270SessionTransferTests`, `B3270LocatorTests`,
-  `IndicationParserTests`, `ReplayTests`, `FileTransferViewModelTests`, `FileTransferWindowTests`,
+  `EnginePatchesTests`, `IndicationParserTests`, `ReplayTests`, `FileTransferViewModelTests`, `FileTransferWindowTests`,
   `LocalFileNamesTests`, `LiveHostTests`, `TsoNavigator`; `Fixtures/indfile-ispf-roundtrip.jsonl` (new) and the
   fixtures README.
 - Docs: `README.md`, `THIRD-PARTY-NOTICES.txt`, `docs/user-guide.md`, `docs/development.md`, `docs/engines.md`,
