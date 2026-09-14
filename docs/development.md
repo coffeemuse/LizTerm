@@ -156,7 +156,8 @@ field should add a trimmed fixture. There are two recorders:
 - `tools/wirelog-to-fixture.sh <wire.log> <out.jsonl>` turns a `LIZTERM_WIRE_LOG` file from a real session into a
   fixture: inbound lines only, timestamps stripped.
 - `tools/record-fixture.sh <trace.trc> <out.jsonl> [model] [playback-step]` replays an x3270 `.trc` host trace
-  through b3270 and saves its output. It needs x3270's `playback` tool, built by `native/build/build-playback.sh`.
+  through b3270 and saves its output. It needs x3270's `playback` tool, built by `native/build/build-playback.sh`,
+  which applies LizTerm's patches and so needs `patch` installed (macOS has it).
 
 Before committing a fixture, cut any logon from it and replace real host addresses.
 

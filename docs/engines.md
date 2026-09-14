@@ -84,10 +84,10 @@ to a patch alone rebuilds the engines instead of restoring cached ones. `shared-
 binary contains each patch's marker, a string only the patched source puts there (`CommandPrefix`; a stock 4.5ga6
 b3270 does not contain it). It reads bytes and never runs the binary, so it covers the engines a runner cannot
 execute. `verify-macos.sh`, `verify-linux.sh` and `verify-windows.sh` call it as their last arm, each gate's step in
-`engines.yml` rejects a copy of the freshly built engine with its marker defaced (re-signed ad hoc on macOS, so the
-TLS arm can still run it), and `verify-bundled-engine.sh` calls it for every packaged archive. A new patch adds its
-marker to `MARKERS` in that script; the backend's `EnginePatchesTests` holds `EnginePatches.CommandPrefixMarker` to
-the same name.
+`engines.yml` rejects a copy of the engine being gated with its marker defaced (re-signed ad hoc on macOS, so the TLS
+arm can still run it), and `verify-bundled-engine.sh` calls it for every packaged archive. A new patch adds its marker
+to `MARKERS` in `shared-verify-patches.sh`; the backend's `EnginePatchesTests` holds
+`EnginePatches.CommandPrefixMarker` to the same name.
 
 **Writing or regenerating a patch.** Extract the tarball twice, rename the trees `a` and `b`, edit `b`, and from
 their parent directory run `diff -u` on each changed file (`diff -u a/Common/ft.c b/Common/ft.c`), stripping the
@@ -234,5 +234,6 @@ the same bytes before a Windows machine has started them.
 
 ## Other tools
 
-`native/build/build-playback.sh` builds x3270's `playback` tool, which `tools/record-fixture.sh` uses to record
-replay fixtures from host traces (see [Development](development.md#replay-fixtures)).
+`native/build/build-playback.sh` builds x3270's `playback` tool, which `tools/record-fixture.sh` uses to record replay
+fixtures from host traces (see [Development](development.md#replay-fixtures)). It gets its source from
+`fetch-source.sh`, so it applies LizTerm's patches and needs `patch` installed; macOS has it.

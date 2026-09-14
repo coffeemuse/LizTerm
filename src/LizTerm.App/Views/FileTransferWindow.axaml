@@ -27,7 +27,7 @@
         <TextBlock Grid.Row="1" Text="Host file" VerticalAlignment="Center" />
         <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding HostFile}" PlaceholderText="LIZTERM.JCL(JOB1) or 'USER.DATA.SET'" />
         <TextBlock Grid.Row="2" Text="Host type" VerticalAlignment="Center" />
-        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding HostTypes}" SelectedItem="{Binding HostType}" Width="120" HorizontalAlignment="Left"
+        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding HostTypes}" SelectedItem="{Binding HostType}" Width="130" HorizontalAlignment="Left"
                   DisplayMemberBinding="{ReflectionBinding Converter={x:Static views:TransferLabels.Converter}}" />
         <TextBlock Grid.Row="3" Text="Mode" VerticalAlignment="Center" />
         <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="16">
