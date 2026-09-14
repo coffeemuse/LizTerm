@@ -44,7 +44,18 @@
     </DockPanel>
     <TabControl x:Name="Tabs" Padding="0,12,0,0">
       <!-- Each row is its own two-column grid inside a StackPanel rather than a row of one shared grid, so a row
-           can be hidden as a unit (the menu bar) and every tab has the same shape. -->
+           can be hidden as a unit (the menu bar) and every tab has the same shape. General is first: it is where
+           a setting that is not about the screen, the bell, or the window's own chrome belongs (#107), and it is
+           where the next such setting goes too, rather than reopening the question of where it belongs. -->
+      <TabItem Header="General">
+        <StackPanel Spacing="12">
+          <Grid Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Updates" />
+            <CheckBox x:Name="CheckForUpdatesBox" Grid.Column="1" Content="Automatically check for updates on launch"
+                      IsChecked="{Binding CheckForUpdatesAutomatically, Mode=TwoWay}" />
+          </Grid>
+        </StackPanel>
+      </TabItem>
       <TabItem Header="Display">
         <StackPanel Spacing="12">
           <Grid Classes="settings" ColumnDefinitions="120,*">

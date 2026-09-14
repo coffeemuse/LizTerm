@@ -271,18 +271,33 @@ public class PreferencesWindowTests
         }
     }
 
-    /// <summary>The tabs are the window's structure: Display, Bell and Window in that order, the last read top of
-    /// the window to bottom (menu bar, status bar, keypad). Every control keeps its name, so the other tests here
-    /// find it whichever tab is selected.</summary>
+    /// <summary>The tabs are the window's structure: General first (#107 — not about the screen, the bell, or
+    /// the window's own chrome), then Display, Bell and Window in that order, the last read top of the window to
+    /// bottom (menu bar, status bar, keypad). Every control keeps its name, so the other tests here find it
+    /// whichever tab is selected.</summary>
     [AvaloniaFact]
-    public void The_settings_sit_on_display_bell_and_window_tabs_in_that_order()
+    public void The_settings_sit_on_general_display_bell_and_window_tabs_in_that_order()
     {
         var (window, _) = Show();
         var tabs = window.FindControl<TabControl>("Tabs")!;
 
-        Assert.Equal(["Display", "Bell", "Window"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header!));
+        Assert.Equal(["General", "Display", "Bell", "Window"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header!));
         Assert.Equal(0, tabs.SelectedIndex);
-        Assert.Same(window.FindControl<RadioButton>("CrosshairNone"), tabs.Items.Cast<TabItem>().First().FindLogicalDescendantOfType<RadioButton>());
+        Assert.Same(window.FindControl<RadioButton>("CrosshairNone"), tabs.Items.Cast<TabItem>().ElementAt(1).FindLogicalDescendantOfType<RadioButton>());
+    }
+
+    [AvaloniaFact]
+    public void Checking_the_check_for_updates_box_sets_the_shared_settings()
+    {
+        var (window, settings) = Show();
+        var box = window.FindControl<CheckBox>("CheckForUpdatesBox")!;
+        Assert.True(box.IsChecked);
+
+        box.IsChecked = false;
+        Assert.False(settings.CheckForUpdatesAutomatically);
+
+        settings.CheckForUpdatesAutomatically = true;
+        Assert.True(box.IsChecked);
     }
 
     /// <summary>App's one-at-a-time rule, through the internal seam that takes a settings object so the test

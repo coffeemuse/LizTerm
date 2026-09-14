@@ -284,7 +284,14 @@ window itself.
 **Preferences...** is in the LizTerm application menu on macOS (Cmd-comma). It is also at the bottom of the
 **Edit** menu wherever a session window draws its menu inside the window: always on Windows and Linux, and on macOS
 under **Inside the window** or **Both**. Changes apply as you make them, to every open session window. The settings
-sit on three tabs:
+sit on four tabs:
+
+**General**
+
+- **Updates** — whether LizTerm checks for a newer release automatically when it starts (on by default). A check
+  never interrupts you unless there is something new, and skipping a version keeps it quiet only until the next
+  one is published. Help > Check for Updates... checks on demand regardless of this setting, and always tells you
+  the result.
 
 **Display**
 
