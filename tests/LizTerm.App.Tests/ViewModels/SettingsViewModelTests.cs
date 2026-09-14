@@ -187,6 +187,40 @@ public class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void The_check_for_updates_flag_writes_through_and_skips_an_unchanged_value()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.CheckForUpdatesAutomatically = true;
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.CheckForUpdatesAutomatically = false;
+
+        Assert.Equal(["CheckForUpdatesAutomatically"], changes);
+        Assert.False(new SettingsViewModel(new SettingsStore(FilePath)).CheckForUpdatesAutomatically);
+    }
+
+    /// <summary>Not bound to any Preferences control — App writes it from the Skip button's callback — but it
+    /// follows the same write-through shape as every other setting.</summary>
+    [Fact]
+    public void The_skipped_update_version_writes_through_and_skips_an_unchanged_value()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.SkippedUpdateVersion = null;
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.SkippedUpdateVersion = "0.6.0";
+
+        Assert.Equal(["SkippedUpdateVersion"], changes);
+        Assert.Equal("0.6.0", new SettingsViewModel(new SettingsStore(FilePath)).SkippedUpdateVersion);
+    }
+
+    [Fact]
     public void The_menu_style_writes_through_raises_its_own_name_and_skips_an_unchanged_value()
     {
         var settings = new SettingsViewModel(new SettingsStore(FilePath));
