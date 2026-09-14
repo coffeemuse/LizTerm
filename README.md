@@ -19,6 +19,10 @@ LizTerm is the modern client around it.
 LizTerm is named after Liz, a beloved cat who passed away in December 2021. She liked to sit on my desk beside the
 keyboard while I worked. She was my mainframe cat.
 
+<img src="src/LizTerm.App/Assets/Liz/liz.jpg" alt="Liz, a white and ginger cat, sitting at a keyboard in front of a monitor showing the MVS/TSO logon screen. The caption reads: Dedicated to Liz, “My Mainframe Cat”, 2007–2021." width="480">
+
+Her photo is in the app too, under **About LizTerm**.
+
 ## Features
 
 - **One app, six builds**: macOS (Apple Silicon and Intel), Linux (x64 and ARM64) and Windows (x64 and ARM64), each
@@ -108,6 +112,10 @@ check it before you share it.
 ## License
 
 LizTerm is open source under the BSD 3-Clause License, Copyright 2026 by CoffeeMuse. See [LICENSE](LICENSE).
+
+The photo of Liz is the exception: it is under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/),
+so you may share it unchanged and with credit, but not commercially
+([notice](src/LizTerm.App/Assets/Liz/LICENSE-liz.txt)).
 
 It bundles:
 

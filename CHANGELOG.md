@@ -15,6 +15,7 @@ What changed in each LizTerm release, newest first. Downloads are on the
   F-keys already cover them.
 - **About and Preferences in the in-window menu on macOS.** After choosing **Inside the window**, the window's own
   menu carries **Edit > Preferences...** and **Help > About LizTerm...**, so the choice can always be undone.
+- **A dedication to Liz**, the cat LizTerm is named after: **About LizTerm** links to her photo.
 - **Fixed:** a profile whose file name did not match the name inside it, such as one renamed by hand, could not be
   starred or deleted, and editing it added a duplicate. Saving a profile also no longer overwrites another profile
   whose name makes the same file name, such as `a/b` and `a:b`.

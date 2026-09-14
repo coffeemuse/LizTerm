@@ -90,4 +90,9 @@ public static class Palette
     public static readonly IBrush OiaError = Brush(HostColor.Red, false);
     public static readonly IBrush TlsVerified = Brush(HostColor.Green, false);
     public static readonly IBrush TlsUnverified = Brush(HostColor.Orange, false);
+
+    /// <summary>About's link to the photo of Liz, in the palette's orange for her fur. It is underlined and led by a
+    /// picture icon so the colour never carries it alone. <see cref="TlsUnverified"/> is the same orange; the two
+    /// never share a window.</summary>
+    public static readonly IBrush DedicationLink = Brush(HostColor.Orange, false);
 }

@@ -630,10 +630,20 @@ Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it install
 - `Assets/Icons/` holds the app icon in the three shapes packaging needs (`lizterm.icns`, `lizterm.ico`,
   `lizterm.png`, referenced from `LizTerm.parcel`). The csproj's `<AvaloniaResource Include="Assets\**" />` already
   covers a new or replaced one.
+- **About's dedication link** (`DedicationLink`) opens `LizWindow`, modal over About: the photo of Liz, the cat
+  LizTerm is named for (`Assets/Liz/liz.jpg`, which the README shows too). It is a `Button` made to look like a link,
+  not a `HyperlinkButton`, because Fluent paints that one in the platform accent, and on macOS the accent is the
+  user's choice, graphite included. So `Palette.DedicationLink` (orange, for her fur) is its foreground, and a window
+  style keeps that colour and no fill under `:pointerover` and `:pressed`, where Fluent's `Button` theme swaps both.
+  The underline and the drawn picture icon are what stop the orange carrying "link" alone. The dedication is
+  lettered into the image, so the image's `AutomationProperties.Name` repeats it.
 - `AppLicense` is the one spelling of LizTerm's licence. `Notice` is the one-line credit on the splash and in About,
   deliberately ASCII (`Copyright 2026 by CoffeeMuse - BSD-3-Clause`) because the splash renders it in the 3270 font,
-  whose coverage is not general. `All` is `LICENSE` followed by `THIRD-PARTY-NOTICES.txt` — both `AvaloniaResource`
-  entries pointing up at the repository root — shown in About under the heading **Licenses**. Embedding `LICENSE` is
+  whose coverage is not general. `All` is `LICENSE`, then `Assets/Liz/LICENSE-liz.txt`, then
+  `THIRD-PARTY-NOTICES.txt` — the first and last `AvaloniaResource` entries pointing up at the repository root —
+  shown in About under the heading **Licenses**. The middle one is the photo of Liz's notice: CC BY-NC-ND 4.0, the
+  one part of LizTerm not under BSD, so it sits with LizTerm's own terms rather than among the bundled components'.
+  It is not added to `LICENSE` itself, which GitHub's licence detection reads. Embedding `LICENSE` is
   what satisfies BSD-3-Clause clause 2 for a binary distribution: no archive or installer the release produces
   carries a licence file beside the binary, so About is the only place LizTerm's terms reach a user. `All` is read on
   first use rather than in a static initializer, so touching `Notice` during startup never pulls in the asset loader.

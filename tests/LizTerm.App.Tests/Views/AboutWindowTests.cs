@@ -4,6 +4,8 @@
 
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using LizTerm.App.Views;
 using LizTerm.Core.Session;
@@ -80,12 +82,47 @@ public class AboutWindowTests
         Assert.Contains("CommunityToolkit", licenses);
     }
 
+    /// <summary>The photo of Liz is the one part of LizTerm not under BSD-3-Clause, and this box is where a build's
+    /// terms reach its user, so the photo's sit with LizTerm's own, ahead of the bundled components'.</summary>
+    [AvaloniaFact]
+    public void Carries_the_photo_licence_after_lizterms_own_and_before_the_third_party_notices()
+    {
+        var licenses = Shown().FindControl<TextBox>("LicensesText")!.Text!;
+        var photo = licenses.IndexOf("CC BY-NC-ND 4.0", StringComparison.Ordinal);
+        Assert.True(photo > licenses.IndexOf("THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS", StringComparison.Ordinal),
+            "The photo's licence belongs after LizTerm's own terms.");
+        Assert.True(photo < licenses.IndexOf("Paul Mattes", StringComparison.Ordinal),
+            "The photo's licence belongs ahead of the bundled components'.");
+    }
+
     [AvaloniaFact]
     public void About_shows_the_app_icon_beside_the_name()
     {
         var image = Shown().FindControl<Image>("AboutMark");
         Assert.NotNull(image);
         Assert.NotNull(image!.Source);
+    }
+
+    /// <summary>LizTerm is named for Liz (README, "The name"), and About links to her photo. The link is orange,
+    /// and underlined so the colour never carries "this is a link" alone.</summary>
+    [AvaloniaFact]
+    public void Offers_lizs_photo_through_an_underlined_link()
+    {
+        var text = Shown().FindControl<TextBlock>("DedicationText")!;
+        Assert.Contains("Liz", text.Text);
+        Assert.NotNull(text.TextDecorations);
+        Assert.Contains(text.TextDecorations!, decoration => decoration.Location == TextDecorationLocation.Underline);
+    }
+
+    [AvaloniaFact]
+    public void The_dedication_link_opens_lizs_photo_over_about()
+    {
+        var window = Shown();
+        Assert.Empty(window.OwnedWindows);
+
+        window.FindControl<Button>("DedicationLink")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.IsType<LizWindow>(Assert.Single(window.OwnedWindows));
     }
 
     private static AboutWindow Shown()
