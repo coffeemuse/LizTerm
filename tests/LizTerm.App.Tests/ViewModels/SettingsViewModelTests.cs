@@ -202,6 +202,22 @@ public class SettingsViewModelTests : IDisposable
         Assert.False(new SettingsViewModel(new SettingsStore(FilePath)).CheckForUpdatesAutomatically);
     }
 
+    [Fact]
+    public void The_splash_flag_writes_through_and_skips_an_unchanged_value()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.ShowSplashOnLaunch = true;
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.ShowSplashOnLaunch = false;
+
+        Assert.Equal(["ShowSplashOnLaunch"], changes);
+        Assert.False(new SettingsViewModel(new SettingsStore(FilePath)).ShowSplashOnLaunch);
+    }
+
     /// <summary>Not bound to any Preferences control — App writes it from the Skip button's callback — but it
     /// follows the same write-through shape as every other setting.</summary>
     [Fact]

@@ -100,6 +100,19 @@ public class SettingsStoreTests : IDisposable
         Assert.False(ReadFile()["checkForUpdatesAutomatically"]!.GetValue<bool>());
     }
 
+    /// <summary>The splash flag (#108): on by default, so a settings file from before it still shows the splash, and
+    /// turning it off is what writes the key.</summary>
+    [Fact]
+    public void The_splash_flag_round_trips_and_defaults_on()
+    {
+        Assert.True(Store.Load().ShowSplashOnLaunch);
+
+        Store.Update(s => s with { ShowSplashOnLaunch = false });
+
+        Assert.False(Store.Load().ShowSplashOnLaunch);
+        Assert.False(ReadFile()["showSplashOnLaunch"]!.GetValue<bool>());
+    }
+
     /// <summary>The per-version Skip (#107): null until the user skips a release, holding the exact version
     /// string rather than a bool so a later release is never suppressed by an old skip.</summary>
     [Fact]

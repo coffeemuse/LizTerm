@@ -53,23 +53,19 @@ public partial class App : Application
             // Closing the last session window returns to the picker; only Quit ends the process.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            // Subscribe before Show(): a splash whose maximum has already elapsed closes from inside Opened, i.e.
-            // inside Show() itself. The gate then runs the plan once the splash has closed and the plan is known,
-            // in whichever order those happen — under OnExplicitShutdown a missed plan would leave the process
-            // running with no window and no way to quit.
-            var gate = new StartupGate(Execute);
-            var splash = new SplashWindow();
-            splash.Closed += (_, _) => gate.SplashClosed();
-            splash.Show();
-            splash.Activate();
-
-            _store = new ProfileStore(AppPaths.ProfilesDirectory());
+            // Settings before anything opens: whether there is a splash at all is one of them (#108). Load never
+            // throws, so reading them first adds no way for startup to fail before a window can say so.
             _settings = new SettingsViewModel(new SettingsStore(AppPaths.SettingsFile()));
             // LIZTERM_MENU seeds this instance and nothing else: in memory, never written, and overridable from
             // Preferences for the rest of the session (#70). A variable naming no style leaves the saved
             // preference to decide.
             if (MenuStrategy.FromVariable(Environment.GetEnvironmentVariable(MenuStrategy.Variable)) is { } seeded)
                 _settings.SeedMenuStyle(seeded);
+
+            var gate = new StartupGate(Execute);
+            OpenSplash(gate, _settings.Current);
+
+            _store = new ProfileStore(AppPaths.ProfilesDirectory());
             string? backendError = null;
             try
             {
@@ -86,6 +82,26 @@ public partial class App : Application
             gate.PlanReady(StartupPlan.Decide(backendError, arguments, _store.LoadAll()));
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>The splash, or none (#108). Turned off, nothing opens and the gate is told at once, so the plan runs
+    /// the moment it is known: no splash at all rather than a zero-length one. On, the gate runs the plan once the
+    /// splash has closed and the plan is known, in whichever order those happen — under OnExplicitShutdown a missed
+    /// plan would leave the process running with no window and no way to quit.</summary>
+    internal static SplashWindow? OpenSplash(StartupGate gate, AppSettings settings)
+    {
+        if (!settings.ShowSplashOnLaunch)
+        {
+            gate.SplashClosed();
+            return null;
+        }
+        // Subscribe before Show(): a splash whose maximum has already elapsed closes from inside Opened, i.e.
+        // inside Show() itself.
+        var splash = new SplashWindow();
+        splash.Closed += (_, _) => gate.SplashClosed();
+        splash.Show();
+        splash.Activate();
+        return splash;
     }
 
     private void Execute(StartupPlan plan)

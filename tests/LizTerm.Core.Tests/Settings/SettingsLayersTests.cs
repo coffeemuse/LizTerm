@@ -77,6 +77,15 @@ public class SettingsLayersTests
         Assert.True(SettingsLayers.Read(Doc("""{"keypad":true,"keypadDock":"Right"}""")).KeypadPfKeys);
     }
 
+    /// <summary>The splash flag (#108) is on by default, so a file from before it, which says nothing about it,
+    /// keeps the splash.</summary>
+    [Fact]
+    public void The_splash_flag_reads_by_name_and_defaults_on()
+    {
+        Assert.False(SettingsLayers.Read(Doc("""{"showSplashOnLaunch":false}""")).ShowSplashOnLaunch);
+        Assert.True(SettingsLayers.Read(Doc("""{"blink":false}""")).ShowSplashOnLaunch);
+    }
+
     /// <summary>A style this build does not know (a later build's name, say) costs that key alone, the same
     /// guarantee the bell's sound and the keypad's dock rely on.</summary>
     [Fact]

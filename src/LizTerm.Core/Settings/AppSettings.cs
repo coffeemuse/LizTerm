@@ -22,4 +22,5 @@ public sealed record AppSettings(
     bool ShowTagsInStatusBar = false,
     bool KeypadPfKeys = true,
     bool CheckForUpdatesAutomatically = true,
-    string? SkippedUpdateVersion = null);
+    string? SkippedUpdateVersion = null,
+    bool ShowSplashOnLaunch = true);
