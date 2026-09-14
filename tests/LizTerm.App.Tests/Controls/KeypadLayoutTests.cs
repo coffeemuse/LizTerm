@@ -31,16 +31,18 @@ public class KeypadLayoutTests
     }
 
     /// <summary>The issue's list plus Erase Input (bound by nothing else), Dup and Field Mark (on the Keys menu
-    /// since #16), in the issue's order.</summary>
+    /// since #16), in the issue's order, Insert in Enter's place (#111) until the keypad is customisable.</summary>
     [Fact]
     public void The_third_bank_is_the_specials()
     {
         Assert.Equal(
-            ["PA1", "PA2", "PA3", "Enter", "Clear", "Reset", "Attn", "SysReq", "Erase EOF", "Erase Input", "Dup", "Field Mark"],
+            ["PA1", "PA2", "PA3", "Insert", "Clear", "Reset", "Attn", "SysReq", "Erase EOF", "Erase Input", "Dup",
+             "Field Mark"],
             KeypadLayout.Banks[2].Select(k => k.Label));
         Assert.Equal(
-            [TerminalKey.PA1, TerminalKey.PA2, TerminalKey.PA3, TerminalKey.Enter, TerminalKey.Clear, TerminalKey.Reset,
-             TerminalKey.Attn, TerminalKey.SysReq, TerminalKey.EraseEof, TerminalKey.EraseInput, TerminalKey.Dup, TerminalKey.FieldMark],
+            [TerminalKey.PA1, TerminalKey.PA2, TerminalKey.PA3, TerminalKey.Insert, TerminalKey.Clear,
+             TerminalKey.Reset, TerminalKey.Attn, TerminalKey.SysReq, TerminalKey.EraseEof, TerminalKey.EraseInput,
+             TerminalKey.Dup, TerminalKey.FieldMark],
             KeypadLayout.Banks[2].Select(k => k.Key));
     }
 

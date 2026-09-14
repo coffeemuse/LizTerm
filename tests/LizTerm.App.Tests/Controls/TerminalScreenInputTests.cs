@@ -51,6 +51,20 @@ public class TerminalScreenInputTests
         Assert.Equal([TerminalKey.Erase, TerminalKey.Backspace], keys);
     }
 
+    /// <summary>#111: Ctrl+I is Insert's second home, for keyboards with no Insert key. Driven through the screen
+    /// rather than the table alone, because platform gestures are checked first and one on I would take it.</summary>
+    [AvaloniaFact]
+    public void Ctrl_I_toggles_insert()
+    {
+        var (window, screen) = Show();
+        var keys = new List<TerminalKey>();
+        screen.KeyRequested += (_, k) => keys.Add(k);
+
+        window.KeyPressQwerty(PhysicalKey.I, RawInputModifiers.Control);
+
+        Assert.Equal([TerminalKey.Insert], keys);
+    }
+
     [AvaloniaFact]
     public void Vista_keys_reach_the_host()
     {

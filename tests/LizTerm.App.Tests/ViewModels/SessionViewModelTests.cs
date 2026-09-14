@@ -75,6 +75,21 @@ public class SessionViewModelTests
         Assert.Equal("LU01", vm.LuText);
     }
 
+    /// <summary>#111: Keys > Insert's check mark reads this, so it follows the host's report both ways, as the status
+    /// bar's caret does.</summary>
+    [Fact]
+    public void Insert_mode_follows_the_host_status()
+    {
+        var (vm, session) = Create();
+        Assert.False(vm.IsInsertMode);
+
+        session.RaiseStatus(new KeyboardStatus(KeyboardLock.Unlocked, null, true, false, null));
+        Assert.True(vm.IsInsertMode);
+
+        session.RaiseStatus(new KeyboardStatus(KeyboardLock.Unlocked, null, false, false, null));
+        Assert.False(vm.IsInsertMode);
+    }
+
     // The message area reads both events: the keyboard's reason only shows once a session is up, and it must
     // appear then even though the status arrived first.
     [Fact]

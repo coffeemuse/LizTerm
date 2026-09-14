@@ -894,6 +894,69 @@ public class NativeMenuTests
         }
     }
 
+    /// <summary>#111: Insert was on the Insert key alone, which Apple's keyboards do not have. The Keys menu is the
+    /// door every keyboard has, so a click on it must reach the host as the insert toggle.</summary>
+    [AvaloniaFact]
+    public void Keys_menu_insert_sends_the_insert_toggle()
+    {
+        var (window, _, session, _) = Show();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Keys", "Insert")).RaiseClicked();
+
+        Assert.Equal(["key:Insert"], session.Calls);
+    }
+
+    /// <summary>#111: Insert is a check box on both menus, and its mark is the host's insert state, the one the status
+    /// bar's caret shows, so Ctrl+I, the Insert key and the keypad move it too.</summary>
+    [AvaloniaFact]
+    public void Keys_menu_insert_is_checked_while_the_host_reports_insert_mode_on_both_menus()
+    {
+        var (window, _, session, _) = Show();
+        var native = Item(window, "_Keys", "Insert");
+        var classic = window.FindControl<MenuItem>("InsertMenuItem");
+        Assert.NotNull(classic);
+        Assert.Equal(MenuItemToggleType.CheckBox, native.ToggleType);
+        Assert.Equal(MenuItemToggleType.CheckBox, classic.ToggleType);
+        Assert.False(native.IsChecked);
+        Assert.False(classic.IsChecked);
+
+        session.RaiseStatus(new KeyboardStatus(KeyboardLock.Unlocked, null, true, false, null));
+        Assert.True(native.IsChecked);
+        Assert.True(classic.IsChecked);
+
+        session.RaiseStatus(new KeyboardStatus(KeyboardLock.Unlocked, null, false, false, null));
+        Assert.False(native.IsChecked);
+        Assert.False(classic.IsChecked);
+    }
+
+    /// <summary>#111: a click sends the toggle and leaves the mark to the host's answer. Both renderers write IsChecked
+    /// before the click reaches the item (DefaultMenuInteractionHandler.Click on the classic MenuItem, and the
+    /// in-window NativeMenuBar fallback through its two-way binding to the NativeMenuItem), so each is replayed in that
+    /// order. Left alone, that write would show insert mode on before the host said so, and stay wrong if the host
+    /// never did.</summary>
+    [AvaloniaFact]
+    public void Clicking_keys_menu_insert_leaves_the_check_mark_to_the_host_on_both_menus()
+    {
+        var (window, _, session, _) = Show();
+        var native = Item(window, "_Keys", "Insert");
+        var classic = window.FindControl<MenuItem>("InsertMenuItem");
+        Assert.NotNull(classic);
+
+        native.IsChecked = true;
+        ((INativeMenuItemExporterEventsImplBridge)native).RaiseClicked();
+        classic.IsChecked = true;
+        classic.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+        Assert.Equal(["key:Insert", "key:Insert"], session.Calls);
+        Assert.False(native.IsChecked);
+        Assert.False(classic.IsChecked);
+
+        // Both marks still follow the host after the corrections: neither write cost an item its binding.
+        session.RaiseStatus(new KeyboardStatus(KeyboardLock.Unlocked, null, true, false, null));
+        Assert.True(native.IsChecked);
+        Assert.True(classic.IsChecked);
+    }
+
     /// <summary>Capture needs no engine, so both items stay live with the session down. Gating them on
     /// IsConnected would take them away at the moment they are most wanted.</summary>
     [AvaloniaFact]

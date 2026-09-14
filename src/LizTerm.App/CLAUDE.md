@@ -211,6 +211,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's `PlatformHotkeyConfiguration` puts Ctrl+Insert into
   Copy on every platform, the Meta-based macOS table included, and platform gestures are checked first. PA1 is
   reached through Alt+1 or the Keys menu.
+- Insert's second home is Ctrl+I (#111), for keyboards with no Insert key (every Apple one). Ctrl+I is Tab only to
+  an ASCII terminal; a 3270 host never sees ASCII control codes, so the table does not reserve it for Tab.
 - A Left Ctrl tap is Reset and a Right Ctrl tap is Enter. `ModifierTapDetector` sees a Ctrl key go down and the same
   key come up with nothing between (`OnKeyUp` looks up `KeyChord.TapOf`); another key, a pointer press, a wheel turn,
   focus loss and the window deactivating all reset it.
@@ -242,6 +244,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   its edge of the window is the window's. The window binds `IsVisible` to `Settings.Keypad`, `ShowPfKeys` to
   `Settings.KeypadPfKeys` and `IsEnabled` to `IsConnected`. `NativeMenuTests.Every_key_on_the_Keys_menu_is_on_the_keypad` holds the menu to a subset of the
   table.
+- **Insert sits in Enter's place in the third bank** (#111), an interim choice until the keypad is customisable: a
+  thirteenth key would break the rectangular grid, and Enter keeps Return, Ctrl+Return and the Right Ctrl tap.
 - **`Build` runs on the first show, not in the constructor**, because the keypad is off by default and a window that
   never shows it should build no buttons and format no tooltips: `OnAttachedToVisualTree` when already visible, and
   the `IsVisible` change otherwise. Everything after that point reads `_banks`, one list of buttons per bank —
@@ -404,6 +408,13 @@ Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it install
   also why OneWay is required rather than tidy: the in-window fallback runs the same handler over a `MenuItem` bound
   two-way to the `NativeMenuItem`, so with a TwoWay binding to the view model there would be two toggles and the
   click would do nothing.
+- **Keys > Insert is a check box whose mark belongs to the host** (#111): `IsInsertMode`, set from the keyboard status
+  beside `InsertText`, so it moves with Ctrl+I, the Insert key and the keypad too. Both menus bind it one-way, keep
+  `SendKeyCommand`, and add a Click handler that puts the mark back to `IsInsertMode`, because
+  `DefaultMenuInteractionHandler.Click` and the in-window fallback both write `IsChecked` before the click arrives,
+  and the host answers the key later, if at all. Unlike Wire Log the view model cannot flip the state itself. The
+  classic handler is added in the constructor with `handledEventsToo`: a `MenuItem` runs its `Command` from its own
+  class handler and marks Click handled, so a `Click=` attribute on an item that also has a `Command` never runs.
 - **Check for Updates... follows About and Preferences' wiring, not `OpenLinkCommand`'s** (#107): a `Click`
   handler on both menus, `SessionWindow.CheckForUpdatesAsync`, which reaches `App.CheckForUpdatesManuallyAsync`
   with `this` as the dialog's owner. `OpenLinkCommand` has no way to pass a window along, which this item needs

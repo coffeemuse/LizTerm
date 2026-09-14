@@ -38,6 +38,7 @@ public class KeymapHintsTests
     [InlineData(TerminalKey.PF7, "F7 or PageUp")]
     [InlineData(TerminalKey.Clear, "Pause or Ctrl+Escape")]
     [InlineData(TerminalKey.Reset, "Ctrl+R or a tap of Left Ctrl")]
+    [InlineData(TerminalKey.Insert, "Insert or Ctrl+I")]
     [InlineData(TerminalKey.Enter, "Return, Ctrl+Return or a tap of Right Ctrl")]
     public void Several_chords_are_ordered_and_joined(TerminalKey key, string expected)
     {
