@@ -268,4 +268,107 @@ public class ProfileStoreTests : IDisposable
         // The rename is within one directory, so nothing else may be left lying around for LoadAll to trip on.
         Assert.Equal(["MVS.json"], Directory.GetFiles(_dir).Select(Path.GetFileName).Order());
     }
+
+    /// <summary>A profile's file is the one that holds its name, whatever that file is called — renamed by hand, or
+    /// written on a platform whose FileNameFor spelled the name differently. Addressed by FileNameFor alone, such a
+    /// profile listed in the picker while its star and Delete did nothing and every save wrote a second file.</summary>
+    [Fact]
+    public void A_profile_in_a_file_named_for_something_else_is_loaded_saved_updated_and_deleted_there()
+    {
+        var store = new ProfileStore(_dir);
+        Place("mvs-backup.json", new SessionProfile { Name = "MVS", Host = "first.host" });
+
+        Assert.Equal("first.host", store.Load("MVS")?.Host);
+
+        store.Save(new SessionProfile { Name = "MVS", Host = "second.host" });
+        store.Update(new SessionProfile { Name = "MVS", Host = "fallback" }, current => current with { Model = 4 });
+        Assert.Equal(["mvs-backup.json"], FileNames());
+        var loaded = Assert.Single(store.LoadAll());
+        Assert.Equal(("second.host", 4), (loaded.Host, loaded.Model));
+
+        store.Delete("MVS");
+        Assert.Empty(FileNames());
+    }
+
+    /// <summary>Names match ignoring case, because the picker's Edit treats a case-only rename as the same profile
+    /// and deletes nothing. An exact match would leave the old file behind as a second profile.</summary>
+    [Fact]
+    public void A_case_only_rename_rewrites_the_profile_s_own_file()
+    {
+        var store = new ProfileStore(_dir);
+        Place("tk5-old.json", new SessionProfile { Name = "TK5", Host = "h" });
+
+        store.Save(new SessionProfile { Name = "tk5", Host = "h" });
+
+        Assert.Equal(["tk5-old.json"], FileNames());
+        Assert.Equal("tk5", Assert.Single(store.LoadAll()).Name);
+    }
+
+    /// <summary>FileNameFor is not one-to-one: a/b and a:b are both a_b.json. The second save must not overwrite the
+    /// first profile, and each name must go on addressing its own file.</summary>
+    [Fact]
+    public void Two_names_that_sanitize_to_one_file_name_are_two_profiles()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "a/b", Host = "slash" });
+        store.Save(new SessionProfile { Name = "a:b", Host = "colon" });
+
+        Assert.Equal(["a/b", "a:b"], store.LoadAll().Select(p => p.Name));
+        Assert.Equal("slash", store.Load("a/b")?.Host);
+        Assert.Equal("colon", store.Load("a:b")?.Host);
+
+        store.Delete("a:b");
+        Assert.Equal("slash", Assert.Single(store.LoadAll()).Host);
+    }
+
+    /// <summary>FileNameFor's file can hold another profile, renamed inside the file by hand, or not read as a profile
+    /// at all, which LoadAll skips and the user can repair. Either way it is not this profile's to overwrite.</summary>
+    [Fact]
+    public void Save_never_overwrites_a_file_that_is_not_that_profile()
+    {
+        var store = new ProfileStore(_dir);
+        Place("MVS.json", new SessionProfile { Name = "renamed", Host = "r" });
+        File.WriteAllText(Path.Combine(_dir, "TK5.json"), "{ not json");
+
+        store.Save(new SessionProfile { Name = "MVS", Host = "m" });
+        store.Save(new SessionProfile { Name = "TK5", Host = "t" });
+
+        Assert.Equal(["MVS", "renamed", "TK5"], store.LoadAll().Select(p => p.Name));
+        Assert.Equal("r", store.Load("renamed")?.Host);
+        Assert.Equal("m", store.Load("MVS")?.Host);
+        Assert.Equal("{ not json", File.ReadAllText(Path.Combine(_dir, "TK5.json")));
+        Assert.Equal("t", store.Load("TK5")?.Host);
+    }
+
+    /// <summary>Two files can hold one name, a copy made in a file manager. Load, Save and Delete pick the same one —
+    /// FileNameFor's own file when it is among them, else the first by ordinal file name — so a save never lands in
+    /// one file and a later delete in the other.</summary>
+    [Fact]
+    public void With_two_files_holding_one_name_every_operation_picks_the_same_file()
+    {
+        var store = new ProfileStore(_dir);
+        Place("MVS old.json", new SessionProfile { Name = "MVS", Host = "old" });
+        Place("MVS copy.json", new SessionProfile { Name = "MVS", Host = "copy" });
+
+        Assert.Equal("copy", store.Load("MVS")?.Host);
+        store.Save(new SessionProfile { Name = "MVS", Host = "copy", Model = 5 });
+        Assert.Equal(5, store.Load("MVS")?.Model);
+        store.Delete("MVS");
+        Assert.Equal(["MVS old.json"], FileNames());
+
+        Place("MVS.json", new SessionProfile { Name = "MVS", Host = "canonical" });
+        Assert.Equal("canonical", store.Load("MVS")?.Host);
+    }
+
+    /// <summary>Puts a profile in this store's directory under <paramref name="file"/>, written by a store of its own
+    /// so the JSON is exactly what Save produces. The staging directory is below <c>_dir</c>, which LoadAll does not
+    /// descend into and Dispose removes.</summary>
+    private void Place(string file, SessionProfile profile)
+    {
+        var staging = new ProfileStore(Path.Combine(_dir, "staging"));
+        staging.Save(profile);
+        File.Move(Path.Combine(staging.Directory, ProfileStore.FileNameFor(profile.Name)), Path.Combine(_dir, file));
+    }
+
+    private IEnumerable<string?> FileNames() => Directory.GetFiles(_dir).Select(Path.GetFileName).Order();
 }
