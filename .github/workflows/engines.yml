@@ -103,7 +103,7 @@ jobs:
       # That is not specific to echo: every macOS platform binary is universal with an arm64e slice, so none
       # can serve here. cc is guaranteed instead, because Xcode CLT is already a hard requirement of
       # build-macos.sh -- and engine-windows builds its own import fixture the same way.
-      - name: The gate accepts each engine and rejects both fixtures for each architecture
+      - name: The gate accepts each engine and rejects every fixture for each architecture
         run: |
           set -euo pipefail
 
@@ -149,12 +149,19 @@ jobs:
             # dirty: an install_name outside /usr/lib and /System/Library -- clears architecture, dies at dependency.
             cc -arch "$ARCH" -dynamiclib -install_name "@executable_path/libfixture.dylib" -o "$FIX/libfixture.dylib" "$FIX/lib.c"
             cc -arch "$ARCH" -o "$FIX/dirty" "$FIX/uses-lib.c" -L"$FIX" -lfixture
+            # unpatched: the real engine with its patch marker defaced -- clears every other arm, dies at the patch
+            # marker. Re-signed ad hoc: an arm64 binary whose signature no longer matches its bytes is killed when
+            # the TLS arm runs it, and would be rejected by the wrong arm.
+            perl -0777 -pe 's/CommandPrefix/CommandPrefiX/g' "native/out/$RID/b3270" > "$FIX/unpatched"
+            chmod +x "$FIX/unpatched"
+            codesign -f -s - "$FIX/unpatched"
 
             echo "--- the gate must accept the engine it is gating"
             native/build/verify-macos.sh "native/out/$RID/b3270" "$ARCH"
 
-            reject "dependency allowlist" "$FIX/dirty" "non-system dynamic dependencies"
-            reject "TLS provider check"   "$FIX/clean" "does not report the expected TLS provider"
+            reject "dependency allowlist" "$FIX/dirty"     "non-system dynamic dependencies"
+            reject "TLS provider check"   "$FIX/clean"     "does not report the expected TLS provider"
+            reject "patch marker check"   "$FIX/unpatched" "does not carry LizTerm"
             echo "::endgroup::"
           done
 
@@ -283,9 +290,9 @@ jobs:
       # that passes for any non-zero exit. build-linux-docker.sh exits non-zero for a Docker Hub rate limit, a
       # failed dnf install (which is its own `exit 1`) or a network hiccup, so asserting only "it exited
       # non-zero" reported every one of those as "the gate rejected the fixture". Each arm is therefore
-      # asserted on the message that arm prints. One container invocation, three runs of the gate: one accept,
-      # two rejects, instead of three invocations each paying the wrapper's dnf install again.
-      - name: The gate accepts the engine and rejects both fixtures
+      # asserted on the message that arm prints. One container invocation, four runs of the gate: one accept,
+      # three rejects, instead of four invocations each paying the wrapper's dnf install again.
+      - name: The gate accepts the engine and rejects every fixture
         run: |
           mkdir -p native/build-tmp
           # debian 12 is glibc 2.36, so its /bin/true imports __libc_start_main@GLIBC_2.34 -- above our 2.28
@@ -325,6 +332,11 @@ jobs:
 
           reject "dependency allowlist" /usr/bin/bash "dynamic dependencies outside the glibc runtime"
           reject "glibc symbol floor" native/build-tmp/newglibc-fixture "above the 2.28 floor"
+
+          # The real engine with its patch marker defaced: it clears every other arm and dies at the patch marker.
+          perl -0777 -pe "s/CommandPrefix/CommandPrefiX/g" native/out/${{ matrix.rid }}/b3270 > native/build-tmp/unpatched-fixture
+          chmod +x native/build-tmp/unpatched-fixture
+          reject "patch marker check" native/build-tmp/unpatched-fixture "does not carry LizTerm"
           '
 
       - uses: actions/setup-dotnet@v6
@@ -426,7 +438,7 @@ jobs:
       # Each arm is asserted on the message it prints, never on a bare non-zero exit: the wrapper also exits
       # non-zero for a Docker Hub rate limit or a failed apt-get install, and asserting only "it failed" would
       # report every one of those as a successful rejection.
-      - name: The gate accepts the engine and rejects a non-system import
+      - name: The gate accepts the engine and rejects a non-system import and an unpatched engine
         run: |
           mkdir -p native/build-tmp/fixtures
           cat > native/build-tmp/fixtures/dll.c <<'EOF'
@@ -449,6 +461,16 @@ jobs:
             case "$OUT" in
               *"imports DLLs outside the Windows system set"*) echo "OK: the import arm rejected its fixture" ;;
               *) echo "the fixture was rejected, but not by the import arm:"; printf "%s\n" "$OUT"; exit 1 ;;
+            esac
+            # The real engine with its patch marker defaced: it clears every other arm and dies at the patch marker.
+            # debian:12-slim ships perl as an essential package.
+            perl -0777 -pe "s/CommandPrefix/CommandPrefiX/g" native/out/win-x64/b3270.exe > native/build-tmp/fixtures/unpatched.exe
+            if OUT=$(native/build/verify-windows.sh native/build-tmp/fixtures/unpatched.exe 2>&1); then
+              echo "the gate ACCEPTED an engine without the patch marker"; exit 1
+            fi
+            case "$OUT" in
+              *"does not carry LizTerm"*) echo "OK: the patch marker arm rejected its fixture" ;;
+              *) echo "the fixture was rejected, but not by the patch marker arm:"; printf "%s\n" "$OUT"; exit 1 ;;
             esac
           '
 

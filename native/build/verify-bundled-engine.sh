@@ -92,4 +92,8 @@ if [ "$ACTUAL" != "$EXPECTED" ]; then
   echo "ERROR: $BIN is $ACTUAL but $RID needs $EXPECTED" >&2
   exit 1
 fi
-echo "OK: $BIN is $ACTUAL, correct for $RID"
+
+# The engine inside the archive must still be the patched one. engines.yml's gates check each engine as it is
+# built; this checks the copy every archive carries, on all six RIDs, win-arm64 included.
+"$(dirname "$0")/shared-verify-patches.sh" "$BIN"
+echo "OK: $BIN is $ACTUAL, correct for $RID, and carries LizTerm's patches"

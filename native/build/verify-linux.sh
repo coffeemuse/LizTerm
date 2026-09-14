@@ -54,6 +54,10 @@ fi
 # the same thing. Its three banner lines are held until after the verdict below, so the OK line comes first.
 BANNER=$("$(dirname "$0")/shared-verify-tls.sh" "$BIN")
 
-echo "OK: $BIN links only the glibc runtime, needs no more than glibc $HIGHEST (floor $FLOOR), and has TLS"
+# 4. The engine must carry LizTerm's patches (native/patches). Last, so every arm above keeps the reject fixture it
+# was built for: engines.yml proves this one with a copy of the real engine whose marker has been defaced.
+"$(dirname "$0")/shared-verify-patches.sh" "$BIN"
+
+echo "OK: $BIN links only the glibc runtime, needs no more than glibc $HIGHEST (floor $FLOOR), has TLS, and carries LizTerm's patches"
 ldd "$BIN"
 printf '%s\n' "$BANNER"

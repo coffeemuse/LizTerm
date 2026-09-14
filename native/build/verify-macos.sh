@@ -31,6 +31,9 @@ fi
 # stderr) and could not simply gain a 2>&1 while keeping head: that would have exposed the
 # SIGPIPE-under-pipefail trap the Linux scripts document. The shared script captures instead of piping.
 BANNER=$("$(dirname "$0")/shared-verify-tls.sh" "$BIN")
-echo "OK: $BIN is $ACTUAL, links only system libraries and has TLS"
+# LizTerm's patches (native/patches) must be in the binary. Last, so every arm above keeps the reject fixture it was
+# built for: engines.yml proves this one with a copy of the real engine whose marker has been defaced.
+"$(dirname "$0")/shared-verify-patches.sh" "$BIN"
+echo "OK: $BIN is $ACTUAL, links only system libraries, has TLS and carries LizTerm's patches"
 otool -L "$BIN"
 printf '%s\n' "$BANNER"
