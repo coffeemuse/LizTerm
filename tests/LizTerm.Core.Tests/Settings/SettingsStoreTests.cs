@@ -87,6 +87,32 @@ public class SettingsStoreTests : IDisposable
         Assert.False(ReadFile()["keypadPfKeys"]!.GetValue<bool>());
     }
 
+    /// <summary>The automatic-check flag (#107): on by default, so an upgrade starts checking, and turning it off
+    /// is what writes the key.</summary>
+    [Fact]
+    public void The_check_for_updates_flag_round_trips_and_defaults_on()
+    {
+        Assert.True(Store.Load().CheckForUpdatesAutomatically);
+
+        Store.Update(s => s with { CheckForUpdatesAutomatically = false });
+
+        Assert.False(Store.Load().CheckForUpdatesAutomatically);
+        Assert.False(ReadFile()["checkForUpdatesAutomatically"]!.GetValue<bool>());
+    }
+
+    /// <summary>The per-version Skip (#107): null until the user skips a release, holding the exact version
+    /// string rather than a bool so a later release is never suppressed by an old skip.</summary>
+    [Fact]
+    public void The_skipped_update_version_round_trips_and_defaults_to_null()
+    {
+        Assert.Null(Store.Load().SkippedUpdateVersion);
+
+        Store.Update(s => s with { SkippedUpdateVersion = "0.6.0" });
+
+        Assert.Equal("0.6.0", Store.Load().SkippedUpdateVersion);
+        Assert.Equal("0.6.0", ReadFile()["skippedUpdateVersion"]!.GetValue<string>());
+    }
+
     [Fact]
     public void A_first_change_writes_only_that_key()
     {

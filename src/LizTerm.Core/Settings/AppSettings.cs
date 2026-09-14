@@ -20,4 +20,6 @@ public sealed record AppSettings(
     [property: JsonConverter(typeof(JsonStringEnumConverter<KeypadDock>))] KeypadDock KeypadDock = KeypadDock.Bottom,
     [property: JsonConverter(typeof(JsonStringEnumConverter<MenuStyle>))] MenuStyle MenuStyle = MenuStyle.Auto,
     bool ShowTagsInStatusBar = false,
-    bool KeypadPfKeys = true);
+    bool KeypadPfKeys = true,
+    bool CheckForUpdatesAutomatically = true,
+    string? SkippedUpdateVersion = null);
