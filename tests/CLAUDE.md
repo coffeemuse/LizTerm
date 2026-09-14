@@ -121,6 +121,13 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   coordinates, when a host's screens differ. On MVS/CE the flow is a Hercules banner (Enter), the `===>` logon
   screen, the password prompt, then READY. The navigator waits for 500 ms of screen quiet before keystrokes and before
   trusting READY, because IND$FILE typed into a half-repainted field fails with `INVALID COMMAND NAME SYNTAX`.
+- On MVS/CE, `ISPF` at READY starts Wally ISPF. `StartIspfAsync` waits for its first panel (false when TSO says the
+  command was not found), and `WaitForIspfPanelAsync` waits for 2 s of quiet before a transfer, so the repaint after
+  the previous transfer has landed. PF3 on its primary menu ends ISPF but leaves the panel on screen with READY
+  written over a row: a line reading exactly READY while `===>` is still showing. `ReachReadyAsync` answers that
+  with Clear, then Enter if the screen stays blank. **Never Clear a live Wally ISPF panel**: that host never answers,
+  and the keyboard stays locked until Reset. `Indfile_round_trip_from_ispf_matches` runs only the bundled engine
+  (`BundledEngine.Require()`), because an engine set through `LIZTERM_B3270_PATH` lacks the CommandPrefix patch.
 - On Robert's Mac the live-lane variables are kept in `~/.config/lizterm-test.env`, outside the repo; `source` it in
   the shell that runs `dotnet test` rather than exporting values on a command line. A wire log of the IND$FILE run
   holds the password on its outbound side and is never committed.

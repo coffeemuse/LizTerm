@@ -194,6 +194,65 @@ public class LiveHostTests
         }
     }
 
+    /// <summary>The same round trip started from ISPF's primary menu with the ISPF (MVS) host type, so the engine types
+    /// TSO ahead of IND$FILE. Only the bundled engine carries LizTerm's CommandPrefix patch, so this test never uses
+    /// LIZTERM_B3270_PATH. Skips when TSO answers ISPF with "not found". Run alone with LIZTERM_WIRE_LOG set, its log is
+    /// the source of Fixtures/indfile-ispf-roundtrip.jsonl; the log holds the password on its outbound side and must
+    /// never be committed.</summary>
+    [Fact(Timeout = LiveTimeout)]
+    public async Task Indfile_round_trip_from_ispf_matches()
+    {
+        var target = Environment.GetEnvironmentVariable("LIZTERM_TEST_HOST");
+        var user = Environment.GetEnvironmentVariable("LIZTERM_TEST_USER");
+        var password = Environment.GetEnvironmentVariable("LIZTERM_TEST_PASSWORD");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(target), "LIZTERM_TEST_HOST is not set");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(user), "LIZTERM_TEST_USER is not set");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(password), "LIZTERM_TEST_PASSWORD is not set");
+        var engine = BundledEngine.Require();
+        var ct = TestContext.Current.CancellationToken;
+
+        var dir = Directory.CreateTempSubdirectory("lizterm-ispf-");
+        var sent = Path.Combine(dir.FullName, "sent.txt");
+        var received = Path.Combine(dir.FullName, "received.txt");
+        await File.WriteAllTextAsync(sent, "LizTerm IND$FILE round trip from ISPF\nsecond line with lowercase text\nthird line has trailing spaces   \nEND\n", ct);
+
+        await using var session = new B3270Session(ProfileFor(target!), () => new B3270ChildProcess(engine.Path), WireLog.TryFromEnvironment(out _), location: engine);
+        using var screens = new ScreenWaiter(session);
+        var tso = new TsoNavigator(session, screens);
+        var dataset = "LIZTERM.ISPFTEST";
+
+        await session.ConnectAsync(cancellationToken: ct);
+        try
+        {
+            await tso.LogonAsync(user!.Trim(), password!);
+            Assert.SkipUnless(await tso.StartIspfAsync(), "TSO answered ISPF with \"not found\": this host has no ISPF");
+
+            var progress = new ProgressLog();
+            var up = await session.TransferAsync(new FileTransferRequest { Direction = TransferDirection.Send, LocalPath = sent, HostFile = dataset, HostType = TransferHostType.Ispf }, progress, ct);
+            Assert.True(up.Succeeded, "send failed: " + up.Message);
+            await tso.WaitForIspfPanelAsync();
+
+            var down = await session.TransferAsync(new FileTransferRequest { Direction = TransferDirection.Receive, LocalPath = received, HostFile = dataset, HostType = TransferHostType.Ispf }, progress, ct);
+            Assert.True(down.Succeeded, "receive failed: " + down.Message);
+            await tso.WaitForIspfPanelAsync();
+
+            Assert.True(progress.Values.Any(v => v > 0), "no bytes were reported for the transfers");
+            var expected = (await File.ReadAllLinesAsync(sent, ct)).Select(l => l.TrimEnd());
+            var actual = (await File.ReadAllLinesAsync(received, ct)).Select(l => l.TrimEnd());
+            Assert.Equal(expected, actual);
+        }
+        finally
+        {
+            // Leaving ISPF first: DELETE needs READY. PF3 ends Wally ISPF and ReachReadyAsync clears the panel it
+            // leaves behind. A session that never reached ISPF is already at READY, and this returns at once.
+            await CleanupStepAsync("leave ISPF", () => tso.ReachReadyAsync());
+            await CleanupStepAsync("DELETE", () => tso.CommandAsync($"DELETE '{user!.Trim()}.{dataset}'"));
+            await CleanupStepAsync("LOGOFF", () => tso.LogoffAsync());
+            await CleanupStepAsync("disconnect", () => session.DisconnectAsync());
+            await CleanupStepAsync("delete scratch dir", () => { dir.Delete(recursive: true); return Task.CompletedTask; });
+        }
+    }
+
     /// <summary>Runs one cleanup step, reporting a failure as a diagnostic rather than throwing, so the steps after
     /// it still run.</summary>
     private static async Task CleanupStepAsync(string step, Func<Task> action)
