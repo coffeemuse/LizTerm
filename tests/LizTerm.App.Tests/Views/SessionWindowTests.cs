@@ -365,6 +365,20 @@ public class SessionWindowTests
         Assert.Equal(KeypadDock.Right, keypad.Dock);
     }
 
+    [AvaloniaFact]
+    public void The_keypad_shows_the_pf_keys_while_the_setting_says()
+    {
+        var (window, _, vm, _, _) = Show();
+        var keypad = KeypadOf(window);
+        Assert.True(keypad.ShowPfKeys);
+
+        vm.Settings.KeypadPfKeys = false;
+        Assert.False(keypad.ShowPfKeys);
+
+        vm.Settings.KeypadPfKeys = true;
+        Assert.True(keypad.ShowPfKeys);
+    }
+
     /// <summary>Greyed rather than silently inert: the keyboard and the Keys menu send nothing visible while
     /// disconnected (the engine's action error is swallowed), and the keypad invites more clicking than either.</summary>
     [AvaloniaFact]

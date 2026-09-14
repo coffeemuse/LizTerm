@@ -9,7 +9,7 @@
         x:Class="LizTerm.App.Views.PreferencesWindow"
         x:DataType="vm:SettingsViewModel"
         Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
-        Title="Preferences" Width="520" Height="410" CanResize="False"
+        Title="Preferences" Width="520" Height="446" CanResize="False"
         WindowStartupLocation="CenterScreen">
   <!-- Every control applies the moment it changes, to every open session window: the data context is the
        process's one SettingsViewModel. No OK or Cancel, only Done.
@@ -139,6 +139,9 @@
                 <RadioButton x:Name="KeypadRight" GroupName="KeypadDock" Content="On the right" Click="OnKeypadRightClick"
                              IsChecked="{Binding KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Right, Mode=OneWay}" />
               </StackPanel>
+              <!-- Here and not in View > Keypad (#105): the PF keys are set once, where showing the keypad is flipped
+                   while working. On by default, so an upgrade changes nobody's keypad. -->
+              <CheckBox x:Name="KeypadPfKeysBox" Content="Show PF1 to PF24" IsChecked="{Binding KeypadPfKeys, Mode=TwoWay}" />
             </StackPanel>
           </Grid>
         </StackPanel>

@@ -146,6 +146,9 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - The Preferences **Keypad** row is a two-way `KeypadBox` for `Settings.Keypad` plus the two dock radios over
   `KeypadDockConverter`, the Crosshair shape. Both settings are also on the View > Keypad submenu (#71); the row
   stays because Preferences is where a user goes looking for settings, and both doors write the same properties.
+  Under the radios, a two-way `KeypadPfKeysBox` for `Settings.KeypadPfKeys` (#105) is the one keypad setting with
+  no menu item, on purpose: it is set once, where showing the keypad is flipped while working (around a screenshot,
+  say), so it stays out of View > Keypad.
 
 ## Terminal screen (`Controls/TerminalScreen.cs`)
 
@@ -217,14 +220,15 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `TerminalKey`), so no button is written by hand. `Dock` (`KeypadDock`) lays the same `UniformGrid`
   out bank-per-row at the bottom or bank-per-column on the right; `Keypad.DockPanelDock` is the converter the
   window's `DockPanel.Dock` binding uses, two bindings to one setting because the grid's shape is the control's and
-  its edge of the window is the window's. The window binds `IsVisible` to `Settings.Keypad` and `IsEnabled` to
-  `IsConnected`. `NativeMenuTests.Every_key_on_the_Keys_menu_is_on_the_keypad` holds the menu to a subset of the
+  its edge of the window is the window's. The window binds `IsVisible` to `Settings.Keypad`, `ShowPfKeys` to
+  `Settings.KeypadPfKeys` and `IsEnabled` to `IsConnected`. `NativeMenuTests.Every_key_on_the_Keys_menu_is_on_the_keypad` holds the menu to a subset of the
   table.
 - **`Build` runs on the first show, not in the constructor**, because the keypad is off by default and a window that
   never shows it should build no buttons and format no tooltips: `OnAttachedToVisualTree` when already visible, and
   the `IsVisible` change otherwise. Everything after that point reads `_banks`, one list of buttons per bank —
   `Relayout` walks the real banks rather than indexing a flat list by `BankSize`, which only `KeypadLayout`'s table
-  promises. `Relayout` also owns the border's `VerticalAlignment` (`Top` on the right), never the control's: how a
+  promises. With `ShowPfKeys` off it leaves out every bank made only of PF keys, judged by the buttons' keys rather
+  than their position, and keeps those buttons for when it is turned back on. `Relayout` also owns the border's `VerticalAlignment` (`Top` on the right), never the control's: how a
   host aligns this control is the host's.
 - **Every button is `Focusable = false`**, so a click never moves the keyboard off the screen; the window still calls
   `Screen.Focus()` after each key as the guarantee. A click goes to `SendKeyAsync`, never the command (see Keyboard

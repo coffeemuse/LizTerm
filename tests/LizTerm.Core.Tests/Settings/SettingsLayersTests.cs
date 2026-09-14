@@ -68,6 +68,15 @@ public class SettingsLayersTests
         Assert.Equal(KeypadDock.Bottom, new AppSettings().KeypadDock);
     }
 
+    /// <summary>The PF keys flag (#105) is on by default, so a file from before it, which says nothing about it,
+    /// keeps all 36 buttons.</summary>
+    [Fact]
+    public void The_pf_keys_flag_reads_by_name_and_defaults_on()
+    {
+        Assert.False(SettingsLayers.Read(Doc("""{"keypadPfKeys":false}""")).KeypadPfKeys);
+        Assert.True(SettingsLayers.Read(Doc("""{"keypad":true,"keypadDock":"Right"}""")).KeypadPfKeys);
+    }
+
     /// <summary>A style this build does not know (a later build's name, say) costs that key alone, the same
     /// guarantee the bell's sound and the keypad's dock rely on.</summary>
     [Fact]

@@ -388,11 +388,12 @@
          screen's height. Two bindings to one setting: the grid's shape is the control's, its edge of the window is
          this panel's. Invisible costs no layout, and the control builds no buttons until it is first shown.
          IsEnabled follows the connection so a disconnected session shows a greyed keypad rather than buttons that
-         silently do nothing. -->
+         silently do nothing. ShowPfKeys is the Preferences-only choice (#105). -->
     <controls:Keypad x:Name="KeypadPanel"
                      DockPanel.Dock="{Binding Settings.KeypadDock, Converter={x:Static controls:Keypad.DockPanelDock}}"
                      Dock="{Binding Settings.KeypadDock}"
                      IsVisible="{Binding Settings.Keypad}"
+                     ShowPfKeys="{Binding Settings.KeypadPfKeys}"
                      IsEnabled="{Binding IsConnected}" />
 
     <controls:TerminalScreen x:Name="Screen"

@@ -116,9 +116,10 @@ default the bell is silent. A host that rings repeatedly is limited to two bells
 SysReq, Erase EOF, Erase Input, Dup and Field Mark, for the keys a keyboard cannot reach. It is off by default,
 remembered, and applies to every session window. The same submenu chooses whether it sits **At the Bottom** of the
 window or **On the Right**, and so does Preferences; either way the choice is saved and every open window follows
-it. The buttons never take the keyboard away from the screen, and they are greyed out while the session is
-disconnected. Once it is connected, hold the pointer over a button to see its keyboard shortcut, where it has one;
-a greyed-out button shows none.
+it. If your keyboard's F-keys already cover PF1 to PF24, turn off **Show PF1 to PF24** in Preferences to leave only
+PA1 to Field Mark: one row at the bottom, or one column on the right. The buttons never take the keyboard away from
+the screen, and they are greyed out while the session is disconnected. Once it is connected, hold the pointer over a
+button to see its keyboard shortcut, where it has one; a greyed-out button shows none.
 
 ## Keyboard
 
@@ -300,7 +301,8 @@ sit on three tabs:
 - **Status bar** — whether the profile's tags are drawn in the session window's status bar. Off by default; the
   note icon and the connect banner are always there.
 - **Keypad** — whether the on-screen keypad is shown, and whether it docks below the screen or to its right. The
-  View > Keypad submenu carries both of the same settings.
+  View > Keypad submenu carries both of the same settings. **Show PF1 to PF24**, on by default, is here only: turn
+  it off when your keyboard's F-keys are enough, and the keypad keeps just PA1 to Field Mark.
 
 ## Where LizTerm keeps its files
 

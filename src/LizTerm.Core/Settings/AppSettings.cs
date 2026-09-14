@@ -19,4 +19,5 @@ public sealed record AppSettings(
     bool Keypad = false,
     [property: JsonConverter(typeof(JsonStringEnumConverter<KeypadDock>))] KeypadDock KeypadDock = KeypadDock.Bottom,
     [property: JsonConverter(typeof(JsonStringEnumConverter<MenuStyle>))] MenuStyle MenuStyle = MenuStyle.Auto,
-    bool ShowTagsInStatusBar = false);
+    bool ShowTagsInStatusBar = false,
+    bool KeypadPfKeys = true);

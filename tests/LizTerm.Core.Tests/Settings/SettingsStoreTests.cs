@@ -74,6 +74,19 @@ public class SettingsStoreTests : IDisposable
         Assert.True(ReadFile()["showTagsInStatusBar"]!.GetValue<bool>());
     }
 
+    /// <summary>The keypad's PF keys flag (#105): on by default, so a settings file from before it reads as on, and
+    /// turning the PF keys off is what writes the key.</summary>
+    [Fact]
+    public void The_pf_keys_flag_round_trips_and_defaults_on()
+    {
+        Assert.True(Store.Load().KeypadPfKeys);
+
+        Store.Update(s => s with { KeypadPfKeys = false });
+
+        Assert.False(Store.Load().KeypadPfKeys);
+        Assert.False(ReadFile()["keypadPfKeys"]!.GetValue<bool>());
+    }
+
     [Fact]
     public void A_first_change_writes_only_that_key()
     {

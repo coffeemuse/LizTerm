@@ -99,6 +99,17 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>The keypad's two PF banks (#105). On by default, so an upgrade changes nobody's keypad; off leaves
+    /// the third bank, the keys a keyboard with F-keys still has no key for.</summary>
+    public bool KeypadPfKeys
+    {
+        get => Current.KeypadPfKeys;
+        set
+        {
+            if (Current.KeypadPfKeys != value) Apply(nameof(KeypadPfKeys), s => s with { KeypadPfKeys = value });
+        }
+    }
+
     /// <summary>The session window's status bar draws the profile's tag chips (#93). Off by default: some people
     /// want PROD in sight at all times and others find the bar cluttered, and the bar as it was is the safer
     /// default for an upgrade. The note icon and the connect banner are not behind this; they cost no width.</summary>
