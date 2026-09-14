@@ -14,12 +14,17 @@ namespace LizTerm.App.Controls;
 
 /// <summary>The on-screen keypad (keypad spec §4): 36 buttons built from KeypadLayout, raising KeyRequested the way
 /// TerminalScreen does and knowing nothing about view models or sessions. The window routes the key (spec §6.2)
-/// and binds IsVisible, IsEnabled and the two dock bindings (spec §6.1).</summary>
+/// and binds IsVisible, IsEnabled, ShowPfKeys and the two dock bindings (spec §6.1).</summary>
 public partial class Keypad : UserControl
 {
     /// <summary>Which way the grid is laid out: each bank a row (Bottom) or a column (Right).</summary>
     public static readonly StyledProperty<KeypadDock> DockProperty =
         AvaloniaProperty.Register<Keypad, KeypadDock>(nameof(Dock), KeypadDock.Bottom);
+
+    /// <summary>Whether the two banks of PF keys are in the grid (#105). Off leaves the third bank, the keys a
+    /// keyboard with F-keys still has no key for.</summary>
+    public static readonly StyledProperty<bool> ShowPfKeysProperty =
+        AvaloniaProperty.Register<Keypad, bool>(nameof(ShowPfKeys), true);
 
     /// <summary>The table the tooltips describe. Defaults to the built-in keymap; nothing binds it yet, since no
     /// keypad key depends on the one thing that varies the default (the backspace choice). The hook for #18.</summary>
@@ -45,6 +50,12 @@ public partial class Keypad : UserControl
         set => SetValue(DockProperty, value);
     }
 
+    public bool ShowPfKeys
+    {
+        get => GetValue(ShowPfKeysProperty);
+        set => SetValue(ShowPfKeysProperty, value);
+    }
+
     public Keymap Keymap
     {
         get => GetValue(KeymapProperty);
@@ -64,9 +75,9 @@ public partial class Keypad : UserControl
     {
         base.OnPropertyChanged(change);
         if (change.Property == IsVisibleProperty && change.GetNewValue<bool>()) Build();
-        // Nothing built yet: Build reads both properties itself, so there is nothing to bring up to date.
+        // Nothing built yet: Build reads every property itself, so there is nothing to bring up to date.
         else if (_banks.Count == 0) return;
-        else if (change.Property == DockProperty) Relayout(change.GetNewValue<KeypadDock>());
+        else if (change.Property == DockProperty || change.Property == ShowPfKeysProperty) Relayout();
         // A binding can hand a reference-typed styled property a null whatever its declared type says; the #18 hook
         // is exactly such a binding, so a keymap that is not there yet keeps the tooltips the control has.
         else if (change.Property == KeymapProperty && change.GetNewValue<Keymap>() is { } keymap) Describe(keymap);
@@ -92,24 +103,28 @@ public partial class Keypad : UserControl
             }
             _banks.Add(buttons);
         }
-        Relayout(Dock);
+        Relayout();
         Describe(Keymap);
     }
 
     /// <summary>Bottom: one column per button of the longest bank, bank-major, stretched to the window's width.
     /// Right: one column per bank, index-major so PF1 to PF12 read down the first, with the border top-aligned so
     /// the twelve rows keep their natural height beside the screen instead of stretching to fill it (spec §4.2,
-    /// §4.3). The border's alignment rather than the control's: how a host aligns this control is the host's.</summary>
-    private void Relayout(KeypadDock dock)
+    /// §4.3). The border's alignment rather than the control's: how a host aligns this control is the host's.
+    /// Without the PF keys, a bank holding nothing else is left out of the grid but kept, so turning them back on
+    /// shows the same buttons.</summary>
+    private void Relayout()
     {
-        var longest = _banks.Max(bank => bank.Count);
+        var dock = Dock;
+        List<List<Button>> banks = ShowPfKeys ? _banks : [.. _banks.Where(bank => !bank.All(IsPfKey))];
+        var longest = banks.Max(bank => bank.Count);
         ButtonGrid.Children.Clear();
         if (dock == KeypadDock.Right)
         {
-            ButtonGrid.Columns = _banks.Count;
+            ButtonGrid.Columns = banks.Count;
             for (var i = 0; i < longest; i++)
             {
-                foreach (var bank in _banks)
+                foreach (var bank in banks)
                 {
                     if (i < bank.Count) ButtonGrid.Children.Add(bank[i]);
                 }
@@ -118,12 +133,14 @@ public partial class Keypad : UserControl
         else
         {
             ButtonGrid.Columns = longest;
-            foreach (var button in _banks.SelectMany(bank => bank)) ButtonGrid.Children.Add(button);
+            foreach (var button in banks.SelectMany(bank => bank)) ButtonGrid.Children.Add(button);
         }
         KeypadBorder.VerticalAlignment = dock == KeypadDock.Right
             ? Avalonia.Layout.VerticalAlignment.Top
             : Avalonia.Layout.VerticalAlignment.Stretch;
     }
+
+    private static bool IsPfKey(Button button) => (TerminalKey)button.Tag! is >= TerminalKey.PF1 and <= TerminalKey.PF24;
 
     /// <summary>A null format is the platform's registration: glyphs on macOS, words elsewhere (spec §5). The
     /// keymap is reversed once for all 36 buttons rather than once per button.</summary>

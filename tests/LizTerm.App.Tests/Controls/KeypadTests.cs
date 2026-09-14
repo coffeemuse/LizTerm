@@ -18,9 +18,9 @@ namespace LizTerm.App.Tests.Controls;
 /// sessions. The window's half is in SessionWindowTests.</summary>
 public class KeypadTests
 {
-    private static (Keypad Keypad, Window Window) Show(KeypadDock dock = KeypadDock.Bottom)
+    private static (Keypad Keypad, Window Window) Show(KeypadDock dock = KeypadDock.Bottom, bool showPfKeys = true)
     {
-        var keypad = new Keypad { Dock = dock };
+        var keypad = new Keypad { Dock = dock, ShowPfKeys = showPfKeys };
         var window = new Window { Width = 960, Height = 680, Content = keypad };
         window.Show();
         return (keypad, window);
@@ -33,6 +33,14 @@ public class KeypadTests
     private static Border BorderOf(Keypad keypad) => keypad.FindControl<Border>("KeypadBorder")!;
 
     private static TerminalKey KeyOf(Control child) => (TerminalKey)((Button)child).Tag!;
+
+    /// <summary>The third bank, written out by hand: what is left when the PF keys are hidden (#105).</summary>
+    private static readonly TerminalKey[] Specials =
+    [
+        TerminalKey.PA1, TerminalKey.PA2, TerminalKey.PA3, TerminalKey.Enter, TerminalKey.Clear, TerminalKey.Reset,
+        TerminalKey.Attn, TerminalKey.SysReq, TerminalKey.EraseEof, TerminalKey.EraseInput, TerminalKey.Dup,
+        TerminalKey.FieldMark,
+    ];
 
     [AvaloniaFact]
     public void One_button_per_layout_entry_in_bank_order_at_the_bottom()
@@ -76,6 +84,59 @@ public class KeypadTests
         Assert.Equal(KeypadLayout.BankSize, grid.Columns);
         Assert.Equal(before, grid.Children.ToArray());
         Assert.Equal(Avalonia.Layout.VerticalAlignment.Stretch, BorderOf(keypad).VerticalAlignment);
+    }
+
+    [AvaloniaFact]
+    public void Without_the_pf_keys_the_bottom_is_one_row_of_the_specials()
+    {
+        var (keypad, _) = Show(showPfKeys: false);
+        var grid = Grid(keypad);
+
+        Assert.Equal(12, grid.Columns);
+        Assert.Equal(Specials, grid.Children.Select(KeyOf));
+    }
+
+    [AvaloniaFact]
+    public void Without_the_pf_keys_the_right_is_one_column_of_the_specials()
+    {
+        var (keypad, _) = Show(KeypadDock.Right, showPfKeys: false);
+        var grid = Grid(keypad);
+
+        Assert.Equal(1, grid.Columns);
+        Assert.Equal(Specials, grid.Children.Select(KeyOf));
+    }
+
+    /// <summary>On the right, where the column count depends on how many banks are shown, so a relayout that
+    /// forgot the dock or counted every bank would show here.</summary>
+    [AvaloniaFact]
+    public void Turning_the_pf_keys_off_and_on_again_relays_the_same_buttons()
+    {
+        var (keypad, _) = Show(KeypadDock.Right);
+        var grid = Grid(keypad);
+        var before = grid.Children.ToArray();
+
+        keypad.ShowPfKeys = false;
+        Assert.Equal(1, grid.Columns);
+        Assert.Equal(Specials, grid.Children.Select(KeyOf));
+
+        keypad.ShowPfKeys = true;
+        Assert.Equal(3, grid.Columns);
+        Assert.Equal(before, grid.Children.ToArray());
+    }
+
+    [AvaloniaFact]
+    public void A_pf_keys_change_before_the_first_show_applies_when_the_keypad_is_shown()
+    {
+        var keypad = new Keypad { IsVisible = false };
+        var window = new Window { Width = 960, Height = 680, Content = keypad };
+        window.Show();
+
+        keypad.ShowPfKeys = false;
+        Assert.Empty(Grid(keypad).Children);
+
+        keypad.IsVisible = true;
+
+        Assert.Equal(Specials, Grid(keypad).Children.Select(KeyOf));
     }
 
     /// <summary>Two clicks, two keys: no command disables in between (spec §4.1). And no button can take the

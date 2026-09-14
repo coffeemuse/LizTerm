@@ -171,6 +171,22 @@ public class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void The_pf_keys_flag_writes_through_and_skips_an_unchanged_value()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.KeypadPfKeys = true;
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.KeypadPfKeys = false;
+
+        Assert.Equal(["KeypadPfKeys"], changes);
+        Assert.False(new SettingsViewModel(new SettingsStore(FilePath)).KeypadPfKeys);
+    }
+
+    [Fact]
     public void The_menu_style_writes_through_raises_its_own_name_and_skips_an_unchanged_value()
     {
         var settings = new SettingsViewModel(new SettingsStore(FilePath));

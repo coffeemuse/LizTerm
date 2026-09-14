@@ -162,6 +162,23 @@ public class PreferencesWindowTests
         Assert.False(window.FindControl<RadioButton>("KeypadBottom")!.IsChecked);
     }
 
+    /// <summary>On by default (#105), and only here rather than in View > Keypad: it is set once, where showing the
+    /// keypad is flipped while working.</summary>
+    [AvaloniaFact]
+    public void The_pf_keys_box_writes_through_and_follows_the_settings()
+    {
+        var (window, settings) = Show();
+        var box = window.FindControl<CheckBox>("KeypadPfKeysBox");
+        Assert.NotNull(box);
+        Assert.True(box.IsChecked);
+
+        box.IsChecked = false;
+        Assert.False(settings.KeypadPfKeys);
+
+        settings.KeypadPfKeys = true;
+        Assert.True(box.IsChecked);
+    }
+
     /// <summary>Linux: the radio is disabled and says why, but a saved SystemAlert (a file exported from a Mac, one
     /// day) still shows as the value it is and is not rewritten (bell spec §5).</summary>
     [AvaloniaFact]
@@ -231,7 +248,27 @@ public class PreferencesWindowTests
         Assert.Equal(SizeToContent.Manual, window.SizeToContent);
         Assert.False(window.CanResize);
         Assert.Equal(520, window.Width);
-        Assert.Equal(410, window.Height);
+        Assert.Equal(446, window.Height);
+    }
+
+    /// <summary>The fixed height has to hold the tallest tab: a row past it is cut off under the Done bar, and there
+    /// is no scroll bar to reach it. Found in the running app for #105, whose PF keys box was cut in half.</summary>
+    [AvaloniaFact]
+    public void Every_tab_fits_the_fixed_size()
+    {
+        var (window, _) = Show();
+        var tabs = window.FindControl<TabControl>("Tabs")!;
+
+        for (var i = 0; i < tabs.ItemCount; i++)
+        {
+            tabs.SelectedIndex = i;
+            window.UpdateLayout();
+            var rows = (Panel)((TabItem)tabs.SelectedItem!).Content!;
+            var last = rows.Children.Last(row => row.IsVisible);
+            var bottom = last.TranslatePoint(new Point(0, last.Bounds.Height), tabs)!.Value.Y;
+
+            Assert.True(bottom <= tabs.Bounds.Height, $"tab {i} ends at {bottom}, below the tab control's {tabs.Bounds.Height}");
+        }
     }
 
     /// <summary>The tabs are the window's structure: Display, Bell and Window in that order, the last read top of
