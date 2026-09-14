@@ -1,0 +1,26 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LizTerm.App.Views.UpdateCheckWindow"
+        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
+        Title="Check for Updates" Width="420" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <!-- Content varies by the result the constructor is given, not by a bound view model: three fixed states, no
+       live data. IsDefault/IsCancel are set in code, on whichever button the constructor makes visible, rather
+       than in markup, since the hidden buttons for the other two states must never compete for them. -->
+  <DockPanel Margin="16">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+      <Button x:Name="SkipButton" Content="Skip This Version" Click="OnSkipClick" IsVisible="False" />
+      <Button x:Name="RemindButton" Content="Remind Me Later" Click="OnRemindClick" IsVisible="False" />
+      <Button x:Name="DownloadButton" Content="Download" Click="OnDownloadClick" IsVisible="False" />
+      <Button x:Name="OkButton" Content="OK" Click="OnOkClick" IsVisible="False" />
+    </StackPanel>
+    <TextBlock x:Name="MessageText" DockPanel.Dock="Top" TextWrapping="Wrap" />
+    <TextBlock x:Name="FallbackText" DockPanel.Dock="Top" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="12"
+               Foreground="#A0A0A0" IsVisible="False" />
+  </DockPanel>
+</Window>
