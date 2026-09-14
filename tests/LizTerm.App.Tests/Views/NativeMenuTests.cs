@@ -894,6 +894,18 @@ public class NativeMenuTests
         }
     }
 
+    /// <summary>#111: Insert was on the Insert key alone, which Apple's keyboards do not have. The Keys menu is the
+    /// door every keyboard has, so a click on it must reach the host as the insert toggle.</summary>
+    [AvaloniaFact]
+    public void Keys_menu_insert_sends_the_insert_toggle()
+    {
+        var (window, _, session, _) = Show();
+
+        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Keys", "Insert")).RaiseClicked();
+
+        Assert.Equal(["key:Insert"], session.Calls);
+    }
+
     /// <summary>Capture needs no engine, so both items stay live with the session down. Gating them on
     /// IsConnected would take them away at the moment they are most wanted.</summary>
     [AvaloniaFact]

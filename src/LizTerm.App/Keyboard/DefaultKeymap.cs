@@ -9,11 +9,12 @@ namespace LizTerm.App.Keyboard;
 
 /// <summary>The built-in defaults: Vista TN3270's table, cross-checked against wc3270 (spec 6.2). Clear has a
 /// second home on Ctrl+Escape because Mac keyboards have no Pause key, PA2 and PA3 a second home on Alt+2 and Alt+3
-/// because Mac laptops have no Insert key, and Reset a second home on Ctrl+R (wc3270's) in case a platform never
-/// reports the Left Ctrl tap. Copy, paste, and select-all are platform hotkeys checked before this table and are
-/// deliberately absent from it; that includes Vista's Ctrl+Insert for PA1, which Avalonia lists as a Copy gesture
-/// on every platform (the Meta-based macOS table included), so PA1 lives on Alt+1 alone. Not user-editable yet;
-/// see <see cref="Keymap.With"/>.</summary>
+/// and Insert one on Ctrl+I (#111) because Mac laptops have no Insert key, and Reset a second home on Ctrl+R
+/// (wc3270's) in case a platform never reports the Left Ctrl tap. Ctrl+I is Tab only to an ASCII terminal; a 3270
+/// host sees EBCDIC and 3270 keys, never ASCII control codes, so a TN3270 client need not reserve it. Copy, paste,
+/// and select-all are platform hotkeys checked before this table and are deliberately absent from it; that includes
+/// Vista's Ctrl+Insert for PA1, which Avalonia lists as a Copy gesture on every platform (the Meta-based macOS table
+/// included), so PA1 lives on Alt+1 alone. Not user-editable yet; see <see cref="Keymap.With"/>.</summary>
 public static class DefaultKeymap
 {
     private static readonly Keymap Erasing = Build(destructiveBackspace: true);
@@ -56,6 +57,7 @@ public static class DefaultKeymap
         Add(Key.Tab, TerminalKey.Tab);
         Add(Key.Tab, TerminalKey.BackTab, KeyModifiers.Shift);
         Add(Key.Insert, TerminalKey.Insert);
+        Add(Key.I, TerminalKey.Insert, KeyModifiers.Control);
         Add(Key.Home, TerminalKey.Home);
         Add(Key.End, TerminalKey.EraseEof);
         Add(Key.Delete, TerminalKey.Delete);
