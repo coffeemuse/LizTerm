@@ -124,3 +124,13 @@ BCL-only, which is why these live in Core, where the integration tests can use t
 - `ITrustAnchorSource`: `SystemTrustAnchors` reads the OS root store (`LocalMachine` and `CurrentUser`) once per
   instance and exports it as PEM; a store that will not open contributes nothing. `NoTrustAnchors` is the default,
   which leaves an engine on its own trust.
+
+## Updates (`LizTerm.Core.Updates`)
+
+BCL-only, same reason Security is here: the App and any future test can both reach it.
+
+- `IReleaseChecker` / `GitHubReleaseChecker`: one `HttpClient` call to GitHub's `/releases/latest` — the app's only
+  HTTP call outside b3270. Headers and the 10 s timeout are set on the request/client the checker is given, not
+  assumed, so a test with a fake `HttpMessageHandler` sees exactly what production sends.
+- `ReleaseVersion.IsNewer`: the pure comparison, over plain version strings only — no caller here ever sees a
+  GitHub tag.
