@@ -2,6 +2,9 @@ LizTerm bundles the following third-party software.
 
 x3270 (b3270), BSD-3-Clause
 
+LizTerm's build of b3270 carries a small modification of its own, published in the LizTerm repository under
+native/patches/.
+
 Copyright © 1993-2025, Paul Mattes.
 Copyright © 1990, Jeff Sparkes.
 Copyright © 1989, Georgia Tech Research Corporation (GTRC), Atlanta, GA

@@ -60,8 +60,9 @@ not recompile, and CI builds with `-warnaserror`:
 dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "
 ```
 
-A fresh worktree has no `native/out`, so the app and the engine-dependent tests need `LIZTERM_B3270_PATH` (a Homebrew
-b3270 works) or a built engine; see `docs/development.md`.
+A fresh worktree has no `native/out`, so the app and the engine-dependent tests need a built engine, or
+`LIZTERM_B3270_PATH` (a Homebrew b3270 works for everything except ISPF (MVS) transfers, which need LizTerm's
+patches); see `docs/development.md`.
 
 ## Rules that apply everywhere
 

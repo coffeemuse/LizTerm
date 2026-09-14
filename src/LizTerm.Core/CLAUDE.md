@@ -40,13 +40,18 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
     its window cannot leave an engine running unowned. `FakeEmulatorSession` mirrors this.
 - `TransferAsync(FileTransferRequest, IProgress<long>?, CancellationToken)` is one call. It completes when the
   transfer ends and returns a `FileTransferResult` whose `Message` is the engine's or host's final text verbatim —
-  success, failure or cancel. (b3270 reports a cancel as a failure reading "Transfer canceled by user"; a host
+  success, failure or cancel, except that a backend may fail a request the engine cannot perform, in its own words,
+  without sending it (the b3270 backend does this for an ISPF transfer to an engine without LizTerm's patch). (b3270
+  reports a cancel as a failure reading "Transfer canceled by user"; a host
   failure landing in the same moment keeps the host's text.) The byte count travels only through the progress
   callback. It throws only for non-outcomes: `InvalidOperationException` (never started, or a transfer already
   running), `OperationCanceledException` (only for a token already cancelled on entry), and
   `BackendUnavailableException` (the engine has died, or dies mid-transfer).
 - `FileTransferRequest.Validate()` checks only what would be refused outright. Fields that do not apply to the
   direction, mode or host type are ignored downstream, never errors.
+- `TransferHostType.Ispf` is TSO reached from an ISPF command line. `IsTso()` (on `TransferHostTypes`) is true for it
+  and for `Tso`, and every TSO rule in Core, the backend and the dialog asks it; only a switch over every host type
+  (`TransferMapper.HostKeyword`, `LocalFileNames.Suggest`) names the two members itself.
 - `Engine` names the binary, its source — `Bundled`, `Override`, or `Unknown` — and, after the hello, its version.
   `Unknown` means *absent*: nothing anywhere the locator looked, which About renders as "not found" rather than
   borrowing a provenance. A binary that is present but unusable keeps its own path and source (see `SessionFactory`

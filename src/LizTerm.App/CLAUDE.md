@@ -578,6 +578,9 @@ Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it install
   faults into the dialog's catch.
 - `LocalFileNames` suggests the save name (member or last qualifier; VM `FN.FT`); `TransferLabels` labels the combo
   boxes.
+- The Host type list is TSO, ISPF (MVS), VM, CICS. ISPF (MVS) is TSO everywhere in the form (`IsTso` is
+  `HostType.IsTso()`), and `CursorHint`, bound to the `CursorHintText` line under the form, says where the cursor
+  must be for the chosen host type. `LocalFileNames` names an ISPF receive as it does a TSO one.
 
 ## Everything else
 
