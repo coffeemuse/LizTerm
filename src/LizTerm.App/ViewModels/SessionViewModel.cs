@@ -339,15 +339,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand]
     private async Task OpenLinkAsync(string url)
     {
-        try
-        {
-            if (_uriOpener is not null && await _uriOpener.OpenAsync(new Uri(url))) return;
-        }
-        catch (Exception)
-        {
-            // Fall through to naming the URL.
-        }
-        ErrorMessage = $"Could not open a browser. The page is at {url}.";
+        if (!await LinkOpening.TryOpenAsync(_uriOpener, url)) ErrorMessage = LinkOpening.NotOpened(url);
     }
 
     /// <summary>Help &gt; User Guide. Writes the bundled copy out and hands it to the platform. When that

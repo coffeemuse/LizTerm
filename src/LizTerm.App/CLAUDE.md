@@ -135,14 +135,21 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - **The release check (#107).** `App._releaseChecker` (`GitHubReleaseChecker.Create()`) is the process's one
   checker. `CheckForUpdatesOnStartupAsync()` fires once from `Execute`, after a session or the picker has actually
   opened — never after `ShowError`, never when opening either one threw — and stays silent unless
-  `Settings.CheckForUpdatesAutomatically` is on, the check finds a newer release, and that release is not
-  `Settings.SkippedUpdateVersion` (`UpdateNotificationPolicy.ShouldShowAutomatically`). Help's own
-  `CheckForUpdatesManuallyAsync(Window?)` always shows a result, ignoring any skip. Both funnel through
-  `ShowUpdateCheckResultAsync`, one `UpdateCheckWindow` at a time (`_updateCheck`, the `_about`/`_preferences`
-  shape); its Download button opens the release page through an `AvaloniaUriOpener` built on the dialog itself,
-  and its Skip button writes `SkippedUpdateVersion`. Each public entry point has an internal overload taking the
-  checker and the `SettingsViewModel` explicitly, `ShowPreferences(SettingsViewModel)`'s shape, so tests never
-  touch the network or the real settings file.
+  `Settings.CheckForUpdatesAutomatically` is on (read before the request and again after it), the check finds a
+  newer release, and that release is not `Settings.SkippedUpdateVersion`
+  (`UpdateNotificationPolicy.ShouldShowAutomatically`). Nobody asked for that result, so its owner is the last
+  session or the picker, never a dialog in front of them. Help's own `CheckForUpdatesManuallyAsync(Window?)` always
+  shows a result, ignoring any skip, and brings a result already on screen forward before asking GitHub again.
+  Checks that overlap share the request still out (`_checking`). Both funnel through `ShowUpdateCheckResultAsync`,
+  one `UpdateCheckWindow` at a time (`_updateCheck`, the `_about`/`_preferences` shape) — except that its owner can
+  close during the request, so an owner no longer visible falls back to `ActiveWindow()`, and a show that throws
+  gives the slot back. The dialog's Download opens the page through `LinkOpening` over an `AvaloniaUriOpener` built
+  on the dialog itself, the same rule and wording as Help's links, and `UpdateChecker` only lets a page under
+  `ProjectLinks.Releases` through, since the platform launcher opens any scheme. Remind Me Later, not Download, is
+  the default button and first tab stop: the automatic check can open over a terminal the user is typing into.
+  Skip writes `SkippedUpdateVersion`. Each public entry point has an internal overload taking the checker and the
+  `SettingsViewModel` explicitly, `ShowPreferences(SettingsViewModel)`'s shape, so tests never touch the network or
+  the real settings file.
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.

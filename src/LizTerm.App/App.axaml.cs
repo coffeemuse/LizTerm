@@ -296,9 +296,15 @@ public partial class App : Application
         if (!settings.Current.CheckForUpdatesAutomatically) return null;
         try
         {
-            var result = await UpdateChecker.CheckAsync(checker, AppVersion.Current, CancellationToken.None);
-            if (!UpdateNotificationPolicy.ShouldShowAutomatically(result, settings.Current.SkippedUpdateVersion)) return null;
-            return await ShowUpdateCheckResultAsync(result, owner: null, settings);
+            var result = await CheckOnceAsync(checker);
+            // Asked again after the wait, not only before it: the user may have turned automatic checking off in
+            // Preferences while the request was out.
+            if (!settings.Current.CheckForUpdatesAutomatically
+                || !UpdateNotificationPolicy.ShouldShowAutomatically(result, settings.Current.SkippedUpdateVersion)) return null;
+            // Nobody asked for this result, so it belongs to the window the user works in — the session they were
+            // last in, else the picker — and never to whatever is in front of it, such as a certificate prompt
+            // still waiting for an answer.
+            return await ShowUpdateCheckResultAsync(result, (Window?)_lastActiveSession ?? _picker, settings);
         }
         catch
         {
@@ -313,14 +319,46 @@ public partial class App : Application
 
     internal async Task<UpdateCheckWindow> CheckForUpdatesManuallyAsync(Window? owner, IReleaseChecker checker, SettingsViewModel settings)
     {
-        var result = await UpdateChecker.CheckAsync(checker, AppVersion.Current, CancellationToken.None);
+        // A result already on screen is brought forward before GitHub is asked again: the one-at-a-time rule in
+        // ShowUpdateCheckResultAsync would only throw a fresh answer away for it.
+        if (_updateCheck is { } showing)
+        {
+            showing.Activate();
+            return showing;
+        }
+        var result = await CheckOnceAsync(checker);
         return await ShowUpdateCheckResultAsync(result, owner, settings);
     }
 
-    /// <summary>One at a time, the _about/_preferences shape. Download opens the result's release page through an
-    /// AvaloniaUriOpener built on the dialog itself (there is no app-wide opener; it is always tied to whichever
-    /// window it acts through, as SessionWindow's own is). Skip writes SkippedUpdateVersion through the settings
-    /// object this call was given, so a test's in-memory settings are what change, never the real file.</summary>
+    /// <summary>The request still out, so checks that overlap — a second click while GitHub is slow, a click during
+    /// the startup check — share one request and so one dialog.</summary>
+    private Task<UpdateCheckResult>? _checking;
+
+    private Task<UpdateCheckResult> CheckOnceAsync(IReleaseChecker checker)
+    {
+        if (_checking is { } running) return running;
+        var check = RunCheckAsync(checker);
+        // Only a request still running is kept: a finished one must never answer the next check.
+        if (!check.IsCompleted) _checking = check;
+        return check;
+    }
+
+    private async Task<UpdateCheckResult> RunCheckAsync(IReleaseChecker checker)
+    {
+        try
+        {
+            return await UpdateChecker.CheckAsync(checker, AppVersion.Current, CancellationToken.None);
+        }
+        finally
+        {
+            _checking = null;
+        }
+    }
+
+    /// <summary>One at a time, the _about/_preferences shape. The dialog opens its release page through an
+    /// AvaloniaUriOpener it builds on itself (there is no app-wide opener; it is always tied to whichever window it
+    /// acts through, as SessionWindow's own is). Skip writes SkippedUpdateVersion through the settings object this
+    /// call was given, so a test's in-memory settings are what change, never the real file.</summary>
     private async Task<UpdateCheckWindow> ShowUpdateCheckResultAsync(UpdateCheckResult result, Window? owner, SettingsViewModel settings)
     {
         if (_updateCheck is { } showing)
@@ -328,14 +366,23 @@ public partial class App : Application
             showing.Activate();
             return showing;
         }
-        UpdateCheckWindow? window = null;
-        window = new UpdateCheckWindow(result, AppVersion.Current,
-            onDownload: url => new AvaloniaUriOpener(window!).OpenAsync(new Uri(url)),
-            onSkip: version => settings.SkippedUpdateVersion = version);
+        var window = new UpdateCheckWindow(result, AppVersion.Current, onSkip: version => settings.SkippedUpdateVersion = version);
         _updateCheck = window;
         window.Closed += (_, _) => { if (ReferenceEquals(_updateCheck, window)) _updateCheck = null; };
-        var target = owner ?? ActiveWindow();
-        if (target is null) window.Show(); else await window.ShowDialog(target);
+        // Unlike About's, this owner was chosen before the request went out, and the user may have closed it while
+        // waiting; ShowDialog throws for an owner that is closed or hidden.
+        var target = owner is { IsVisible: true } ? owner : ActiveWindow();
+        try
+        {
+            if (target is null) window.Show(); else await window.ShowDialog(target);
+        }
+        catch
+        {
+            // A window that never opened never raises Closed, so the slot is given back here, or every later check
+            // would activate an invisible window and show nothing.
+            if (ReferenceEquals(_updateCheck, window)) _updateCheck = null;
+            throw;
+        }
         return window;
     }
 

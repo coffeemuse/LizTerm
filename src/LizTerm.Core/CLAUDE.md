@@ -130,7 +130,9 @@ BCL-only, which is why these live in Core, where the integration tests can use t
 BCL-only, same reason Security is here: the App and any future test can both reach it.
 
 - `IReleaseChecker` / `GitHubReleaseChecker`: one `HttpClient` call to GitHub's `/releases/latest` — the app's only
-  HTTP call outside b3270. Headers and the 10 s timeout are set on the request/client the checker is given, not
-  assumed, so a test with a fake `HttpMessageHandler` sees exactly what production sends.
+  HTTP call outside b3270. The headers are set on each request, so a test with a fake `HttpMessageHandler` sees
+  exactly what production sends. The 10 s timeout is not: it lives on the client `CreateHttpClient` builds for
+  `Create()`, which no handler can observe, so `GitHubReleaseCheckerTests` reads it off that client.
 - `ReleaseVersion.IsNewer`: the pure comparison, over plain version strings only — no caller here ever sees a
-  GitHub tag.
+  GitHub tag. Exactly `Major.Minor.Patch` in digits, stricter than `Version.TryParse`, which takes two or four parts
+  (the missing ones read as -1, so `0.5.2.0` would be newer than `0.5.2`), spaces and signs.

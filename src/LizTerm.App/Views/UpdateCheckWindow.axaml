@@ -10,17 +10,19 @@
         Title="Check for Updates" Width="420" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <!-- Content varies by the result the constructor is given, not by a bound view model: three fixed states, no
-       live data. IsDefault/IsCancel are set in code, on whichever button the constructor makes visible, rather
-       than in markup, since the hidden buttons for the other two states must never compete for them. -->
+       live data. Remind Me Later, not Download, is the default button (set in code) and the first tab stop: the
+       automatic check can open this over a terminal the user is typing into, where Enter and Tab are ordinary
+       keys, and neither may open a browser or skip a release unread. The fallback line sits under the buttons
+       and can be selected, so a page the platform could not open can still be copied. -->
   <DockPanel Margin="16">
+    <SelectableTextBlock x:Name="FallbackText" DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="12"
+                         Foreground="#A0A0A0" IsVisible="False" />
     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
-      <Button x:Name="SkipButton" Content="Skip This Version" Click="OnSkipClick" IsVisible="False" />
-      <Button x:Name="RemindButton" Content="Remind Me Later" Click="OnRemindClick" IsVisible="False" />
-      <Button x:Name="DownloadButton" Content="Download" Click="OnDownloadClick" IsVisible="False" />
+      <Button x:Name="SkipButton" Content="Skip This Version" Click="OnSkipClick" IsVisible="False" TabIndex="2" />
+      <Button x:Name="RemindButton" Content="Remind Me Later" Click="OnRemindClick" IsVisible="False" TabIndex="0" />
+      <Button x:Name="DownloadButton" Content="Download" Click="OnDownloadClick" IsVisible="False" TabIndex="1" />
       <Button x:Name="OkButton" Content="OK" Click="OnOkClick" IsVisible="False" />
     </StackPanel>
     <TextBlock x:Name="MessageText" DockPanel.Dock="Top" TextWrapping="Wrap" />
-    <TextBlock x:Name="FallbackText" DockPanel.Dock="Top" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="12"
-               Foreground="#A0A0A0" IsVisible="False" />
   </DockPanel>
 </Window>

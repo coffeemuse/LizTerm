@@ -54,7 +54,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   `LastRequest`); `FakeFolderOpener`; `FakeUriOpener` (`Opened`, the list of URLs and paths handed to it; `Result`;
   an optional `Exception`); `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
   `fetch:<host>:<port>`); `FakeBellRinger` (`Rings`, the list of `BellSound` values asked for, `Available`, what
-  `CanRing` answers, and an optional `Exception`); and `FakeReleaseChecker` (`Result`, an optional `Exception`).
+  `CanRing` answers, and an optional `Exception`); and `FakeReleaseChecker` (`Result`, an optional `Exception`, `Calls`, and a `Gate`
+  that holds every answer back until the test completes it, for what happens while a request is out).
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
   `src/LizTerm.App/CLAUDE.md` say why.
 - The picker's row menu is a classic `ContextMenu` on each `ListBoxItem`. Open it with a headless right

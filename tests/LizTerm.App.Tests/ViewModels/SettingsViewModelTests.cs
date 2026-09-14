@@ -205,7 +205,7 @@ public class SettingsViewModelTests : IDisposable
     /// <summary>Not bound to any Preferences control — App writes it from the Skip button's callback — but it
     /// follows the same write-through shape as every other setting.</summary>
     [Fact]
-    public void The_skipped_update_version_writes_through_and_skips_an_unchanged_value()
+    public void The_skipped_update_version_writes_through_clears_and_skips_an_unchanged_value()
     {
         var settings = new SettingsViewModel(new SettingsStore(FilePath));
         var changes = Changes(settings);
@@ -218,6 +218,11 @@ public class SettingsViewModelTests : IDisposable
 
         Assert.Equal(["SkippedUpdateVersion"], changes);
         Assert.Equal("0.6.0", new SettingsViewModel(new SettingsStore(FilePath)).SkippedUpdateVersion);
+
+        settings.SkippedUpdateVersion = null;
+
+        Assert.Equal(["SkippedUpdateVersion", "SkippedUpdateVersion"], changes);
+        Assert.Null(new SettingsViewModel(new SettingsStore(FilePath)).SkippedUpdateVersion);
     }
 
     [Fact]

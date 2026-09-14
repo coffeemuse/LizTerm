@@ -15,17 +15,20 @@ internal sealed record GitHubReleaseResponse(
 [JsonSerializable(typeof(GitHubReleaseResponse))]
 internal partial class GitHubReleaseJsonContext : JsonSerializerContext;
 
-/// <summary>The app's first HTTP call of any kind — everything else goes through b3270. The headers and the 10 s
-/// timeout are set per request/client here, not assumed, so a test using a fake handler sees exactly what
-/// production sends.</summary>
+/// <summary>The app's first HTTP call of any kind. The headers are set on each request, so a test using a fake
+/// handler sees exactly what production sends; the 10 s timeout is on the client CreateHttpClient builds, which no
+/// handler can observe, so its test reads it off that client.</summary>
 public sealed class GitHubReleaseChecker(HttpClient httpClient) : IReleaseChecker
 {
     private const string LatestReleaseUrl = "https://api.github.com/repos/coffeemuse/LizTerm/releases/latest";
     private static readonly string ProductVersion = typeof(GitHubReleaseChecker).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
-    /// <summary>The production instance. A launch must never hang behind a check with no route to the internet,
-    /// hence the timeout.</summary>
-    public static IReleaseChecker Create() => new GitHubReleaseChecker(new HttpClient { Timeout = TimeSpan.FromSeconds(10) });
+    /// <summary>The production instance.</summary>
+    public static IReleaseChecker Create() => new GitHubReleaseChecker(CreateHttpClient());
+
+    /// <summary>A check with no route to the internet must give up rather than leave Help &gt; Check for Updates...
+    /// showing nothing, hence the timeout.</summary>
+    internal static HttpClient CreateHttpClient() => new() { Timeout = TimeSpan.FromSeconds(10) };
 
     public async Task<ReleaseInfo> GetLatestReleaseAsync(CancellationToken cancellationToken)
     {

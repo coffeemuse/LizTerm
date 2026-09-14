@@ -4,6 +4,7 @@
 
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using LizTerm.App.Files;
 using LizTerm.App.Updates;
 
 namespace LizTerm.App.Views;
@@ -13,21 +14,23 @@ namespace LizTerm.App.Views;
 public partial class UpdateCheckWindow : Window
 {
     private readonly UpdateCheckResult _result;
-    private readonly Func<string, Task<bool>>? _onDownload;
+    private readonly IUriOpener _uriOpener;
     private readonly Action<string>? _onSkip;
 
     /// <summary>Design-time only.</summary>
     public UpdateCheckWindow() : this(
         new UpdateCheckResult.NewerAvailable("0.6.0", "https://github.com/coffeemuse/LizTerm/releases/tag/v0.6.0"),
-        "0.5.2", null, null)
+        "0.5.2", null)
     { }
 
-    public UpdateCheckWindow(UpdateCheckResult result, string currentVersion, Func<string, Task<bool>>? onDownload, Action<string>? onSkip)
+    /// <param name="uriOpener">What Download opens the release page through. Null for the platform's, acting through
+    /// this window, which is what App wants; tests pass a fake.</param>
+    public UpdateCheckWindow(UpdateCheckResult result, string currentVersion, Action<string>? onSkip, IUriOpener? uriOpener = null)
     {
         InitializeComponent();
         _result = result;
-        _onDownload = onDownload;
         _onSkip = onSkip;
+        _uriOpener = uriOpener ?? new AvaloniaUriOpener(this);
 
         switch (result)
         {
@@ -36,7 +39,7 @@ public partial class UpdateCheckWindow : Window
                 DownloadButton.IsVisible = true;
                 RemindButton.IsVisible = true;
                 SkipButton.IsVisible = true;
-                DownloadButton.IsDefault = true;
+                RemindButton.IsDefault = true;
                 RemindButton.IsCancel = true;
                 break;
             case UpdateCheckResult.UpToDate:
@@ -56,23 +59,13 @@ public partial class UpdateCheckWindow : Window
 
     private async void OnDownloadClick(object? sender, RoutedEventArgs e)
     {
-        var newer = (UpdateCheckResult.NewerAvailable)_result;
-        bool opened;
-        try
-        {
-            opened = _onDownload is null || await _onDownload(newer.HtmlUrl);
-        }
-        catch (Exception)
-        {
-            // Fall through to naming the URL, the same as _onDownload returning false — OpenLinkAsync's shape.
-            opened = false;
-        }
-        if (opened)
+        var page = ((UpdateCheckResult.NewerAvailable)_result).HtmlUrl;
+        if (await LinkOpening.TryOpenAsync(_uriOpener, page))
         {
             Close();
             return;
         }
-        FallbackText.Text = "Could not open a browser. The release is at " + newer.HtmlUrl;
+        FallbackText.Text = LinkOpening.NotOpened(page);
         FallbackText.IsVisible = true;
     }
 

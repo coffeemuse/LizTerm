@@ -17,10 +17,26 @@ public class ReleaseVersionTests
     public void Compares_two_plain_version_strings(string latest, string current, bool expected) =>
         Assert.Equal(expected, ReleaseVersion.IsNewer(latest, current));
 
+    /// <summary>Version.TryParse alone would take the two- and four-part, spaced and signed ones, and a missing part
+    /// reads as -1 there, so 0.5.2.0 would count as newer than the 0.5.2 it names.</summary>
     [Theory]
     [InlineData("not-a-version", "0.5.2")]
     [InlineData("0.5.2", "not-a-version")]
     [InlineData("", "0.5.2")]
-    public void Throws_for_a_version_string_that_will_not_parse(string latest, string current) =>
+    [InlineData("0.6", "0.5.2")]
+    [InlineData("0.5.2.0", "0.5.2")]
+    [InlineData(" 0.6.0", "0.5.2")]
+    [InlineData("+0.6.0", "0.5.2")]
+    [InlineData("0.6.0-rc.1", "0.5.2")]
+    [InlineData("0.5.2", "0.6.0+abc")]
+    public void Throws_for_anything_but_major_minor_patch_in_plain_digits(string latest, string current) =>
         Assert.Throws<FormatException>(() => ReleaseVersion.IsNewer(latest, current));
+
+    [Theory]
+    [InlineData("0.5.2", true)]
+    [InlineData("00.06.00", true)]
+    [InlineData("0.6", false)]
+    [InlineData("0.6.0-dev", false)]
+    public void Says_whether_a_version_is_one_it_can_compare(string value, bool expected) =>
+        Assert.Equal(expected, ReleaseVersion.IsValid(value));
 }

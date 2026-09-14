@@ -4,7 +4,9 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using LizTerm.App.ViewModels;
@@ -283,17 +285,24 @@ public class PreferencesWindowTests
 
         Assert.Equal(["General", "Display", "Bell", "Window"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header!));
         Assert.Equal(0, tabs.SelectedIndex);
+        Assert.Same(tabs.Items.Cast<TabItem>().First(), window.FindControl<CheckBox>("CheckForUpdatesBox")!.FindLogicalAncestorOfType<TabItem>());
         Assert.Same(window.FindControl<RadioButton>("CrosshairNone"), tabs.Items.Cast<TabItem>().ElementAt(1).FindLogicalDescendantOfType<RadioButton>());
     }
 
+    /// <summary>By a real click rather than by assigning IsChecked (update spec §9.2): General is the tab the window
+    /// opens on, so the box is on screen, and a press that lands proves it is there and enabled — the only way off
+    /// for a check that is on by default — where an assignment would not.</summary>
     [AvaloniaFact]
-    public void Checking_the_check_for_updates_box_sets_the_shared_settings()
+    public void Clicking_the_check_for_updates_box_sets_the_shared_settings()
     {
         var (window, settings) = Show();
         var box = window.FindControl<CheckBox>("CheckForUpdatesBox")!;
         Assert.True(box.IsChecked);
+        window.UpdateLayout();
+        var centre = box.TranslatePoint(new Point(box.Bounds.Width / 2, box.Bounds.Height / 2), window)!.Value;
 
-        box.IsChecked = false;
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
         Assert.False(settings.CheckForUpdatesAutomatically);
 
         settings.CheckForUpdatesAutomatically = true;
