@@ -285,8 +285,28 @@ public class PreferencesWindowTests
 
         Assert.Equal(["General", "Display", "Bell", "Window"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header!));
         Assert.Equal(0, tabs.SelectedIndex);
+        Assert.Same(tabs.Items.Cast<TabItem>().First(), window.FindControl<CheckBox>("ShowSplashBox")!.FindLogicalAncestorOfType<TabItem>());
         Assert.Same(tabs.Items.Cast<TabItem>().First(), window.FindControl<CheckBox>("CheckForUpdatesBox")!.FindLogicalAncestorOfType<TabItem>());
         Assert.Same(window.FindControl<RadioButton>("CrosshairNone"), tabs.Items.Cast<TabItem>().ElementAt(1).FindLogicalDescendantOfType<RadioButton>());
+    }
+
+    /// <summary>By a real click, for the check-for-updates box's reason: the splash box (#108) is on by default and
+    /// sits on the tab the window opens on, so a press that lands proves it is there and enabled.</summary>
+    [AvaloniaFact]
+    public void Clicking_the_splash_box_sets_the_shared_settings()
+    {
+        var (window, settings) = Show();
+        var box = window.FindControl<CheckBox>("ShowSplashBox")!;
+        Assert.True(box.IsChecked);
+        window.UpdateLayout();
+        var centre = box.TranslatePoint(new Point(box.Bounds.Width / 2, box.Bounds.Height / 2), window)!.Value;
+
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
+        Assert.False(settings.ShowSplashOnLaunch);
+
+        settings.ShowSplashOnLaunch = true;
+        Assert.True(box.IsChecked);
     }
 
     /// <summary>By a real click rather than by assigning IsChecked (update spec §9.2): General is the tab the window

@@ -288,6 +288,9 @@ sit on four tabs:
 
 **General**
 
+- **Splash screen** — whether LizTerm shows its splash screen when it starts (on by default). Off, LizTerm opens
+  straight to the Sessions list, or to the session you named on the command line. The change applies from the next
+  time LizTerm starts.
 - **Updates** — whether LizTerm checks for a newer release automatically when it starts (on by default). A check
   never interrupts you unless there is something new, and skipping a version keeps it quiet only until the next
   one is published. Help > Check for Updates... checks on demand regardless of this setting, and always tells you

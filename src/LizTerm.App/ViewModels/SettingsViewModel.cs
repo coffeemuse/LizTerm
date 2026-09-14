@@ -133,6 +133,17 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Whether App shows the splash before its first window (#108). On by default, so an upgrade changes
+    /// nobody's launch; App reads it once, at startup, so a change in Preferences reaches the next launch.</summary>
+    public bool ShowSplashOnLaunch
+    {
+        get => Current.ShowSplashOnLaunch;
+        set
+        {
+            if (Current.ShowSplashOnLaunch != value) Apply(nameof(ShowSplashOnLaunch), s => s with { ShowSplashOnLaunch = value });
+        }
+    }
+
     /// <summary>The exact release version the user chose "Skip This Version" for, or null (#107). Not bound to
     /// any Preferences control: App writes it from the update dialog's Skip button. Storing the version string,
     /// not a bool, is what makes a later release un-suppressed for free.</summary>

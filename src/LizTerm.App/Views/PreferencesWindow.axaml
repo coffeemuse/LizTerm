@@ -14,7 +14,7 @@
   <!-- Every control applies the moment it changes, to every open session window: the data context is the
        process's one SettingsViewModel. No OK or Cancel, only Done.
 
-       Three tabs, each the profile editor's grid (a 120 px label column, controls on the right). A short enum is
+       Four tabs, each the profile editor's grid (a 120 px label column, controls on the right). A short enum is
        one horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. The size
        is fixed rather than SizeToContent: only the selected tab is measured, so a window sized to its content
        would change height on every tab switch. The Window tab is the tallest and sets the height. A new setting
@@ -48,7 +48,14 @@
            a setting that is not about the screen, the bell, or the window's own chrome belongs (#107), and it is
            where the next such setting goes too, rather than reopening the question of where it belongs. -->
       <TabItem Header="General">
+        <!-- Rows in the order they happen at launch: the splash, then the update check. -->
         <StackPanel Spacing="12">
+          <Grid Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Splash screen" />
+            <!-- Read once, at startup (#108): off opens the first window with no splash at all. -->
+            <CheckBox x:Name="ShowSplashBox" Grid.Column="1" Content="Show the splash screen on launch"
+                      IsChecked="{Binding ShowSplashOnLaunch, Mode=TwoWay}" />
+          </Grid>
           <Grid Classes="settings" ColumnDefinitions="120,*">
             <TextBlock Text="Updates" />
             <CheckBox x:Name="CheckForUpdatesBox" Grid.Column="1" Content="Automatically check for updates on launch"

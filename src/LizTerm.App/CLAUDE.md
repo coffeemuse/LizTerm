@@ -16,6 +16,11 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   engine is missing, else the session for a resolved argument, else the picker. The gate fires once the splash has
   closed *and* the plan is known, in either order. A splash already past its maximum closes from inside `Show()`, so
   `Closed` is subscribed before `Show()` is called; a missed signal would strand the process with no window.
+- **The splash can be turned off** (`Settings.ShowSplashOnLaunch`, Preferences > General, #108), so settings load
+  before anything opens. `App.OpenSplash(gate, settings)` holds the choice: with it off, no window opens and the
+  gate is told at once that the splash has closed, so the plan runs as soon as it is known. That is no splash at
+  all rather than a zero-length one, because `SplashTiming.Minimum` only means anything for a splash that is shown.
+  It is read once per launch; a change in Preferences reaches the next one.
 - `StartupArguments.Parse` records the argument as typed in `Argument` and, when it also reads as a host, the ad hoc
   `[L:][Y:][lu@]host[:port]` fields beside it. It does not choose between the two: the ad hoc forms overlap legal
   profile names (`CONS01@tk5`, `a:b`), and only `Resolve` has the saved list, where an exact name match always wins —
@@ -157,9 +162,9 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `StackPanel` of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short
   enum is one horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. A new
   setting joins the tab it belongs to (#78's theme and cursor go in Display); a new area is a new tab — General
-  itself is the most recent (#107's Updates toggle), and #79's logging and #18's keyboard are next. The size is
-  fixed rather than `SizeToContent`, because only the selected tab is measured and a window sized
-  to its content would change height on every tab switch; the Window tab is the tallest and sets the height.
+  itself is the most recent (#107's Updates toggle, with #108's Splash screen row above it, in the order both happen
+  at launch), and #79's logging and #18's keyboard are next. The size is fixed rather than `SizeToContent`, because
+  only the selected tab is measured and a window sized to its content would change height on every tab switch; the Window tab is the tallest and sets the height.
   `FindControl` reaches a control on an unselected tab (the name scope is the window's), so the tests never select
   a tab first.
 - The Preferences **Keypad** row is a two-way `KeypadBox` for `Settings.Keypad` plus the two dock radios over
