@@ -96,6 +96,9 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [ObservableProperty] private bool _messageIsError;
     [ObservableProperty] private string _messageTip = "";
     [ObservableProperty] private string _insertText = "";
+    /// <summary>The host's insert mode, as InsertText draws it: Keys > Insert's check mark (#111). Set only from the
+    /// host's status, so the mark never runs ahead of what the host reports.</summary>
+    [ObservableProperty] private bool _isInsertMode;
     [ObservableProperty] private string _luText = "";
     [ObservableProperty] private string _cursorText = "";
     [ObservableProperty] private string? _errorMessage;
@@ -339,15 +342,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand]
     private async Task OpenLinkAsync(string url)
     {
-        try
-        {
-            if (_uriOpener is not null && await _uriOpener.OpenAsync(new Uri(url))) return;
-        }
-        catch (Exception)
-        {
-            // Fall through to naming the URL.
-        }
-        ErrorMessage = $"Could not open a browser. The page is at {url}.";
+        if (!await LinkOpening.TryOpenAsync(_uriOpener, url)) ErrorMessage = LinkOpening.NotOpened(url);
     }
 
     /// <summary>Help &gt; User Guide. Writes the bundled copy out and hands it to the platform. When that
@@ -400,6 +395,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         if (_disposed) return;
         _keyboard = status;
         InsertText = StatusFormatter.Insert(status.InsertMode);
+        IsInsertMode = status.InsertMode;
         LuText = StatusFormatter.Lu(status.LuName);
         UpdateMessage();
     }

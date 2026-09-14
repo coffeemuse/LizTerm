@@ -13,12 +13,14 @@ using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
 using LizTerm.App.Startup;
+using LizTerm.App.Updates;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Security;
 using LizTerm.Core.Session;
 using LizTerm.Core.Settings;
+using LizTerm.Core.Updates;
 
 namespace LizTerm.App;
 
@@ -27,6 +29,8 @@ public partial class App : Application
     private readonly List<SessionWindow> _sessions = [];
     /// <summary>The process's one ringer: what it can ring is the answer Preferences shows, so they cannot drift.</summary>
     private readonly SystemBellRinger _bellRinger = new();
+    /// <summary>The process's one release checker (#107).</summary>
+    private readonly IReleaseChecker _releaseChecker = GitHubReleaseChecker.Create();
     /// <summary>The session window the user was in most recently, which is what About describes when it is
     /// opened from the application menu with something else — the picker, a dialog — in front.</summary>
     private SessionWindow? _lastActiveSession;
@@ -49,23 +53,19 @@ public partial class App : Application
             // Closing the last session window returns to the picker; only Quit ends the process.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            // Subscribe before Show(): a splash whose maximum has already elapsed closes from inside Opened, i.e.
-            // inside Show() itself. The gate then runs the plan once the splash has closed and the plan is known,
-            // in whichever order those happen — under OnExplicitShutdown a missed plan would leave the process
-            // running with no window and no way to quit.
-            var gate = new StartupGate(Execute);
-            var splash = new SplashWindow();
-            splash.Closed += (_, _) => gate.SplashClosed();
-            splash.Show();
-            splash.Activate();
-
-            _store = new ProfileStore(AppPaths.ProfilesDirectory());
+            // Settings before anything opens: whether there is a splash at all is one of them (#108). Load never
+            // throws, so reading them first adds no way for startup to fail before a window can say so.
             _settings = new SettingsViewModel(new SettingsStore(AppPaths.SettingsFile()));
             // LIZTERM_MENU seeds this instance and nothing else: in memory, never written, and overridable from
             // Preferences for the rest of the session (#70). A variable naming no style leaves the saved
             // preference to decide.
             if (MenuStrategy.FromVariable(Environment.GetEnvironmentVariable(MenuStrategy.Variable)) is { } seeded)
                 _settings.SeedMenuStyle(seeded);
+
+            var gate = new StartupGate(Execute);
+            OpenSplash(gate, _settings.Current);
+
+            _store = new ProfileStore(AppPaths.ProfilesDirectory());
             string? backendError = null;
             try
             {
@@ -84,6 +84,26 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    /// <summary>The splash, or none (#108). Turned off, nothing opens and the gate is told at once, so the plan runs
+    /// the moment it is known: no splash at all rather than a zero-length one. On, the gate runs the plan once the
+    /// splash has closed and the plan is known, in whichever order those happen — under OnExplicitShutdown a missed
+    /// plan would leave the process running with no window and no way to quit.</summary>
+    internal static SplashWindow? OpenSplash(StartupGate gate, AppSettings settings)
+    {
+        if (!settings.ShowSplashOnLaunch)
+        {
+            gate.SplashClosed();
+            return null;
+        }
+        // Subscribe before Show(): a splash whose maximum has already elapsed closes from inside Opened, i.e.
+        // inside Show() itself.
+        var splash = new SplashWindow();
+        splash.Closed += (_, _) => gate.SplashClosed();
+        splash.Show();
+        splash.Activate();
+        return splash;
+    }
+
     private void Execute(StartupPlan plan)
     {
         try
@@ -97,9 +117,11 @@ public partial class App : Application
                     break;
                 case StartupPlan.OpenSession open:
                     OpenSession(open.Profile, open.FromStore);
+                    _ = CheckForUpdatesOnStartupAsync();
                     break;
                 default:
                     ShowPicker();
+                    _ = CheckForUpdatesOnStartupAsync();
                     break;
             }
         }
@@ -251,6 +273,7 @@ public partial class App : Application
     private void OnPreferencesClick(object? sender, EventArgs e) => ShowPreferences();
 
     private PreferencesWindow? _preferences;
+    private UpdateCheckWindow? _updateCheck;
 
     /// <summary>The one route to Preferences, for the macOS application menu and a session's Edit item alike.
     /// Modeless and unowned so the user keeps working while it is open, and one at a time: a second request
@@ -273,6 +296,109 @@ public partial class App : Application
         _preferences = window;
         window.Closed += (_, _) => { if (ReferenceEquals(_preferences, window)) _preferences = null; };
         window.Show();
+        return window;
+    }
+
+    /// <summary>Runs once at startup (fired from Execute, never after ShowError or a failed open). Silent unless
+    /// CheckForUpdatesAutomatically is on, the check finds a newer release, and that release is not the one the
+    /// user already skipped.</summary>
+    public Task<UpdateCheckWindow?> CheckForUpdatesOnStartupAsync() => CheckForUpdatesOnStartupAsync(_releaseChecker, Settings);
+
+    /// <summary>The rule with the checker and settings as arguments, so a test can exercise it with a
+    /// FakeReleaseChecker and an in-memory SettingsViewModel and never touch the network or the real settings
+    /// file — ShowPreferences(SettingsViewModel)'s shape.</summary>
+    internal async Task<UpdateCheckWindow?> CheckForUpdatesOnStartupAsync(IReleaseChecker checker, SettingsViewModel settings)
+    {
+        if (!settings.Current.CheckForUpdatesAutomatically) return null;
+        try
+        {
+            var result = await CheckOnceAsync(checker);
+            // Asked again after the wait, not only before it: the user may have turned automatic checking off in
+            // Preferences while the request was out.
+            if (!settings.Current.CheckForUpdatesAutomatically
+                || !UpdateNotificationPolicy.ShouldShowAutomatically(result, settings.Current.SkippedUpdateVersion)) return null;
+            // Nobody asked for this result, so it belongs to the window the user works in — the session they were
+            // last in, else the picker — and never to whatever is in front of it, such as a certificate prompt
+            // still waiting for an answer.
+            return await ShowUpdateCheckResultAsync(result, (Window?)_lastActiveSession ?? _picker, settings);
+        }
+        catch
+        {
+            // An unattended check is not worth a crash.
+            return null;
+        }
+    }
+
+    /// <summary>Help &gt; Check for Updates..., always reporting something — newer, up to date, or the failure
+    /// reason — and ignoring any skipped version, because the user asked directly.</summary>
+    public Task<UpdateCheckWindow> CheckForUpdatesManuallyAsync(Window? owner) => CheckForUpdatesManuallyAsync(owner, _releaseChecker, Settings);
+
+    internal async Task<UpdateCheckWindow> CheckForUpdatesManuallyAsync(Window? owner, IReleaseChecker checker, SettingsViewModel settings)
+    {
+        // A result already on screen is brought forward before GitHub is asked again: the one-at-a-time rule in
+        // ShowUpdateCheckResultAsync would only throw a fresh answer away for it.
+        if (_updateCheck is { } showing)
+        {
+            showing.Activate();
+            return showing;
+        }
+        var result = await CheckOnceAsync(checker);
+        return await ShowUpdateCheckResultAsync(result, owner, settings);
+    }
+
+    /// <summary>The request still out, so checks that overlap — a second click while GitHub is slow, a click during
+    /// the startup check — share one request and so one dialog.</summary>
+    private Task<UpdateCheckResult>? _checking;
+
+    private Task<UpdateCheckResult> CheckOnceAsync(IReleaseChecker checker)
+    {
+        if (_checking is { } running) return running;
+        var check = RunCheckAsync(checker);
+        // Only a request still running is kept: a finished one must never answer the next check.
+        if (!check.IsCompleted) _checking = check;
+        return check;
+    }
+
+    private async Task<UpdateCheckResult> RunCheckAsync(IReleaseChecker checker)
+    {
+        try
+        {
+            return await UpdateChecker.CheckAsync(checker, AppVersion.Current, CancellationToken.None);
+        }
+        finally
+        {
+            _checking = null;
+        }
+    }
+
+    /// <summary>One at a time, the _about/_preferences shape. The dialog opens its release page through an
+    /// AvaloniaUriOpener it builds on itself (there is no app-wide opener; it is always tied to whichever window it
+    /// acts through, as SessionWindow's own is). Skip writes SkippedUpdateVersion through the settings object this
+    /// call was given, so a test's in-memory settings are what change, never the real file.</summary>
+    private async Task<UpdateCheckWindow> ShowUpdateCheckResultAsync(UpdateCheckResult result, Window? owner, SettingsViewModel settings)
+    {
+        if (_updateCheck is { } showing)
+        {
+            showing.Activate();
+            return showing;
+        }
+        var window = new UpdateCheckWindow(result, AppVersion.Current, onSkip: version => settings.SkippedUpdateVersion = version);
+        _updateCheck = window;
+        window.Closed += (_, _) => { if (ReferenceEquals(_updateCheck, window)) _updateCheck = null; };
+        // Unlike About's, this owner was chosen before the request went out, and the user may have closed it while
+        // waiting; ShowDialog throws for an owner that is closed or hidden.
+        var target = owner is { IsVisible: true } ? owner : ActiveWindow();
+        try
+        {
+            if (target is null) window.Show(); else await window.ShowDialog(target);
+        }
+        catch
+        {
+            // A window that never opened never raises Closed, so the slot is given back here, or every later check
+            // would activate an invisible window and show nothing.
+            if (ReferenceEquals(_updateCheck, window)) _updateCheck = null;
+            throw;
+        }
         return window;
     }
 

@@ -118,6 +118,8 @@
             <NativeMenuItem Header="SysReq" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.SysReq}" />
             <NativeMenuItem Header="Dup" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Dup}" />
             <NativeMenuItem Header="Field Mark" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.FieldMark}" />
+            <NativeMenuItem Header="Insert" ToggleType="CheckBox" IsChecked="{Binding IsInsertMode, Mode=OneWay}" Click="OnInsertClickNative"
+                            Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Insert}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="PA1" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA1}" />
             <NativeMenuItem Header="PA2" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA2}" />
@@ -150,6 +152,7 @@
                             CommandParameter="{x:Static app:ProjectLinks.NewIssue}" />
             <NativeMenuItem Header="R_eleases" Command="{Binding OpenLinkCommand}"
                             CommandParameter="{x:Static app:ProjectLinks.Releases}" />
+            <NativeMenuItem Header="_Check for Updates..." Click="OnCheckForUpdatesClickNative" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=OneWay}"
                             Click="OnWireLogClickNative" />
@@ -222,6 +225,8 @@
         <MenuItem Header="SysReq" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.SysReq}" />
         <MenuItem Header="Dup" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Dup}" />
         <MenuItem Header="Field Mark" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.FieldMark}" />
+        <MenuItem x:Name="InsertMenuItem" Header="Insert" ToggleType="CheckBox" IsChecked="{Binding IsInsertMode, Mode=OneWay}"
+                  Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Insert}" />
         <Separator />
         <MenuItem Header="PA1" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA1}" />
         <MenuItem Header="PA2" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PA2}" />
@@ -248,6 +253,7 @@
                   CommandParameter="{x:Static app:ProjectLinks.NewIssue}" />
         <MenuItem Header="R_eleases" Command="{Binding OpenLinkCommand}"
                   CommandParameter="{x:Static app:ProjectLinks.Releases}" />
+        <MenuItem Header="_Check for Updates..." Click="OnCheckForUpdatesClick" />
         <Separator />
         <MenuItem x:Name="WireLogMenuItem" Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=TwoWay}" />
         <MenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />

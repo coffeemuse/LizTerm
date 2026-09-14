@@ -56,6 +56,9 @@ public partial class SessionWindow : Window
         // every surface that takes no focus — the keypad's border padding and the margins between its buttons, a
         // button the pointer leaves before releasing (neither raises Click), the status bar and the error bar.
         AddHandler(PointerPressedEvent, (_, _) => Screen.CancelTap(), RoutingStrategies.Tunnel);
+
+        // handledEventsToo: the item's Command marks Click handled before any instance handler runs. See OnInsertClick.
+        InsertMenuItem.AddHandler(MenuItem.ClickEvent, OnInsertClick, RoutingStrategies.Bubble, handledEventsToo: true);
         ApplyMenuStyle(MenuStrategy.Resolve(style, isMacOS));
         Opened += (_, _) =>
         {
@@ -224,6 +227,23 @@ public partial class SessionWindow : Window
 
     private static void ShowPreferences() => (Avalonia.Application.Current as App)?.ShowPreferences();
 
+    private async void OnCheckForUpdatesClickNative(object? sender, EventArgs e) => await CheckForUpdatesAsync();
+    private async void OnCheckForUpdatesClick(object? sender, RoutedEventArgs e) => await CheckForUpdatesAsync();
+
+    private async Task CheckForUpdatesAsync()
+    {
+        if (ViewModel is not { } vm) return;
+        try
+        {
+            if (Avalonia.Application.Current is App app) await app.CheckForUpdatesManuallyAsync(this);
+        }
+        catch (Exception ex)
+        {
+            vm.ErrorMessage = "Could not check for updates: " + ex.Message;
+        }
+        Screen.Focus();
+    }
+
     // Deliberately the view model's methods, never the [RelayCommand]s. Each method carries its own guard; the
     // commands keep CommunityToolkit's default of disabling while running, which is fine for a click and wrong
     // for a keystroke — and on macOS Task 6's gestures make these keystrokes, activated by the OS.
@@ -347,6 +367,24 @@ public partial class SessionWindow : Window
     private void OnWireLogClickNative(object? sender, EventArgs e)
     {
         if (ViewModel is { } vm) vm.IsWireLogging = !vm.IsWireLogging;
+    }
+
+    /// <summary>Keys > Insert's check mark is the host's insert mode (#111), not the menu's. Both renderers write
+    /// IsChecked before the click arrives (DefaultMenuInteractionHandler.Click on the classic item, the in-window
+    /// NativeMenuBar fallback through its two-way binding to the native one), and the host answers the key later, if
+    /// at all. So the click puts the mark back to what the host last reported; the Command still sends the key, and
+    /// the one-way binding moves the mark when the host's answer arrives. Unlike Wire Log, nothing here can flip the
+    /// state itself. The classic handler is added in the constructor with handledEventsToo, not by a Click attribute:
+    /// a MenuItem runs its Command from its own class handler and marks Click handled first, so an attribute handler
+    /// on an item that also has a Command never runs.</summary>
+    private void OnInsertClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem item && ViewModel is { } vm) item.IsChecked = vm.IsInsertMode;
+    }
+
+    private void OnInsertClickNative(object? sender, EventArgs e)
+    {
+        if (sender is NativeMenuItem item && ViewModel is { } vm) item.IsChecked = vm.IsInsertMode;
     }
 
     // Two one-line handlers per mode: MenuItem.Click and NativeMenuItem.Click have different delegate shapes.

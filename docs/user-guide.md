@@ -112,7 +112,7 @@ The choice is remembered, and applies to every session window; it is also in Pre
 When the host rings the terminal bell, the screen flashes briefly. A sound can be turned on in Preferences; by
 default the bell is silent. A host that rings repeatedly is limited to two bells a second.
 
-**View > Keypad > Show the Keypad** shows a panel of buttons for PF1 to PF24, PA1 to PA3, Enter, Clear, Reset, Attn,
+**View > Keypad > Show the Keypad** shows a panel of buttons for PF1 to PF24, PA1 to PA3, Insert, Clear, Reset, Attn,
 SysReq, Erase EOF, Erase Input, Dup and Field Mark, for the keys a keyboard cannot reach. It is off by default,
 remembered, and applies to every session window. The same submenu chooses whether it sits **At the Bottom** of the
 window or **On the Right**, and so does Preferences; either way the choice is saved and every open window follows
@@ -140,7 +140,7 @@ The default layout follows Vista TN3270, cross-checked against wc3270. It cannot
 | Alt+2, or Ctrl+Home | PA2 |
 | Alt+3, or Ctrl+Page Up | PA3 |
 | Tab / Shift+Tab | Tab / Back Tab |
-| Insert | Toggle insert mode |
+| Insert, or Ctrl+I | Toggle insert mode |
 | Home | Home |
 | End | Erase EOF |
 | Delete | Delete |
@@ -155,9 +155,9 @@ between.
 Copy, Paste, Select All and Find use the platform's own shortcuts — Cmd+C, Cmd+V, Cmd+A and Cmd+F on macOS, Ctrl
 elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.
 
-The **Keys** menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, PA1 to
-PA3, and PF13 to PF24. The on-screen keypad (**View > Keypad > Show the Keypad**) offers all of those as buttons,
-plus PF1 to PF12, Enter, Erase EOF and Erase Input.
+The **Keys** menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, Insert,
+PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. The on-screen keypad
+(**View > Keypad > Show the Keypad**) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.
 
 ## Mouse, selection and clipboard
 
@@ -256,6 +256,8 @@ The Help menu carries the project's own pages, ahead of Wire Log (see [Wire logs
 - **Help > Project on GitHub** opens the project's page on GitHub.
 - **Help > Report an Issue...** opens GitHub's form for a new bug report or feature request.
 - **Help > Releases** opens the project's releases page on GitHub.
+- **Help > Check for Updates...** checks now, and always tells you the result — a newer version, or that you are
+  up to date, or why the check failed. See [Preferences](#preferences) for the automatic version of this check.
 
 On macOS you can choose, under **Menu bar** in Preferences:
 
@@ -288,7 +290,17 @@ window itself.
 **Preferences...** is in the LizTerm application menu on macOS (Cmd-comma). It is also at the bottom of the
 **Edit** menu wherever a session window draws its menu inside the window: always on Windows and Linux, and on macOS
 under **Inside the window** or **Both**. Changes apply as you make them, to every open session window. The settings
-sit on three tabs:
+sit on four tabs:
+
+**General**
+
+- **Splash screen** — whether LizTerm shows its splash screen when it starts (on by default). Off, LizTerm opens
+  straight to the Sessions list, or to the session you named on the command line. The change applies from the next
+  time LizTerm starts.
+- **Updates** — whether LizTerm checks for a newer release automatically when it starts (on by default). A check
+  never interrupts you unless there is something new, and skipping a version keeps it quiet only until the next
+  one is published. Help > Check for Updates... checks on demand regardless of this setting, and always tells you
+  the result.
 
 **Display**
 

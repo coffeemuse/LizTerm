@@ -134,7 +134,7 @@ cancels an attempt that is still in progress.</p>
 The choice is remembered, and applies to every session window; it is also in Preferences.</p>
 <p>When the host rings the terminal bell, the screen flashes briefly. A sound can be turned on in Preferences; by
 default the bell is silent. A host that rings repeatedly is limited to two bells a second.</p>
-<p><strong>View &gt; Keypad &gt; Show the Keypad</strong> shows a panel of buttons for PF1 to PF24, PA1 to PA3, Enter, Clear, Reset, Attn,
+<p><strong>View &gt; Keypad &gt; Show the Keypad</strong> shows a panel of buttons for PF1 to PF24, PA1 to PA3, Insert, Clear, Reset, Attn,
 SysReq, Erase EOF, Erase Input, Dup and Field Mark, for the keys a keyboard cannot reach. It is off by default,
 remembered, and applies to every session window. The same submenu chooses whether it sits <strong>At the Bottom</strong> of the
 window or <strong>On the Right</strong>, and so does Preferences; either way the choice is saved and every open window follows
@@ -162,7 +162,7 @@ button to see its keyboard shortcut, where it has one; a greyed-out button shows
 <tr><td>Alt+2, or Ctrl+Home</td><td>PA2</td></tr>
 <tr><td>Alt+3, or Ctrl+Page Up</td><td>PA3</td></tr>
 <tr><td>Tab / Shift+Tab</td><td>Tab / Back Tab</td></tr>
-<tr><td>Insert</td><td>Toggle insert mode</td></tr>
+<tr><td>Insert, or Ctrl+I</td><td>Toggle insert mode</td></tr>
 <tr><td>Home</td><td>Home</td></tr>
 <tr><td>End</td><td>Erase EOF</td></tr>
 <tr><td>Delete</td><td>Delete</td></tr>
@@ -176,9 +176,9 @@ button to see its keyboard shortcut, where it has one; a greyed-out button shows
 between.</p>
 <p>Copy, Paste, Select All and Find use the platform's own shortcuts — Cmd+C, Cmd+V, Cmd+A and Cmd+F on macOS, Ctrl
 elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.</p>
-<p>The <strong>Keys</strong> menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, PA1 to
-PA3, and PF13 to PF24. The on-screen keypad (<strong>View &gt; Keypad &gt; Show the Keypad</strong>) offers all of those as buttons,
-plus PF1 to PF12, Enter, Erase EOF and Erase Input.</p>
+<p>The <strong>Keys</strong> menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, Insert,
+PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. The on-screen keypad
+(<strong>View &gt; Keypad &gt; Show the Keypad</strong>) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.</p>
 <h2 id="mouse-selection-and-clipboard">Mouse, selection and clipboard</h2>
 <ul>
 <li>Click to move the cursor.</li>
@@ -263,6 +263,8 @@ connection. If the platform cannot open a browser, an error names this page's ad
 <li><strong>Help &gt; Project on GitHub</strong> opens the project's page on GitHub.</li>
 <li><strong>Help &gt; Report an Issue...</strong> opens GitHub's form for a new bug report or feature request.</li>
 <li><strong>Help &gt; Releases</strong> opens the project's releases page on GitHub.</li>
+<li><strong>Help &gt; Check for Updates...</strong> checks now, and always tells you the result — a newer version, or that you are
+up to date, or why the check failed. See <a href="#preferences">Preferences</a> for the automatic version of this check.</li>
 </ul>
 <p>On macOS you can choose, under <strong>Menu bar</strong> in Preferences:</p>
 <ul>
@@ -291,7 +293,17 @@ window itself.</p>
 <p><strong>Preferences...</strong> is in the LizTerm application menu on macOS (Cmd-comma). It is also at the bottom of the
 <strong>Edit</strong> menu wherever a session window draws its menu inside the window: always on Windows and Linux, and on macOS
 under <strong>Inside the window</strong> or <strong>Both</strong>. Changes apply as you make them, to every open session window. The settings
-sit on three tabs:</p>
+sit on four tabs:</p>
+<p><strong>General</strong></p>
+<ul>
+<li><strong>Splash screen</strong> — whether LizTerm shows its splash screen when it starts (on by default). Off, LizTerm opens
+straight to the Sessions list, or to the session you named on the command line. The change applies from the next
+time LizTerm starts.</li>
+<li><strong>Updates</strong> — whether LizTerm checks for a newer release automatically when it starts (on by default). A check
+never interrupts you unless there is something new, and skipping a version keeps it quiet only until the next
+one is published. Help &gt; Check for Updates... checks on demand regardless of this setting, and always tells you
+the result.</li>
+</ul>
 <p><strong>Display</strong></p>
 <ul>
 <li><strong>Crosshair</strong> — the same choice as View &gt; Crosshair.</li>

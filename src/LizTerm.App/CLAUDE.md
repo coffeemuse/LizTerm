@@ -16,6 +16,11 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   engine is missing, else the session for a resolved argument, else the picker. The gate fires once the splash has
   closed *and* the plan is known, in either order. A splash already past its maximum closes from inside `Show()`, so
   `Closed` is subscribed before `Show()` is called; a missed signal would strand the process with no window.
+- **The splash can be turned off** (`Settings.ShowSplashOnLaunch`, Preferences > General, #108), so settings load
+  before anything opens. `App.OpenSplash(gate, settings)` holds the choice: with it off, no window opens and the
+  gate is told at once that the splash has closed, so the plan runs as soon as it is known. That is no splash at
+  all rather than a zero-length one, because `SplashTiming.Minimum` only means anything for a splash that is shown.
+  It is read once per launch; a change in Preferences reaches the next one.
 - `StartupArguments.Parse` records the argument as typed in `Argument` and, when it also reads as a host, the ad hoc
   `[L:][Y:][lu@]host[:port]` fields beside it. It does not choose between the two: the ad hoc forms overlap legal
   profile names (`CONS01@tk5`, `a:b`), and only `Resolve` has the saved list, where an exact name match always wins —
@@ -132,15 +137,34 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   until the sound setting changes. The bell's sound radios are one-way check marks plus Click handlers over
   `BellSoundConverter`, the Crosshair shape; both converters are subclasses of `EnumIsConverter<TEnum>`, which
   holds the rule.
+- **The release check (#107).** `App._releaseChecker` (`GitHubReleaseChecker.Create()`) is the process's one
+  checker. `CheckForUpdatesOnStartupAsync()` fires once from `Execute`, after a session or the picker has actually
+  opened — never after `ShowError`, never when opening either one threw — and stays silent unless
+  `Settings.CheckForUpdatesAutomatically` is on (read before the request and again after it), the check finds a
+  newer release, and that release is not `Settings.SkippedUpdateVersion`
+  (`UpdateNotificationPolicy.ShouldShowAutomatically`). Nobody asked for that result, so its owner is the last
+  session or the picker, never a dialog in front of them. Help's own `CheckForUpdatesManuallyAsync(Window?)` always
+  shows a result, ignoring any skip, and brings a result already on screen forward before asking GitHub again.
+  Checks that overlap share the request still out (`_checking`). Both funnel through `ShowUpdateCheckResultAsync`,
+  one `UpdateCheckWindow` at a time (`_updateCheck`, the `_about`/`_preferences` shape) — except that its owner can
+  close during the request, so an owner no longer visible falls back to `ActiveWindow()`, and a show that throws
+  gives the slot back. The dialog's Download opens the page through `LinkOpening` over an `AvaloniaUriOpener` built
+  on the dialog itself, the same rule and wording as Help's links, and `UpdateChecker` only lets a page under
+  `ProjectLinks.Releases` through, since the platform launcher opens any scheme. Remind Me Later, not Download, is
+  the default button and first tab stop: the automatic check can open over a terminal the user is typing into.
+  Skip writes `SkippedUpdateVersion`. Each public entry point has an internal overload taking the checker and the
+  `SettingsViewModel` explicitly, `ShowPreferences(SettingsViewModel)`'s shape, so tests never touch the network or
+  the real settings file.
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.
-- **The window is three tabs** — Display, Bell, Window — on a `TabControl` named `Tabs`, each tab a `StackPanel`
-  of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short enum is one
-  horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. A new setting joins
-  the tab it belongs to (#78's theme and cursor go in Display); a new area (#79's logging, #18's keyboard) is a new
-  tab. The size is fixed rather than `SizeToContent`, because only the selected tab is measured and a window sized
-  to its content would change height on every tab switch; the Window tab is the tallest and sets the height.
+- **The window is four tabs** — General, Display, Bell, Window — on a `TabControl` named `Tabs`, each tab a
+  `StackPanel` of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short
+  enum is one horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. A new
+  setting joins the tab it belongs to (#78's theme and cursor go in Display); a new area is a new tab — General
+  itself is the most recent (#107's Updates toggle, with #108's Splash screen row above it, in the order both happen
+  at launch), and #79's logging and #18's keyboard are next. The size is fixed rather than `SizeToContent`, because
+  only the selected tab is measured and a window sized to its content would change height on every tab switch; the Window tab is the tallest and sets the height.
   `FindControl` reaches a control on an unselected tab (the name scope is the window's), so the tests never select
   a tab first.
 - The Preferences **Keypad** row is a two-way `KeypadBox` for `Settings.Keypad` plus the two dock radios over
@@ -192,6 +216,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's `PlatformHotkeyConfiguration` puts Ctrl+Insert into
   Copy on every platform, the Meta-based macOS table included, and platform gestures are checked first. PA1 is
   reached through Alt+1 or the Keys menu.
+- Insert's second home is Ctrl+I (#111), for keyboards with no Insert key (every Apple one). Ctrl+I is Tab only to
+  an ASCII terminal; a 3270 host never sees ASCII control codes, so the table does not reserve it for Tab.
 - A Left Ctrl tap is Reset and a Right Ctrl tap is Enter. `ModifierTapDetector` sees a Ctrl key go down and the same
   key come up with nothing between (`OnKeyUp` looks up `KeyChord.TapOf`); another key, a pointer press, a wheel turn,
   focus loss and the window deactivating all reset it.
@@ -223,6 +249,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   its edge of the window is the window's. The window binds `IsVisible` to `Settings.Keypad`, `ShowPfKeys` to
   `Settings.KeypadPfKeys` and `IsEnabled` to `IsConnected`. `NativeMenuTests.Every_key_on_the_Keys_menu_is_on_the_keypad` holds the menu to a subset of the
   table.
+- **Insert sits in Enter's place in the third bank** (#111), an interim choice until the keypad is customisable: a
+  thirteenth key would break the rectangular grid, and Enter keeps Return, Ctrl+Return and the Right Ctrl tap.
 - **`Build` runs on the first show, not in the constructor**, because the keypad is off by default and a window that
   never shows it should build no buttons and format no tooltips: `OnAttachedToVisualTree` when already visible, and
   the `IsVisible` change otherwise. Everything after that point reads `_banks`, one list of buttons per bank —
@@ -385,6 +413,17 @@ Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it install
   also why OneWay is required rather than tidy: the in-window fallback runs the same handler over a `MenuItem` bound
   two-way to the `NativeMenuItem`, so with a TwoWay binding to the view model there would be two toggles and the
   click would do nothing.
+- **Keys > Insert is a check box whose mark belongs to the host** (#111): `IsInsertMode`, set from the keyboard status
+  beside `InsertText`, so it moves with Ctrl+I, the Insert key and the keypad too. Both menus bind it one-way, keep
+  `SendKeyCommand`, and add a Click handler that puts the mark back to `IsInsertMode`, because
+  `DefaultMenuInteractionHandler.Click` and the in-window fallback both write `IsChecked` before the click arrives,
+  and the host answers the key later, if at all. Unlike Wire Log the view model cannot flip the state itself. The
+  classic handler is added in the constructor with `handledEventsToo`: a `MenuItem` runs its `Command` from its own
+  class handler and marks Click handled, so a `Click=` attribute on an item that also has a `Command` never runs.
+- **Check for Updates... follows About and Preferences' wiring, not `OpenLinkCommand`'s** (#107): a `Click`
+  handler on both menus, `SessionWindow.CheckForUpdatesAsync`, which reaches `App.CheckForUpdatesManuallyAsync`
+  with `this` as the dialog's owner. `OpenLinkCommand` has no way to pass a window along, which this item needs
+  and a plain Help link does not.
 - View > Keypad is a **submenu** on *both* menus, the Crosshair's structure: a `Show the Keypad` check box
   (`ToggleKeypad`, flipping `Settings.Keypad`), a separator, then `At the Bottom` and `On the Right` radios over
   `KeypadDockConverter` (`SetKeypadDock`, writing `Settings.KeypadDock`). Every one is a one-way `IsChecked` plus a

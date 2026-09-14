@@ -37,7 +37,7 @@ public class KeypadTests
     /// <summary>The third bank, written out by hand: what is left when the PF keys are hidden (#105).</summary>
     private static readonly TerminalKey[] Specials =
     [
-        TerminalKey.PA1, TerminalKey.PA2, TerminalKey.PA3, TerminalKey.Enter, TerminalKey.Clear, TerminalKey.Reset,
+        TerminalKey.PA1, TerminalKey.PA2, TerminalKey.PA3, TerminalKey.Insert, TerminalKey.Clear, TerminalKey.Reset,
         TerminalKey.Attn, TerminalKey.SysReq, TerminalKey.EraseEof, TerminalKey.EraseInput, TerminalKey.Dup,
         TerminalKey.FieldMark,
     ];

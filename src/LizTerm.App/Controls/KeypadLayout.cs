@@ -19,14 +19,16 @@ public static class KeypadLayout
 
     /// <summary>PF1 to PF12; PF13 to PF24; then the issue's list plus Erase Input, which nothing else binds, and
     /// Dup and Field Mark, which joined the Keys menu after the issue was written. Twelve in the third bank is what
-    /// keeps the grid rectangular both ways.</summary>
+    /// keeps the grid rectangular both ways, so Insert (#111) took Enter's place rather than a thirteenth: a keyboard
+    /// with no Insert key had no other door to it, where Enter has three. An interim choice, until the keypad is
+    /// customisable.</summary>
     public static IReadOnlyList<IReadOnlyList<KeypadKey>> Banks { get; } =
     [
         [.. Enumerable.Range(0, BankSize).Select(i => new KeypadKey($"PF{i + 1}", TerminalKey.PF1 + i))],
         [.. Enumerable.Range(0, BankSize).Select(i => new KeypadKey($"PF{i + 13}", TerminalKey.PF13 + i))],
         [
             new("PA1", TerminalKey.PA1), new("PA2", TerminalKey.PA2), new("PA3", TerminalKey.PA3),
-            new("Enter", TerminalKey.Enter), new("Clear", TerminalKey.Clear), new("Reset", TerminalKey.Reset),
+            new("Insert", TerminalKey.Insert), new("Clear", TerminalKey.Clear), new("Reset", TerminalKey.Reset),
             new("Attn", TerminalKey.Attn), new("SysReq", TerminalKey.SysReq), new("Erase EOF", TerminalKey.EraseEof),
             new("Erase Input", TerminalKey.EraseInput), new("Dup", TerminalKey.Dup), new("Field Mark", TerminalKey.FieldMark),
         ],
