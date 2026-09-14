@@ -1,0 +1,3 @@
+# The b3270 patches keep LF line endings on every checkout: the x3270 sources they apply to are LF, and
+# native/build/fetch-source.sh applies them with no fuzz.
+native/patches/*.patch text eol=lf

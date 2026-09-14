@@ -19,8 +19,8 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 # breaking on a dependency change would be a confusing failure. curl and ca-certificates are
 # shared-fetch-tarball.sh's, which runs in here: debian:12-slim ships neither. python3 is x3270's -- its
 # configure refuses to run without one ("Can't find Python using 'python3'") because the build generates
-# several C sources with Python scripts.
-PACKAGES="gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 make python3 curl ca-certificates"
+# several C sources with Python scripts. patch is fetch-source.sh's: it applies native/patches.
+PACKAGES="gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 make python3 curl ca-certificates patch"
 
 if [ "$#" -eq 0 ]; then
   COMMAND="native/build/build-windows.sh"

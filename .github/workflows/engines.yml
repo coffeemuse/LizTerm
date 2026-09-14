@@ -54,14 +54,14 @@ jobs:
         uses: actions/cache@v6
         with:
           path: native/out/osx-arm64
-          key: b3270-osx-arm64-${{ hashFiles('native/build/*macos*.sh', 'native/build/fetch-source.sh', 'native/build/fetch-openssl.sh', 'native/build/shared-*.sh') }}
+          key: b3270-osx-arm64-${{ hashFiles('native/build/*macos*.sh', 'native/build/fetch-source.sh', 'native/build/fetch-openssl.sh', 'native/build/shared-*.sh', 'native/patches/**') }}
 
       - name: Cache the built osx-x64 engine
         id: x64
         uses: actions/cache@v6
         with:
           path: native/out/osx-x64
-          key: b3270-osx-x64-${{ hashFiles('native/build/*macos*.sh', 'native/build/fetch-source.sh', 'native/build/fetch-openssl.sh', 'native/build/shared-*.sh') }}
+          key: b3270-osx-x64-${{ hashFiles('native/build/*macos*.sh', 'native/build/fetch-source.sh', 'native/build/fetch-openssl.sh', 'native/build/shared-*.sh', 'native/patches/**') }}
 
       # verify-macos.sh's TLS arm runs the binary to read its banner, and the osx-x64 binary is x86_64 on this
       # arm64 runner. Idempotent: a no-op if the image already ships Rosetta (2 s when it does).
@@ -249,7 +249,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: native/out/${{ matrix.rid }}
-          key: b3270-${{ matrix.rid }}-${{ hashFiles('native/build/*linux*.sh', 'native/build/fetch-*.sh', 'native/build/shared-*.sh') }}
+          key: b3270-${{ matrix.rid }}-${{ hashFiles('native/build/*linux*.sh', 'native/build/fetch-*.sh', 'native/build/shared-*.sh', 'native/patches/**') }}
 
       - name: Build b3270 (verify-linux.sh is the gate)
         if: steps.engine.outputs.cache-hit != 'true'
@@ -400,7 +400,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: native/out/win-x64
-          key: b3270-win-x64-${{ hashFiles('native/build/*windows*.sh', 'native/build/fetch-source.sh', 'native/build/shared-*.sh') }}
+          key: b3270-win-x64-${{ hashFiles('native/build/*windows*.sh', 'native/build/fetch-source.sh', 'native/build/shared-*.sh', 'native/patches/**') }}
 
       - name: Build b3270.exe (verify-windows.sh is the gate)
         if: steps.engine.outputs.cache-hit != 'true'

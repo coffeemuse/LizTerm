@@ -16,8 +16,8 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 
 # binutils is for the readelf the gate needs; findutils and diffutils are configure's, perl-core is OpenSSL's.
 # python3 is x3270's: its configure refuses to run without one ("Can't find Python using 'python3'") because the
-# build generates several C sources with Python scripts.
-PACKAGES="gcc make perl-core diffutils findutils tar binutils python3"
+# build generates several C sources with Python scripts. patch is fetch-source.sh's: it applies native/patches.
+PACKAGES="gcc make perl-core diffutils findutils tar binutils python3 patch"
 
 if [ "$#" -eq 0 ]; then
   COMMAND="native/build/build-linux.sh"
