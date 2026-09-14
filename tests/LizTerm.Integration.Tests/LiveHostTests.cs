@@ -240,11 +240,15 @@ public class LiveHostTests
             var expected = (await File.ReadAllLinesAsync(sent, ct)).Select(l => l.TrimEnd());
             var actual = (await File.ReadAllLinesAsync(received, ct)).Select(l => l.TrimEnd());
             Assert.Equal(expected, actual);
+
+            // Leaving ISPF here, not only in the finally, so a broken leftover-panel rule fails the test instead of
+            // becoming a hidden cleanup diagnostic.
+            await tso.ReachReadyAsync();
         }
         finally
         {
-            // Leaving ISPF first: DELETE needs READY. PF3 ends Wally ISPF and ReachReadyAsync clears the panel it
-            // leaves behind. A session that never reached ISPF is already at READY, and this returns at once.
+            // A fallback for a run that failed inside ISPF: DELETE needs READY. PF3 ends Wally ISPF and ReachReadyAsync
+            // clears the panel it leaves behind. A session already at READY returns at once.
             await CleanupStepAsync("leave ISPF", () => tso.ReachReadyAsync());
             await CleanupStepAsync("DELETE", () => tso.CommandAsync($"DELETE '{user!.Trim()}.{dataset}'"));
             await CleanupStepAsync("LOGOFF", () => tso.LogoffAsync());

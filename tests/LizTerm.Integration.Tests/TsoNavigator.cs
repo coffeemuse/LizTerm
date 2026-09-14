@@ -83,6 +83,7 @@ internal sealed class TsoNavigator(IEmulatorSession session, ScreenWaiter screen
                 // that stays blank gets an Enter, which TSO answers with READY.
                 await screens.WaitForUnlockedKeyboardAsync(Step);
                 await session.SendKeyAsync(TerminalKey.Clear);
+                await screens.WaitForAsync(t => t != text, Step, "the screen to clear");
                 await screens.WaitForQuietAsync(Quiet, Step);
                 if (string.IsNullOrWhiteSpace(screens.LatestText))
                 {
