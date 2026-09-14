@@ -250,6 +250,8 @@ The Help menu carries the project's own pages, ahead of Wire Log (see [Wire logs
 - **Help > Project on GitHub** opens the project's page on GitHub.
 - **Help > Report an Issue...** opens GitHub's form for a new bug report or feature request.
 - **Help > Releases** opens the project's releases page on GitHub.
+- **Help > Check for Updates...** checks now, and always tells you the result — a newer version, or that you are
+  up to date, or why the check failed. See [Preferences](#preferences) for the automatic version of this check.
 
 On macOS you can choose, under **Menu bar** in Preferences:
 
@@ -282,7 +284,14 @@ window itself.
 **Preferences...** is in the LizTerm application menu on macOS (Cmd-comma). It is also at the bottom of the
 **Edit** menu wherever a session window draws its menu inside the window: always on Windows and Linux, and on macOS
 under **Inside the window** or **Both**. Changes apply as you make them, to every open session window. The settings
-sit on three tabs:
+sit on four tabs:
+
+**General**
+
+- **Updates** — whether LizTerm checks for a newer release automatically when it starts (on by default). A check
+  never interrupts you unless there is something new, and skipping a version keeps it quiet only until the next
+  one is published. Help > Check for Updates... checks on demand regardless of this setting, and always tells you
+  the result.
 
 **Display**
 

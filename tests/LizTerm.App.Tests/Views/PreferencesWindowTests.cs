@@ -4,7 +4,9 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using LizTerm.App.ViewModels;
@@ -271,18 +273,40 @@ public class PreferencesWindowTests
         }
     }
 
-    /// <summary>The tabs are the window's structure: Display, Bell and Window in that order, the last read top of
-    /// the window to bottom (menu bar, status bar, keypad). Every control keeps its name, so the other tests here
-    /// find it whichever tab is selected.</summary>
+    /// <summary>The tabs are the window's structure: General first (#107 — not about the screen, the bell, or
+    /// the window's own chrome), then Display, Bell and Window in that order, the last read top of the window to
+    /// bottom (menu bar, status bar, keypad). Every control keeps its name, so the other tests here find it
+    /// whichever tab is selected.</summary>
     [AvaloniaFact]
-    public void The_settings_sit_on_display_bell_and_window_tabs_in_that_order()
+    public void The_settings_sit_on_general_display_bell_and_window_tabs_in_that_order()
     {
         var (window, _) = Show();
         var tabs = window.FindControl<TabControl>("Tabs")!;
 
-        Assert.Equal(["Display", "Bell", "Window"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header!));
+        Assert.Equal(["General", "Display", "Bell", "Window"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header!));
         Assert.Equal(0, tabs.SelectedIndex);
-        Assert.Same(window.FindControl<RadioButton>("CrosshairNone"), tabs.Items.Cast<TabItem>().First().FindLogicalDescendantOfType<RadioButton>());
+        Assert.Same(tabs.Items.Cast<TabItem>().First(), window.FindControl<CheckBox>("CheckForUpdatesBox")!.FindLogicalAncestorOfType<TabItem>());
+        Assert.Same(window.FindControl<RadioButton>("CrosshairNone"), tabs.Items.Cast<TabItem>().ElementAt(1).FindLogicalDescendantOfType<RadioButton>());
+    }
+
+    /// <summary>By a real click rather than by assigning IsChecked (update spec §9.2): General is the tab the window
+    /// opens on, so the box is on screen, and a press that lands proves it is there and enabled — the only way off
+    /// for a check that is on by default — where an assignment would not.</summary>
+    [AvaloniaFact]
+    public void Clicking_the_check_for_updates_box_sets_the_shared_settings()
+    {
+        var (window, settings) = Show();
+        var box = window.FindControl<CheckBox>("CheckForUpdatesBox")!;
+        Assert.True(box.IsChecked);
+        window.UpdateLayout();
+        var centre = box.TranslatePoint(new Point(box.Bounds.Width / 2, box.Bounds.Height / 2), window)!.Value;
+
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
+        Assert.False(settings.CheckForUpdatesAutomatically);
+
+        settings.CheckForUpdatesAutomatically = true;
+        Assert.True(box.IsChecked);
     }
 
     /// <summary>App's one-at-a-time rule, through the internal seam that takes a settings object so the test

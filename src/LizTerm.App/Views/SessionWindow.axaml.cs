@@ -224,6 +224,23 @@ public partial class SessionWindow : Window
 
     private static void ShowPreferences() => (Avalonia.Application.Current as App)?.ShowPreferences();
 
+    private async void OnCheckForUpdatesClickNative(object? sender, EventArgs e) => await CheckForUpdatesAsync();
+    private async void OnCheckForUpdatesClick(object? sender, RoutedEventArgs e) => await CheckForUpdatesAsync();
+
+    private async Task CheckForUpdatesAsync()
+    {
+        if (ViewModel is not { } vm) return;
+        try
+        {
+            if (Avalonia.Application.Current is App app) await app.CheckForUpdatesManuallyAsync(this);
+        }
+        catch (Exception ex)
+        {
+            vm.ErrorMessage = "Could not check for updates: " + ex.Message;
+        }
+        Screen.Focus();
+    }
+
     // Deliberately the view model's methods, never the [RelayCommand]s. Each method carries its own guard; the
     // commands keep CommunityToolkit's default of disabling while running, which is fine for a click and wrong
     // for a keystroke — and on macOS Task 6's gestures make these keystrokes, activated by the OS.

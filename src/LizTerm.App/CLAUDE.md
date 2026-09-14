@@ -132,14 +132,33 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   until the sound setting changes. The bell's sound radios are one-way check marks plus Click handlers over
   `BellSoundConverter`, the Crosshair shape; both converters are subclasses of `EnumIsConverter<TEnum>`, which
   holds the rule.
+- **The release check (#107).** `App._releaseChecker` (`GitHubReleaseChecker.Create()`) is the process's one
+  checker. `CheckForUpdatesOnStartupAsync()` fires once from `Execute`, after a session or the picker has actually
+  opened — never after `ShowError`, never when opening either one threw — and stays silent unless
+  `Settings.CheckForUpdatesAutomatically` is on (read before the request and again after it), the check finds a
+  newer release, and that release is not `Settings.SkippedUpdateVersion`
+  (`UpdateNotificationPolicy.ShouldShowAutomatically`). Nobody asked for that result, so its owner is the last
+  session or the picker, never a dialog in front of them. Help's own `CheckForUpdatesManuallyAsync(Window?)` always
+  shows a result, ignoring any skip, and brings a result already on screen forward before asking GitHub again.
+  Checks that overlap share the request still out (`_checking`). Both funnel through `ShowUpdateCheckResultAsync`,
+  one `UpdateCheckWindow` at a time (`_updateCheck`, the `_about`/`_preferences` shape) — except that its owner can
+  close during the request, so an owner no longer visible falls back to `ActiveWindow()`, and a show that throws
+  gives the slot back. The dialog's Download opens the page through `LinkOpening` over an `AvaloniaUriOpener` built
+  on the dialog itself, the same rule and wording as Help's links, and `UpdateChecker` only lets a page under
+  `ProjectLinks.Releases` through, since the platform launcher opens any scheme. Remind Me Later, not Download, is
+  the default button and first tab stop: the automatic check can open over a terminal the user is typing into.
+  Skip writes `SkippedUpdateVersion`. Each public entry point has an internal overload taking the checker and the
+  `SettingsViewModel` explicitly, `ShowPreferences(SettingsViewModel)`'s shape, so tests never touch the network or
+  the real settings file.
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.
-- **The window is three tabs** — Display, Bell, Window — on a `TabControl` named `Tabs`, each tab a `StackPanel`
-  of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short enum is one
-  horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. A new setting joins
-  the tab it belongs to (#78's theme and cursor go in Display); a new area (#79's logging, #18's keyboard) is a new
-  tab. The size is fixed rather than `SizeToContent`, because only the selected tab is measured and a window sized
+- **The window is four tabs** — General, Display, Bell, Window — on a `TabControl` named `Tabs`, each tab a
+  `StackPanel` of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short
+  enum is one horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. A new
+  setting joins the tab it belongs to (#78's theme and cursor go in Display); a new area is a new tab — General
+  itself is the most recent (#107's Updates toggle), and #79's logging and #18's keyboard are next. The size is
+  fixed rather than `SizeToContent`, because only the selected tab is measured and a window sized
   to its content would change height on every tab switch; the Window tab is the tallest and sets the height.
   `FindControl` reaches a control on an unselected tab (the name scope is the window's), so the tests never select
   a tab first.
@@ -385,6 +404,10 @@ Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it install
   also why OneWay is required rather than tidy: the in-window fallback runs the same handler over a `MenuItem` bound
   two-way to the `NativeMenuItem`, so with a TwoWay binding to the view model there would be two toggles and the
   click would do nothing.
+- **Check for Updates... follows About and Preferences' wiring, not `OpenLinkCommand`'s** (#107): a `Click`
+  handler on both menus, `SessionWindow.CheckForUpdatesAsync`, which reaches `App.CheckForUpdatesManuallyAsync`
+  with `this` as the dialog's owner. `OpenLinkCommand` has no way to pass a window along, which this item needs
+  and a plain Help link does not.
 - View > Keypad is a **submenu** on *both* menus, the Crosshair's structure: a `Show the Keypad` check box
   (`ToggleKeypad`, flipping `Settings.Keypad`), a separator, then `At the Bottom` and `On the Right` radios over
   `KeypadDockConverter` (`SetKeypadDock`, writing `Settings.KeypadDock`). Every one is a one-way `IsChecked` plus a
