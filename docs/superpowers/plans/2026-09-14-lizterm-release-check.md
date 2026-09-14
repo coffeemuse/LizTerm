@@ -1566,29 +1566,25 @@ to:
     }
 ```
 
-Then add a new test for the checkbox itself, mirroring `StatusBarTagsBox`'s test elsewhere in the file (search
-the file for how it drives `StatusBarTagsBox` to match the exact assertion shape used there):
+Then add a new test for the checkbox itself, the exact shape `StatusBarTagsBox`'s own test in this file uses: a
+plain `TwoWay`-bound `CheckBox` (unlike the radios, which are one-way plus a `Click` handler) is driven by setting
+`IsChecked` directly, both directions — UI to settings and settings to UI:
 
 ```csharp
     [AvaloniaFact]
-    public void Clicking_the_check_for_updates_box_sets_the_shared_settings()
+    public void Checking_the_check_for_updates_box_sets_the_shared_settings()
     {
         var (window, settings) = Show();
         var box = window.FindControl<CheckBox>("CheckForUpdatesBox")!;
-
         Assert.True(box.IsChecked);
 
-        Click(box);
-
+        box.IsChecked = false;
         Assert.False(settings.CheckForUpdatesAutomatically);
-        Assert.False(box.IsChecked);
+
+        settings.CheckForUpdatesAutomatically = true;
+        Assert.True(box.IsChecked);
     }
 ```
-
-(If the file's existing `Click` helper is typed to `Button` only, as seen in the file's current form, add a
-one-line overload beside it: `private static void Click(CheckBox box) => box.RaiseEvent(new
-RoutedEventArgs(Button.ClickEvent));` — a `CheckBox` is a `Button`-derived `ToggleButton` in Avalonia and raises
-the same `ClickEvent`.)
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
