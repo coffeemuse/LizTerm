@@ -52,6 +52,22 @@ jobs:
           echo "version=$tree" >> "$GITHUB_OUTPUT"
           echo "building $tree"
 
+      # The release notes' "What's new" is this version's section of CHANGELOG.md, which the release job copies
+      # in. A tag with no entries fails here, before anything is packaged. A rehearsal only warns: rehearsals also
+      # exercise the pipeline mid-development, while the entries still sit under "## Unreleased".
+      - name: CHANGELOG.md has entries for this version
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          if tools/changelog-section.sh "$VERSION" > /dev/null; then
+            echo "CHANGELOG.md has entries for $VERSION"
+          elif [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            exit 1
+          else
+            echo "::warning::CHANGELOG.md has no entries for $VERSION, so a tag for it would fail this step"
+          fi
+
       # Parcel treats a missing or misnamed icon as a warning, not an error, so a typo in one of these three
       # paths would ship an icon-less installer behind an otherwise green build. This reads the same paths
       # Parcel itself would read and fails the run before anything is published, without parsing Parcel's own
@@ -576,17 +592,27 @@ jobs:
           path: packages
           merge-multiple: true
 
-      # The <v> tokens in the table below are substituted after the heredoc rather than interpolated inside
-      # it: the heredoc is quoted so that nothing in the prose is treated as a shell expansion, and a table of
-      # filenames that match no asset is its own small papercut for a first-time visitor.
+      # The <v> tokens in the table below are substituted by sed rather than interpolated inside the heredoc:
+      # the heredoc is quoted so that nothing in the prose is treated as a shell expansion, and a table of
+      # filenames that match no asset is its own small papercut for a first-time visitor. "What's new" is this
+      # version's section of CHANGELOG.md, which the version job has already checked is there; it stays out of
+      # the substitution.
       - name: Write the release notes
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          cat > notes.md <<'NOTES'
+          set -euo pipefail
+          {
+          cat <<'NOTES'
           LizTerm is a cross-platform TN3270 client for retro mainframe hobbyists. Download the archive for
           your platform, unpack it, and run it -- there is nothing to install and no runtime to add.
 
+          ## What's new
+
+          NOTES
+          tools/changelog-section.sh "$VERSION"
+          echo
+          sed "s/<v>/$VERSION/g" <<'NOTES'
           ## Downloads
 
           Pick the **ZIP** for your platform. The installers below it are the same application, for people who
@@ -623,7 +649,7 @@ jobs:
           Windows ARM64 runs the x64 emulator engine under Windows 11's emulation; the application itself is
           native ARM64.
           NOTES
-          sed -i "s/<v>/$VERSION/g" notes.md
+          } > notes.md
 
       # Archives are passed first and the ZIP is what a first-time visitor should reach for, but
       # `gh release create` uploads assets concurrently, so passing archives first is not a guarantee the
@@ -631,11 +657,9 @@ jobs:
       #
       # --draft: `gh release create` is not idempotent. A mid-run asset upload failure would otherwise leave a
       # *published* release behind, and re-running this job would then die with "release already exists" on
-      # the retry. A draft can be deleted and recreated freely. The spec's section 8 already requires a manual
-      # pass -- downloading each headline archive and connecting it to a real host -- before the first tag, so
-      # publishing by hand after that pass matches the existing intent rather than adding a new step. Revisit
-      # once a release has actually been cut successfully and the failure mode above has been seen (or not) in
-      # practice.
+      # the retry. A draft can be deleted and recreated freely, and publishing stays a manual step, taken after
+      # checking the draft's packages by hand. The draft is also what keeps a release from installed copies
+      # until then: the app's update check reads GitHub's releases/latest, which never returns a draft.
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -4,7 +4,7 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 `docs/development.md`.
 
 - Every hand-written `.cs`, `.axaml` and `.sh` file needs the three-line licence header (see the root `CLAUDE.md`).
-- Assertions on user-visible status strings (for example `"✕ Not connected"`) are exact; change `StatusFormatter`
+- Assertions on user-visible status strings (for example `"Not connected"`) are exact; change `StatusFormatter`
   and its tests together.
 - Every bug found in the field should add a trimmed replay fixture, documented in the fixtures README
   (`docs/development.md#replay-fixtures`).

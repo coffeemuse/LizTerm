@@ -293,8 +293,8 @@ sit on four tabs:
   time LizTerm starts.
 - **Updates** — whether LizTerm checks for a newer release automatically when it starts (on by default). A check
   never interrupts you unless there is something new, and skipping a version keeps it quiet only until the next
-  one is published. Help > Check for Updates... checks on demand regardless of this setting, and always tells you
-  the result.
+  one is published. Help > Check for Updates... works either way. A check is one request to GitHub
+  (`api.github.com`) that sends LizTerm's version number and nothing about your profiles or sessions.
 
 **Display**
 
