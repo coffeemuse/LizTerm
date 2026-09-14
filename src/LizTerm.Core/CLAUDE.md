@@ -62,6 +62,19 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - `DestructiveBackspace` defaults to true. Every x3270-family default keymap erases; the old belief that x3270
   defaults to cursor-left came from the name of its `BackSpace()` action.
 - The profile JSON writes every field, so a saved `false` survives a change of default.
+- `ProfileStore` addresses a profile by the name **inside** its file, never by `FileNameFor(name)` alone. A file
+  renamed by hand, or copied from a platform whose invalid-character list differs, is still that profile's;
+  addressed by the computed name, its star and Delete were silent no-ops and every save wrote a second file.
+  `FileNameFor`'s file is only tried first. A file holding the name exactly wins wherever it sits, and only then one
+  holding it ignoring case (a case-only rename), so `MVS` and `mvs` in two files never act on each other's file. A
+  profile no file holds gets that name, or `name (2).json` and on when a file is already there, because
+  `FileNameFor` is not one-to-one (`a/b` and `a:b`) and the file there may be another profile or one the user can
+  still repair. When two files hold one name, every operation picks the same one: `FileNameFor`'s, else the first by
+  ordinal file name. `LoadAll` lists only that one, because the picker and `TagMaintenance` act on a row by its name,
+  so a row for the other file would star, edit and delete the first. `Save` throws, writing nothing, when a file it
+  reads on the way cannot be opened: that file may be the profile's own, and an edit written elsewhere would sit
+  behind it once it opens again. Saving under a name a profile already holds still overwrites it, which is what the
+  picker's New and a rename onto an existing name have always done.
 - `SessionProfile.Tags` is a `TagSet`, not a list, and that is load-bearing: a record's synthesised `Equals`
   compares a collection member by **reference**, so a list would make a profile read back from disk unequal to
   the one written — which `ProfileStoreTests` asserts it is. `TagSet` is a struct with hand-written value
