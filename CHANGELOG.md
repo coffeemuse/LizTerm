@@ -3,8 +3,11 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
-## Unreleased
+## 0.6.0
 
+- **File transfer from inside ISPF.** In **File > IND$FILE Transfer...**, the new **ISPF (MVS)** host type starts a
+  transfer with the cursor on an ISPF `Command ===>` or `Option ===>` line, so there is no need to leave ISPF for a
+  TSO `READY` prompt first.
 - **Check for updates.** LizTerm checks for a newer release when it starts and tells you only when there is one,
   and **Help > Check for Updates...** checks on demand. Skip a version to hear nothing more until the next one, or
   turn the automatic check off under **Preferences > General > Updates**.
