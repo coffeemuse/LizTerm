@@ -132,6 +132,17 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   until the sound setting changes. The bell's sound radios are one-way check marks plus Click handlers over
   `BellSoundConverter`, the Crosshair shape; both converters are subclasses of `EnumIsConverter<TEnum>`, which
   holds the rule.
+- **The release check (#107).** `App._releaseChecker` (`GitHubReleaseChecker.Create()`) is the process's one
+  checker. `CheckForUpdatesOnStartupAsync()` fires once from `Execute`, after a session or the picker has actually
+  opened — never after `ShowError`, never when opening either one threw — and stays silent unless
+  `Settings.CheckForUpdatesAutomatically` is on, the check finds a newer release, and that release is not
+  `Settings.SkippedUpdateVersion` (`UpdateNotificationPolicy.ShouldShowAutomatically`). Help's own
+  `CheckForUpdatesManuallyAsync(Window?)` always shows a result, ignoring any skip. Both funnel through
+  `ShowUpdateCheckResultAsync`, one `UpdateCheckWindow` at a time (`_updateCheck`, the `_about`/`_preferences`
+  shape); its Download button opens the release page through an `AvaloniaUriOpener` built on the dialog itself,
+  and its Skip button writes `SkippedUpdateVersion`. Each public entry point has an internal overload taking the
+  checker and the `SettingsViewModel` explicitly, `ShowPreferences(SettingsViewModel)`'s shape, so tests never
+  touch the network or the real settings file.
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
   `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.

@@ -13,12 +13,14 @@ using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
 using LizTerm.App.Startup;
+using LizTerm.App.Updates;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Security;
 using LizTerm.Core.Session;
 using LizTerm.Core.Settings;
+using LizTerm.Core.Updates;
 
 namespace LizTerm.App;
 
@@ -27,6 +29,8 @@ public partial class App : Application
     private readonly List<SessionWindow> _sessions = [];
     /// <summary>The process's one ringer: what it can ring is the answer Preferences shows, so they cannot drift.</summary>
     private readonly SystemBellRinger _bellRinger = new();
+    /// <summary>The process's one release checker (#107).</summary>
+    private readonly IReleaseChecker _releaseChecker = GitHubReleaseChecker.Create();
     /// <summary>The session window the user was in most recently, which is what About describes when it is
     /// opened from the application menu with something else — the picker, a dialog — in front.</summary>
     private SessionWindow? _lastActiveSession;
@@ -97,9 +101,11 @@ public partial class App : Application
                     break;
                 case StartupPlan.OpenSession open:
                     OpenSession(open.Profile, open.FromStore);
+                    _ = CheckForUpdatesOnStartupAsync();
                     break;
                 default:
                     ShowPicker();
+                    _ = CheckForUpdatesOnStartupAsync();
                     break;
             }
         }
@@ -251,6 +257,7 @@ public partial class App : Application
     private void OnPreferencesClick(object? sender, EventArgs e) => ShowPreferences();
 
     private PreferencesWindow? _preferences;
+    private UpdateCheckWindow? _updateCheck;
 
     /// <summary>The one route to Preferences, for the macOS application menu and a session's Edit item alike.
     /// Modeless and unowned so the user keeps working while it is open, and one at a time: a second request
@@ -273,6 +280,62 @@ public partial class App : Application
         _preferences = window;
         window.Closed += (_, _) => { if (ReferenceEquals(_preferences, window)) _preferences = null; };
         window.Show();
+        return window;
+    }
+
+    /// <summary>Runs once at startup (fired from Execute, never after ShowError or a failed open). Silent unless
+    /// CheckForUpdatesAutomatically is on, the check finds a newer release, and that release is not the one the
+    /// user already skipped.</summary>
+    public Task<UpdateCheckWindow?> CheckForUpdatesOnStartupAsync() => CheckForUpdatesOnStartupAsync(_releaseChecker, Settings);
+
+    /// <summary>The rule with the checker and settings as arguments, so a test can exercise it with a
+    /// FakeReleaseChecker and an in-memory SettingsViewModel and never touch the network or the real settings
+    /// file — ShowPreferences(SettingsViewModel)'s shape.</summary>
+    internal async Task<UpdateCheckWindow?> CheckForUpdatesOnStartupAsync(IReleaseChecker checker, SettingsViewModel settings)
+    {
+        if (!settings.Current.CheckForUpdatesAutomatically) return null;
+        try
+        {
+            var result = await UpdateChecker.CheckAsync(checker, AppVersion.Current, CancellationToken.None);
+            if (!UpdateNotificationPolicy.ShouldShowAutomatically(result, settings.Current.SkippedUpdateVersion)) return null;
+            return await ShowUpdateCheckResultAsync(result, owner: null, settings);
+        }
+        catch
+        {
+            // An unattended check is not worth a crash.
+            return null;
+        }
+    }
+
+    /// <summary>Help &gt; Check for Updates..., always reporting something — newer, up to date, or the failure
+    /// reason — and ignoring any skipped version, because the user asked directly.</summary>
+    public Task<UpdateCheckWindow> CheckForUpdatesManuallyAsync(Window? owner) => CheckForUpdatesManuallyAsync(owner, _releaseChecker, Settings);
+
+    internal async Task<UpdateCheckWindow> CheckForUpdatesManuallyAsync(Window? owner, IReleaseChecker checker, SettingsViewModel settings)
+    {
+        var result = await UpdateChecker.CheckAsync(checker, AppVersion.Current, CancellationToken.None);
+        return await ShowUpdateCheckResultAsync(result, owner, settings);
+    }
+
+    /// <summary>One at a time, the _about/_preferences shape. Download opens the result's release page through an
+    /// AvaloniaUriOpener built on the dialog itself (there is no app-wide opener; it is always tied to whichever
+    /// window it acts through, as SessionWindow's own is). Skip writes SkippedUpdateVersion through the settings
+    /// object this call was given, so a test's in-memory settings are what change, never the real file.</summary>
+    private async Task<UpdateCheckWindow> ShowUpdateCheckResultAsync(UpdateCheckResult result, Window? owner, SettingsViewModel settings)
+    {
+        if (_updateCheck is { } showing)
+        {
+            showing.Activate();
+            return showing;
+        }
+        UpdateCheckWindow? window = null;
+        window = new UpdateCheckWindow(result, AppVersion.Current,
+            onDownload: url => new AvaloniaUriOpener(window!).OpenAsync(new Uri(url)),
+            onSkip: version => settings.SkippedUpdateVersion = version);
+        _updateCheck = window;
+        window.Closed += (_, _) => { if (ReferenceEquals(_updateCheck, window)) _updateCheck = null; };
+        var target = owner ?? ActiveWindow();
+        if (target is null) window.Show(); else await window.ShowDialog(target);
         return window;
     }
 
