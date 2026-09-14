@@ -200,4 +200,25 @@ public class ReplayTests
         Assert.Equal(50, screen.Rows);
         Assert.Equal(100, screen.Columns);
     }
+
+    /// <summary>The trimmed ISPF fixture has no initialize block, so the fake's own starts the session and the fixture
+    /// follows. What it proves is the host's behaviour LizTerm relies on: after a transfer from ISPF the host
+    /// repaints the panel, with no *** pause, because IND$FILE's closing message came through the transfer itself.</summary>
+    [Fact]
+    public async Task Indfile_from_ispf_replays_back_to_the_ispf_panel()
+    {
+        var fake = new FakeB3270Process();
+        var session = new B3270Session(new SessionProfile { Name = "replay", Host = "127.0.0.1" }, () => fake);
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, _) => ended.TrySetResult();
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+
+        foreach (var line in File.ReadLines(Fixture("indfile-ispf-roundtrip.jsonl"))) fake.Emit(line);
+        fake.Exit(0);
+        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        var text = session.CurrentScreen.ToText();
+        Assert.Contains("===>", text);
+        Assert.DoesNotContain("***", text);
+    }
 }

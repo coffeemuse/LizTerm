@@ -35,6 +35,15 @@ The traces come from the x3270 source distribution (BSD-3-Clause, Copyright Paul
   pause in between. TSO keeps writing for a moment after `READY` appears, and IND$FILE typed into a
   half-painted screen reaches the host as garbage (`INVALID COMMAND NAME SYNTAX`), so the integration lane
   waits for the screen to stand still before it treats `READY` as a prompt.
+- `indfile-ispf-roundtrip.jsonl`: inbound lines of a real LizTerm session on 2026-09-14 against the same MVS/CE host,
+  recorded from `LiveHostTests.Indfile_round_trip_from_ispf_matches` with the bundled engine and its CommandPrefix
+  patch, model 3279-2-E. Trimmed from the last screen update before the first transfer (the Wally ISPF V2.2 primary
+  menu, cursor on `Option ===>`) to the last line the host sent after the second transfer ended: a text-mode send to
+  `LIZTERM.ISPFTEST` and a receive of it, both with host type ISPF (MVS), which the engine typed into that field as
+  `TSO IND$FILE PUT ...` and `TSO IND$FILE GET ...` (the file's screen updates show both commands). Shows that ISPF
+  repaints its panel after each transfer with no `***` pause, because IND$FILE's closing message arrives through the
+  transfer's own `FT:MSG` structured field. The logon, the ISPF exit and the logoff were cut, so no credentials and
+  no host address are in the file; the TSO user id shows on the ISPF panel, as it does on any MVS/CE install.
 - `gateway-cert-failure.jsonl`: raw b3270 4.5ga6 stdout from a verify-on TLS connect to the same hobbyist
   gateway on 2026-09-05, recorded with run tags `set` and `connect` (the replay substitutes the session's own
   tags). The Connect run fails with `Connection failed:`, `TLS: Host certificate verification failed:`, and the
