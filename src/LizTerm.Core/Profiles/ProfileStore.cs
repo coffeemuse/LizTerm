@@ -16,6 +16,9 @@ public sealed class ProfileStore(string directory)
 
     public static string DefaultDirectory() => AppPaths.ProfilesDirectory();
 
+    /// <summary>Every readable profile, each name once: when two files hold one name, the one <see cref="Find"/> picks.
+    /// The picker's rows and Manage Tags act on a profile by its name, so a row for the other file would star, edit
+    /// and delete the first, and a tag change would write both into one file.</summary>
     public IReadOnlyList<SessionProfile> LoadAll()
     {
         if (!System.IO.Directory.Exists(Directory)) return [];
@@ -24,10 +27,14 @@ public sealed class ProfileStore(string directory)
         {
             if (Read(file) is { } profile) profiles.Add(profile);
         }
-        return profiles.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        return profiles.GroupBy(p => p.Name, StringComparer.Ordinal)
+            .Select(named => named.Skip(1).Any() && Find(named.Key)?.Profile is { } picked && picked.Name == named.Key
+                ? picked
+                : named.First())
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    /// <summary>The saved profile of that name, ignoring case, or null when no readable file holds it.</summary>
+    /// <summary>The saved profile of that name (exactly, else ignoring case), or null when no readable file holds it.</summary>
     public SessionProfile? Load(string name) => Find(name)?.Profile;
 
     /// <summary>Applies <paramref name="change"/> to the profile as it is on disk now, or to <paramref name="fallback"/>
@@ -38,15 +45,19 @@ public sealed class ProfileStore(string directory)
 
     /// <summary>One file, or null when it cannot be read; the user can delete such a file by hand. A pin without
     /// its PEM or fingerprint (a hand-edited or redacted file) is dropped rather than handed to the engine, which
-    /// would refuse an empty trust file with an error naming a temp file that no longer exists.</summary>
-    private static SessionProfile? Read(string file)
+    /// would refuse an empty trust file with an error naming a temp file that no longer exists. With
+    /// <paramref name="failOnIoError"/>, a file that is there but cannot be opened throws instead, which is what Save
+    /// needs (see <see cref="Find"/>); one that does not parse is still null.</summary>
+    private static SessionProfile? Read(string file, bool failOnIoError = false)
     {
         SessionProfile? profile;
         try
         {
             profile = JsonSerializer.Deserialize(File.ReadAllText(file), ProfileJsonContext.Default.SessionProfile);
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        // A file gone since it was listed holds nothing, whoever asks.
+        catch (Exception ex) when (ex is JsonException or FileNotFoundException
+            || (!failOnIoError && ex is IOException or UnauthorizedAccessException))
         {
             return null;
         }
@@ -58,22 +69,28 @@ public sealed class ProfileStore(string directory)
         return profile;
     }
 
-    /// <summary>The file holding the profile of that name, ignoring case, because the picker treats a case-only rename
-    /// as the same profile. <see cref="FileNameFor"/>'s file is tried first, since Save puts a new profile there; then
-    /// every file in ordinal order, so that when two files hold one name (a copy made in a file manager) Load, Save
-    /// and Delete all pick the same one.</summary>
-    private (string FilePath, SessionProfile Profile)? Find(string name)
+    /// <summary>The file holding the profile of that name. <see cref="FileNameFor"/>'s file is tried first, since Save
+    /// puts a new profile there; then every file in ordinal order, so that when two files hold one name (a copy made
+    /// in a file manager) Load, Save and Delete all pick the same one. A file holding the name exactly wins wherever
+    /// it sits, and only then the first holding it ignoring case: the picker treats a case-only rename as the same
+    /// profile, but "MVS" and "mvs" in two files are two rows that must not act on each other.
+    /// <paramref name="failOnIoError"/> is Save's: a file it cannot open on the way may be the profile's own, and
+    /// writing anywhere else would leave the edit behind that file once it opens again.</summary>
+    private (string FilePath, SessionProfile Profile)? Find(string name, bool failOnIoError = false)
     {
         if (!System.IO.Directory.Exists(Directory)) return null;
-        bool Holds(SessionProfile profile) => profile.Name.Equals(name, StringComparison.OrdinalIgnoreCase);
-
         var expected = Path.Combine(Directory, FileNameFor(name));
-        if (File.Exists(expected) && Read(expected) is { } atExpected && Holds(atExpected)) return (expected, atExpected);
-        foreach (var file in System.IO.Directory.EnumerateFiles(Directory, "*.json").Order(StringComparer.Ordinal))
+        var others = System.IO.Directory.EnumerateFiles(Directory, "*.json")
+            .Where(file => file != expected).Order(StringComparer.Ordinal);
+        (string FilePath, SessionProfile Profile)? ignoringCase = null;
+        foreach (var file in others.Prepend(expected))
         {
-            if (file != expected && Read(file) is { } profile && Holds(profile)) return (file, profile);
+            if (!File.Exists(file) || Read(file, failOnIoError) is not { } profile) continue;
+            if (profile.Name.Equals(name, StringComparison.Ordinal)) return (file, profile);
+            if (ignoringCase is null && profile.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                ignoringCase = (file, profile);
         }
-        return null;
+        return ignoringCase;
     }
 
     /// <summary>Where a profile that no file holds yet is written: <see cref="FileNameFor"/>'s name, or "name (2).json"
@@ -91,13 +108,14 @@ public sealed class ProfileStore(string directory)
     /// <summary>Writes through a temp file in the same directory and renames over the target, so a reader never
     /// sees a partial profile. Read swallows a JsonException and LoadAll skips the file, so a write interrupted
     /// by a crash, a full disk or a kill would otherwise leave a profile that looks deleted rather than broken.
-    /// The temp file is a sibling on purpose: File.Move across a filesystem is a copy, which is not atomic.</summary>
+    /// The temp file is a sibling on purpose: File.Move across a filesystem is a copy, which is not atomic. A file
+    /// that cannot be opened on the way to the profile's makes it throw before writing anything (see <see cref="Find"/>).</summary>
     public void Save(SessionProfile profile)
     {
         if (string.IsNullOrWhiteSpace(profile.Name)) throw new ArgumentException("Profile needs a name", nameof(profile));
         System.IO.Directory.CreateDirectory(Directory);
         var json = JsonSerializer.Serialize(profile, ProfileJsonContext.Default.SessionProfile);
-        var path = Find(profile.Name)?.FilePath ?? NewFileFor(profile.Name);
+        var path = Find(profile.Name, failOnIoError: true)?.FilePath ?? NewFileFor(profile.Name);
         // Not ".json": LoadAll enumerates *.json, and a temp file left by a crash mid-write must not be read
         // back as a profile of its own.
         var temp = path + ".tmp";

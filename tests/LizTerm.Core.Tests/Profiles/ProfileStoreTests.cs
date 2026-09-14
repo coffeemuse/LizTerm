@@ -360,6 +360,55 @@ public class ProfileStoreTests : IDisposable
         Assert.Equal("canonical", store.Load("MVS")?.Host);
     }
 
+    /// <summary>A file holding the name exactly is found before one holding it only ignoring case, wherever each sits:
+    /// "MVS" and "mvs" in two files are two rows, and the mvs row must never star, edit or delete MVS.</summary>
+    [Fact]
+    public void A_name_held_exactly_is_found_before_one_that_differs_only_in_case()
+    {
+        var store = new ProfileStore(_dir);
+        Place("MVS.json", new SessionProfile { Name = "MVS", Host = "upper" });
+        Place("other.json", new SessionProfile { Name = "mvs", Host = "lower" });
+
+        Assert.Equal("lower", store.Load("mvs")?.Host);
+        store.Save(new SessionProfile { Name = "mvs", Host = "lower", Model = 5 });
+        Assert.Equal(["MVS.json", "other.json"], FileNames());
+        store.Delete("mvs");
+
+        Assert.Equal(["MVS.json"], FileNames());
+        Assert.Equal("upper", Assert.Single(store.LoadAll()).Host);
+    }
+
+    /// <summary>LoadAll lists a name two files hold once, as the file every call that takes a name picks. A row for the
+    /// other would star, edit and delete the first, and Manage Tags, which saves each profile LoadAll lists, would
+    /// write both into one file and leave the other carrying the old tag.</summary>
+    [Fact]
+    public void Two_files_holding_one_name_list_once_as_the_file_every_operation_picks()
+    {
+        var store = new ProfileStore(_dir);
+        Place("MVS old.json", new SessionProfile { Name = "MVS", Host = "old" });
+        Place("MVS copy.json", new SessionProfile { Name = "MVS", Host = "copy" });
+
+        Assert.Equal("copy", Assert.Single(store.LoadAll()).Host);
+    }
+
+    /// <summary>A file that cannot be opened for the moment (a sync tool's lock, another LizTerm replacing it) may be the
+    /// profile's own. Writing "MVS (2).json" instead would leave the edit behind MVS.json once it reads again, since
+    /// FileNameFor's file is found first, so Save fails and writes nothing.</summary>
+    [Fact]
+    public void Save_fails_and_writes_nothing_while_a_file_it_may_own_cannot_be_read()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "MVS", Host = "old" });
+
+        using (File.Open(Path.Combine(_dir, "MVS.json"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.ThrowsAny<IOException>(() => store.Save(new SessionProfile { Name = "MVS", Host = "new" }));
+        }
+
+        Assert.Equal(["MVS.json"], FileNames());
+        Assert.Equal("old", store.Load("MVS")?.Host);
+    }
+
     /// <summary>Puts a profile in this store's directory under <paramref name="file"/>, written by a store of its own
     /// so the JSON is exactly what Save produces. The staging directory is below <c>_dir</c>, which LoadAll does not
     /// descend into and Dispose removes.</summary>
