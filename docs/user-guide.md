@@ -156,8 +156,8 @@ Copy, Paste, Select All and Find use the platform's own shortcuts — Cmd+C, Cmd
 elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.
 
 The **Keys** menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, Insert,
-PA1 to PA3, and PF13 to PF24. The on-screen keypad (**View > Keypad > Show the Keypad**) offers all of those as
-buttons, plus PF1 to PF12, Erase EOF and Erase Input.
+PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. The on-screen keypad
+(**View > Keypad > Show the Keypad**) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.
 
 ## Mouse, selection and clipboard
 

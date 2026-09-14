@@ -408,6 +408,13 @@ Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it install
   also why OneWay is required rather than tidy: the in-window fallback runs the same handler over a `MenuItem` bound
   two-way to the `NativeMenuItem`, so with a TwoWay binding to the view model there would be two toggles and the
   click would do nothing.
+- **Keys > Insert is a check box whose mark belongs to the host** (#111): `IsInsertMode`, set from the keyboard status
+  beside `InsertText`, so it moves with Ctrl+I, the Insert key and the keypad too. Both menus bind it one-way, keep
+  `SendKeyCommand`, and add a Click handler that puts the mark back to `IsInsertMode`, because
+  `DefaultMenuInteractionHandler.Click` and the in-window fallback both write `IsChecked` before the click arrives,
+  and the host answers the key later, if at all. Unlike Wire Log the view model cannot flip the state itself. The
+  classic handler is added in the constructor with `handledEventsToo`: a `MenuItem` runs its `Command` from its own
+  class handler and marks Click handled, so a `Click=` attribute on an item that also has a `Command` never runs.
 - **Check for Updates... follows About and Preferences' wiring, not `OpenLinkCommand`'s** (#107): a `Click`
   handler on both menus, `SessionWindow.CheckForUpdatesAsync`, which reaches `App.CheckForUpdatesManuallyAsync`
   with `this` as the dialog's owner. `OpenLinkCommand` has no way to pass a window along, which this item needs
