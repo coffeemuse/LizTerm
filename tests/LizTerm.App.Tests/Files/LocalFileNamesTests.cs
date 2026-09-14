@@ -17,6 +17,8 @@ public class LocalFileNamesTests
     [InlineData("ITEST", TransferHostType.Tso, "ITEST")]
     [InlineData("A.B()", TransferHostType.Tso, "received")]
     [InlineData("A.B.", TransferHostType.Tso, "received")]
+    [InlineData("LIZTERM.JCL(JOB1)", TransferHostType.Ispf, "JOB1")]
+    [InlineData("'MVSCE02.LIZTERM.ITEST'", TransferHostType.Ispf, "ITEST")]
     [InlineData("PROFILE EXEC A", TransferHostType.Vm, "PROFILE.EXEC")]
     [InlineData("PROFILE  EXEC", TransferHostType.Vm, "PROFILE.EXEC")]
     [InlineData("PROFILE", TransferHostType.Vm, "PROFILE")]

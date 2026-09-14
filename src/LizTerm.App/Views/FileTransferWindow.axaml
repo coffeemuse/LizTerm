@@ -27,7 +27,7 @@
         <TextBlock Grid.Row="1" Text="Host file" VerticalAlignment="Center" />
         <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding HostFile}" PlaceholderText="LIZTERM.JCL(JOB1) or 'USER.DATA.SET'" />
         <TextBlock Grid.Row="2" Text="Host type" VerticalAlignment="Center" />
-        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding HostTypes}" SelectedItem="{Binding HostType}" Width="120" HorizontalAlignment="Left"
+        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding HostTypes}" SelectedItem="{Binding HostType}" Width="130" HorizontalAlignment="Left"
                   DisplayMemberBinding="{ReflectionBinding Converter={x:Static views:TransferLabels.Converter}}" />
         <TextBlock Grid.Row="3" Text="Mode" VerticalAlignment="Center" />
         <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="16">
@@ -65,7 +65,7 @@
           <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding ExtraOptions}" PlaceholderText="appended to the IND$FILE command" />
         </Grid>
       </Expander>
-      <TextBlock Text="The cursor must be at a TSO READY prompt or a command line before you start." Foreground="#A0A0A0" TextWrapping="Wrap" />
+      <TextBlock x:Name="CursorHintText" Text="{Binding CursorHint}" Foreground="#A0A0A0" TextWrapping="Wrap" />
       <TextBlock Text="{Binding ValidationMessage}" Foreground="#FF8080" TextWrapping="Wrap"
                  IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

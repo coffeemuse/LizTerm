@@ -13,7 +13,8 @@ in `src/LizTerm.Core/CLAUDE.md`; how the engine binary is built and located is i
   reports; `FakeB3270Process` in the tests is the other.
 - `B3270Locator.Find` returns a `B3270Location` with its source, resolving `LIZTERM_B3270_PATH`, then
   `runtimes/<rid>/native/`, then beside the app. It throws the same exception type for "nothing found" and "found but
-  not executable"; `B3270Locator.Candidates` is how callers tell the two apart.
+  not executable"; `B3270Locator.Candidates` is how callers tell the two apart. Its not-found message ends by telling
+  users to reinstall LizTerm; the environment variable is for development only.
 - Startup waits for the `hello` indication (default 10 s) and rejects versions below `MinimumVersion` (4.2.0).
 - Process death drops to `Disconnected`, sets `_fault` and clears the process slot, **then** drains `_pending`,
   **then** raises `Faulted` with the stderr tail — in that order, so the fault is the session's whole state before
@@ -132,6 +133,13 @@ certificate that CA issued for another host from verifying (`CertificateReader.C
 - `TransferMapper` builds the `Transfer` action's `keyword=value` arguments. It omits what b3270 would reject
   (`cr`/`remap` in binary mode; allocation keywords on receive or on non-TSO hosts) or ignore (`lrecl`/`blksize`
   without a `recfm`; space fields without `allocation`). A receive adds `exist=replace` unless appending.
+- ISPF is TSO with a prefix: `TransferMapper` sends `host=tso`, then `commandprefix=TSO`, then every TSO keyword. Only
+  LizTerm's patched engine knows `commandprefix` (`native/patches`, `docs/engines.md`), and b3270 silently ignores a
+  keyword it does not know, so an unpatched engine would type a bare IND$FILE into the ISPF line and time out.
+  `TransferAsync` therefore checks the engine binary for `EnginePatches.CommandPrefixMarker` before an ISPF transfer
+  (read once per session; no engine path, or an unreadable file, counts as patched) and without it returns
+  `EnginePatches.MissingCommandPrefixMessage` as a failed result, sending nothing. TSO, VM and CICS never read the
+  file.
 - b3270 does not answer the Transfer run until the transfer ends, so that `run-result` is the outcome. `ft`
   indications only feed progress (`running` with `bytes`) to the one in-flight `TransferContext`; stray `ft` lines
   are dropped.

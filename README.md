@@ -30,7 +30,7 @@ Her photo is in the app too, under **About LizTerm**.
 - **Session profiles** for your hosts, or **Quick Connect** to try a host without saving one.
 - **TLS**, with certificate verification against your system's trusted roots, and **certificate pinning** for the
   self-signed certificates most hobbyist hosts use.
-- **IND$FILE file transfer** to and from TSO, VM/CMS and CICS, with progress and cancel.
+- **IND$FILE file transfer** to and from TSO (at READY or inside ISPF), VM/CMS and CICS, with progress and cancel.
 - **Models 2 to 5**, custom oversize screens, extended colour, and 41 host code pages.
 - **A Vista TN3270-style keyboard**, rectangular selection, and margin-aware paste.
 - **An on-screen keypad** for PF1–PF24, PA1–PA3, Attn, Clear, Reset and the rest, docked to the bottom or the
@@ -48,8 +48,9 @@ Her photo is in the app too, under **About LizTerm**.
 LizTerm is pre-1.0. Settings, profile file formats, defaults and interfaces may change between releases.
 
 The 3270 emulation is **not new code**. It is `b3270`, from the long-established x3270 suite, which every build
-bundles. That part of the stack is mature, and it is not where the risk is. What is new is the client around it —
-the window, profiles, settings, the file-transfer interface and the packaging. Expect the terminal session itself
+bundles. LizTerm builds it from the upstream source with one small addition of its own, so a file transfer can start
+from inside ISPF. That part of the stack is mature, and it is not where the risk is. What is new is the client around
+it — the window, profiles, settings, the file-transfer interface and the packaging. Expect the terminal session itself
 to be solid, and rough edges in the application surrounding it.
 
 If you find one, please [open an issue](https://github.com/coffeemuse/LizTerm/issues).

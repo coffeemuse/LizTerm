@@ -65,5 +65,9 @@ if [ -n "$MISSING" ]; then
   exit 1
 fi
 
-echo "OK: $BIN is a 64-bit PE importing only Windows system DLLs, Schannel included"
+# 4. The engine must carry LizTerm's patches (native/patches). Last, so every arm above keeps the reject fixture it
+# was built for: engines.yml proves this one with a copy of the real engine whose marker has been defaced.
+"$(dirname "$0")/shared-verify-patches.sh" "$BIN"
+
+echo "OK: $BIN is a 64-bit PE importing only Windows system DLLs, Schannel included, carrying LizTerm's patches"
 printf '%s\n' "$IMPORTS"

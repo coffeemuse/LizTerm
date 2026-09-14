@@ -59,6 +59,6 @@ public static class B3270Locator
 
         throw new BackendUnavailableException(
             "The emulator engine (b3270) was not found. Looked in:\n  " + string.Join("\n  ", candidates.Select(c => c.Path)) +
-            $"\nSet {EnvironmentOverride} to a b3270 executable to override.");
+            "\nReinstalling LizTerm restores it.");
     }
 }

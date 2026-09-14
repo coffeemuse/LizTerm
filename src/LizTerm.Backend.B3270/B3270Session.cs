@@ -22,6 +22,9 @@ public sealed class B3270Session : IEmulatorSession
     private WireLog? _wireLog;
     private readonly string? _wireLogError;
     private readonly B3270Location _location;
+    /// <summary>Whether the engine at <see cref="_location"/> carries LizTerm's CommandPrefix patch: read from the
+    /// binary on the first ISPF transfer and kept for the session (see <see cref="EngineCarriesCommandPrefix"/>).</summary>
+    private readonly Lazy<bool> _carriesCommandPrefix;
     private readonly object _writeLock = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<RunResultIndication>> _pending = new();
     private readonly ScreenBuffer _buffer = new(24, 80);
@@ -68,6 +71,7 @@ public sealed class B3270Session : IEmulatorSession
         _wireLog = wireLog;
         _wireLogError = wireLogError;
         _location = location ?? B3270Location.Unknown;
+        _carriesCommandPrefix = new Lazy<bool>(EngineCarriesCommandPrefix);
         Engine = new EngineInfo("b3270", null, _location.Path, _location.Source);
         CurrentScreen = _buffer.Snapshot();
     }
@@ -1124,6 +1128,10 @@ public sealed class B3270Session : IEmulatorSession
     {
         cancellationToken.ThrowIfCancellationRequested();
         RequireProcess();
+        // An engine without LizTerm's patch cannot be asked and does not refuse the keyword: it would drop the prefix
+        // and type a bare IND$FILE into the ISPF command line, then time out. So it is never sent one.
+        if (request.HostType == TransferHostType.Ispf && !_carriesCommandPrefix.Value)
+            return new FileTransferResult(false, EnginePatches.MissingCommandPrefixMessage);
         var context = new TransferContext(progress);
         if (Interlocked.CompareExchange(ref _transfer, context, null) is not null)
             throw new InvalidOperationException("A file transfer is already in progress.");
@@ -1156,6 +1164,23 @@ public sealed class B3270Session : IEmulatorSession
         }
         catch (Exception)
         {
+        }
+    }
+
+    /// <summary>The check behind <see cref="_carriesCommandPrefix"/>. b3270 4.5ga6 silently ignores a Transfer keyword
+    /// it does not know, so the binary is the only thing to ask. A session with no engine file (the tests' fake
+    /// process) or one that cannot be read is assumed to carry the patch, so the transfer is attempted, as it was
+    /// before this check existed.</summary>
+    private bool EngineCarriesCommandPrefix()
+    {
+        if (string.IsNullOrEmpty(_location.Path)) return true;
+        try
+        {
+            return EnginePatches.Carries(_location.Path, EnginePatches.CommandPrefixMarker);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return true;
         }
     }
 

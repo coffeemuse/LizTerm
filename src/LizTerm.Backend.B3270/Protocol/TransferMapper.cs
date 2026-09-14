@@ -9,7 +9,8 @@ namespace LizTerm.Backend.B3270.Protocol;
 /// <summary>Turns a Core request into b3270's Transfer(keyword=value,...) action. Keywords b3270 would reject for
 /// the direction, mode, or host type are omitted rather than passed through, and keywords its IND$FILE command
 /// builder would ignore (LRECL and BLKSIZE without a RECFM, SPACE without units) are omitted so the wire log
-/// stays honest. Values are raw strings; RunOperation quotes them as JSON, so spaces need no escaping.</summary>
+/// stays honest. Values are raw strings; RunOperation quotes them as JSON, so spaces need no escaping. ISPF is TSO
+/// with <c>commandprefix=TSO</c>, a keyword only LizTerm's patched engine knows (native/patches).</summary>
 public static class TransferMapper
 {
     public static readonly B3270Action CancelAction = new("Transfer", "Cancel");
@@ -18,7 +19,7 @@ public static class TransferMapper
     {
         var send = request.Direction == TransferDirection.Send;
         var text = request.Mode == TransferMode.Text;
-        var tso = request.HostType == TransferHostType.Tso;
+        var tso = request.HostType.IsTso();
         var vm = request.HostType == TransferHostType.Vm;
 
         var args = new List<string>
@@ -27,8 +28,10 @@ public static class TransferMapper
             "hostfile=" + request.HostFile,
             "localfile=" + request.LocalPath,
             "host=" + HostKeyword(request.HostType),
-            "mode=" + (text ? "ascii" : "binary"),
         };
+        // LizTerm's b3270 patch types this, and a space, ahead of IND$FILE; TSO makes ISPF hand the command to TSO.
+        if (request.HostType == TransferHostType.Ispf) args.Add("commandprefix=TSO");
+        args.Add("mode=" + (text ? "ascii" : "binary"));
 
         if (text)
         {
@@ -65,7 +68,7 @@ public static class TransferMapper
 
     private static string HostKeyword(TransferHostType type) => type switch
     {
-        TransferHostType.Tso => "tso",
+        TransferHostType.Tso or TransferHostType.Ispf => "tso",
         TransferHostType.Vm => "vm",
         _ => "cics",
     };

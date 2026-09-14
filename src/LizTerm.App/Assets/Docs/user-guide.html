@@ -224,7 +224,14 @@ normal verification.</p>
 padlock shows whether the certificate was verified: green with a <strong>✓</strong>, or orange with a <strong>!</strong>.</p>
 <h2 id="file-transfer-indfile">File transfer (IND$FILE)</h2>
 <p><strong>File &gt; IND$FILE Transfer...</strong> sends files to, or receives them from, a TSO, VM/CMS or CICS host using the host's
-IND$FILE program. Before you start, put the cursor at a TSO <code>READY</code> prompt or a command line.</p>
+IND$FILE program. It types the IND$FILE command into the input field the cursor is in, so before you start, put the
+cursor at a TSO <code>READY</code> prompt or a command line, or use the ISPF (MVS) host type.</p>
+<ul>
+<li><strong>ISPF (MVS)</strong> starts a transfer from inside ISPF, with the cursor on a <code>Command ===&gt;</code> or <code>Option ===&gt;</code> line.
+LizTerm types <code>TSO</code> ahead of the command, which makes ISPF hand it to TSO, so everything else works as it does for
+TSO, the Advanced options included. ISPF's own TSO command panel (option 6, Command) also accepts a transfer with
+host type TSO.</li>
+</ul>
 <ul>
 <li>Choose <strong>Send to host</strong> or <strong>Receive from host</strong>, the local file, and the host file (for example
 <code>LIZTERM.JCL(JOB1)</code>, or <code>'USER.DATA.SET'</code> with quotes for a fully qualified TSO name).</li>

@@ -11,13 +11,16 @@ how the pieces fit together, [architecture](architecture.md).
 
 ## Getting an engine
 
-The app runs b3270 as a child process and cannot connect without one. Any of these works:
+The app runs b3270 as a child process and cannot connect without one. LizTerm ships its own build, with the patches
+in `native/patches` applied ([engines](engines.md#patches)), and that is the engine to develop and test against:
 
 - Build one with `native/build/build-macos.sh`, `native/build/build-linux-docker.sh` or
   `native/build/build-windows-docker.sh` (see [engines](engines.md)), then rebuild the .NET projects so the engine
   is copied into their output.
 - Download a CI-built one ([engines](engines.md#using-a-ci-built-engine)).
-- Point `LIZTERM_B3270_PATH` at any b3270 4.2 or later. A Homebrew `x3270` install works.
+
+For quick work, `LIZTERM_B3270_PATH` can point at another b3270 4.2 or later, such as a Homebrew `x3270` install. It
+lacks LizTerm's patches, so ISPF (MVS) file transfers are refused with it, and it is never what users run.
 
 Without an engine the app shows an error instead of the profile picker, and the tests that need one skip.
 
@@ -113,7 +116,7 @@ would then draw the wrong symbols.
 
 | Variable | Effect |
 |---|---|
-| `LIZTERM_B3270_PATH` | Use this b3270 instead of the bundled one. |
+| `LIZTERM_B3270_PATH` | Development only: use this b3270 instead of the bundled one. It lacks LizTerm's [patches](engines.md#patches). |
 | `LIZTERM_WIRE_LOG` | Append every protocol line, in both directions, to this file. Help > Wire Log does the same from inside the app. |
 | `LIZTERM_MENU` | `native`, `classic` (the in-window menu) or `both`, seeding the launched instance's menu style on macOS (see the [user guide](user-guide.md#menus)); any other value, and any value at all off macOS, leaves the saved preference to decide. It seeds rather than overrides. The macOS application menu is not affected. |
 | `LIZTERM_TEST_HOST` | `host[:port]`; enables the live integration tests, which otherwise skip. |
@@ -156,7 +159,8 @@ field should add a trimmed fixture. There are two recorders:
 - `tools/wirelog-to-fixture.sh <wire.log> <out.jsonl>` turns a `LIZTERM_WIRE_LOG` file from a real session into a
   fixture: inbound lines only, timestamps stripped.
 - `tools/record-fixture.sh <trace.trc> <out.jsonl> [model] [playback-step]` replays an x3270 `.trc` host trace
-  through b3270 and saves its output. It needs x3270's `playback` tool, built by `native/build/build-playback.sh`.
+  through b3270 and saves its output. It needs x3270's `playback` tool, built by `native/build/build-playback.sh`,
+  which applies LizTerm's patches and so needs `patch` installed (macOS has it).
 
 Before committing a fixture, cut any logon from it and replace real host addresses.
 

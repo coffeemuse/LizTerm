@@ -169,10 +169,36 @@ public class TransferMapperTests
         Assert.Contains("secondaryspace=1", args);
     }
 
+    [Fact]
+    public void Ispf_is_tso_with_the_command_prefix() =>
+        Assert.Equal(["direction=send", "hostfile=LIZTERM.JCL(JOB1)", "localfile=/tmp/job.jcl", "host=tso", "commandprefix=TSO", "mode=ascii", "cr=remove", "remap=yes"], Args(Send(TransferHostType.Ispf)));
+
+    [Fact]
+    public void An_ispf_receive_carries_the_prefix_too() =>
+        Assert.Equal(["direction=receive", "hostfile=LIZTERM.ITEST", "localfile=/tmp/out.txt", "host=tso", "commandprefix=TSO", "mode=ascii", "cr=add", "remap=yes", "exist=replace"], Args(Receive(TransferHostType.Ispf)));
+
+    [Fact]
+    public void An_ispf_send_keeps_every_tso_only_keyword()
+    {
+        var r = Send(TransferHostType.Ispf) with { RecordFormat = RecordFormat.Undefined, Lrecl = 80, Blksize = 3120, AllocationUnits = AllocationUnits.AvBlock, PrimarySpace = 5, SecondarySpace = 1, AverageBlock = 4096 };
+        Assert.Equal(["recfm=undefined", "lrecl=80", "blksize=3120", "allocation=avblock", "primaryspace=5", "secondaryspace=1", "avblock=4096"], Args(r)[8..]);
+    }
+
+    [Theory]
+    [InlineData(TransferHostType.Tso)]
+    [InlineData(TransferHostType.Vm)]
+    [InlineData(TransferHostType.Cics)]
+    public void Only_ispf_sends_a_command_prefix(TransferHostType host)
+    {
+        Assert.DoesNotContain(Args(Send(host)), a => a.StartsWith("commandprefix=", StringComparison.Ordinal));
+        Assert.DoesNotContain(Args(Receive(host)), a => a.StartsWith("commandprefix=", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(TransferHostType.Tso, "host=tso")]
     [InlineData(TransferHostType.Vm, "host=vm")]
     [InlineData(TransferHostType.Cics, "host=cics")]
+    [InlineData(TransferHostType.Ispf, "host=tso")]
     public void Every_host_type_has_a_keyword(TransferHostType host, string expected) => Assert.Contains(expected, Args(Send(host)));
 
     [Theory]

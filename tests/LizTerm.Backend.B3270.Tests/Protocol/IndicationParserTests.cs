@@ -252,10 +252,12 @@ public class IndicationParserTests
         Assert.Equal(["ok", "123", "true", ""], result.Text);
     }
 
-    [Fact]
-    public void Indfile_fixture_parses_with_the_expected_ft_sequence()
+    [Theory]
+    [InlineData("indfile-tso-roundtrip.jsonl")]
+    [InlineData("indfile-ispf-roundtrip.jsonl")]
+    public void Indfile_fixture_parses_with_the_expected_ft_sequence(string fixture)
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "indfile-tso-roundtrip.jsonl");
+        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture);
         var states = new List<FtIndication>();
         foreach (var line in File.ReadLines(path))
         {

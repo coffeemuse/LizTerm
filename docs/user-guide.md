@@ -213,7 +213,13 @@ padlock shows whether the certificate was verified: green with a **✓**, or ora
 ## File transfer (IND$FILE)
 
 **File > IND$FILE Transfer...** sends files to, or receives them from, a TSO, VM/CMS or CICS host using the host's
-IND$FILE program. Before you start, put the cursor at a TSO `READY` prompt or a command line.
+IND$FILE program. It types the IND$FILE command into the input field the cursor is in, so before you start, put the
+cursor at a TSO `READY` prompt or a command line, or use the ISPF (MVS) host type.
+
+- **ISPF (MVS)** starts a transfer from inside ISPF, with the cursor on a `Command ===>` or `Option ===>` line.
+  LizTerm types `TSO` ahead of the command, which makes ISPF hand it to TSO, so everything else works as it does for
+  TSO, the Advanced options included. ISPF's own TSO command panel (option 6, Command) also accepts a transfer with
+  host type TSO.
 
 - Choose **Send to host** or **Receive from host**, the local file, and the host file (for example
   `LIZTERM.JCL(JOB1)`, or `'USER.DATA.SET'` with quotes for a fully qualified TSO name).

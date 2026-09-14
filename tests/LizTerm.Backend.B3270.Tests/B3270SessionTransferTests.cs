@@ -2,7 +2,9 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Text;
 using System.Text.RegularExpressions;
+using LizTerm.Backend.B3270.Process;
 using LizTerm.Backend.B3270.Tests.Fakes;
 using LizTerm.Core.Session;
 
@@ -16,11 +18,11 @@ public class B3270SessionTransferTests
     private static readonly FileTransferRequest Request = new() { Direction = TransferDirection.Send, LocalPath = "/nonexistent/a.txt", HostFile = "A.B" };
     private static readonly TimeSpan WaitTime = TimeSpan.FromSeconds(5);
 
-    private static async Task<(B3270Session Session, FakeB3270Process Fake)> StartAsync()
+    private static async Task<(B3270Session Session, FakeB3270Process Fake)> StartAsync(B3270Location? location = null)
     {
         var fake = new FakeB3270Process();
         fake.RunResponder = line => IsTransferStart(line) ? Array.Empty<string>() : new[] { AutoResult(line) };
-        var session = new B3270Session(Profile, () => fake);
+        var session = new B3270Session(Profile, () => fake, location: location);
         await session.StartProcessAsync(CancellationToken.None);
         return (session, fake);
     }
@@ -245,5 +247,68 @@ public class B3270SessionTransferTests
         var session = new B3270Session(Profile, () => new FakeB3270Process());
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => session.TransferAsync(Request, cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal("The session has not been started.", ex.Message);
+    }
+
+    /// <summary>A stand-in engine binary on disk: arbitrary bytes, with or without the patch marker among them.</summary>
+    private static B3270Location EngineFile(bool patched)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "lizterm-engine-" + Guid.NewGuid().ToString("N"));
+        File.WriteAllBytes(path, [0x7f, 0x45, 0x4c, 0x46, .. Encoding.ASCII.GetBytes(patched ? "OtherOptions\0CommandPrefix\0" : "OtherOptions\0")]);
+        return new B3270Location(path, EngineSource.Override);
+    }
+
+    [Fact]
+    public async Task An_ispf_transfer_on_an_engine_without_the_patch_fails_at_once_and_sends_nothing()
+    {
+        var engine = EngineFile(patched: false);
+        try
+        {
+            var (session, fake) = await StartAsync(engine);
+            var result = await session.TransferAsync(Request with { HostType = TransferHostType.Ispf }, cancellationToken: TestContext.Current.CancellationToken)
+                .WaitAsync(WaitTime, TestContext.Current.CancellationToken);
+            Assert.False(result.Succeeded);
+            Assert.Equal(EnginePatches.MissingCommandPrefixMessage, result.Message);
+            Assert.DoesNotContain(fake.InputLines, IsTransferStart);
+            Assert.False(session.IsTransferInProgress);
+
+            // Only ISPF needs the patch: a TSO transfer on the same engine goes out as usual.
+            var tso = session.TransferAsync(Request, cancellationToken: TestContext.Current.CancellationToken);
+            var line = await TransferLineAsync(fake);
+            fake.Emit(SuccessResult(line, "Transfer complete, 1 bytes transferred"));
+            Assert.True((await tso.WaitAsync(WaitTime, TestContext.Current.CancellationToken)).Succeeded);
+        }
+        finally
+        {
+            File.Delete(engine.Path);
+        }
+    }
+
+    [Fact]
+    public async Task An_ispf_transfer_on_a_patched_engine_sends_the_command_prefix()
+    {
+        var engine = EngineFile(patched: true);
+        try
+        {
+            await AssertIspfTransferIsSentAsync(engine);
+        }
+        finally
+        {
+            File.Delete(engine.Path);
+        }
+    }
+
+    /// <summary>No engine file to read (a session built without a location) is assumed patched, so the transfer is
+    /// attempted as it was before the check existed.</summary>
+    [Fact]
+    public Task An_ispf_transfer_with_no_known_engine_file_is_attempted() => AssertIspfTransferIsSentAsync(null);
+
+    private static async Task AssertIspfTransferIsSentAsync(B3270Location? engine)
+    {
+        var (session, fake) = await StartAsync(engine);
+        var transfer = session.TransferAsync(Request with { HostType = TransferHostType.Ispf }, cancellationToken: TestContext.Current.CancellationToken);
+        var line = await TransferLineAsync(fake);
+        Assert.Contains("\"host=tso\",\"commandprefix=TSO\",\"mode=ascii\"", line);
+        fake.Emit(SuccessResult(line, "Transfer complete, 1 bytes transferred"));
+        Assert.True((await transfer.WaitAsync(WaitTime, TestContext.Current.CancellationToken)).Succeeded);
     }
 }

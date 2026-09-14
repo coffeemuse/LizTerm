@@ -92,10 +92,12 @@ past its timeout has no other way to get its logs out of `native/build-tmp`.
   both and each must hit or miss independently), plus one source-tarball entry shared by both.
 - `engine-linux` caches the same two things per leg: `native/out/<rid>`, and one `native/cache` entry shared by both
   legs, since source tarballs are architecture-independent.
+- `engine-windows` caches `native/out/win-x64` and the x3270 source tarball.
 - Each engine cache key hashes only the scripts that feed **that** platform — `*macos*.sh` plus `fetch-source.sh`
-  and `fetch-openssl.sh` for macOS; `*linux*.sh` plus `fetch-*.sh` for Linux — with `shared-*.sh` in both. A
-  Linux-only edit therefore does not force a cold macOS rebuild that cannot change its binary, and new shared
-  machinery cannot be added to one key and forgotten in the other.
+  and `fetch-openssl.sh` for macOS; `*linux*.sh` plus `fetch-*.sh` for Linux; `*windows*.sh` plus `fetch-source.sh`
+  for Windows — with `shared-*.sh` and `native/patches/**` in all three. A Linux-only edit therefore does not force a
+  cold macOS rebuild that cannot change its binary, new shared machinery cannot be added to one key and forgotten in
+  another, and an edit to a patch alone rebuilds every engine instead of restoring an unpatched one from the cache.
 
 **Why `platforms.yml` runs on pushes to `main`, and only for native changes.** `actions/cache` scopes an entry to the
 branch that saved it plus the default branch: a PR run restores what `main` saved, but `main` never restores what a
@@ -182,9 +184,10 @@ names (`Win32Settings.InstallerIcon`, `MacOsSettings.AppIcon`, `LinuxSettings.Ap
 
 Each publish job extracts its archive and runs, against that extracted tree:
 
-1. **`verify-bundled-engine.sh`**, which fails on a missing, duplicate or wrong-machine-type engine. The engine
-   survives `PublishSingleFile` at `runtimes/<rid>/native/b3270[.exe]`, nested inside `LizTerm.app/Contents/MacOS/`
-   on macOS, which is why the script searches at any depth and requires exactly one match.
+1. **`verify-bundled-engine.sh`**, which fails on a missing, duplicate or wrong-machine-type engine, or one without
+   LizTerm's patches (`shared-verify-patches.sh`). The engine survives `PublishSingleFile` at
+   `runtimes/<rid>/native/b3270[.exe]`, nested inside `LizTerm.app/Contents/MacOS/` on macOS, which is why the script
+   searches at any depth and requires exactly one match.
 2. **An engine start check** (`shared-verify-tls.sh`).
 3. **`verify-app-launches.sh`**, which launches the real, extracted executable the way a user does — no headless
    platform and no self-test flag, since either would step around Skia initialisation, which is where the bug it

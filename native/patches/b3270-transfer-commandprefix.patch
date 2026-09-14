@@ -1,0 +1,69 @@
+LizTerm patch for b3270 (x3270 suite 4.5ga6): a CommandPrefix keyword for the Transfer action.
+
+Transfer(...,CommandPrefix=<text>) types <text> and one space ahead of the IND$FILE command it builds.
+LizTerm's ISPF (MVS) host type sends CommandPrefix=TSO, so a transfer can start from an ISPF command
+line: ISPF hands "TSO IND$FILE ..." to TSO, which runs IND$FILE as it would at READY. Typing TSO at the
+cursor before calling Transfer cannot work, because Transfer blanks the input field (kybd_prime) before
+it types the command.
+
+Unset or empty, the engine behaves exactly as upstream. Only what LizTerm's engine uses is changed: no
+Transfer help text, interactive prompt, X resource or Motif dialog field.
+
+LizTerm issue #109. Applied by native/build/fetch-source.sh; see docs/engines.md, "Patches".
+
+--- a/include/ft_private.h
++++ b/include/ft_private.h
+@@ -81,6 +81,7 @@
+     int windows_codepage;
+ #endif /*]*/
+     char *other_options;
++    char *command_prefix;
+ 
+     /* Invocation state. */
+     bool is_action;
+--- a/Common/ft.c
++++ b/Common/ft.c
+@@ -132,6 +132,7 @@
+     PARM_WINDOWS_CODEPAGE,
+ #endif /*]*/
+     PARM_OTHER_OPTIONS,
++    PARM_COMMAND_PREFIX,
+     N_PARMS
+ };
+ static struct {
+@@ -159,6 +160,7 @@
+     { "WindowsCodePage" },
+ #endif /*]*/
+     { "OtherOptions" },
++    { "CommandPrefix" },
+ };
+ ft_tstate_t fts;
+ 
+@@ -336,6 +338,7 @@
+ 	appres.ft.codepage: appres.local_cp;
+ #endif /*]*/
+     Replace(p->other_options, NULL);
++    Replace(p->command_prefix, NULL);
+ 
+     /* Apply resources. */
+     if (appres.ft.blksize) {
+@@ -682,6 +685,9 @@
+ 
+     /* Build the ind$file command */
+     vb_init(&r);
++    if (p->command_prefix != NULL && p->command_prefix[0]) {
++	vb_appendf(&r, "%s ", p->command_prefix);
++    }
+     vb_appendf(&r, "IND\\e005BFILE %s %s %s",
+ 	    p->receive_flag? "GET": "PUT",
+ 	    p->host_filename,
+@@ -989,6 +995,9 @@
+     if (tp[PARM_OTHER_OPTIONS].value) {
+ 	Replace(p->other_options, NewString(tp[PARM_OTHER_OPTIONS].value));
+     }
++    if (tp[PARM_COMMAND_PREFIX].value) {
++	Replace(p->command_prefix, NewString(tp[PARM_COMMAND_PREFIX].value));
++    }
+ 
+     /* Check for required values. */
+     if (!p->host_filename) {

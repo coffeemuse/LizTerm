@@ -47,11 +47,12 @@ public class B3270LocatorTests : IDisposable
     }
 
     [Fact]
-    public void Missing_binary_reports_where_it_looked()
+    public void Missing_binary_reports_where_it_looked_and_points_at_reinstalling()
     {
         var ex = Assert.Throws<BackendUnavailableException>(() => B3270Locator.Find(null, _dir));
         Assert.Contains(_dir, ex.Message);
-        Assert.Contains("LIZTERM_B3270_PATH", ex.Message);
+        Assert.EndsWith("\nReinstalling LizTerm restores it.", ex.Message);
+        Assert.DoesNotContain("LIZTERM_B3270_PATH", ex.Message);
     }
 
     [Fact]
