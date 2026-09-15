@@ -22,10 +22,15 @@
          Embedding them as Avalonia resources cost
          1.71 MB + 0.13 MB of a 3.41 MB assembly for no benefit; excluding them leaves them on disk for their
          real readers while dropping them from the bundle. lizterm.png stays embedded and full-size: Parcel's
-         LinuxSettings.AppIcon reads it from disk too, and it is also the 1254x1254 master lizterm-256.png (what
-         every Window.Icon actually points at) and every other packaged size derives from, so do not resize it. -->
+         LinuxSettings.AppIcon reads it from disk too, and it is also the 1254x1254 master lizterm-256.png (the
+         splash's and About's mark) and every other packaged size of 64 px or more derives from, so do not resize
+         it. lizterm-small.png is the unlettered master for the sizes of 48 px or less; only
+         tools/build-app-icons.sh reads it, so it stays out of the bundle too. lizterm-window.ico is not
+         lizterm.ico: it is the small, unlettered icon App.axaml gives every window, loaded by the app itself,
+         so it stays embedded. -->
     <AvaloniaResource Remove="Assets\Icons\lizterm.icns" />
     <AvaloniaResource Remove="Assets\Icons\lizterm.ico" />
+    <AvaloniaResource Remove="Assets\Icons\lizterm-small.png" />
     <AvaloniaResource Include="../../THIRD-PARTY-NOTICES.txt" Link="Assets/THIRD-PARTY-NOTICES.txt" />
     <!-- LizTerm's own terms. About is the only place they reach a user: no archive or installer this
          pipeline produces carries a LICENSE file beside the app, so embedding it is what satisfies

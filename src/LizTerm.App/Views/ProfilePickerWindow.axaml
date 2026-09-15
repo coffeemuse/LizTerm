@@ -13,7 +13,6 @@
         x:Class="LizTerm.App.Views.ProfilePickerWindow"
         x:DataType="vm:ProfilePickerViewModel"
         Title="LizTerm" Width="520" Height="480" MinWidth="400" MinHeight="360"
-        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         WindowStartupLocation="CenterScreen">
   <!-- Two zones: the saved sessions (heading, filter, list and its buttons) and, below a divider, Quick Connect.
        They used to be two look-alike text boxes stacked 12px apart under one heading, with the Quick Connect button

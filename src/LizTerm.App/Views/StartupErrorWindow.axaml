@@ -6,7 +6,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="LizTerm.App.Views.StartupErrorWindow"
-        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         Title="LizTerm cannot start" Width="560" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterScreen">
   <StackPanel Margin="16" Spacing="12">

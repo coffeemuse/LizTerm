@@ -9,7 +9,6 @@
         xmlns:render="using:LizTerm.App.Rendering"
         x:Class="LizTerm.App.Views.ManageTagsWindow"
         x:DataType="vm:ManageTagsViewModel"
-        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         Title="Tags" Width="560" Height="420" MinWidth="520" MinHeight="360"
         WindowStartupLocation="CenterOwner">
   <Window.Styles>

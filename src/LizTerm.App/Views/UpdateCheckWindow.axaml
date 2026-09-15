@@ -6,7 +6,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="LizTerm.App.Views.UpdateCheckWindow"
-        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         Title="Check for Updates" Width="420" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <!-- Content varies by the result the constructor is given, not by a bound view model: three fixed states, no

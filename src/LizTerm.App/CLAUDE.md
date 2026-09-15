@@ -686,8 +686,19 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   (`docs/development.md`, "The 3270 font"); the padlock is the font's Powerline one, U+E0A2. The words go on
   tooltips. Assertions on status strings are exact, so change `StatusFormatter` and its tests together.
 - `Assets/Icons/` holds the app icon in the three shapes packaging needs (`lizterm.icns`, `lizterm.ico`,
-  `lizterm.png`, referenced from `LizTerm.parcel`). The csproj's `<AvaloniaResource Include="Assets\**" />` already
-  covers a new or replaced one.
+  `lizterm.png`, referenced from `LizTerm.parcel`), plus `lizterm-256.png` for the splash's and About's `Image`
+  marks and `lizterm-window.ico` for every window's `Icon`. All but `lizterm.png` are built by
+  `tools/build-app-icons.sh` from it and the unlettered `lizterm-small.png` (`docs/development.md`, "The app
+  icon"); never edit a built one by hand. The csproj's `<AvaloniaResource Include="Assets\**" />` already covers a
+  new or replaced one, and the csproj removes the files only packaging reads.
+- **The window icon is set once**, by the `:is(Window)` style in `App.axaml`, so no window's `.axaml` sets `Icon`:
+  a local value would beat the style and bring back the lettered image, and `WindowIconTests` fails the suite for
+  one. It is a multi-size `.ico` rather than a PNG because Avalonia 12.1.2 handles the two differently. The Win32
+  backend (`IconImpl`, `Win32Icon`) reads an `.ico` directory and picks the nearest entry to 16 px and to 24 px
+  (32 px before Windows 10) at the display's scale, but hands a PNG to the shell as one bitmap to shrink. X11
+  (`X11IconLoader`) decodes any stream through Skia, which takes an `.ico`'s largest entry, and caps the result at
+  128 px, so that is the largest entry. Avalonia.Native's `SetIcon` is a no-op: macOS draws the bundle's `.icns`.
+  The headless platform stubs icons, so tests can see that a window has the shared icon but not its pixels.
 - **About's dedication link** (`DedicationLink`) opens `LizWindow`, modal over About: the photo of Liz, the cat
   LizTerm is named for (`Assets/Liz/liz.jpg`, which the README shows too). It is a `Button` made to look like a link,
   not a `HyperlinkButton`, because Fluent paints that one in the platform accent, and on macOS the accent is the

@@ -8,7 +8,6 @@
         xmlns:vm="using:LizTerm.App.ViewModels"
         x:Class="LizTerm.App.Views.ProfileEditorWindow"
         x:DataType="vm:ProfileEditorViewModel"
-        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         Title="Session Profile" Width="480" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="10">
