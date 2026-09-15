@@ -8,7 +8,6 @@
         xmlns:vm="using:LizTerm.App.ViewModels"
         x:Class="LizTerm.App.Views.PreferencesWindow"
         x:DataType="vm:SettingsViewModel"
-        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         Title="Preferences" Width="520" Height="446" CanResize="False"
         WindowStartupLocation="CenterScreen">
   <!-- Every control applies the moment it changes, to every open session window: the data context is the

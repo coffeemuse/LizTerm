@@ -5,7 +5,8 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
-- **A new app icon**: Liz on a green 3270 screen.
+- **A new app icon**: Liz on a green 3270 screen, without the "3270" lettering in title bars and on the taskbar,
+  where it is too small to read.
 
 ## 0.6.0
 
