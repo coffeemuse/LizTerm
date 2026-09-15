@@ -12,6 +12,13 @@
              RequestedThemeVariant="Dark">
   <Application.Styles>
     <FluentTheme />
+    <!-- Every window's icon, set once here so no window names it. :is() because each window is a subclass, and a
+         plain Window selector matches only Window itself. The .ico is unlettered at every size, since a title bar
+         or taskbar draws it at 16 to 32 px, where the "3270" of lizterm-256.png is a smear; Windows picks the
+         nearest of its entries and X11 takes the largest. See "The app icon" in docs/development.md. -->
+    <Style Selector=":is(Window)">
+      <Setter Property="Icon" Value="avares://LizTerm.App/Assets/Icons/lizterm-window.ico" />
+    </Style>
   </Application.Styles>
 
   <Application.Resources>

@@ -6,7 +6,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="LizTerm.App.Views.LizWindow"
-        Icon="avares://LizTerm.App/Assets/Icons/lizterm-256.png"
         Title="Liz" SizeToContent="WidthAndHeight" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <!-- The photo LizTerm's name comes from, opened from About's dedication link. The dedication is lettered into the

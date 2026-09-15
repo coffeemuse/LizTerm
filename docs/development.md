@@ -115,9 +115,16 @@ would then draw the wrong symbols.
 ### The app icon
 
 `src/LizTerm.App/Assets/Icons/` holds two masters: `lizterm.png`, with "3270" lettered above Liz, and
-`lizterm-small.png`, the same tile unlettered, since the lettering is a green smear below 64 px. The other three
-files are built from them — `lizterm.icns`, `lizterm.ico` and `lizterm-256.png`, every image of 48 px or less from
-the small master — so after changing either master, rebuild them on a Mac with ImageMagick installed:
+`lizterm-small.png`, the same tile unlettered, since the lettering is a green smear below 64 px. The other files
+are built from them:
+
+- `lizterm.icns` and `lizterm.ico`, the packaged icons, with every image of 48 px or less from the small master;
+- `lizterm-256.png`, the lettered mark on the splash, in About and in the README;
+- `lizterm-window.ico`, every window's title bar and taskbar icon, set once by a style in `App.axaml`. It is
+  unlettered at every size, from 16 to 128 px, because Windows draws it at 16 to 32 px, choosing the nearest
+  entry, and X11 takes the largest entry.
+
+After changing either master, rebuild them on a Mac with ImageMagick installed:
 
 ```bash
 tools/build-app-icons.sh
