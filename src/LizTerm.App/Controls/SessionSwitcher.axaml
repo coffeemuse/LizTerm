@@ -1,0 +1,76 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<!-- The session switcher (#46): a palette at the top centre over a dimmed screen. Session switching spec §5.1 and
+     §5.3. Its visibility belongs to SessionWindow's code-behind, never a binding here: see Task 6's note. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LizTerm.App.ViewModels"
+             x:Class="LizTerm.App.Controls.SessionSwitcher"
+             x:DataType="vm:SessionSwitcherViewModel">
+  <UserControl.Styles>
+    <!-- A background on every row, transparent when not selected: a Border with a null background is nothing to
+         hit, and a click on the row would fall through to the dim. -->
+    <Style Selector="Border.row">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <!-- The selection is the bar on the left and the ↵ mark as well as the fill, so colour never carries it. -->
+    <Style Selector="Border.row.selected">
+      <Setter Property="Background" Value="#2F3D55" />
+      <Setter Property="BorderBrush" Value="#8FB0FF" />
+    </Style>
+    <Style Selector="Rectangle.badge">
+      <Setter Property="Fill" Value="#4A4A4A" />
+    </Style>
+    <!-- Once the filter holds text, digits filter instead of jumping, and the badge says so by its outline. -->
+    <Style Selector="Rectangle.badge.idle">
+      <Setter Property="Fill" Value="Transparent" />
+      <Setter Property="Stroke" Value="#6A6A6A" />
+      <Setter Property="StrokeDashArray" Value="2,2" />
+    </Style>
+  </UserControl.Styles>
+  <Panel>
+    <Border x:Name="Dim" Background="#80000000" PointerPressed="OnDimPressed" />
+    <!-- 88% of the screen area's width, capped at 520 px, centred: star columns give the 88%, MaxWidth the cap. -->
+    <Grid ColumnDefinitions="6*,88*,6*">
+      <Border x:Name="Palette" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Top" MaxWidth="520"
+              Margin="0,12" Background="#262626" BorderBrush="#4A4A4A" BorderThickness="1" CornerRadius="8">
+        <DockPanel>
+          <TextBox x:Name="SwitcherBox" DockPanel.Dock="Top" Margin="10,8,10,6"
+                   Text="{Binding Term, Mode=TwoWay}" PlaceholderText="Switch to a session: type to filter" />
+          <TextBlock x:Name="HintLine" DockPanel.Dock="Bottom" Margin="10,5,10,7" FontSize="11" Foreground="#8F8F8F"
+                     Text="{Binding Hint}" />
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl x:Name="RowsHost" ItemsSource="{Binding Rows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SwitcherRow">
+                  <Border x:Name="RowBorder" Classes="row" Classes.selected="{Binding IsSelected}"
+                          BorderThickness="3,0,0,0" Padding="7,5,10,5" PointerReleased="OnRowReleased">
+                    <Grid ColumnDefinitions="18,8,12,8,*,8,Auto,6,12">
+                      <Panel Grid.Column="0" Width="18" Height="18" VerticalAlignment="Center" IsVisible="{Binding HasNumber}">
+                        <Rectangle Classes="badge" Classes.idle="{Binding !NumberActive}" RadiusX="4" RadiusY="4" />
+                        <TextBlock x:Name="NumberBadge" Text="{Binding Number}" FontSize="11" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      </Panel>
+                      <TextBlock x:Name="ConnectionMark" Grid.Column="2" Text="{Binding ConnectionMark}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      <ContentControl Grid.Column="4" Content="{Binding Summary}"
+                                      ContentTemplate="{StaticResource ProfileSummaryTemplate}" />
+                      <TextBlock x:Name="FlagText" Grid.Column="6" Text="{Binding Flag}" FontSize="11"
+                                 Foreground="#B5B5B5" VerticalAlignment="Center" />
+                      <TextBlock x:Name="SelectionMark" Grid.Column="8" Text="↵" FontWeight="SemiBold"
+                                 Foreground="#CFE0FF" VerticalAlignment="Center" IsVisible="{Binding IsSelected}" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Grid>
+  </Panel>
+</UserControl>

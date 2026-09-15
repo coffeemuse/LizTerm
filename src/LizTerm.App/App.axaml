@@ -34,6 +34,37 @@
     <ItemsPanelTemplate x:Key="TagChipStrip">
       <StackPanel Orientation="Horizontal" Spacing="3" />
     </ItemsPanelTemplate>
+
+    <!-- One profile's summary, drawn once: the Sessions list's rows and the session switcher's rows (#46) both use
+         it, for the reason TagChipTemplate is shared. A 15px gutter on all three lines, so every star lands on the
+         same x and a column of them can be scanned. Right-aligned among the chips it would slide with the chip
+         count, which is most of what a favourite marker is for. -->
+    <DataTemplate x:Key="ProfileSummaryTemplate" x:DataType="vm:ProfileRow">
+      <Grid ColumnDefinitions="15,*" RowDefinitions="Auto,Auto,Auto">
+        <TextBlock x:Name="StarGlyph" Grid.Row="0" Grid.Column="0" Text="★" Foreground="{x:Static render:TagPalette.Star}"
+                   FontSize="13" VerticalAlignment="Center" IsVisible="{Binding IsFavorite}" />
+        <!-- The name is what ellipsises; the chips never shrink. A truncated PRO… carries nothing, where a
+             truncated long name is still recognisable. -->
+        <DockPanel Grid.Row="0" Grid.Column="1" LastChildFill="True">
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+            <ItemsControl ItemsSource="{Binding Chips}" ItemsPanel="{StaticResource TagChipStrip}"
+                          ItemTemplate="{StaticResource TagChipTemplate}" />
+            <Border Background="{x:Static render:TagPalette.Overflow}" CornerRadius="3" Padding="5,1"
+                    IsVisible="{Binding HasOverflow}">
+              <TextBlock x:Name="OverflowChip" Text="{Binding OverflowText}" FontSize="10" FontWeight="Bold"
+                         Foreground="{x:Static render:TagPalette.ChipText}" ToolTip.Tip="{Binding OverflowTip}" />
+            </Border>
+          </StackPanel>
+          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                     VerticalAlignment="Center" Margin="0,0,6,0" />
+        </DockPanel>
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SecondLine}" Foreground="#A0A0A0" FontSize="12" />
+        <!-- Only when there is one, so an un-noted profile stays two lines and the list stays long. -->
+        <TextBlock x:Name="NoteLine" Grid.Row="2" Grid.Column="1" Text="{Binding Note}" Foreground="#8F8F8F"
+                   FontSize="12" FontStyle="Italic" TextTrimming="CharacterEllipsis"
+                   IsVisible="{Binding HasNote}" ToolTip.Tip="{Binding Note}" />
+      </Grid>
+    </DataTemplate>
   </Application.Resources>
 
   <!-- The macOS application menu. It hangs off the application rather than a window, which is what gives the

@@ -232,6 +232,10 @@ public sealed class TerminalScreen : Control
     /// reason copy and paste are: the window owns what happens, the control owns only the keystroke.</summary>
     public event EventHandler? FindRequested;
 
+    /// <summary>The session switcher's chord, Cmd+K on macOS and Ctrl+K elsewhere (#46). Like FindRequested it is
+    /// a platform gesture, checked ahead of the keymap, so a future user keymap (#18) cannot take Ctrl+K.</summary>
+    public event EventHandler? SwitcherRequested;
+
     /// <summary>Spec 6.2 ordering: the platform's copy, paste, and select-all hotkeys first (they are not in the
     /// table), then the key table, then the text table, then Avalonia's text input for everything else so dead
     /// keys and IMEs keep working.</summary>
@@ -306,6 +310,13 @@ public sealed class TerminalScreen : Control
         if (e.Key == Key.F && e.KeyModifiers == (hotkeys?.CommandModifiers ?? KeyModifiers.Control))
         {
             FindRequested?.Invoke(this, EventArgs.Empty);
+            return true;
+        }
+
+        // The switcher's chord, built the same way as Find's.
+        if (e.Key == Key.K && e.KeyModifiers == (hotkeys?.CommandModifiers ?? KeyModifiers.Control))
+        {
+            SwitcherRequested?.Invoke(this, EventArgs.Empty);
             return true;
         }
         return false;

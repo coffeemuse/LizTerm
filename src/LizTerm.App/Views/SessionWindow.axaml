@@ -139,6 +139,26 @@
           </NativeMenu>
         </NativeMenuItem.Menu>
       </NativeMenuItem>
+      <!-- The Window menu (#46; session switching spec §7). The fixed items are declared here in both renderers, so
+           the parity walk covers them; one numbered row per open session is added after the last separator by
+           RebuildSessionRows. Minimize and Zoom are macOS's and hidden elsewhere with their separator
+           (ApplyPlatformMenuRules). Every item has a Click handler: the exporter greys out anything else. No
+           gestures here in XAML: ShowPlatformGestures sets Switch Session's command chord and Minimize's Cmd+M,
+           the two exceptions to "no gesture outside Edit". -->
+      <NativeMenuItem Header="_Window">
+        <NativeMenuItem.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="_Minimize" Click="OnMinimizeClickNative" />
+            <NativeMenuItem Header="_Zoom" Click="OnZoomClickNative" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="_Keep on Top" ToggleType="CheckBox" Click="OnKeepOnTopClickNative" />
+            <NativeMenuItem Header="_Switch Session..." Click="OnSwitchSessionClickNative" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="_Bring All to Front" Click="OnBringAllToFrontClickNative" />
+            <NativeMenuItemSeparator />
+          </NativeMenu>
+        </NativeMenuItem.Menu>
+      </NativeMenuItem>
       <NativeMenuItem Header="_Help">
         <NativeMenuItem.Menu>
           <NativeMenu>
@@ -243,6 +263,16 @@
         <MenuItem Header="PF22" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF22}" />
         <MenuItem Header="PF23" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF23}" />
         <MenuItem Header="PF24" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.PF24}" />
+      </MenuItem>
+      <MenuItem x:Name="WindowMenuItem" Header="_Window">
+        <MenuItem x:Name="MinimizeMenuItem" Header="_Minimize" Click="OnMinimizeClick" />
+        <MenuItem x:Name="ZoomMenuItem" Header="_Zoom" Click="OnZoomClick" />
+        <Separator x:Name="MinimizeSeparator" />
+        <MenuItem x:Name="KeepOnTopMenuItem" Header="_Keep on Top" ToggleType="CheckBox" Click="OnKeepOnTopClick" />
+        <MenuItem x:Name="SwitchSessionMenuItem" Header="_Switch Session..." Click="OnSwitchSessionClick" />
+        <Separator />
+        <MenuItem Header="_Bring All to Front" Click="OnBringAllToFrontClick" />
+        <Separator x:Name="SessionsSeparator" />
       </MenuItem>
       <MenuItem Header="_Help">
         <MenuItem Header="_User Guide" Command="{Binding ShowUserGuideCommand}" />
@@ -401,13 +431,20 @@
                      ShowPfKeys="{Binding Settings.KeypadPfKeys}"
                      IsEnabled="{Binding IsConnected}" />
 
-    <controls:TerminalScreen x:Name="Screen"
-                             Snapshot="{Binding Screen}"
-                             Selection="{Binding Selection, Mode=TwoWay}"
-                             Crosshair="{Binding Settings.Crosshair}"
-                             BlinkEnabled="{Binding Settings.Blink}"
-                             FindMatches="{Binding Find.Matches}"
-                             CurrentMatch="{Binding Find.CurrentMatch}"
-                             DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />
+    <!-- The screen and, over it, the session switcher (#46): an overlay rather than a docked bar, so it covers the
+         top of the screen and never the bottom rows, where hosts put command lines. Visibility and DataContext are
+         the code-behind's: until App attaches the session list there is no view model, and a failed IsVisible
+         binding would fall back to true and dim the window. -->
+    <Panel>
+      <controls:TerminalScreen x:Name="Screen"
+                               Snapshot="{Binding Screen}"
+                               Selection="{Binding Selection, Mode=TwoWay}"
+                               Crosshair="{Binding Settings.Crosshair}"
+                               BlinkEnabled="{Binding Settings.Blink}"
+                               FindMatches="{Binding Find.Matches}"
+                               CurrentMatch="{Binding Find.CurrentMatch}"
+                               DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />
+      <controls:SessionSwitcher x:Name="SwitcherPanel" IsVisible="False" DataContext="{x:Null}" />
+    </Panel>
   </DockPanel>
 </Window>

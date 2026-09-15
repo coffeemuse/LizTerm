@@ -34,11 +34,14 @@ public sealed class ProfileRow
     /// list has once the button column takes its share, and Robert expects two or three in practice.</summary>
     public const int MaxChips = 3;
 
-    public ProfileRow(SessionProfile profile, TagRegistry registry)
+    /// <param name="isSaved">False for an ad hoc session (Quick Connect or a host on the command line), whose
+    /// second line says so rather than repeating the host its name already carries.</param>
+    public ProfileRow(SessionProfile profile, TagRegistry registry, bool isSaved = true)
     {
         Profile = profile;
         Name = profile.Name;
         HostPort = $"{profile.Host}:{profile.Port}";
+        SecondLine = isSaved ? HostPort : QuickConnectLine;
         Note = string.IsNullOrWhiteSpace(profile.Note) ? null : profile.Note.Trim();
         IsFavorite = profile.Tags.Contains(TagRegistry.FavoriteName);
 
@@ -50,12 +53,19 @@ public sealed class ProfileRow
         OverflowTip = hidden.Count > 0 ? string.Join(", ", hidden.Select(chip => chip.Text)) : null;
     }
 
+    /// <summary>What an unsaved session's second line reads.</summary>
+    public const string QuickConnectLine = "Quick Connect";
+
     /// <summary>The store's own instance, unchanged. Connect, Edit and Delete act on this.</summary>
     public SessionProfile Profile { get; }
 
     public string Name { get; }
 
     public string HostPort { get; }
+
+    /// <summary>The row's second line, which ProfileSummaryTemplate draws: HostPort for a saved profile,
+    /// QuickConnectLine for an ad hoc session (session switching spec §5.3).</summary>
+    public string SecondLine { get; }
 
     /// <summary>Null when there is nothing to show, so the third line collapses and an un-noted profile stays
     /// two lines tall.</summary>

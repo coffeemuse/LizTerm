@@ -99,10 +99,10 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   holds one dialog at a time in `_about`; a second request activates it instead of stacking, because the macOS menu
   bar stays live over a modal dialog and a second About would be owned by the first.
 - Which engine About names is `App.AboutEngine`, not "whatever window is in front": the owner's session if it has
-  one, else the last session the user was in (`_lastActiveSession`, tracked on `Activated`), and only then the
-  located binary. Resolving from the owner alone would show no version whenever a dialog or the picker was on top of
-  a running session. `ActiveWindow` skips `SplashWindow`, which closes itself on a timer and would take an owned
-  About with it.
+  one, else the last session the user was in (`SessionList.Current`, kept by each window's `Activated`), and only
+  then the located binary. Resolving from the owner alone would show no version whenever a dialog or the picker was
+  on top of a running session. `ActiveWindow` skips `SplashWindow`, which closes itself on a timer and would take an
+  owned About with it.
 - `SessionFactory.Refused` uses `B3270Locator.Candidates` to tell a missing engine from one that is present but not
   executable, so a file that exists keeps its own source, and About and the status bar call it bundled or name the
   override instead of calling it missing. `CheckBackendOrUnknown` and `Create` both go through it, so they cannot
@@ -205,9 +205,10 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 
 - Key events go through `TryHandlePlatformGesture` first, then `Keymap.TryMap`, then `Keymap.TryText` (Ctrl+[ types
   `¬`, Ctrl+6 `¢`), then fall through to Avalonia's text input, so dead keys and IMEs work.
-- `TryHandlePlatformGesture` checks the platform's copy, paste, select-all **and Find** hotkeys, ahead of the keymap.
-  Do not add a Ctrl+F chord to `DefaultKeymap`: it would silently shadow Find on Windows and Linux, where the classic
-  menu makes this control the only dispatch path for it.
+- `TryHandlePlatformGesture` checks the platform's copy, paste, select-all **and Find** hotkeys, and the session
+  switcher's Cmd/Ctrl+K (#46), ahead of the keymap. Do not add a Ctrl+F or Ctrl+K chord to `DefaultKeymap`: it would
+  silently shadow Find or the switcher on Windows and Linux, where the classic menu makes this control the only
+  dispatch path for them.
 - `Keymap` (`Keyboard/`) is an immutable table of `KeyChord(Key, Modifiers, Tap)` to `TerminalKey`, built by
   `DefaultKeymap.Create(destructiveBackspace)` (two cached instances) from Vista TN3270's defaults, cross-checked
   against wc3270 in the M2 hardening spec, section 6.2. `docs/user-guide.md` has the full table; keep it in step.
@@ -367,23 +368,29 @@ the host through the text input `TerminalScreen` already handles, and Ctrl+Cmd+S
 
 ### Gestures
 
-**No window menu item outside Edit ever carries a `Gesture`.** On macOS a `NativeMenuItem` gesture becomes an AppKit
-key equivalent that `NSApplication.sendEvent:` dispatches before the key window's responder chain, so `Gesture="F1"`
-would silently swallow PF1 — `TerminalScreen` would never see the key. So View (Crosshair and Keypad), File > Save
-Screen As... and Edit > Copy Screen as HTML carry none. **The one exception is Preferences... on the application
-menu**, with Cmd-comma (settings spec §5.4): the application menu exists only on macOS, `DefaultKeymap` binds no Cmd
-chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly this class.
-`NativeMenuTests.The_application_menu_carries_cmd_comma_on_preferences_and_nothing_else` holds it to that one. The
-in-window Edit > Preferences... *names* the same chord on macOS through `MenuItem.InputGesture`
+**No window menu item outside Edit carries a `Gesture`, apart from Window's two Cmd chords (below).** On macOS a
+`NativeMenuItem` gesture becomes an AppKit key equivalent that `NSApplication.sendEvent:` dispatches before the key
+window's responder chain, so `Gesture="F1"` would silently swallow PF1 — `TerminalScreen` would never see the key. So
+View (Crosshair and Keypad), File > Save Screen As... and Edit > Copy Screen as HTML carry none. **The one exception
+is Preferences... on the application menu**, with Cmd-comma (settings spec §5.4): the application menu exists only on
+macOS, `DefaultKeymap` binds no Cmd chord, and Edit's own Cmd+C, V, A and F are already key equivalents of exactly
+this class. `NativeMenuTests.The_application_menu_carries_cmd_comma_on_preferences_and_nothing_else` holds it to that
+one. The in-window Edit > Preferences... *names* the same chord on macOS through `MenuItem.InputGesture`
 (`MenuStrategy.PreferencesGesture`), which dispatches nothing. The application menu's key equivalent stays the one
-handler, and it works under every style because the application menu is there under every style. The exported
-Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it installs no second key equivalent.
+handler, and it works under every style because the application menu is there under every style. The exported Edit >
+Preferences... is hidden on macOS and carries no `Gesture`, so it installs no second key equivalent.
 
 - Edit's Cmd/Ctrl+C, V and A come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`,
   `PasteAsync` and `SelectAll` directly, never the `[RelayCommand]`s, which disable while running.
 - Edit > Find... is the one other Edit item with a gesture, because Edit is the menu with an established safe route for
   one: `ShowPlatformGestures` builds it as `new KeyGesture(Key.F, hotkeys.CommandModifiers)`, since
   `PlatformHotkeyConfiguration` has no Find to read.
+- Window > Switch Session... and Window > Minimize are the window menu's two exceptions outside Edit (#46), both Cmd
+  chords no 3270 keystroke uses. Switch Session is Find's arrangement: `ShowPlatformGestures` sets
+  `new KeyGesture(Key.K, hotkeys.CommandModifiers)` as the native `Gesture` and the classic `InputGesture`, and
+  `TerminalScreen.SwitcherRequested` handles the chord wherever no key equivalent is installed. Minimize's Cmd+M is
+  native and macOS only; nothing else dispatches it, so the in-window item names no chord.
+  `NativeMenuTests.Only_edit_and_two_window_items_carry_gestures` allows exactly those two.
 - View > **Crosshair** is a submenu of four radio items rather than four items directly under View, because
   "Horizontal" and "Vertical" sitting under View read as window tiling. On macOS `ToggleType="Radio"` marks the chosen
   item with a bullet, not a tick; that is AppKit's own radio mark, not a bug.
@@ -570,6 +577,54 @@ Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it install
 - The chips in the status bar (`StatusChips`) are the one part behind `Settings.ShowTagsInStatusBar`, default
   off. They lead the bar with the icon and are the first thing clipped when the window is narrow; the state
   text keeps its place.
+
+## Session switching (#46)
+
+- `SessionList` (`Sessions/`) is the process's one record of open sessions, owned by `App`: opening order for the
+  numbers 1–10 in the switcher, the Window menu and the Dock menu, and use order for `Current` and `Previous`. It
+  raises one `Changed` on add, remove, a change of `Current`, any listed view model's `Connection`, and any host's
+  `KeepOnTopChanged`. Everything that reads it reaches a session only through `ISessionHost.Bring()`, the seam a
+  tabbed window would implement (#119) — with one known exception: `App`'s startup update check picks its dialog
+  owner with `_sessions.Current?.Host as Window` (`src/LizTerm.App/App.axaml.cs`, around line 326), falling back
+  to the picker; a tabbed host (#119) would need its own window lookup there. A consumer that casts a host to
+  `SessionWindow` for anything else closes that door.
+- A window joins through `SessionWindow.AttachSessions(list, entry)` before `Show()`, reports `Activated` to the
+  list, and removes itself in `OnClosed` *before* `base.OnClosed` raises `Closed`, because App's `Closed` handler
+  asks `ShutdownPolicy` with `_sessions.Count`. `App.AboutEngine` and the startup update check read
+  `_sessions.Current`.
+- **The switcher overlay's visibility and `DataContext` belong to code-behind.** A window has no
+  `SessionSwitcherViewModel` until it is attached, and a failed compiled `IsVisible` binding falls back to true,
+  which would dim every window. So `SwitcherPanel` is declared `IsVisible="False"` with a null `DataContext`, and
+  only `ToggleSwitcher`, `CloseSwitcher` and `CloseSwitcherLeavingFocus` change it.
+- **A jumping digit is taken from the tunnelled `TextInput`, never from `KeyDown`.** Handling the key-down closes the
+  switcher and focuses the screen before the platform delivers the digit's text input, which would then type it
+  into the host. Up, Down, Enter, Escape and Cmd/Ctrl+K are tunnelled `KeyDown`s.
+  `SessionSwitcherTests.Nothing_typed_in_the_switcher_reaches_the_host` is the invariant.
+- **`SessionWindow` closes an open switcher whenever focus lands outside `SwitcherPanel`**, through a window-level
+  `GotFocus` handler registered with `handledEventsToo` (`OnFocusMoved`), which checks logical ancestry. That close is
+  quiet (`CloseSwitcherLeavingFocus`): it does not refocus the screen, because focus has already gone somewhere on
+  purpose — Edit > Find must keep `FindBox`. It uses every focus arrival rather than
+  `SwitcherPanel.IsKeyboardFocusWithin` going false, because the filter box's own context menu takes focus outside the
+  panel, and that trigger fires only once. Tab and Shift+Tab are swallowed while the switcher is open, since it has
+  one field. A keypad click with the switcher open still sends its key (a pointer action, not typing) and the switcher
+  then closes.
+- **`SwitcherBox` is the window's second text field**, and the native Copy, Paste and Select All handlers guard it
+  as they guard `FindBox`. It lives in the `SessionSwitcher`'s name scope, so the window reaches it as
+  `SwitcherPanel.Box`. Each row's `Border` takes a transparent background from the `row` style: with none it is
+  nothing to hit, and a click falls through to the dim.
+- **The Window menu's session rows are built in code** (`RebuildSessionRows`, over `Menus/SessionMenuItems`), after
+  the last separator in both menus, from one list, on every `Changed`. The window holds references to the native
+  Window submenu and its items, found by header in the constructor, because under InWindow the top-level items are
+  stashed out of the window's menu where `MenuLookup` cannot see them. Rows come off the end one at a time from the
+  same `NativeMenu` (#60), and `BringFromMenu` puts the check marks back after a click, Keys > Insert's pattern.
+- Minimize and Zoom are hidden off macOS by `ApplyPlatformMenuRules` reading `_isMacOS`, the constructor's
+  platform — unlike About and Preferences, which read the running OS — so a test can build either shape.
+- **The Dock menu** is `Menus/DockMenu`, attached to the application with `NativeDock.SetMenu` on macOS only and
+  rebuilt on `Changed`. macOS appends Options, Show All Windows, Hide and Quit, which no test sees.
+- The Sessions list's row is `App.axaml`'s `ProfileSummaryTemplate`, shared by the picker and the switcher so one
+  profile cannot be drawn two ways. It binds `ProfileRow.SecondLine`: the host and port, or `Quick Connect` for an
+  unsaved session.
+- What only a run on the real app can check is listed in the session switching spec, §10.3.
 
 ## Screen capture
 

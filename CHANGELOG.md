@@ -7,6 +7,10 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 - **A new app icon**: Liz on a green 3270 screen, without the "3270" lettering in title bars and on the taskbar,
   where it is too small to read.
+- **Switching between sessions.** Cmd+K on macOS, or Ctrl+K on Windows and Linux, lists every open session over the
+  current window: press its number, or type part of its name, host, tag or note. A new **Window** menu lists the
+  sessions too, with **Keep on Top** for a session you want in view and **Bring All to Front**, and on macOS the Dock
+  icon's menu lists them as well.
 
 ## 0.6.0
 

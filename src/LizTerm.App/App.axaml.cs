@@ -12,6 +12,7 @@ using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
+using LizTerm.App.Sessions;
 using LizTerm.App.Startup;
 using LizTerm.App.Updates;
 using LizTerm.App.ViewModels;
@@ -26,14 +27,14 @@ namespace LizTerm.App;
 
 public partial class App : Application
 {
-    private readonly List<SessionWindow> _sessions = [];
+    /// <summary>The process's one record of open sessions (#46): opening order for the Window and Dock menus' numbers,
+    /// use order for the switcher and for "the session the user was last in", which About and the update check read.
+    /// Each window adds itself through AttachSessions and removes itself in OnClosed, before Closed is raised.</summary>
+    private readonly SessionList _sessions = new();
     /// <summary>The process's one ringer: what it can ring is the answer Preferences shows, so they cannot drift.</summary>
     private readonly SystemBellRinger _bellRinger = new();
     /// <summary>The process's one release checker (#107).</summary>
     private readonly IReleaseChecker _releaseChecker = GitHubReleaseChecker.Create();
-    /// <summary>The session window the user was in most recently, which is what About describes when it is
-    /// opened from the application menu with something else — the picker, a dialog — in front.</summary>
-    private SessionWindow? _lastActiveSession;
     private ProfilePickerWindow? _picker;
     private ProfileStore? _store;
     private TagRegistryStore? _tags;
@@ -52,6 +53,10 @@ public partial class App : Application
         {
             // Closing the last session window returns to the picker; only Quit ends the process.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+            // The Dock icon's menu, on macOS only (#46): the open sessions and New Session..., current for the life
+            // of the process.
+            DockMenu.Attach(this, _sessions, ShowPicker, OperatingSystem.IsMacOS());
 
             // Settings before anything opens: whether there is a splash at all is one of them (#108). Load never
             // throws, so reading them first adds no way for startup to fail before a window can say so.
@@ -147,6 +152,9 @@ public partial class App : Application
     {
         var window = new SessionWindow(Settings.MenuStyle, OperatingSystem.IsMacOS());
         var store = _store ??= new ProfileStore(AppPaths.ProfilesDirectory());
+        // One snapshot of the tag colours for both the window's chips and its row in the switcher, so the two agree.
+        // Load never throws (an unreadable file is an empty registry, and every chip draws grey).
+        var tags = (_tags ??= new TagRegistryStore(TagRegistryStore.DefaultFile())).Load();
         var viewModel = new SessionViewModel(
             SessionFactory.Create(profile),
             action => Dispatcher.UIThread.Post(action),
@@ -172,14 +180,12 @@ public partial class App : Application
             settings: Settings,
             bellRinger: _bellRinger,
             uriOpener: new AvaloniaUriOpener(window),
-            // Read now, like the profile: the chips' colours are a snapshot of tags.json at open, and a Manage
-            // Tags recolour reaches the next window rather than this one. Load never throws (an unreadable file
-            // is an empty registry, and every chip draws grey).
-            tags: (_tags ??= new TagRegistryStore(TagRegistryStore.DefaultFile())).Load());
+            // A snapshot, like the profile: a Manage Tags recolour reaches the next window rather than this one.
+            tags: tags);
         window.DataContext = viewModel;
-        _sessions.Add(window);
-        _lastActiveSession ??= window;
-        window.Activated += (_, _) => _lastActiveSession = window;
+        var entry = new SessionEntry(viewModel, new ProfileRow(profile, tags, isSaved: fromStore), fromStore, window);
+        _sessions.Add(entry);
+        window.AttachSessions(_sessions, entry);
         // Read in Closing, because Closed carries no reason and by then the shutdown that is closing this window
         // is already counting the windows that are left. A close the owned File Transfer dialog refuses never
         // reaches Closing at all (Window.ShouldCancelClose asks the children first), and the next close attempt
@@ -188,9 +194,6 @@ public partial class App : Application
         window.Closing += (_, e) => shutdownClose = ShutdownPolicy.IsShutdown(e.CloseReason);
         window.Closed += async (_, _) =>
         {
-            _sessions.Remove(window);
-            // A closed window must not keep answering for About; fall back to whichever session is left.
-            if (ReferenceEquals(_lastActiveSession, window)) _lastActiveSession = _sessions.LastOrDefault();
             try { await viewModel.DisposeAsync(); }
             catch { /* the window is gone; nothing more to do with a failed disposal */ }
             if (ShutdownPolicy.UserClosedLastWindow(_quitting, shutdownClose, _sessions.Count)) ShowPicker();
@@ -320,7 +323,7 @@ public partial class App : Application
             // Nobody asked for this result, so it belongs to the window the user works in — the session they were
             // last in, else the picker — and never to whatever is in front of it, such as a certificate prompt
             // still waiting for an answer.
-            return await ShowUpdateCheckResultAsync(result, (Window?)_lastActiveSession ?? _picker, settings);
+            return await ShowUpdateCheckResultAsync(result, (_sessions.Current?.Host as Window) ?? _picker, settings);
         }
         catch
         {
@@ -408,7 +411,7 @@ public partial class App : Application
     /// version for an engine that has been running and has told us one. The session the user was last in is the
     /// honest answer, and only a run with no session at all falls back to the binary on disk.</summary>
     private EngineInfo AboutEngine(Window? preferredOwner) =>
-        AboutEngine(preferredOwner?.DataContext, _lastActiveSession?.DataContext, SessionFactory.CheckBackendOrUnknown);
+        AboutEngine(preferredOwner?.DataContext, _sessions.Current?.Session, SessionFactory.CheckBackendOrUnknown);
 
     /// <summary>The rule alone, so it can be asserted without a window manager.</summary>
     internal static EngineInfo AboutEngine(object? ownerContext, object? lastSessionContext, Func<EngineInfo> located) =>

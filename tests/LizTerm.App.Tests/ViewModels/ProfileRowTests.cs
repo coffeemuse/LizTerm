@@ -125,4 +125,27 @@ public class ProfileRowTests
         Assert.True(fullStarred.CanToggleFavorite);
         Assert.Equal("Remove from FAVORITE", fullStarred.FavoriteMenuText);
     }
+
+    /// <summary>The row's second line (session switching spec §5.3): a saved profile's host and port.</summary>
+    [Fact]
+    public void A_saved_profile_shows_its_host_and_port_on_the_second_line()
+    {
+        var row = new ProfileRow(new SessionProfile { Name = "TSO", Host = "tk5.local", Port = 3270 }, TagRegistry.Empty);
+
+        Assert.Equal("tk5.local:3270", row.SecondLine);
+    }
+
+    /// <summary>An ad hoc session is named host:port already, so its second line says what it is instead of
+    /// repeating the host. HostPort is unchanged for its other readers.</summary>
+    [Fact]
+    public void An_unsaved_session_says_quick_connect_on_the_second_line()
+    {
+        var row = new ProfileRow(
+            new SessionProfile { Name = "sdf.example:3270", Host = "sdf.example", Port = 3270 },
+            TagRegistry.Empty, isSaved: false);
+
+        Assert.Equal(ProfileRow.QuickConnectLine, row.SecondLine);
+        Assert.Equal("Quick Connect", ProfileRow.QuickConnectLine);
+        Assert.Equal("sdf.example:3270", row.HostPort);
+    }
 }

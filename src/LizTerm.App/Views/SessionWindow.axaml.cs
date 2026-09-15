@@ -3,18 +3,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
+using LizTerm.App.Sessions;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Views;
 
-public partial class SessionWindow : Window
+public partial class SessionWindow : Window, ISessionHost
 {
     /// <summary>The platform's default style and nothing else — the designer's constructor, and the tests' where
     /// the menu is not what is under test. App passes the user's style explicitly; a window that reached for
@@ -34,6 +37,13 @@ public partial class SessionWindow : Window
     {
         _isMacOS = isMacOS;
         InitializeComponent();
+        _nativeWindowMenu = MenuLookup.Item(NativeMenu.GetMenu(this), "_Window")!.Menu!;
+        _nativeMinimize = MenuLookup.Item(_nativeWindowMenu, "_Minimize")!;
+        _nativeZoom = MenuLookup.Item(_nativeWindowMenu, "_Zoom")!;
+        _nativeMinimizeSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().First();
+        _nativeKeepOnTop = MenuLookup.Item(_nativeWindowMenu, "_Keep on Top")!;
+        _nativeSessionsSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().Last();
+        RebuildSessionRows();
         // The screen's events call the view model's methods, not its commands: each method carries its own guard,
         // and a keystroke must never be dropped for arriving while the previous one's round trip is still open.
         Screen.KeyRequested += (_, key) => _ = ViewModel?.SendKeyAsync(key);
@@ -43,6 +53,18 @@ public partial class SessionWindow : Window
         Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteAsync();
         Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAll();
         Screen.FindRequested += (_, _) => ShowFind();
+        Screen.SwitcherRequested += (_, _) => ToggleSwitcher();
+        SwitcherPanel.Chosen += (_, entry) => ChooseSession(entry);
+        SwitcherPanel.Dismissed += (_, _) => CloseSwitcher();
+        // A switcher left open over a window the user has moved away from would greet them with a stale list.
+        Deactivated += (_, _) =>
+        {
+            if (Switcher is { IsOpen: true }) CloseSwitcher();
+        };
+        // Focus arriving anywhere else in the window closes the switcher, because the screen must never hold the
+        // keyboard under it (session switching spec §5.2, §5.5): the native Find item, a keypad click, a dialog handing
+        // focus back. handledEventsToo, since what matters is where the keyboard went, not who marked the event.
+        AddHandler(GotFocusEvent, (_, e) => OnFocusMoved(e.Source), RoutingStrategies.Bubble, handledEventsToo: true);
         // The keypad's keys take the screen's route: the method, never the command. Focus last, a no-op while the
         // non-focusable buttons leave the keyboard alone, and the guarantee when something else (the find box) had it.
         KeypadPanel.KeyRequested += (_, key) =>
@@ -69,6 +91,12 @@ public partial class SessionWindow : Window
             // ApplyMenuStyle on a dead window for the life of the process. Nothing changes the style between
             // the two, so nothing is missed.
             if (_styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
+            // Subscribed here for the reason the settings are: a window never shown never raises Closed.
+            if (_sessions is not null)
+            {
+                _sessions.Changed += OnSessionsChanged;
+                RebuildSessionRows();
+            }
             ShowPlatformGestures();
             Screen.Focus();
         };
@@ -87,6 +115,20 @@ public partial class SessionWindow : Window
     /// the same NativeMenuItem objects throughout: refilling adds these back to the declared instance, which is
     /// the only instance the macOS exporter will accept (#60).</summary>
     private readonly List<NativeMenuItemBase> _stashedMenuItems = [];
+
+    /// <summary>The native Window menu's own NativeMenu and the items the code changes, held by reference because
+    /// under InWindow the top-level items are stashed out of the window's menu (MenuLookup cannot reach them) and
+    /// must still be kept current for when they come back. NativeMenuItem takes no x:Name, so they are found by
+    /// header once, in the constructor.</summary>
+    private readonly NativeMenu _nativeWindowMenu;
+    private readonly NativeMenuItem _nativeMinimize;
+    private readonly NativeMenuItem _nativeZoom;
+    private readonly NativeMenuItemSeparator _nativeMinimizeSeparator;
+    private readonly NativeMenuItem _nativeKeepOnTop;
+    private readonly NativeMenuItemSeparator _nativeSessionsSeparator;
+
+    /// <summary>The generated session rows, both renderers' items with the session each stands for.</summary>
+    private readonly List<(NativeMenuItem Native, MenuItem Classic, SessionEntry Entry)> _sessionRows = [];
 
     /// <summary>The SettingsViewModel this window follows for live style changes, so a data-context swap can
     /// unsubscribe from the old one — the same shape as _bellSource below.</summary>
@@ -208,6 +250,14 @@ public partial class SessionWindow : Window
         // The in-window Preferences names that chord as a label. InputGesture is display-only, so the application
         // menu's key equivalent is still what acts on it, under every style. Off macOS no chord opens Preferences.
         PreferencesMenuItem.InputGesture = MenuStrategy.PreferencesGesture(OperatingSystem.IsMacOS());
+
+        // Minimize and Zoom are macOS's (session switching spec §7.4); elsewhere the title bar has both. Unlike About
+        // and Preferences above this reads _isMacOS, the constructor's platform, so a test can build either shape on
+        // any machine. Set on the held references, so it holds for stashed native items too.
+        foreach (var item in new NativeMenuItem[] { _nativeMinimize, _nativeZoom, _nativeMinimizeSeparator }) item.IsVisible = _isMacOS;
+        MinimizeMenuItem.IsVisible = _isMacOS;
+        ZoomMenuItem.IsVisible = _isMacOS;
+        MinimizeSeparator.IsVisible = _isMacOS;
     }
 
     // MenuItem.Click is EventHandler<RoutedEventArgs> and NativeMenuItem.Click is EventHandler<EventArgs>, so
@@ -258,22 +308,26 @@ public partial class SessionWindow : Window
     // intermittent, copying whichever of the two has something to copy. Routing to the box's own
     // Copy/Paste/SelectAll instead keeps the key equivalent doing what the user looking at the focused box
     // expects. The classic (non-native) handlers and the [RelayCommand]s are untouched on purpose: that path
-    // dispatches through the normal focus chain, so the box already wins there without help.
+    // dispatches through the normal focus chain, so the box already wins there without help. The session switcher's
+    // box (#46) is the second such field, guarded the same way.
     private void OnCopyClickNative(object? sender, EventArgs e)
     {
         if (FindBox.IsFocused) { FindBox.Copy(); return; }
+        if (SwitcherPanel.Box.IsFocused) { SwitcherPanel.Box.Copy(); return; }
         _ = ViewModel?.CopyAsync();
     }
 
     private void OnPasteClickNative(object? sender, EventArgs e)
     {
         if (FindBox.IsFocused) { FindBox.Paste(); return; }
+        if (SwitcherPanel.Box.IsFocused) { SwitcherPanel.Box.Paste(); return; }
         _ = ViewModel?.PasteAsync();
     }
 
     private void OnSelectAllClickNative(object? sender, EventArgs e)
     {
         if (FindBox.IsFocused) { FindBox.SelectAll(); return; }
+        if (SwitcherPanel.Box.IsFocused) { SwitcherPanel.Box.SelectAll(); return; }
         ViewModel?.SelectAll();
     }
 
@@ -428,13 +482,14 @@ public partial class SessionWindow : Window
 
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
-    /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these
-    /// four, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
-    /// carries one.
+    /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for Copy, Paste,
+    /// Select All, Find and Switch Session, which TerminalScreen already routes away from the host, and for
+    /// Minimize, which nothing else dispatches — why nothing on File, View, Keys or Help carries one, and
+    /// Window only its two Cmd chords.
     ///
-    /// Under InWindow, ApplyMenuStyle has emptied the native menu and ExportedMenu answers null,
-    /// so the four classic InputGesture assignments still run and the four native ones find no item and do
-    /// nothing — no key equivalent is installed for a menu with nothing in it.</summary>
+    /// Under InWindow, ApplyMenuStyle has emptied the native menu and ExportedMenu answers null, so the five
+    /// classic InputGesture assignments still run and all six native ones — the sixth, Minimize, only on
+    /// macOS — find no item and do nothing: no key equivalent is installed for a menu with nothing in it.</summary>
     private void ShowPlatformGestures()
     {
         var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
@@ -457,6 +512,16 @@ public partial class SessionWindow : Window
         FindMenuItem.InputGesture = find;
         Gesture(menu, "_Find...", find);
 
+        // The session switcher's chord (spec §6), Find's arrangement: a real key equivalent on the native item, display
+        // text on the classic one, and TerminalScreen.SwitcherRequested wherever no key equivalent is installed. A Cmd
+        // chord cannot be a 3270 keystroke, which is why this and Minimize are the two exceptions outside Edit.
+        var switcher = new KeyGesture(Key.K, hotkeys.CommandModifiers);
+        SwitchSessionMenuItem.InputGesture = switcher;
+        if (MenuLookup.Required(menu, "_Window", "_Switch Session...") is { } nativeSwitch) nativeSwitch.Gesture = switcher;
+        // Cmd+M on macOS, native only: nothing else dispatches it, so the in-window item names no chord it cannot keep.
+        if (_isMacOS && MenuLookup.Required(menu, "_Window", "_Minimize") is { } nativeMinimize)
+            nativeMinimize.Gesture = new KeyGesture(Key.M, KeyModifiers.Meta);
+
         static void Gesture(NativeMenu? menu, string child, KeyGesture? gesture)
         {
             if (MenuLookup.Required(menu, "_Edit", child) is { } item) item.Gesture = gesture;
@@ -464,6 +529,187 @@ public partial class SessionWindow : Window
     }
 
     private SessionViewModel? ViewModel => DataContext as SessionViewModel;
+
+    private SessionList? _sessions;
+    private SessionEntry? _ownEntry;
+
+    /// <summary>This window's switcher, once App has attached the session list; null for a window built without
+    /// one, as most tests build it.</summary>
+    internal SessionSwitcherViewModel? Switcher { get; private set; }
+
+    /// <summary>Joins this window to the process's session list (session switching spec §7.2, §9). Called by App
+    /// once, before Show(). Activation is reported here so the list's use order follows the user; removal is in
+    /// OnClosed, ahead of the Closed event App's shutdown test reads the count from.</summary>
+    internal void AttachSessions(SessionList sessions, SessionEntry own)
+    {
+        if (_sessions is not null) throw new InvalidOperationException("This window already has a session list.");
+        _sessions = sessions;
+        _ownEntry = own;
+        Switcher = new SessionSwitcherViewModel(sessions, own);
+        SwitcherPanel.DataContext = Switcher;
+        RebuildSessionRows();
+        // Attached after Opened (a test can do this), the Opened handler has already run.
+        if (_opened) sessions.Changed += OnSessionsChanged;
+        Activated += (_, _) => sessions.Activated(own);
+    }
+
+    /// <summary>Cmd/Ctrl+K from the screen, and Window &gt; Switch Session... (Task 7).</summary>
+    private void ToggleSwitcher()
+    {
+        if (Switcher is not { } switcher) return;
+        if (switcher.IsOpen)
+        {
+            CloseSwitcher();
+            return;
+        }
+        switcher.Open();
+        SwitcherPanel.IsVisible = true;
+        SwitcherPanel.FocusBox();
+    }
+
+    /// <summary>Always hands the keyboard back to the screen, as Find's Escape does.</summary>
+    private void CloseSwitcher()
+    {
+        Switcher?.Close();
+        SwitcherPanel.IsVisible = false;
+        Screen.Focus();
+    }
+
+    /// <summary>The close for focus that has already moved somewhere on purpose, so unlike CloseSwitcher it leaves
+    /// the keyboard where it is: Find has just put it in FindBox, and refocusing the screen would take it away, so
+    /// the next letter typed would go to the host; the keypad refocuses the screen itself.</summary>
+    private void CloseSwitcherLeavingFocus()
+    {
+        Switcher?.Close();
+        SwitcherPanel.IsVisible = false;
+    }
+
+    /// <summary>Every focus arrival in the window, rather than the panel's IsKeyboardFocusWithin going false, for two
+    /// reasons measured headless. The box's own context menu takes focus into a popup outside the panel, which that
+    /// property counts as leaving, and right-clicking the filter to paste must not close the switcher. And the
+    /// property changes only once, so focus that went nowhere first (another window shown) and later landed on the
+    /// screen would leave the switcher open over it. The test is logical ancestry for that same popup: wherever it
+    /// is hosted, its logical ancestors lead back to the switcher. Neither explicit close comes back through here:
+    /// CloseSwitcher sets IsOpen false before it refocuses the screen, and opening focuses the box, which is the
+    /// switcher's own.</summary>
+    private void OnFocusMoved(object? source)
+    {
+        if (Switcher is not { IsOpen: true }) return;
+        if (source is ILogical element && (ReferenceEquals(element, SwitcherPanel) || SwitcherPanel.IsLogicalAncestorOf(element))) return;
+        CloseSwitcherLeavingFocus();
+    }
+
+    /// <summary>Closes first: bringing another window deactivates this one, whose handler would otherwise close a
+    /// switcher that is mid-choice.</summary>
+    private void ChooseSession(SessionEntry entry)
+    {
+        CloseSwitcher();
+        entry.Host.Bring();
+    }
+
+    private void OnSessionsChanged(object? sender, EventArgs e) => RebuildSessionRows();
+
+    /// <summary>One row per open session after the sessions separator, in both menus from one list (spec §7.2).
+    /// Removed from the end one at a time and added to the same NativeMenu instance: never Clear(), never a new
+    /// menu (#60).</summary>
+    private void RebuildSessionRows()
+    {
+        while (_nativeWindowMenu.Items.Count > 0 && !ReferenceEquals(_nativeWindowMenu.Items[^1], _nativeSessionsSeparator))
+            _nativeWindowMenu.Items.RemoveAt(_nativeWindowMenu.Items.Count - 1);
+        while (WindowMenuItem.Items.Count > 0 && !ReferenceEquals(WindowMenuItem.Items[^1], SessionsSeparator))
+            WindowMenuItem.Items.RemoveAt(WindowMenuItem.Items.Count - 1);
+        _sessionRows.Clear();
+
+        if (_sessions is { } sessions)
+        {
+            foreach (var entry in sessions.Entries)
+            {
+                var native = SessionMenuItems.Native(sessions, entry, BringFromMenu);
+                var classic = SessionMenuItems.Classic(sessions, entry, BringFromMenu);
+                _nativeWindowMenu.Items.Add(native);
+                WindowMenuItem.Items.Add(classic);
+                _sessionRows.Add((native, classic, entry));
+            }
+        }
+
+        // Nothing collapses a trailing separator, so it goes when there is nothing under it.
+        _nativeSessionsSeparator.IsVisible = _sessionRows.Count > 0;
+        SessionsSeparator.IsVisible = _sessionRows.Count > 0;
+    }
+
+    /// <summary>Brings the session, then puts every mark back: both renderers write IsChecked before the click
+    /// arrives, and bringing the session that is already current raises no Changed to rebuild them (Keys &gt;
+    /// Insert's pattern).</summary>
+    private void BringFromMenu(SessionEntry entry)
+    {
+        entry.Host.Bring();
+        var current = _sessions?.Current;
+        foreach (var (native, classic, rowEntry) in _sessionRows)
+        {
+            native.IsChecked = ReferenceEquals(rowEntry, current);
+            classic.IsChecked = ReferenceEquals(rowEntry, current);
+        }
+    }
+
+    // Two one-line handlers per action: MenuItem.Click and NativeMenuItem.Click have different delegate shapes.
+    private void OnMinimizeClick(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void OnMinimizeClickNative(object? sender, EventArgs e) => WindowState = WindowState.Minimized;
+    private void OnZoomClick(object? sender, RoutedEventArgs e) => ToggleZoom();
+    private void OnZoomClickNative(object? sender, EventArgs e) => ToggleZoom();
+    private void OnKeepOnTopClick(object? sender, RoutedEventArgs e) => ToggleKeepOnTop();
+    private void OnKeepOnTopClickNative(object? sender, EventArgs e) => ToggleKeepOnTop();
+    private void OnSwitchSessionClick(object? sender, RoutedEventArgs e) => ToggleSwitcher();
+    private void OnSwitchSessionClickNative(object? sender, EventArgs e) => ToggleSwitcher();
+    private void OnBringAllToFrontClick(object? sender, RoutedEventArgs e) => _sessions?.BringAllToFront();
+    private void OnBringAllToFrontClickNative(object? sender, EventArgs e) => _sessions?.BringAllToFront();
+
+    /// <summary>macOS's Zoom: between maximised and normal.</summary>
+    private void ToggleZoom() =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    /// <summary>Per window and never saved (spec §7.3). The marks are put back after the flip because both renderers
+    /// toggle them before the click arrives; OnPropertyChanged keeps them in step with Topmost from anywhere else.</summary>
+    private void ToggleKeepOnTop()
+    {
+        Topmost = !Topmost;
+        ShowKeepOnTopMarks();
+    }
+
+    private void ShowKeepOnTopMarks()
+    {
+        KeepOnTopMenuItem.IsChecked = Topmost;
+        _nativeKeepOnTop.IsChecked = Topmost;
+    }
+
+    /// <summary>What the window was before it was last minimised, so Bring puts a maximised or zoomed window back
+    /// that way: Normal is not "restore" on every backend (X11 clears the maximised atoms for it).</summary>
+    private WindowState _stateBeforeMinimize = WindowState.Normal;
+
+    /// <summary>ISessionHost: restore a minimised window to the state it had, then activate it.</summary>
+    public void Bring()
+    {
+        if (WindowState == WindowState.Minimized) WindowState = _stateBeforeMinimize;
+        Activate();
+    }
+
+    public bool IsMinimized => WindowState == WindowState.Minimized;
+
+    /// <summary>Keep on Top is the window's Topmost (spec §7.3).</summary>
+    public bool KeepOnTop => Topmost;
+
+    public event EventHandler? KeepOnTopChanged;
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == WindowStateProperty
+            && change.GetNewValue<WindowState>() == WindowState.Minimized
+            && change.GetOldValue<WindowState>() is var before and not WindowState.Minimized)
+            _stateBeforeMinimize = before;
+        if (change.Property != TopmostProperty) return;
+        ShowKeepOnTopMarks();
+        KeepOnTopChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>Follows the data context for the two view-model events the window handles itself. Every other
     /// binding is XAML; the flash is a method call on the screen and the menu style rebuilds controls, neither of
@@ -505,6 +751,13 @@ public partial class SessionWindow : Window
         _bellSource = null;
         if (_styleSource is not null) _styleSource.PropertyChanged -= OnSettingsChanged;
         _styleSource = null;
+        // Before base.OnClosed raises Closed: App's handler asks ShutdownPolicy with the count of sessions left.
+        if (Switcher is { IsOpen: true }) Switcher.Close();
+        if (_sessions is not null && _ownEntry is not null)
+        {
+            _sessions.Changed -= OnSessionsChanged;
+            _sessions.Remove(_ownEntry);
+        }
         base.OnClosed(e);
     }
 
