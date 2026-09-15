@@ -681,10 +681,14 @@ public partial class SessionWindow : Window, ISessionHost
         _nativeKeepOnTop.IsChecked = Topmost;
     }
 
-    /// <summary>ISessionHost: restore a minimised window, then activate it.</summary>
+    /// <summary>What the window was before it was last minimised, so Bring puts a maximised or zoomed window back
+    /// that way: Normal is not "restore" on every backend (X11 clears the maximised atoms for it).</summary>
+    private WindowState _stateBeforeMinimize = WindowState.Normal;
+
+    /// <summary>ISessionHost: restore a minimised window to the state it had, then activate it.</summary>
     public void Bring()
     {
-        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        if (WindowState == WindowState.Minimized) WindowState = _stateBeforeMinimize;
         Activate();
     }
 
@@ -698,6 +702,10 @@ public partial class SessionWindow : Window, ISessionHost
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == WindowStateProperty
+            && change.GetNewValue<WindowState>() == WindowState.Minimized
+            && change.GetOldValue<WindowState>() is var before and not WindowState.Minimized)
+            _stateBeforeMinimize = before;
         if (change.Property != TopmostProperty) return;
         ShowKeepOnTopMarks();
         KeepOnTopChanged?.Invoke(this, EventArgs.Empty);

@@ -205,6 +205,18 @@ public class WindowMenuTests
         Assert.Equal(WindowState.Normal, rig.Window.WindowState);
     }
 
+    [AvaloniaFact]
+    public void Bring_restores_a_maximised_window_as_maximised()
+    {
+        var rig = Show();
+        rig.Window.WindowState = WindowState.Maximized;
+        rig.Window.WindowState = WindowState.Minimized;
+
+        rig.Window.Bring();
+
+        Assert.Equal(WindowState.Maximized, rig.Window.WindowState);
+    }
+
     /// <summary>Off macOS the title bar has both, so the in-window menu hides them and their separator. The native
     /// items are only attached on macOS, so they are checked there.</summary>
     [AvaloniaTheory]

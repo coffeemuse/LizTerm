@@ -20,8 +20,9 @@ public static class SessionMenuLabel
         if (position is { } number) label.Append('_').Append(number % 10).Append("  ");
         if (entry.Summary.IsFavorite) label.Append("★ ");
         label.Append(Escape(profile.Name));
-        // An ad hoc session is named host:port or LU@host:port (StartupArguments.Resolve) and carries its host.
-        if (!profile.Name.Contains(profile.Host, StringComparison.OrdinalIgnoreCase))
+        // An ad hoc session is named host:port or LU@host:port (StartupArguments.Resolve) and carries its host. A
+        // saved profile always shows it: a name like MVS/CE on host mvs contains the host without carrying it.
+        if (entry.IsSaved || !profile.Name.Contains(profile.Host, StringComparison.OrdinalIgnoreCase))
             label.Append(" - ").Append(Escape(profile.Host));
         if (entry.Session.Connection == ConnectionState.Disconnected) label.Append(" (Disconnected)");
         return label.ToString();

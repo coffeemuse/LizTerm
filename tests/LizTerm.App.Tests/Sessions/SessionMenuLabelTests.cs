@@ -45,6 +45,16 @@ public class SessionMenuLabelTests
         Assert.Equal("_1  CONS01@mvs.local:3270", SessionMenuLabel.For(entry, 1));
     }
 
+    /// <summary>The name-carries-host rule is for ad hoc sessions only: a saved name that happens to contain a
+    /// short host still shows it.</summary>
+    [Fact]
+    public void A_saved_name_containing_its_host_still_shows_the_host()
+    {
+        var (entry, _, _) = TestSessions.Create("MVS/CE", "mvs");
+
+        Assert.Equal("_2  MVS/CE - mvs", SessionMenuLabel.For(entry, 2));
+    }
+
     /// <summary>Past ten there is no number and no leading spaces, and an underscore in the name is doubled so it
     /// cannot become an access key.</summary>
     [Fact]
