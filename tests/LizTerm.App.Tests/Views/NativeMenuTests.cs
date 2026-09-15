@@ -736,7 +736,7 @@ public class NativeMenuTests
     /// Keys or Edit submenu, so a dropped separator, a reordered item, a Command copied from the wrong line
     /// (a "_Connect"-headed item wired to DisconnectCommand) or — the case that matters most on a 3270 client —
     /// a CommandParameter copied from the wrong line (a "PA1"-headed item silently wired to TerminalKey.PA2)
-    /// would pass every test above while still doing the wrong thing to the mainframe. This test walks all five
+    /// would pass every test above while still doing the wrong thing to the mainframe. This test walks all six
     /// top-level menus item for item — and recursively into their submenus — comparing header, separator
     /// position, Command and (on Keys) CommandParameter, normalising across the two menu kinds' different item
     /// types (MenuItem/NativeMenuItem) and separator types (Separator/NativeMenuItemSeparator).</summary>

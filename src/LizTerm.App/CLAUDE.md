@@ -584,7 +584,10 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   numbers 1–10 in the switcher, the Window menu and the Dock menu, and use order for `Current` and `Previous`. It
   raises one `Changed` on add, remove, a change of `Current`, any listed view model's `Connection`, and any host's
   `KeepOnTopChanged`. Everything that reads it reaches a session only through `ISessionHost.Bring()`, the seam a
-  tabbed window would implement (#119). A consumer that casts a host to `SessionWindow` closes that door.
+  tabbed window would implement (#119) — with one known exception: `App`'s startup update check picks its dialog
+  owner with `_sessions.Current?.Host as Window` (`src/LizTerm.App/App.axaml.cs`, around line 326), falling back
+  to the picker; a tabbed host (#119) would need its own window lookup there. A consumer that casts a host to
+  `SessionWindow` for anything else closes that door.
 - A window joins through `SessionWindow.AttachSessions(list, entry)` before `Show()`, reports `Activated` to the
   list, and removes itself in `OnClosed` *before* `base.OnClosed` raises `Closed`, because App's `Closed` handler
   asks `ShutdownPolicy` with `_sessions.Count`. `App.AboutEngine` and the startup update check read
@@ -592,7 +595,7 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
 - **The switcher overlay's visibility and `DataContext` belong to code-behind.** A window has no
   `SessionSwitcherViewModel` until it is attached, and a failed compiled `IsVisible` binding falls back to true,
   which would dim every window. So `SwitcherPanel` is declared `IsVisible="False"` with a null `DataContext`, and
-  only `ToggleSwitcher` and `CloseSwitcher` change it.
+  only `ToggleSwitcher`, `CloseSwitcher` and `CloseSwitcherLeavingFocus` change it.
 - **A jumping digit is taken from the tunnelled `TextInput`, never from `KeyDown`.** Handling the key-down closes the
   switcher and focuses the screen before the platform delivers the digit's text input, which would then type it
   into the host. Up, Down, Enter, Escape and Cmd/Ctrl+K are tunnelled `KeyDown`s.
@@ -621,9 +624,7 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
 - The Sessions list's row is `App.axaml`'s `ProfileSummaryTemplate`, shared by the picker and the switcher so one
   profile cannot be drawn two ways. It binds `ProfileRow.SecondLine`: the host and port, or `Quick Connect` for an
   unsaved session.
-- Only a run on the real app checks these (session switching spec §10.3): Keep on Top above other applications, a
-  Dock-menu choice bringing LizTerm forward, Cmd+K firing once under every menu style, a doubled underscore in a
-  macOS menu, access keys on Windows and Linux, and Zoom.
+- What only a run on the real app can check is listed in the session switching spec, §10.3.
 
 ## Screen capture
 

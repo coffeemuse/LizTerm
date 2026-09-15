@@ -482,13 +482,14 @@ public partial class SessionWindow : Window, ISessionHost
 
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
-    /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these
-    /// four, which TerminalScreen already routes away from the host, and is why nothing on File, View, Keys or
-    /// Help carries one, and Window only its two Cmd chords.
+    /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for Copy, Paste,
+    /// Select All, Find and Switch Session, which TerminalScreen already routes away from the host, and for
+    /// Minimize, which nothing else dispatches — why nothing on File, View, Keys or Help carries one, and
+    /// Window only its two Cmd chords.
     ///
-    /// Under InWindow, ApplyMenuStyle has emptied the native menu and ExportedMenu answers null,
-    /// so the four classic InputGesture assignments still run and the four native ones find no item and do
-    /// nothing — no key equivalent is installed for a menu with nothing in it.</summary>
+    /// Under InWindow, ApplyMenuStyle has emptied the native menu and ExportedMenu answers null, so the five
+    /// classic InputGesture assignments still run and all six native ones — the sixth, Minimize, only on
+    /// macOS — find no item and do nothing: no key equivalent is installed for a menu with nothing in it.</summary>
     private void ShowPlatformGestures()
     {
         var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;

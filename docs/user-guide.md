@@ -130,19 +130,20 @@ are three ways back to the one you want:
 - **Cmd+K** on macOS, or **Ctrl+K** on Windows and Linux, opens a list of every open session over the current
   window; so does **Window > Switch Session...**. Sessions are numbered in the order you opened them, 1 to 9 and
   then 0 for the tenth: press a number to go straight there. Or type part of a session's name, host, tag or note
-  to narrow the list, then use the arrow keys and **Enter**, or click a session. The session you were last in is
-  highlighted when the list opens, so **Cmd+K** then **Enter** flips between two sessions. **Escape** closes the
-  list. Nothing you type while it is open is sent to the host.
-- The **Window** menu lists the same numbered sessions, with a check mark on the one you were last in. On Windows
+  to narrow the list, then use the arrow keys and **Enter**, or click a session. The session you were in before
+  this one is highlighted when the list opens, so **Cmd+K** then **Enter** flips between two sessions. **Escape**
+  closes the list. Nothing you type while it is open is sent to the host.
+- The **Window** menu lists the same numbered sessions, with a check mark on the session you are in. On Windows
   and Linux each number is also the item's access key, so **Alt**, **W**, **3** reaches session 3. **Bring All to
-  Front** raises every LizTerm session above other applications' windows. On macOS the menu also has **Minimize**
-  (Cmd+M) and **Zoom**.
+  Front** raises every LizTerm session that is not minimised above other applications' windows. On macOS the menu
+  also has **Minimize** (Cmd+M, which works only while the menu is in the system menu bar) and **Zoom**.
 - On macOS, right-click LizTerm's icon in the Dock to see the sessions there too, and choose one to go straight to
   it from any application. **New Session...** in the same menu opens the Sessions list.
 
 In the list, a session shows its star if it is a favourite, then its tags, host and note, a filled circle ● while
 it is connected or an open circle ○ and the word **Disconnected** when it is not, and **This window** or **On top**
-where they apply. A Quick Connect session shows **Quick Connect** under its name.
+where they apply. A session that is not a saved profile — Quick Connect, or a host named on the command line —
+shows **Quick Connect** under its name.
 
 **Window > Keep on Top** keeps that window above other applications' windows, for a session you want in view while
 you work in another, such as an operator console. It is not remembered: a new window starts without it.
