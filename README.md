@@ -36,6 +36,8 @@ Her photo is in the app too, under **About LizTerm**.
 - **An on-screen keypad** for PF1–PF24, PA1–PA3, Attn, Clear, Reset and the rest, docked to the bottom or the
   right of the window.
 - **Find on screen**, a **crosshair** cursor, and **screen capture** to text or HTML.
+- **A session switcher** (Cmd/Ctrl+K), a **Window** menu and, on macOS, a Dock menu for finding the right session
+  among many, with **Keep on Top** for a console you want in view.
 - **A bell** you can see, hear, or both.
 - **Keep-alive** and **automatic reconnect**.
 - **Update notices** when a newer release is out, from one request to GitHub at startup that you can turn off.

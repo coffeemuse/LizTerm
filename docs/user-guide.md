@@ -5,6 +5,7 @@ This guide covers everything past the first connection. For downloading and firs
 
 - [Sessions and profiles](#sessions-and-profiles)
 - [The session window](#the-session-window)
+- [Several sessions](#several-sessions)
 - [Keyboard](#keyboard)
 - [Mouse, selection and clipboard](#mouse-selection-and-clipboard)
 - [Finding text](#finding-text)
@@ -121,6 +122,31 @@ PA1 to Field Mark: one row at the bottom, or one column on the right. The button
 the screen, and they are greyed out while the session is disconnected. Once it is connected, hold the pointer over a
 button to see its keyboard shortcut, where it has one; a greyed-out button shows none.
 
+## Several sessions
+
+Each session has its own window, so with several open they mix in with every other application's windows. There
+are three ways back to the one you want:
+
+- **Cmd+K** on macOS, or **Ctrl+K** on Windows and Linux, opens a list of every open session over the current
+  window; so does **Window > Switch Session...**. Sessions are numbered in the order you opened them, 1 to 9 and
+  then 0 for the tenth: press a number to go straight there. Or type part of a session's name, host, tag or note
+  to narrow the list, then use the arrow keys and **Enter**, or click a session. The session you were last in is
+  highlighted when the list opens, so **Cmd+K** then **Enter** flips between two sessions. **Escape** closes the
+  list. Nothing you type while it is open is sent to the host.
+- The **Window** menu lists the same numbered sessions, with a check mark on the one you were last in. On Windows
+  and Linux each number is also the item's access key, so **Alt**, **W**, **3** reaches session 3. **Bring All to
+  Front** raises every LizTerm session above other applications' windows. On macOS the menu also has **Minimize**
+  (Cmd+M) and **Zoom**.
+- On macOS, right-click LizTerm's icon in the Dock to see the sessions there too, and choose one to go straight to
+  it from any application. **New Session...** in the same menu opens the Sessions list.
+
+In the list, a session shows its star if it is a favourite, then its tags, host and note, a filled circle ● while
+it is connected or an open circle ○ and the word **Disconnected** when it is not, and **This window** or **On top**
+where they apply. A Quick Connect session shows **Quick Connect** under its name.
+
+**Window > Keep on Top** keeps that window above other applications' windows, for a session you want in view while
+you work in another, such as an operator console. It is not remembered: a new window starts without it.
+
 ## Keyboard
 
 The default layout follows Vista TN3270, cross-checked against wc3270. It cannot be changed yet.
@@ -154,6 +180,7 @@ between.
 
 Copy, Paste, Select All and Find use the platform's own shortcuts — Cmd+C, Cmd+V, Cmd+A and Cmd+F on macOS, Ctrl
 elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.
+The session switcher is Cmd+K on macOS and Ctrl+K elsewhere; see [Several sessions](#several-sessions).
 
 The **Keys** menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, Insert,
 PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. The on-screen keypad
@@ -258,6 +285,9 @@ The Help menu carries the project's own pages, ahead of Wire Log (see [Wire logs
 - **Help > Releases** opens the project's releases page on GitHub.
 - **Help > Check for Updates...** checks now, and always tells you the result — a newer version, or that you are
   up to date, or why the check failed. See [Preferences](#preferences) for the automatic version of this check.
+
+The **Window** menu lists the open sessions and holds **Keep on Top**, **Switch Session...** and **Bring All to
+Front**, and on macOS **Minimize** and **Zoom**; see [Several sessions](#several-sessions).
 
 On macOS you can choose, under **Menu bar** in Preferences:
 

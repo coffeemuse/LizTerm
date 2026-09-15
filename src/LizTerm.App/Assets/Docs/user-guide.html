@@ -41,6 +41,7 @@ since this release — <a href="https://github.com/coffeemuse/LizTerm/blob/main/
 <ul>
 <li><a href="#sessions-and-profiles">Sessions and profiles</a></li>
 <li><a href="#the-session-window">The session window</a></li>
+<li><a href="#several-sessions">Several sessions</a></li>
 <li><a href="#keyboard">Keyboard</a></li>
 <li><a href="#mouse-selection-and-clipboard">Mouse, selection and clipboard</a></li>
 <li><a href="#finding-text">Finding text</a></li>
@@ -142,6 +143,28 @@ it. If your keyboard's F-keys already cover PF1 to PF24, turn off <strong>Show P
 PA1 to Field Mark: one row at the bottom, or one column on the right. The buttons never take the keyboard away from
 the screen, and they are greyed out while the session is disconnected. Once it is connected, hold the pointer over a
 button to see its keyboard shortcut, where it has one; a greyed-out button shows none.</p>
+<h2 id="several-sessions">Several sessions</h2>
+<p>Each session has its own window, so with several open they mix in with every other application's windows. There
+are three ways back to the one you want:</p>
+<ul>
+<li><strong>Cmd+K</strong> on macOS, or <strong>Ctrl+K</strong> on Windows and Linux, opens a list of every open session over the current
+window; so does <strong>Window &gt; Switch Session...</strong>. Sessions are numbered in the order you opened them, 1 to 9 and
+then 0 for the tenth: press a number to go straight there. Or type part of a session's name, host, tag or note
+to narrow the list, then use the arrow keys and <strong>Enter</strong>, or click a session. The session you were last in is
+highlighted when the list opens, so <strong>Cmd+K</strong> then <strong>Enter</strong> flips between two sessions. <strong>Escape</strong> closes the
+list. Nothing you type while it is open is sent to the host.</li>
+<li>The <strong>Window</strong> menu lists the same numbered sessions, with a check mark on the one you were last in. On Windows
+and Linux each number is also the item's access key, so <strong>Alt</strong>, <strong>W</strong>, <strong>3</strong> reaches session 3. <strong>Bring All to
+Front</strong> raises every LizTerm session above other applications' windows. On macOS the menu also has <strong>Minimize</strong>
+(Cmd+M) and <strong>Zoom</strong>.</li>
+<li>On macOS, right-click LizTerm's icon in the Dock to see the sessions there too, and choose one to go straight to
+it from any application. <strong>New Session...</strong> in the same menu opens the Sessions list.</li>
+</ul>
+<p>In the list, a session shows its star if it is a favourite, then its tags, host and note, a filled circle ● while
+it is connected or an open circle ○ and the word <strong>Disconnected</strong> when it is not, and <strong>This window</strong> or <strong>On top</strong>
+where they apply. A Quick Connect session shows <strong>Quick Connect</strong> under its name.</p>
+<p><strong>Window &gt; Keep on Top</strong> keeps that window above other applications' windows, for a session you want in view while
+you work in another, such as an operator console. It is not remembered: a new window starts without it.</p>
 <h2 id="keyboard">Keyboard</h2>
 <p>The default layout follows Vista TN3270, cross-checked against wc3270. It cannot be changed yet.</p>
 <table>
@@ -175,7 +198,8 @@ button to see its keyboard shortcut, where it has one; a greyed-out button shows
 <p>On a Mac, Alt is the Option key. A "tap" means pressing and releasing the key on its own, with nothing else in
 between.</p>
 <p>Copy, Paste, Select All and Find use the platform's own shortcuts — Cmd+C, Cmd+V, Cmd+A and Cmd+F on macOS, Ctrl
-elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.</p>
+elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.
+The session switcher is Cmd+K on macOS and Ctrl+K elsewhere; see <a href="#several-sessions">Several sessions</a>.</p>
 <p>The <strong>Keys</strong> menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, Insert,
 PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. The on-screen keypad
 (<strong>View &gt; Keypad &gt; Show the Keypad</strong>) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.</p>
@@ -266,6 +290,8 @@ connection. If the platform cannot open a browser, an error names this page's ad
 <li><strong>Help &gt; Check for Updates...</strong> checks now, and always tells you the result — a newer version, or that you are
 up to date, or why the check failed. See <a href="#preferences">Preferences</a> for the automatic version of this check.</li>
 </ul>
+<p>The <strong>Window</strong> menu lists the open sessions and holds <strong>Keep on Top</strong>, <strong>Switch Session...</strong> and <strong>Bring All to
+Front</strong>, and on macOS <strong>Minimize</strong> and <strong>Zoom</strong>; see <a href="#several-sessions">Several sessions</a>.</p>
 <p>On macOS you can choose, under <strong>Menu bar</strong> in Preferences:</p>
 <ul>
 <li><strong>Wherever this platform puts it</strong> — the default: the system menu bar on a Mac. Picking one of the three

@@ -58,6 +58,12 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   that holds every answer back until the test completes it, for what happens while a request is out).
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
   `src/LizTerm.App/CLAUDE.md` say why.
+- Session switching tests seed a `SessionList` with `TestSessions`. `Create(name, ...)` builds an entry over a
+  `FakeEmulatorSession` and a `FakeSessionHost`, which counts `Bring()` and runs `OnBring`, where a test calls
+  `SessionList.Activated` as a real window's activation would. `Attach(window, vm, others...)` joins a real headless
+  `SessionWindow` as the first session. The switcher's filter box is in its control's name scope, so reach it as
+  `window.FindControl<SessionSwitcher>("SwitcherPanel")!.Box`, and type a jumping digit with `KeyTextInput`, since
+  the switcher takes digits from `TextInput`.
 - The picker's row menu is a classic `ContextMenu` on each `ListBoxItem`. Open it with a headless right
   `MouseDown`/`MouseUp` at the row's centre (after `window.UpdateLayout()`), or without a pointer by raising
   `new ContextRequestedEventArgs()` on the container — what the context-menu key does, and the only way to open it
