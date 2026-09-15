@@ -82,6 +82,11 @@ public partial class SessionSwitcher : UserControl
             case Key.K when e.KeyModifiers == command:
                 Dismissed?.Invoke(this, EventArgs.Empty);
                 break;
+            case Key.Tab:
+                // Tab and Shift+Tab: the palette has one field, so there is nowhere to tab to. Left to keyboard
+                // navigation, focus would leave the box for the window's menu bar, and the window would close the
+                // switcher behind it.
+                break;
             default:
                 return;
         }

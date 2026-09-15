@@ -9,6 +9,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LizTerm.App.Controls;
 using LizTerm.App.Menus;
@@ -198,6 +199,65 @@ public class SessionSwitcherTests
 
         Assert.Equal("vm", Panel(rig.Window).Box.Text);
         Assert.DoesNotContain(rig.Session.Calls, call => call.StartsWith("paste:"));
+    }
+
+    /// <summary>Spec §5.2 and §5.5: focus leaving the open switcher closes it. The native Find item is the macOS
+    /// Cmd+F key equivalent, dispatched ahead of the focused box; before this, the dimmed switcher stayed up while
+    /// Escape in the find box put the keyboard back on the screen and the next letter went to the host.</summary>
+    [AvaloniaFact]
+    public void Opening_find_from_the_native_menu_closes_the_switcher_and_keeps_the_find_box_focused()
+    {
+        var rig = Show();
+        rig.Session.RaiseConnection(ConnectionState.Connected3270);
+        OpenWithChord(rig.Window);
+
+        var find = MenuLookup.Item(NativeMenu.GetMenu(rig.Window), "_Edit", "_Find...")!;
+        ((INativeMenuItemExporterEventsImplBridge)find).RaiseClicked();
+
+        Assert.False(rig.Window.Switcher!.IsOpen);
+        Assert.False(Panel(rig.Window).IsVisible);
+        var findBox = rig.Window.FindControl<TextBox>("FindBox")!;
+        Assert.True(findBox.IsFocused);
+
+        rig.Window.KeyTextInput("x");
+
+        Assert.Equal("x", findBox.Text);
+        Assert.Empty(rig.Session.Calls);
+    }
+
+    /// <summary>The palette has one field, so Tab has nowhere to go. Left to the window, Tab moved focus out of the
+    /// box to the menu bar with the switcher still open, and Enter and Escape no longer reached it.</summary>
+    [AvaloniaTheory]
+    [InlineData(RawInputModifiers.None)]
+    [InlineData(RawInputModifiers.Shift)]
+    public void Tab_stays_in_the_switcher(RawInputModifiers modifiers)
+    {
+        var rig = Show();
+        rig.Session.RaiseConnection(ConnectionState.Connected3270);
+        OpenWithChord(rig.Window);
+
+        rig.Window.KeyPressQwerty(PhysicalKey.Tab, modifiers);
+
+        Assert.True(rig.Window.Switcher!.IsOpen);
+        Assert.True(Panel(rig.Window).Box.IsFocused);
+        Assert.Empty(rig.Session.Calls);
+    }
+
+    /// <summary>The box's own context menu is part of the switcher. Its popup takes focus outside the panel, which is
+    /// why the window does not close on the panel's IsKeyboardFocusWithin: right-clicking the filter to paste must
+    /// not close the switcher under the menu.</summary>
+    [AvaloniaFact]
+    public void The_box_context_menu_keeps_the_switcher_open()
+    {
+        var rig = Show();
+        OpenWithChord(rig.Window);
+
+        Panel(rig.Window).Box.RaiseEvent(new ContextRequestedEventArgs());
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.IsType<MenuItem>(rig.Window.FocusManager!.GetFocusedElement());
+        Assert.True(rig.Window.Switcher!.IsOpen);
+        Assert.True(Panel(rig.Window).IsVisible);
     }
 
     [AvaloniaFact]

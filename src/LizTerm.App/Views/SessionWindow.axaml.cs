@@ -7,6 +7,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
@@ -53,6 +54,10 @@ public partial class SessionWindow : Window, ISessionHost
         {
             if (Switcher is { IsOpen: true }) CloseSwitcher();
         };
+        // Focus arriving anywhere else in the window closes the switcher, because the screen must never hold the
+        // keyboard under it (session switching spec §5.2, §5.5): the native Find item, a keypad click, a dialog handing
+        // focus back. handledEventsToo, since what matters is where the keyboard went, not who marked the event.
+        AddHandler(GotFocusEvent, (_, e) => OnFocusMoved(e.Source), RoutingStrategies.Bubble, handledEventsToo: true);
         // The keypad's keys take the screen's route: the method, never the command. Focus last, a no-op while the
         // non-focusable buttons leave the keyboard alone, and the guarantee when something else (the find box) had it.
         KeypadPanel.KeyRequested += (_, key) =>
@@ -519,6 +524,30 @@ public partial class SessionWindow : Window, ISessionHost
         Switcher?.Close();
         SwitcherPanel.IsVisible = false;
         Screen.Focus();
+    }
+
+    /// <summary>The close for focus that has already moved somewhere on purpose, so unlike CloseSwitcher it leaves
+    /// the keyboard where it is: Find has just put it in FindBox, and refocusing the screen would take it away, so
+    /// the next letter typed would go to the host; the keypad refocuses the screen itself.</summary>
+    private void CloseSwitcherLeavingFocus()
+    {
+        Switcher?.Close();
+        SwitcherPanel.IsVisible = false;
+    }
+
+    /// <summary>Every focus arrival in the window, rather than the panel's IsKeyboardFocusWithin going false, for two
+    /// reasons measured headless. The box's own context menu takes focus into a popup outside the panel, which that
+    /// property counts as leaving, and right-clicking the filter to paste must not close the switcher. And the
+    /// property changes only once, so focus that went nowhere first (another window shown) and later landed on the
+    /// screen would leave the switcher open over it. The test is logical ancestry for that same popup: wherever it
+    /// is hosted, its logical ancestors lead back to the switcher. Neither explicit close comes back through here:
+    /// CloseSwitcher sets IsOpen false before it refocuses the screen, and opening focuses the box, which is the
+    /// switcher's own.</summary>
+    private void OnFocusMoved(object? source)
+    {
+        if (Switcher is not { IsOpen: true }) return;
+        if (source is ILogical element && (ReferenceEquals(element, SwitcherPanel) || SwitcherPanel.IsLogicalAncestorOf(element))) return;
+        CloseSwitcherLeavingFocus();
     }
 
     /// <summary>Closes first: bringing another window deactivates this one, whose handler would otherwise close a
