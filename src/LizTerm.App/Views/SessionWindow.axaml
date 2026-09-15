@@ -402,13 +402,20 @@
                      ShowPfKeys="{Binding Settings.KeypadPfKeys}"
                      IsEnabled="{Binding IsConnected}" />
 
-    <controls:TerminalScreen x:Name="Screen"
-                             Snapshot="{Binding Screen}"
-                             Selection="{Binding Selection, Mode=TwoWay}"
-                             Crosshair="{Binding Settings.Crosshair}"
-                             BlinkEnabled="{Binding Settings.Blink}"
-                             FindMatches="{Binding Find.Matches}"
-                             CurrentMatch="{Binding Find.CurrentMatch}"
-                             DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />
+    <!-- The screen and, over it, the session switcher (#46): an overlay rather than a docked bar, so it covers the
+         top of the screen and never the bottom rows, where hosts put command lines. Visibility and DataContext are
+         the code-behind's: until App attaches the session list there is no view model, and a failed IsVisible
+         binding would fall back to true and dim the window. -->
+    <Panel>
+      <controls:TerminalScreen x:Name="Screen"
+                               Snapshot="{Binding Screen}"
+                               Selection="{Binding Selection, Mode=TwoWay}"
+                               Crosshair="{Binding Settings.Crosshair}"
+                               BlinkEnabled="{Binding Settings.Blink}"
+                               FindMatches="{Binding Find.Matches}"
+                               CurrentMatch="{Binding Find.CurrentMatch}"
+                               DestructiveBackspace="{Binding Profile.DestructiveBackspace}" />
+      <controls:SessionSwitcher x:Name="SwitcherPanel" IsVisible="False" DataContext="{x:Null}" />
+    </Panel>
   </DockPanel>
 </Window>

@@ -3,18 +3,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
+using LizTerm.App.Sessions;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Views;
 
-public partial class SessionWindow : Window
+public partial class SessionWindow : Window, ISessionHost
 {
     /// <summary>The platform's default style and nothing else — the designer's constructor, and the tests' where
     /// the menu is not what is under test. App passes the user's style explicitly; a window that reached for
@@ -43,6 +45,14 @@ public partial class SessionWindow : Window
         Screen.PasteRequested += (_, _) => _ = ViewModel?.PasteAsync();
         Screen.SelectAllRequested += (_, _) => ViewModel?.SelectAll();
         Screen.FindRequested += (_, _) => ShowFind();
+        Screen.SwitcherRequested += (_, _) => ToggleSwitcher();
+        SwitcherPanel.Chosen += (_, entry) => ChooseSession(entry);
+        SwitcherPanel.Dismissed += (_, _) => CloseSwitcher();
+        // A switcher left open over a window the user has moved away from would greet them with a stale list.
+        Deactivated += (_, _) =>
+        {
+            if (Switcher is { IsOpen: true }) CloseSwitcher();
+        };
         // The keypad's keys take the screen's route: the method, never the command. Focus last, a no-op while the
         // non-focusable buttons leave the keyboard alone, and the guarantee when something else (the find box) had it.
         KeypadPanel.KeyRequested += (_, key) =>
@@ -258,22 +268,26 @@ public partial class SessionWindow : Window
     // intermittent, copying whichever of the two has something to copy. Routing to the box's own
     // Copy/Paste/SelectAll instead keeps the key equivalent doing what the user looking at the focused box
     // expects. The classic (non-native) handlers and the [RelayCommand]s are untouched on purpose: that path
-    // dispatches through the normal focus chain, so the box already wins there without help.
+    // dispatches through the normal focus chain, so the box already wins there without help. The session switcher's
+    // box (#46) is the second such field, guarded the same way.
     private void OnCopyClickNative(object? sender, EventArgs e)
     {
         if (FindBox.IsFocused) { FindBox.Copy(); return; }
+        if (SwitcherPanel.Box.IsFocused) { SwitcherPanel.Box.Copy(); return; }
         _ = ViewModel?.CopyAsync();
     }
 
     private void OnPasteClickNative(object? sender, EventArgs e)
     {
         if (FindBox.IsFocused) { FindBox.Paste(); return; }
+        if (SwitcherPanel.Box.IsFocused) { SwitcherPanel.Box.Paste(); return; }
         _ = ViewModel?.PasteAsync();
     }
 
     private void OnSelectAllClickNative(object? sender, EventArgs e)
     {
         if (FindBox.IsFocused) { FindBox.SelectAll(); return; }
+        if (SwitcherPanel.Box.IsFocused) { SwitcherPanel.Box.SelectAll(); return; }
         ViewModel?.SelectAll();
     }
 
@@ -465,6 +479,76 @@ public partial class SessionWindow : Window
 
     private SessionViewModel? ViewModel => DataContext as SessionViewModel;
 
+    private SessionList? _sessions;
+    private SessionEntry? _ownEntry;
+
+    /// <summary>This window's switcher, once App has attached the session list; null for a window built without
+    /// one, as most tests build it.</summary>
+    internal SessionSwitcherViewModel? Switcher { get; private set; }
+
+    /// <summary>Joins this window to the process's session list (session switching spec §7.2, §9). Called by App
+    /// once, before Show(). Activation is reported here so the list's use order follows the user; removal is in
+    /// OnClosed, ahead of the Closed event App's shutdown test reads the count from.</summary>
+    internal void AttachSessions(SessionList sessions, SessionEntry own)
+    {
+        if (_sessions is not null) throw new InvalidOperationException("This window already has a session list.");
+        _sessions = sessions;
+        _ownEntry = own;
+        Switcher = new SessionSwitcherViewModel(sessions, own);
+        SwitcherPanel.DataContext = Switcher;
+        Activated += (_, _) => sessions.Activated(own);
+    }
+
+    /// <summary>Cmd/Ctrl+K from the screen, and Window &gt; Switch Session... (Task 7).</summary>
+    private void ToggleSwitcher()
+    {
+        if (Switcher is not { } switcher) return;
+        if (switcher.IsOpen)
+        {
+            CloseSwitcher();
+            return;
+        }
+        switcher.Open();
+        SwitcherPanel.IsVisible = true;
+        SwitcherPanel.FocusBox();
+    }
+
+    /// <summary>Always hands the keyboard back to the screen, as Find's Escape does.</summary>
+    private void CloseSwitcher()
+    {
+        Switcher?.Close();
+        SwitcherPanel.IsVisible = false;
+        Screen.Focus();
+    }
+
+    /// <summary>Closes first: bringing another window deactivates this one, whose handler would otherwise close a
+    /// switcher that is mid-choice.</summary>
+    private void ChooseSession(SessionEntry entry)
+    {
+        CloseSwitcher();
+        entry.Host.Bring();
+    }
+
+    /// <summary>ISessionHost: restore a minimised window, then activate it.</summary>
+    public void Bring()
+    {
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    public bool IsMinimized => WindowState == WindowState.Minimized;
+
+    /// <summary>Keep on Top is the window's Topmost (spec §7.3).</summary>
+    public bool KeepOnTop => Topmost;
+
+    public event EventHandler? KeepOnTopChanged;
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == TopmostProperty) KeepOnTopChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>Follows the data context for the two view-model events the window handles itself. Every other
     /// binding is XAML; the flash is a method call on the screen and the menu style rebuilds controls, neither of
     /// which XAML can express.</summary>
@@ -505,6 +589,9 @@ public partial class SessionWindow : Window
         _bellSource = null;
         if (_styleSource is not null) _styleSource.PropertyChanged -= OnSettingsChanged;
         _styleSource = null;
+        // Before base.OnClosed raises Closed: App's handler asks ShutdownPolicy with the count of sessions left.
+        if (Switcher is { IsOpen: true }) Switcher.Close();
+        if (_sessions is not null && _ownEntry is not null) _sessions.Remove(_ownEntry);
         base.OnClosed(e);
     }
 
