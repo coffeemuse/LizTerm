@@ -206,4 +206,25 @@ public class TerminalScreenInputTests
         window.MouseUp(new Avalonia.Point(rect.Center.X, rect.Center.Y), MouseButton.Left);
         Assert.Equal((5, 12), clicked);
     }
+
+    /// <summary>The session switcher's chord (session switching spec §6), beside Find's: the platform's command
+    /// modifier plus K. It is checked before the keymap, so it can never become a key or text for the host. The
+    /// headless platform's CommandModifiers is Control, as the Find chord's tests rely on.</summary>
+    [AvaloniaFact]
+    public void The_command_modifier_with_k_raises_SwitcherRequested_and_sends_nothing()
+    {
+        var (window, screen) = Show();
+        var requests = 0;
+        var keys = new List<TerminalKey>();
+        var text = new List<string>();
+        screen.SwitcherRequested += (_, _) => requests++;
+        screen.KeyRequested += (_, key) => keys.Add(key);
+        screen.TextEntered += (_, typed) => text.Add(typed);
+
+        window.KeyPressQwerty(PhysicalKey.K, RawInputModifiers.Control);
+
+        Assert.Equal(1, requests);
+        Assert.Empty(keys);
+        Assert.Empty(text);
+    }
 }
