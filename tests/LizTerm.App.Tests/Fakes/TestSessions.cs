@@ -4,6 +4,7 @@
 
 using LizTerm.App.Sessions;
 using LizTerm.App.ViewModels;
+using LizTerm.App.Views;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
 
@@ -26,5 +27,19 @@ public static class TestSessions
         var sessionHost = new FakeSessionHost();
         var entry = new SessionEntry(viewModel, new ProfileRow(session.Profile, TagRegistry.Empty, isSaved), isSaved, sessionHost);
         return (entry, session, sessionHost);
+    }
+
+    /// <summary>Joins a real window to a new list as its first session, followed by fake-hosted sessions named
+    /// <paramref name="others"/>, in that opening order. Works before or after Show(), as App's order is before.</summary>
+    public static (SessionList List, SessionEntry Own, List<(SessionEntry Entry, FakeEmulatorSession Session, FakeSessionHost Host)> Others) Attach(
+        SessionWindow window, SessionViewModel vm, params string[] others)
+    {
+        var list = new SessionList();
+        var own = new SessionEntry(vm, new ProfileRow(vm.Profile, TagRegistry.Empty), true, window);
+        list.Add(own);
+        var created = others.Select(name => Create(name)).ToList();
+        foreach (var other in created) list.Add(other.Entry);
+        window.AttachSessions(list, own);
+        return (list, own, created);
     }
 }

@@ -96,12 +96,12 @@ public class NativeMenuTests
         ?? throw new InvalidOperationException($"no native menu item _View > _Keypad > {header}");
 
     [AvaloniaFact]
-    public void The_window_menu_has_the_same_five_top_level_menus_as_the_classic_one()
+    public void The_window_menu_has_the_same_six_top_level_menus_as_the_classic_one()
     {
         var (window, _, _, _) = Show();
 
         var headers = NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().Select(i => i.Header!).ToArray();
-        Assert.Equal(["_File", "_Edit", "_View", "_Keys", "_Help"], headers);
+        Assert.Equal(["_File", "_Edit", "_View", "_Keys", "_Window", "_Help"], headers);
     }
 
     /// <summary>A NativeMenuItem never toggles itself — RaiseClicked raises Click and executes Command and
@@ -404,6 +404,17 @@ public class NativeMenuTests
     public void Every_native_item_can_actually_be_activated()
     {
         var (window, _, _, _) = Show();
+
+        foreach (var top in NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>())
+            AssertEveryLeafIsActivatable(top.Header!, top.Menu!);
+    }
+
+    /// <summary>The generated session rows are leaves too, and each needs its Click handler.</summary>
+    [AvaloniaFact]
+    public void Every_native_item_can_actually_be_activated_with_sessions_open()
+    {
+        var (window, vm, _, _) = Show();
+        TestSessions.Attach(window, vm, "CONSOLE", "IMON");
 
         foreach (var top in NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>())
             AssertEveryLeafIsActivatable(top.Header!, top.Menu!);
@@ -732,6 +743,17 @@ public class NativeMenuTests
     [AvaloniaFact]
     public void The_native_menu_matches_the_classic_menu_item_for_item() => AssertParity(Show().Window);
 
+    /// <summary>The session rows are built in code, in both menus from one list; with sessions open the item-for-item
+    /// walk must still hold (session switching spec §10.2).</summary>
+    [AvaloniaFact]
+    public void The_native_menu_matches_the_classic_menu_item_for_item_with_sessions_open()
+    {
+        var (window, vm, _, _) = Show();
+        TestSessions.Attach(window, vm, "CONSOLE", "IMON");
+
+        AssertParity(window);
+    }
+
     private static void AssertParity(SessionWindow window)
     {
         var classicTop = window.FindControl<Menu>("ClassicMenu")!.Items.OfType<MenuItem>().ToArray();
@@ -821,9 +843,11 @@ public class NativeMenuTests
     }
 
     /// <summary>Gestures come from the platform hotkey table, not a hardcoded modifier, so macOS shows Cmd and
-    /// the others Ctrl from the one table ShowPlatformGestures already reads for the classic menu.</summary>
+    /// the others Ctrl from the one table ShowPlatformGestures already reads for the classic menu. Outside Edit
+    /// exactly two items carry one, both Cmd chords no 3270 keystroke uses (session switching spec §6):
+    /// Window &gt; Switch Session... and, on macOS, Window &gt; Minimize.</summary>
     [AvaloniaFact]
-    public void Only_the_edit_menu_carries_gestures()
+    public void Only_edit_and_two_window_items_carry_gestures()
     {
         var (window, _, _, _) = Show();
         var hotkeys = window.GetPlatformSettings()!.HotkeyConfiguration;
@@ -831,23 +855,28 @@ public class NativeMenuTests
         Assert.Equal(hotkeys.Copy.FirstOrDefault(), Item(window, "_Edit", "_Copy").Gesture);
         Assert.Equal(hotkeys.Paste.FirstOrDefault(), Item(window, "_Edit", "_Paste").Gesture);
         Assert.Equal(hotkeys.SelectAll.FirstOrDefault(), Item(window, "_Edit", "Select _All").Gesture);
+        Assert.Equal(new KeyGesture(Key.K, hotkeys.CommandModifiers), Item(window, "_Window", "_Switch Session...").Gesture);
+        Assert.Equal(new KeyGesture(Key.M, KeyModifiers.Meta), Item(window, "_Window", "_Minimize").Gesture);
 
-        // A gesture anywhere outside Edit is a 3270 client that cannot send that key, silently, with nothing in
-        // the wire log: an AppKit key equivalent is dispatched ahead of the key window's responder chain, so
-        // TerminalScreen never sees it. Walked exhaustively rather than from a list of examples — a list only
-        // covers the items someone remembered to add to it, and View > Crosshair is precisely the submenu one
-        // would have missed.
+        // A gesture anywhere else is a 3270 client that cannot send that key, silently, with nothing in the wire
+        // log: an AppKit key equivalent is dispatched ahead of the key window's responder chain, so TerminalScreen
+        // never sees it. Walked exhaustively rather than from a list of examples — a list only covers the items
+        // someone remembered to add to it, and View > Crosshair is precisely the submenu one would have missed.
         foreach (var top in NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().Where(i => i.Header != "_Edit"))
             AssertNoGestures(top.Header!, top.Menu!);
     }
+
+    private static readonly string[] GestureExceptions = ["_Window > _Switch Session...", "_Window > _Minimize"];
 
     private static void AssertNoGestures(string path, NativeMenu menu)
     {
         foreach (var item in menu.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator))
         {
+            var itemPath = $"{path} > {item.Header}";
+            if (GestureExceptions.Contains(itemPath)) continue;
             Assert.True(item.Gesture is null,
-                $"{path} > {item.Header} carries a gesture, which takes that key away from the terminal");
-            if (item.Menu is { } submenu) AssertNoGestures($"{path} > {item.Header}", submenu);
+                $"{itemPath} carries a gesture, which takes that key away from the terminal");
+            if (item.Menu is { } submenu) AssertNoGestures(itemPath, submenu);
         }
     }
 

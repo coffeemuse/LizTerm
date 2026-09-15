@@ -37,6 +37,13 @@ public partial class SessionWindow : Window, ISessionHost
     {
         _isMacOS = isMacOS;
         InitializeComponent();
+        _nativeWindowMenu = MenuLookup.Item(NativeMenu.GetMenu(this), "_Window")!.Menu!;
+        _nativeMinimize = MenuLookup.Item(_nativeWindowMenu, "_Minimize")!;
+        _nativeZoom = MenuLookup.Item(_nativeWindowMenu, "_Zoom")!;
+        _nativeMinimizeSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().First();
+        _nativeKeepOnTop = MenuLookup.Item(_nativeWindowMenu, "_Keep on Top")!;
+        _nativeSessionsSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().Last();
+        RebuildSessionRows();
         // The screen's events call the view model's methods, not its commands: each method carries its own guard,
         // and a keystroke must never be dropped for arriving while the previous one's round trip is still open.
         Screen.KeyRequested += (_, key) => _ = ViewModel?.SendKeyAsync(key);
@@ -84,6 +91,12 @@ public partial class SessionWindow : Window, ISessionHost
             // ApplyMenuStyle on a dead window for the life of the process. Nothing changes the style between
             // the two, so nothing is missed.
             if (_styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
+            // Subscribed here for the reason the settings are: a window never shown never raises Closed.
+            if (_sessions is not null)
+            {
+                _sessions.Changed += OnSessionsChanged;
+                RebuildSessionRows();
+            }
             ShowPlatformGestures();
             Screen.Focus();
         };
@@ -102,6 +115,20 @@ public partial class SessionWindow : Window, ISessionHost
     /// the same NativeMenuItem objects throughout: refilling adds these back to the declared instance, which is
     /// the only instance the macOS exporter will accept (#60).</summary>
     private readonly List<NativeMenuItemBase> _stashedMenuItems = [];
+
+    /// <summary>The native Window menu's own NativeMenu and the items the code changes, held by reference because
+    /// under InWindow the top-level items are stashed out of the window's menu (MenuLookup cannot reach them) and
+    /// must still be kept current for when they come back. NativeMenuItem takes no x:Name, so they are found by
+    /// header once, in the constructor.</summary>
+    private readonly NativeMenu _nativeWindowMenu;
+    private readonly NativeMenuItem _nativeMinimize;
+    private readonly NativeMenuItem _nativeZoom;
+    private readonly NativeMenuItemSeparator _nativeMinimizeSeparator;
+    private readonly NativeMenuItem _nativeKeepOnTop;
+    private readonly NativeMenuItemSeparator _nativeSessionsSeparator;
+
+    /// <summary>The generated session rows, both renderers' items with the session each stands for.</summary>
+    private readonly List<(NativeMenuItem Native, MenuItem Classic, SessionEntry Entry)> _sessionRows = [];
 
     /// <summary>The SettingsViewModel this window follows for live style changes, so a data-context swap can
     /// unsubscribe from the old one — the same shape as _bellSource below.</summary>
@@ -223,6 +250,14 @@ public partial class SessionWindow : Window, ISessionHost
         // The in-window Preferences names that chord as a label. InputGesture is display-only, so the application
         // menu's key equivalent is still what acts on it, under every style. Off macOS no chord opens Preferences.
         PreferencesMenuItem.InputGesture = MenuStrategy.PreferencesGesture(OperatingSystem.IsMacOS());
+
+        // Minimize and Zoom are macOS's (session switching spec §7.4); elsewhere the title bar has both. Unlike About
+        // and Preferences above this reads _isMacOS, the constructor's platform, so a test can build either shape on
+        // any machine. Set on the held references, so it holds for stashed native items too.
+        foreach (var item in new NativeMenuItem[] { _nativeMinimize, _nativeZoom, _nativeMinimizeSeparator }) item.IsVisible = _isMacOS;
+        MinimizeMenuItem.IsVisible = _isMacOS;
+        ZoomMenuItem.IsVisible = _isMacOS;
+        MinimizeSeparator.IsVisible = _isMacOS;
     }
 
     // MenuItem.Click is EventHandler<RoutedEventArgs> and NativeMenuItem.Click is EventHandler<EventArgs>, so
@@ -448,8 +483,8 @@ public partial class SessionWindow : Window, ISessionHost
     /// <summary>Menu gesture text from the platform table, so macOS shows Cmd and the others show Ctrl.
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
     /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for exactly these
-    /// four, which TerminalScreen already routes away from the host, and is why nothing on File, Keys or Help
-    /// carries one.
+    /// four, which TerminalScreen already routes away from the host, and is why nothing on File, View, Keys or
+    /// Help carries one, and Window only its two Cmd chords.
     ///
     /// Under InWindow, ApplyMenuStyle has emptied the native menu and ExportedMenu answers null,
     /// so the four classic InputGesture assignments still run and the four native ones find no item and do
@@ -476,6 +511,16 @@ public partial class SessionWindow : Window, ISessionHost
         FindMenuItem.InputGesture = find;
         Gesture(menu, "_Find...", find);
 
+        // The session switcher's chord (spec §6), Find's arrangement: a real key equivalent on the native item, display
+        // text on the classic one, and TerminalScreen.SwitcherRequested wherever no key equivalent is installed. A Cmd
+        // chord cannot be a 3270 keystroke, which is why this and Minimize are the two exceptions outside Edit.
+        var switcher = new KeyGesture(Key.K, hotkeys.CommandModifiers);
+        SwitchSessionMenuItem.InputGesture = switcher;
+        if (MenuLookup.Required(menu, "_Window", "_Switch Session...") is { } nativeSwitch) nativeSwitch.Gesture = switcher;
+        // Cmd+M on macOS, native only: nothing else dispatches it, so the in-window item names no chord it cannot keep.
+        if (_isMacOS && MenuLookup.Required(menu, "_Window", "_Minimize") is { } nativeMinimize)
+            nativeMinimize.Gesture = new KeyGesture(Key.M, KeyModifiers.Meta);
+
         static void Gesture(NativeMenu? menu, string child, KeyGesture? gesture)
         {
             if (MenuLookup.Required(menu, "_Edit", child) is { } item) item.Gesture = gesture;
@@ -501,6 +546,9 @@ public partial class SessionWindow : Window, ISessionHost
         _ownEntry = own;
         Switcher = new SessionSwitcherViewModel(sessions, own);
         SwitcherPanel.DataContext = Switcher;
+        RebuildSessionRows();
+        // Attached after Opened (a test can do this), the Opened handler has already run.
+        if (_opened) sessions.Changed += OnSessionsChanged;
         Activated += (_, _) => sessions.Activated(own);
     }
 
@@ -558,6 +606,80 @@ public partial class SessionWindow : Window, ISessionHost
         entry.Host.Bring();
     }
 
+    private void OnSessionsChanged(object? sender, EventArgs e) => RebuildSessionRows();
+
+    /// <summary>One row per open session after the sessions separator, in both menus from one list (spec §7.2).
+    /// Removed from the end one at a time and added to the same NativeMenu instance: never Clear(), never a new
+    /// menu (#60).</summary>
+    private void RebuildSessionRows()
+    {
+        while (_nativeWindowMenu.Items.Count > 0 && !ReferenceEquals(_nativeWindowMenu.Items[^1], _nativeSessionsSeparator))
+            _nativeWindowMenu.Items.RemoveAt(_nativeWindowMenu.Items.Count - 1);
+        while (WindowMenuItem.Items.Count > 0 && !ReferenceEquals(WindowMenuItem.Items[^1], SessionsSeparator))
+            WindowMenuItem.Items.RemoveAt(WindowMenuItem.Items.Count - 1);
+        _sessionRows.Clear();
+
+        if (_sessions is { } sessions)
+        {
+            foreach (var entry in sessions.Entries)
+            {
+                var native = SessionMenuItems.Native(sessions, entry, BringFromMenu);
+                var classic = SessionMenuItems.Classic(sessions, entry, BringFromMenu);
+                _nativeWindowMenu.Items.Add(native);
+                WindowMenuItem.Items.Add(classic);
+                _sessionRows.Add((native, classic, entry));
+            }
+        }
+
+        // Nothing collapses a trailing separator, so it goes when there is nothing under it.
+        _nativeSessionsSeparator.IsVisible = _sessionRows.Count > 0;
+        SessionsSeparator.IsVisible = _sessionRows.Count > 0;
+    }
+
+    /// <summary>Brings the session, then puts every mark back: both renderers write IsChecked before the click
+    /// arrives, and bringing the session that is already current raises no Changed to rebuild them (Keys &gt;
+    /// Insert's pattern).</summary>
+    private void BringFromMenu(SessionEntry entry)
+    {
+        entry.Host.Bring();
+        var current = _sessions?.Current;
+        foreach (var (native, classic, rowEntry) in _sessionRows)
+        {
+            native.IsChecked = ReferenceEquals(rowEntry, current);
+            classic.IsChecked = ReferenceEquals(rowEntry, current);
+        }
+    }
+
+    // Two one-line handlers per action: MenuItem.Click and NativeMenuItem.Click have different delegate shapes.
+    private void OnMinimizeClick(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void OnMinimizeClickNative(object? sender, EventArgs e) => WindowState = WindowState.Minimized;
+    private void OnZoomClick(object? sender, RoutedEventArgs e) => ToggleZoom();
+    private void OnZoomClickNative(object? sender, EventArgs e) => ToggleZoom();
+    private void OnKeepOnTopClick(object? sender, RoutedEventArgs e) => ToggleKeepOnTop();
+    private void OnKeepOnTopClickNative(object? sender, EventArgs e) => ToggleKeepOnTop();
+    private void OnSwitchSessionClick(object? sender, RoutedEventArgs e) => ToggleSwitcher();
+    private void OnSwitchSessionClickNative(object? sender, EventArgs e) => ToggleSwitcher();
+    private void OnBringAllToFrontClick(object? sender, RoutedEventArgs e) => _sessions?.BringAllToFront();
+    private void OnBringAllToFrontClickNative(object? sender, EventArgs e) => _sessions?.BringAllToFront();
+
+    /// <summary>macOS's Zoom: between maximised and normal.</summary>
+    private void ToggleZoom() =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    /// <summary>Per window and never saved (spec §7.3). The marks are put back after the flip because both renderers
+    /// toggle them before the click arrives; OnPropertyChanged keeps them in step with Topmost from anywhere else.</summary>
+    private void ToggleKeepOnTop()
+    {
+        Topmost = !Topmost;
+        ShowKeepOnTopMarks();
+    }
+
+    private void ShowKeepOnTopMarks()
+    {
+        KeepOnTopMenuItem.IsChecked = Topmost;
+        _nativeKeepOnTop.IsChecked = Topmost;
+    }
+
     /// <summary>ISessionHost: restore a minimised window, then activate it.</summary>
     public void Bring()
     {
@@ -575,7 +697,9 @@ public partial class SessionWindow : Window, ISessionHost
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == TopmostProperty) KeepOnTopChanged?.Invoke(this, EventArgs.Empty);
+        if (change.Property != TopmostProperty) return;
+        ShowKeepOnTopMarks();
+        KeepOnTopChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Follows the data context for the two view-model events the window handles itself. Every other
@@ -620,7 +744,11 @@ public partial class SessionWindow : Window, ISessionHost
         _styleSource = null;
         // Before base.OnClosed raises Closed: App's handler asks ShutdownPolicy with the count of sessions left.
         if (Switcher is { IsOpen: true }) Switcher.Close();
-        if (_sessions is not null && _ownEntry is not null) _sessions.Remove(_ownEntry);
+        if (_sessions is not null && _ownEntry is not null)
+        {
+            _sessions.Changed -= OnSessionsChanged;
+            _sessions.Remove(_ownEntry);
+        }
         base.OnClosed(e);
     }
 
