@@ -108,17 +108,44 @@ public class SessionSwitcherTests
         Assert.True(ScreenFocused(rig.Window));
     }
 
+    /// <summary>A real keyboard delivers a digit as key-down, then text input, then key-up: this is the sequence
+    /// that would leak the digit to the host if the switcher ever took it on key-down instead of TextInput (the
+    /// guard OnTunnelTextInput exists to keep, see Task 6's note). Session.Calls stays empty across all three.</summary>
     [AvaloniaFact]
     public void A_digit_with_the_filter_empty_brings_that_session_and_closes()
     {
         var rig = Show();
+        rig.Session.RaiseConnection(ConnectionState.Connected3270);
         OpenWithChord(rig.Window);
 
+        rig.Window.KeyPressQwerty(PhysicalKey.Digit2, RawInputModifiers.None);
         rig.Window.KeyTextInput("2");
+        rig.Window.KeyReleaseQwerty(PhysicalKey.Digit2, RawInputModifiers.None);
 
         Assert.Equal(1, rig.SecondHost.BringCount);
         Assert.False(rig.Window.Switcher!.IsOpen);
         Assert.Equal("", Panel(rig.Window).Box.Text ?? "");
+        Assert.Empty(rig.Session.Calls);
+    }
+
+    /// <summary>The digit for this window's own, already-current session (position 1): still a real key-down,
+    /// text-input, key-up sequence, and still nothing reaches the host. Choosing the current session brings this
+    /// window's own host (a no-op activation) rather than SecondHost, and the switcher's close still refocuses
+    /// the screen.</summary>
+    [AvaloniaFact]
+    public void A_digit_for_this_window_s_own_session_closes_and_focuses_the_screen()
+    {
+        var rig = Show();
+        rig.Session.RaiseConnection(ConnectionState.Connected3270);
+        OpenWithChord(rig.Window);
+
+        rig.Window.KeyPressQwerty(PhysicalKey.Digit1, RawInputModifiers.None);
+        rig.Window.KeyTextInput("1");
+        rig.Window.KeyReleaseQwerty(PhysicalKey.Digit1, RawInputModifiers.None);
+
+        Assert.False(rig.Window.Switcher!.IsOpen);
+        Assert.True(ScreenFocused(rig.Window));
+        Assert.Equal(0, rig.SecondHost.BringCount);
         Assert.Empty(rig.Session.Calls);
     }
 
@@ -136,16 +163,21 @@ public class SessionSwitcherTests
         Assert.True(rig.Window.Switcher.IsOpen);
     }
 
+    /// <summary>Enter on the row the switcher preselects (the previous session, spec §5.2): a real key-down and
+    /// key-up, and nothing reaches the host either side of the choice.</summary>
     [AvaloniaFact]
     public void Enter_brings_the_previous_session()
     {
         var rig = Show();
+        rig.Session.RaiseConnection(ConnectionState.Connected3270);
         OpenWithChord(rig.Window);
 
         rig.Window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        rig.Window.KeyReleaseQwerty(PhysicalKey.Enter, RawInputModifiers.None);
 
         Assert.Equal(1, rig.SecondHost.BringCount);
         Assert.False(rig.Window.Switcher!.IsOpen);
+        Assert.Empty(rig.Session.Calls);
     }
 
     /// <summary>A real pointer, not a raised event: the row's Border must have a background to be hit at all (the
