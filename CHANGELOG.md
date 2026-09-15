@@ -3,6 +3,10 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
+## Unreleased
+
+- **A new app icon**: Liz on a green 3270 screen.
+
 ## 0.6.0
 
 - **File transfer from inside ISPF.** In **File > IND$FILE Transfer...**, the new **ISPF (MVS)** host type starts a

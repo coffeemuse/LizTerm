@@ -631,8 +631,11 @@ Edit > Preferences... is hidden on macOS and carries no `Gesture`, so it install
   (`docs/development.md`, "The 3270 font"); the padlock is the font's Powerline one, U+E0A2. The words go on
   tooltips. Assertions on status strings are exact, so change `StatusFormatter` and its tests together.
 - `Assets/Icons/` holds the app icon in the three shapes packaging needs (`lizterm.icns`, `lizterm.ico`,
-  `lizterm.png`, referenced from `LizTerm.parcel`). The csproj's `<AvaloniaResource Include="Assets\**" />` already
-  covers a new or replaced one.
+  `lizterm.png`, referenced from `LizTerm.parcel`), plus `lizterm-256.png` for every `Window.Icon`. All but
+  `lizterm.png` are built by `tools/build-app-icons.sh` from it and the unlettered `lizterm-small.png`
+  (`docs/development.md`, "The app icon"); never edit a built one by hand. The csproj's
+  `<AvaloniaResource Include="Assets\**" />` already covers a new or replaced one, and the csproj removes the
+  files only packaging reads.
 - **About's dedication link** (`DedicationLink`) opens `LizWindow`, modal over About: the photo of Liz, the cat
   LizTerm is named for (`Assets/Liz/liz.jpg`, which the README shows too). It is a `Button` made to look like a link,
   not a `HyperlinkButton`, because Fluent paints that one in the platform accent, and on macOS the accent is the
