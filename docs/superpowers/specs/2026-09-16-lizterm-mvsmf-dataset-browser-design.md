@@ -99,20 +99,24 @@ the build differs from the source or docs it is marked **RC**. These findings se
 
 ### 3.3 Session window integration
 
-- `SessionProfile` gains optional `MvsmfUrl`, `MvsmfUserid` and `MvsmfPinnedCertificate`. The pin is separate from
-  the 3270 `PinnedCertificate`.
-- When `MvsmfUrl` is set, **Datasets…** appears in the File menu, native macOS and in-window alike, with a
-  shortcut chosen in planning against the existing keymap (Cmd/Ctrl+Shift+D proposed).
-- One `DatasetBrowserWindow` per session window; the menu item again fronts it. The session window owns the
-  service and the `CredentialHolder`; closing it closes the browser and forgets the credentials.
-- The browser follows the ownership and Keep on Top rules of the app's other windows (#125, #127), and the Window
-  menu lists it under its session.
+- `SessionProfile` gains optional `HostFilesUrl`, `HostFilesUserid` and `HostFilesPinnedCertificate` (Core's host-neutral
+  names; Core never names mvsMF, decided while planning PR 2). The pin is separate from the 3270 `PinnedCertificate`.
+- When `HostFilesUrl` is set, **mvsMF Browser...** appears in the File menu, native macOS and in-window alike. It has
+  no keyboard shortcut: the app's menu rule keeps shortcuts off every menu outside Edit (bar Switch Session and
+  Minimize), because on macOS a menu shortcut is taken before the 3270 screen sees the key (decided with Robert
+  while planning PR 2, 2026-09-16).
+- One `MvsmfBrowserWindow` per session window, owned by it and shown without blocking it; the menu item again
+  fronts it. The session window owns the `CredentialHolder`; closing it closes the browser and forgets the
+  credentials.
+- The browser stays above its session window and follows that window's Keep on Top. It is not listed in the Window
+  menu in the preview; **mvsMF Browser...** is the way back to it (decided 2026-09-16; a nested Window-menu entry can
+  come later).
 
 ### 3.4 Transport security
 
 The URL's scheme decides. `http` goes direct. `https` validates through the handler's
 `ServerCertificateCustomValidationCallback` with the existing pin model in `LizTerm.Core.Security`; an untrusted
-certificate opens the existing certificate window, and "Remember" stores `MvsmfPinnedCertificate`. A pin trusts exactly the pinned leaf while it is in date (decided 2026-09-16 in the PR 1
+certificate opens the existing certificate window, and "Remember" stores `HostFilesPinnedCertificate`. A pin trusts exactly the pinned leaf while it is in date (decided 2026-09-16 in the PR 1
 review); it is not a trust store, so a pinned chain does not extend to other leaves. No warning is
 shown for `http`; the user guide suggests a TLS reverse proxy.
 
@@ -128,7 +132,7 @@ never names mvsMF; its log entry names the Core member instead. The log is added
 
 ## 4. The browser window
 
-- **Title** "Datasets — {profile} (Preview)". A one-line strip under the filter says the feature is a preview and
+- **Title** "mvsMF Browser — {profile} (Preview)". A one-line strip under the filter says the feature is a preview and
   links to the user guide.
 - **Filter** field defaulting to `{userid}.**`, with **List**.
 - **Column headers are in capitals**, as ISPF shows them: `NAME`, `DSORG`, `RECFM`, `LRECL` in the dataset list,
