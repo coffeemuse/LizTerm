@@ -66,8 +66,9 @@ public sealed partial class UploadRow : ObservableObject
 
     [ObservableProperty] private string _status = "";
 
-    /// <summary>This row reached the host in an earlier run of the same review, so a retry does not send it again.</summary>
-    public bool Sent { get; set; }
+    /// <summary>This row reached the host in an earlier run of the same review, so a retry does not send it again,
+    /// and its member name is no longer editable.</summary>
+    [ObservableProperty] private bool _sent;
 
     public string UploadName => MemberName.Trim().ToUpperInvariant();
 

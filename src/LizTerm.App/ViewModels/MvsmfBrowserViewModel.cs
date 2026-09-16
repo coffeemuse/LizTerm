@@ -47,7 +47,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMembers), nameof(ShowSequentialNote), nameof(ShowChooseHint), nameof(ChooseHint),
-        nameof(MembersHeader), nameof(ShowPaddingNote), nameof(UploadHeader))]
+        nameof(MembersHeader), nameof(ShowPaddingNote), nameof(UploadHeader), nameof(ShowMemberPane))]
     private DatasetRow? _selectedDataset;
 
     [ObservableProperty]
@@ -59,7 +59,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private bool _expandTabs = true;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIdle))]
+    [NotifyPropertyChangedFor(nameof(IsIdle), nameof(CanChooseDataset))]
     private bool _isBusy;
 
     [ObservableProperty] private string _statusText = "";

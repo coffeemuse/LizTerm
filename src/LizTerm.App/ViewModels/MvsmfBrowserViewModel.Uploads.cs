@@ -15,7 +15,7 @@ public sealed partial class MvsmfBrowserViewModel
     public ObservableCollection<UploadRow> Uploads { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(UploadHeader))]
+    [NotifyPropertyChangedFor(nameof(UploadHeader), nameof(ShowMemberPane), nameof(CanChooseDataset))]
     private bool _isReviewingUpload;
 
     [ObservableProperty] private bool _uploadFinished;
@@ -23,6 +23,13 @@ public sealed partial class MvsmfBrowserViewModel
 
     /// <summary>Set when a connection failure stopped a write part-way, so the banner warns about a partial member.</summary>
     private bool _uploadStoppedMidWrite;
+
+    /// <summary>The member list gives way to the upload review.</summary>
+    public bool ShowMemberPane => ShowMembers && !IsReviewingUpload;
+
+    /// <summary>The dataset list is fixed while an operation runs or a review is open: the review and the member
+    /// list both belong to the chosen dataset.</summary>
+    public bool CanChooseDataset => !IsBusy && !IsReviewingUpload;
 
     public string UploadHeader => SelectedDataset is { } dataset ? $"Upload to {dataset.Name}" : "";
 
