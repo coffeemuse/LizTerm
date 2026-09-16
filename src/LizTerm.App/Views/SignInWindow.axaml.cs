@@ -32,7 +32,7 @@ public partial class SignInWindow : Window
         var password = PasswordBox.Text ?? "";
         if (userid.Length == 0 || password.Length == 0)
         {
-            MissingText.Text = "Enter the userid and the password.";
+            MissingText.Text = "✗ Enter the userid and the password.";
             MissingText.IsVisible = true;
             return;
         }

@@ -65,7 +65,14 @@ public class SignInWindowTests
 
         Assert.True(window.IsVisible);
         Assert.True(window.FindControl<TextBlock>("MissingText")!.IsVisible);
-        Assert.Equal("Enter the userid and the password.", window.FindControl<TextBlock>("MissingText")!.Text);
+        Assert.Equal("✗ Enter the userid and the password.", window.FindControl<TextBlock>("MissingText")!.Text);
+
+        var noPassword = Show();
+        noPassword.SignIn();
+
+        Assert.True(noPassword.IsVisible);
+        Assert.True(noPassword.FindControl<TextBlock>("MissingText")!.IsVisible);
+        Assert.Equal("✗ Enter the userid and the password.", noPassword.FindControl<TextBlock>("MissingText")!.Text);
     }
 
     [AvaloniaFact]
