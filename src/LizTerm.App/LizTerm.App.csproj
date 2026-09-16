@@ -51,6 +51,7 @@
   <ItemGroup>
     <ProjectReference Include="../LizTerm.Core/LizTerm.Core.csproj" />
     <ProjectReference Include="../LizTerm.Backend.B3270/LizTerm.Backend.B3270.csproj" />
+    <ProjectReference Include="../LizTerm.Backend.Mvsmf/LizTerm.Backend.Mvsmf.csproj" />
   </ItemGroup>
 
   <!-- The engine's RID and the app's RID are two different values, so the copy needs both.
