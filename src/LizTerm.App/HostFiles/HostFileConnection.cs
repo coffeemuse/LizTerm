@@ -26,8 +26,8 @@ public sealed class HostFileConnection : IDisposable
     private readonly List<IHostFileService> _made = [];
     private IHostFileService _service;
     private CertificatePin? _servicePin;
-    /// <summary>The service whose refusal the user declined, so the refusals that arrived with it are not asked
-    /// again.</summary>
+    /// <summary>The service whose refusal the user declined, so the refusals already in flight with it are not asked
+    /// again. A decline replaces the service, so later operations are asked afresh.</summary>
     private IHostFileService? _declined;
     private bool _disposed;
 
@@ -102,10 +102,12 @@ public sealed class HostFileConnection : IDisposable
         {
             lock (_lock)
             {
-                // Declined already, for an operation that was refused at the same time.
+                // Another window accepted a pin since: retry, and Current() picks it up.
+                if (!Equals(_access.Pin, _servicePin)) return true;
+                // Declined already, for an operation that was in flight at the time.
                 if (ReferenceEquals(_declined, refused)) return false;
-                // Answered already, by an operation that was refused at the same time or by another window.
-                if (!ReferenceEquals(_service, refused) || !Equals(_access.Pin, _servicePin)) return true;
+                // Accepted already, for an operation that was refused at the same time.
+                if (!ReferenceEquals(_service, refused)) return true;
                 // The pin in force already trusts exactly this certificate, so the refusal is not about trust (an
                 // expired certificate, say) and asking again cannot help.
                 if (_servicePin is { } inForce && CertificateReader.SameFingerprint(inForce.Sha256, presented.Sha256)) return false;
@@ -119,7 +121,11 @@ public sealed class HostFileConnection : IDisposable
                 _url.Host, [NotTrusted], presented, null, _access.Pin, canPin, cannotPin));
             if (!decision.ConnectAnyway)
             {
-                lock (_lock) _declined = refused;
+                lock (_lock)
+                {
+                    _declined = refused;
+                    if (!_disposed) Replace(_servicePin);
+                }
                 return false;
             }
             var pin = new CertificatePin(presented.Sha256, presented.Subject, presented.Pem);

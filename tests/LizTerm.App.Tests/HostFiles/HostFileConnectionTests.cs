@@ -124,7 +124,8 @@ public class HostFileConnectionTests
         var ex = await Assert.ThrowsAsync<HostFileException>(() => Info(connection));
 
         Assert.Equal(HostFileErrorKind.CertificateRejected, ex.Kind);
-        Assert.Single(host.Created);
+        Assert.All(host.Created, c => Assert.Null(c.Pin));
+        Assert.Single(host.Created.SelectMany(c => c.Service.CallsSnapshot()));
     }
 
     [Fact]
@@ -192,6 +193,45 @@ public class HostFileConnectionTests
         Assert.Equal(HostFileErrorKind.CertificateRejected, (await Assert.ThrowsAsync<HostFileException>(() => a)).Kind);
         Assert.Equal(HostFileErrorKind.CertificateRejected, (await Assert.ThrowsAsync<HostFileException>(() => b)).Kind);
         Assert.Single(prompt.Calls);
+    }
+
+    [Fact]
+    public async Task After_a_decline_a_later_operation_asks_again()
+    {
+        var host = new Host();
+        var prompt = new FakeCertificatePrompt();
+        using var connection = host.Access().Connect(new FakeCredentialPrompt(), prompt);
+
+        await Assert.ThrowsAsync<HostFileException>(() => Info(connection));
+        await Assert.ThrowsAsync<HostFileException>(() => Info(connection));
+
+        Assert.Equal(2, prompt.Calls.Count);
+        Assert.Equal(3, host.Created.Count);
+        connection.Dispose();
+        Assert.All(host.Created, c => Assert.True(c.Service.Disposed));
+    }
+
+    [Fact]
+    public async Task After_a_decline_a_new_certificate_is_asked_about()
+    {
+        var renewed = Presented with { Sha256 = "33:44" };
+        var made = 0;
+        var prompt = new FakeCertificatePrompt();
+        var access = new HostFileAccess(new SessionProfile { Name = "MVS", Host = "proxy", HostFilesUrl = "https://proxy/zosmf" },
+            (url, pin, provider) =>
+            {
+                var service = new FakeHostFileService();
+                var presented = Interlocked.Increment(ref made) == 1 ? Presented : renewed;
+                service.Failures["info"] = new HostFileException(HostFileErrorKind.CertificateRejected, "x", certificate: presented);
+                return service;
+            }, savePin: null);
+        using var connection = access.Connect(new FakeCredentialPrompt(), prompt);
+
+        await Assert.ThrowsAsync<HostFileException>(() => Info(connection));
+        await Assert.ThrowsAsync<HostFileException>(() => Info(connection));
+
+        Assert.Equal(2, prompt.Calls.Count);
+        Assert.Same(renewed, prompt.LastRequest!.Presented);
     }
 
     [Fact]
