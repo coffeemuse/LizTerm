@@ -43,20 +43,27 @@
                   IsChecked="{Binding AutoReconnect}" />
       </StackPanel>
       <TextBlock Grid.Row="5" Text="Model" VerticalAlignment="Center" />
-      <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Spacing="12">
-        <ComboBox x:Name="ModelBox" ItemsSource="{Binding TerminalModels}" SelectedItem="{Binding SelectedModel}" Width="160" />
+      <!-- The checkbox sits under the drop-down rather than beside it: side by side, "Other (custom size)" and
+           "Extended data stream" do not both fit the window's width. 280 matches the Code page drop-down. -->
+      <StackPanel Grid.Row="5" Grid.Column="1" Spacing="4">
+        <ComboBox x:Name="ModelBox" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding SelectedModelChoice}" Width="280" />
         <CheckBox Content="Extended data stream" IsChecked="{Binding Extended}" />
       </StackPanel>
-      <TextBlock Grid.Row="6" Text="Oversize" VerticalAlignment="Center" />
-      <!-- Columns first, which is b3270's order for -oversize and the opposite of the Model drop-down's
-           "2 — 24x80". Deliberately left disagreeing: 24x80 is the conventional way to name a model and is
-           asserted exactly by CatalogueTests, while cols x rows is what every x3270 document a user might copy
-           from uses. The placeholder is what resolves it (spec 4.3). -->
-      <!-- 280 to match the Code page drop-down directly below, and because 200 clipped the placeholder to
-           "columns x rows, e.g. 132x4" (seen on a real macOS window). A truncated example is worse than none
-           here: the placeholder is the whole mechanism, so it has to survive rendering. -->
-      <TextBox x:Name="OversizeBox" Grid.Row="6" Grid.Column="1" Text="{Binding Oversize}" Width="280"
-               HorizontalAlignment="Left" PlaceholderText="columns x rows, e.g. 132x43" />
+      <TextBlock Grid.Row="6" Text="Screen size" VerticalAlignment="Center" />
+      <!-- Always shown, so the window keeps its height and the row always says what the screen will be: greyed
+           out with the model's own size, open for typing only under Other. Two labelled boxes instead of one
+           "132x43" field, so columns and rows cannot be swapped: the Model drop-down names a model rows first
+           ("2 — 24x80"), while b3270's -oversize takes columns first. Plain text boxes rather than
+           NumericUpDown, like Port: the spinner silently snaps a value into range, and the engine's real limit is
+           an area (columns * rows), which only a message can explain. -->
+      <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="Columns" VerticalAlignment="Center" />
+        <TextBox x:Name="ColumnsBox" Text="{Binding ColumnsDisplay}" IsEnabled="{Binding IsCustomSize}" Width="70"
+                 PlaceholderText="132" />
+        <TextBlock Text="Rows" VerticalAlignment="Center" Margin="8,0,0,0" />
+        <TextBox x:Name="RowsBox" Text="{Binding RowsDisplay}" IsEnabled="{Binding IsCustomSize}" Width="70"
+                 PlaceholderText="43" />
+      </StackPanel>
       <TextBlock Grid.Row="7" Text="Code page" VerticalAlignment="Center" />
       <ComboBox x:Name="CodePageBox" Grid.Row="7" Grid.Column="1" ItemsSource="{Binding CodePages}" SelectedItem="{Binding SelectedCodePage}" Width="280" HorizontalAlignment="Left" />
       <TextBlock Grid.Row="8" Text="LU name" VerticalAlignment="Center" />

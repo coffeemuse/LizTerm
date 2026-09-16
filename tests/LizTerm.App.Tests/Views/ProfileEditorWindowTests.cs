@@ -4,6 +4,7 @@
 
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Session;
 
@@ -55,5 +56,32 @@ public class ProfileEditorWindowTests
         var note = window.FindControl<TextBox>("NoteBox")!;
         Assert.False(note.AcceptsReturn);
         Assert.Equal(120, note.MaxLength);
+    }
+    /// <summary>The size boxes are always there, greyed out showing the model's own size, and open for typing only
+    /// once Other is chosen in the drop-down.</summary>
+    [AvaloniaFact]
+    public void The_size_boxes_open_only_for_other()
+    {
+        var window = new ProfileEditorWindow(new SessionProfile { Name = "p", Host = "h", Model = 5 });
+        window.Show();
+        var modelBox = window.FindControl<ComboBox>("ModelBox")!;
+        var columns = window.FindControl<TextBox>("ColumnsBox")!;
+        var rows = window.FindControl<TextBox>("RowsBox")!;
+
+        Assert.True(columns.IsVisible);
+        Assert.False(columns.IsEnabled);
+        Assert.False(rows.IsEnabled);
+        Assert.Equal("132", columns.Text);
+        Assert.Equal("27", rows.Text);
+
+        modelBox.SelectedItem = ModelChoice.Other;
+
+        Assert.True(columns.IsEnabled);
+        Assert.True(rows.IsEnabled);
+        Assert.Equal("", columns.Text);
+        columns.Text = "140";
+        rows.Text = "30";
+        var vm = (ProfileEditorViewModel)window.DataContext!;
+        Assert.Equal("140x30", vm.TryBuild()!.Oversize);
     }
 }
