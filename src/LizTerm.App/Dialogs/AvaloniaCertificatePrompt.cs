@@ -12,7 +12,7 @@ public sealed class AvaloniaCertificatePrompt(Window owner) : ICertificatePrompt
 {
     public async Task<CertificateDecision> AskAsync(CertificatePromptRequest request)
     {
-        var result = await new CertificateWindow(request).ShowDialog<CertificateDecision?>(owner);
+        var result = await new CertificateWindow(request).ShowDialogAbove<CertificateDecision?>(owner);
         return result ?? CertificateDecision.Declined;
     }
 }

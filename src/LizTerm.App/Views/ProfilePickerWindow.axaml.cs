@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using LizTerm.App.Dialogs;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
@@ -36,13 +37,13 @@ public partial class ProfilePickerWindow : Window
         var vm = new ProfilePickerViewModel(
             store,
             openSession,
-            existing => new ProfileEditorWindow(existing).ShowDialog<ProfileEdit?>(this),
+            existing => new ProfileEditorWindow(existing).ShowDialogAbove<ProfileEdit?>(this),
             quit,
             tags,
             // Modal over this picker, so it cannot be open at the same time as the picker's own editor (spec 2.1).
             tags is null
                 ? null
-                : () => new ManageTagsWindow(new ManageTagsViewModel(new TagMaintenance(store, tags))).ShowDialog(this),
+                : () => new ManageTagsWindow(new ManageTagsViewModel(new TagMaintenance(store, tags))).ShowDialogAbove(this),
             recentHosts);
         DataContext = vm;
         // An open drop-down with nothing left in it is an empty box hanging under the field.
