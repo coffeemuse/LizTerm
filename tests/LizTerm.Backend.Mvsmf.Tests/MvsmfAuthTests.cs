@@ -134,4 +134,48 @@ public class MvsmfAuthTests
         Assert.False(handler.UseCookies);
         Assert.False(handler.AllowAutoRedirect);
     }
+
+    [Fact]
+    public async Task A_slow_sign_in_is_not_a_host_timeout()
+    {
+        var handler = new RecordedHandler().Then("info-200");
+        HostCredentialProvider slow = async (request, ct) =>
+        {
+            await Task.Delay(300, ct);
+            return new HostCredentials("MVSCE02", "pw");
+        };
+        using var service = new MvsmfFileService(handler, Base, slow, idleTimeout: TimeSpan.FromMilliseconds(100));
+
+        var info = await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("1.0.0-dev", info.ProductVersion);
+    }
+
+    [Fact]
+    public async Task A_slow_retry_prompt_is_not_a_host_timeout()
+    {
+        var handler = new RecordedHandler().Then("info-401").Then("info-200");
+        HostCredentialProvider slow = async (request, ct) =>
+        {
+            if (request.IsRetry) await Task.Delay(300, ct);
+            return new HostCredentials("MVSCE02", "pw");
+        };
+        using var service = new MvsmfFileService(handler, Base, slow, idleTimeout: TimeSpan.FromMilliseconds(100));
+
+        var info = await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("1.0.0-dev", info.ProductVersion);
+    }
+
+    [Fact]
+    public async Task A_connect_timeout_is_unreachable()
+    {
+        var handler = new RecordedHandler().Then((_, _) => throw new TaskCanceledException("The operation was canceled.", new TimeoutException()));
+        using var service = new MvsmfFileService(handler, Base, Answering([], new HostCredentials("U", "p")));
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(HostFileErrorKind.Unreachable, ex.Kind);
+        Assert.Equal("Server information: cannot reach the host (no answer within 10 s).", ex.Message);
+    }
 }

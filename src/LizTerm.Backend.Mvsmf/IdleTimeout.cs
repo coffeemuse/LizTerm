@@ -19,6 +19,12 @@ internal sealed class IdleTimeout(TimeSpan idle, CancellationToken outer) : IDis
         if (!_source.IsCancellationRequested) _source.CancelAfter(_idle);
     }
 
+    /// <summary>Waiting on the user, not the host: stop the clock until the next <see cref="Reset"/>.</summary>
+    public void Pause()
+    {
+        if (!_source.IsCancellationRequested) _source.CancelAfter(Timeout.InfiniteTimeSpan);
+    }
+
     /// <summary>Whether the token fired for idleness rather than because the caller cancelled.</summary>
     public bool Expired(CancellationToken caller) => _source.IsCancellationRequested && !caller.IsCancellationRequested;
 

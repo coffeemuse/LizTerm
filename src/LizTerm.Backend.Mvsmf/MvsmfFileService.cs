@@ -113,11 +113,13 @@ public sealed class MvsmfFileService : IHostFileService
 
     private async Task<HttpResponseMessage> SendAsync(Func<HttpRequestMessage> build, string what, IdleTimeout idle, CancellationToken cancellationToken)
     {
+        idle.Pause();
         var credentials = await AskAsync(isRetry: false, cancellationToken);
         var response = await SendOnceAsync(build, credentials, what, idle, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             response.Dispose();
+            idle.Pause();
             credentials = await AskAsync(isRetry: true, cancellationToken);
             response = await SendOnceAsync(build, credentials, what, idle, cancellationToken);
         }
@@ -149,6 +151,11 @@ public sealed class MvsmfFileService : IHostFileService
         catch (OperationCanceledException) when (idle.Expired(cancellationToken))
         {
             throw TimedOut(what);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && ex.InnerException is TimeoutException)
+        {
+            throw new HostFileException(HostFileErrorKind.Unreachable,
+                $"{what}: cannot reach the host (no answer within {ConnectTimeout.TotalSeconds:0} s).", inner: ex);
         }
         catch (HttpRequestException ex)
         {
