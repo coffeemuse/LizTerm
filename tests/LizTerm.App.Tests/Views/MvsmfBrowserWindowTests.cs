@@ -7,6 +7,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.LogicalTree;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LizTerm.App.Tests.ViewModels;
 using LizTerm.App.ViewModels;
@@ -286,6 +287,48 @@ public class MvsmfBrowserWindowTests
         {
             Directory.Delete(folder, recursive: true);
         }
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_a_pds_with_the_keyboard_keeps_focus_in_the_dataset_list()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var list = Named<ListBox>(window, "DatasetList");
+        window.UpdateLayout();
+        Assert.True(list.ContainerFromIndex(0)!.Focus());
+        var gate = new TaskCompletionSource();
+        t.Host.Gate = gate;
+
+        list.SelectedIndex = 0;
+        await Wait.UntilAsync(() => t.Vm.IsBusy, "the member load");
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(list.IsKeyboardFocusWithin);
+        gate.SetResult();
+        await Wait.UntilAsync(() => !t.Vm.IsBusy && t.Vm.Members.Count == 3, "the members");
+
+        await Wait.UntilAsync(() => list.IsKeyboardFocusWithin, "the focus back in the dataset list");
+    }
+
+    [AvaloniaFact]
+    public async Task Focus_returns_to_the_member_list_after_a_delete()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        t.Vm.SelectedDataset = t.Vm.Datasets[0];
+        await Wait.UntilAsync(() => !t.Vm.IsBusy, "the members");
+        var members = Named<ListBox>(window, "MemberList");
+        members.SelectedItems!.Add(t.Vm.VisibleMembers[2]);
+        window.UpdateLayout();
+        Assert.True(members.ContainerFromIndex(2)!.Focus());
+
+        window.KeyPress(Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null);
+        await Wait.UntilAsync(() => t.Vm.HasConfirmation, "the question");
+        t.Vm.Confirmation!.PrimaryCommand.Execute(null);
+        await Wait.UntilAsync(() => !t.Vm.IsBusy, "the delete");
+
+        Assert.Equal(2, t.Vm.Members.Count);
+        await Wait.UntilAsync(() => members.IsKeyboardFocusWithin, "the focus back in the member list");
     }
 
     [AvaloniaFact]

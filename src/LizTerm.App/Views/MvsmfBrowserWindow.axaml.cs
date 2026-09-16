@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LizTerm.App.ViewModels;
 
 namespace LizTerm.App.Views;
@@ -40,14 +41,87 @@ public partial class MvsmfBrowserWindow : Window
     }
 
     /// <summary>A question takes the keyboard to its Cancel button, the safe answer, once the strip has been laid
-    /// out; a focus request on a control that is still hidden is refused.</summary>
+    /// out; a focus request on a control that is still hidden is refused. An operation disables the lists and the
+    /// filter box, which drops their focus and does not give it back when they are enabled again, so the window
+    /// remembers where the keyboard was when the operation started and returns it there afterwards.</summary>
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(MvsmfBrowserViewModel.HasConfirmation) || _watched is not { HasConfirmation: true }) return;
+        if (_watched is not { } vm) return;
+        switch (e.PropertyName)
+        {
+            // Raised before IsIdle and CanChooseDataset, whose bindings disable the controls that hold the focus.
+            case nameof(MvsmfBrowserViewModel.IsBusy) when vm.IsBusy:
+                RememberFocus();
+                break;
+            case nameof(MvsmfBrowserViewModel.IsBusy) when !vm.HasConfirmation:
+                PostRestoreFocus(forget: true);
+                break;
+            case nameof(MvsmfBrowserViewModel.HasConfirmation) when vm.HasConfirmation:
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_watched is { HasConfirmation: true }) ConfirmCancelButton.Focus();
+                }, DispatcherPriority.Loaded);
+                break;
+            case nameof(MvsmfBrowserViewModel.HasConfirmation):
+                PostRestoreFocus(forget: false);
+                break;
+        }
+    }
+
+    private Control? _focusBefore;
+    private object? _focusedItemBefore;
+    private int _focusedIndexBefore = -1;
+
+    private void RememberFocus()
+    {
+        _focusBefore = null;
+        _focusedItemBefore = null;
+        _focusedIndexBefore = -1;
+        if (FilterBox.IsKeyboardFocusWithin) _focusBefore = FilterBox;
+        else if (FocusedList() is { } list)
+        {
+            _focusBefore = list;
+            if (FocusManager?.GetFocusedElement() is Control focused
+                && focused.FindAncestorOfType<ListBoxItem>(includeSelf: true) is { } container)
+            {
+                _focusedItemBefore = list.ItemFromContainer(container);
+                _focusedIndexBefore = list.IndexFromContainer(container);
+            }
+        }
+    }
+
+    private ListBox? FocusedList() =>
+        DatasetList.IsKeyboardFocusWithin ? DatasetList : MemberList.IsKeyboardFocusWithin ? MemberList : null;
+
+    /// <summary>At Loaded priority, so a list refilled by the operation has its containers. Only when the keyboard
+    /// has nowhere better to be: the user may have moved it on meanwhile. A question that closes while its operation
+    /// still runs tries too, but keeps the memory for the end of the operation, when the controls are enabled.</summary>
+    private void PostRestoreFocus(bool forget)
+    {
         Dispatcher.UIThread.Post(() =>
         {
-            if (_watched is { HasConfirmation: true }) ConfirmCancelButton.Focus();
+            if (_focusBefore is not { } target || _watched is not { HasConfirmation: false } vm) return;
+            if (forget && vm.IsBusy) return;
+            if (FocusManager?.GetFocusedElement() is Control { IsEffectivelyVisible: true, IsEffectivelyEnabled: true }) return;
+            var (item, index) = (_focusedItemBefore, _focusedIndexBefore);
+            if (forget)
+            {
+                _focusBefore = null;
+                _focusedItemBefore = null;
+                _focusedIndexBefore = -1;
+            }
+            if (target is ListBox list) FocusRow(list, item, index);
+            else target.Focus();
         }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>The row that had the focus if it is still listed, else the selected row, else the row now at its
+    /// place (a deleted member's neighbour). A list box itself does not take the focus.</summary>
+    private static void FocusRow(ListBox list, object? item, int index)
+    {
+        if (item is not null && list.ContainerFromItem(item)?.Focus() == true) return;
+        if (list.SelectedItem is { } selected && list.ContainerFromItem(selected)?.Focus() == true) return;
+        if (index >= 0 && list.ItemCount > 0) list.ContainerFromIndex(Math.Min(index, list.ItemCount - 1))?.Focus();
     }
 
     /// <summary>Only rows the member filter still shows: a transfer or a delete must never act on a member the user
@@ -63,6 +137,7 @@ public partial class MvsmfBrowserWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         if (_watched is not null) _watched.PropertyChanged -= OnViewModelPropertyChanged;
+        _watched = null;
         ViewModel?.Dispose();
         base.OnClosed(e);
     }

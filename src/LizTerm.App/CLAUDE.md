@@ -743,6 +743,15 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   shows, so a transfer or a delete never acts on a member the user cannot see. A question moves focus to its
   Cancel button, posted at `Loaded` priority because a control that is still hidden refuses focus. Escape cancels
   a question, else the running operation, else closes the window.
+- **Focus survives an operation.** In Avalonia 12.1.2, disabling a list whose row has the focus drops the focus,
+  and enabling it again does not give it back, so arrowing onto a PDS (a member load) or pressing Enter or Delete
+  used to strand the keyboard. When `IsBusy` turns on (its notification comes before `IsIdle` and
+  `CanChooseDataset`, which disable the controls), the window remembers whether the filter box, the dataset list or
+  the member list had the focus, and for a list the focused row and its index. When `IsBusy` turns off with no
+  question showing, or a question closes, it posts a restore at `Loaded` priority, so a refilled list has its rows:
+  the same row if it is still listed, else the selected row, else the row now at the old index (a deleted member's
+  neighbour). A `ListBox` itself does not take the focus. The restore does nothing when the focus is already on a
+  visible, enabled control, since the user may have moved it on.
 - The window never refuses to close: closing cancels and disposes the view model, which disposes the connection.
 - Every status that reports an outcome, a warning or progress starts with a mark and words (`✓ ✗ ⚠ ⟳ –`), per
   the colour rule; plain counts (the dataset count, the member header) carry none.
