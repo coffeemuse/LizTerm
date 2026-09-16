@@ -34,42 +34,63 @@ public sealed partial class MvsmfBrowserViewModel
         if (members.Count > NamesInQuestion) names += $" and {members.Count - NamesInQuestion} more";
         var label = members.Count == 1 ? "Delete 1 member" : $"Delete {members.Count} members";
         var answer = await AskAsync(new ConfirmationRequest($"Delete {names} from {dataset.Name}? This cannot be undone.", label));
-        if (answer.Choice != ConfirmChoice.Primary) return;
+        if (answer.Choice != ConfirmChoice.Primary)
+        {
+            StatusText = "– Delete cancelled.";
+            return;
+        }
 
         var deleted = 0;
         var failures = new List<string>();
-        for (var i = 0; i < members.Count; i++)
+        try
         {
-            token.ThrowIfCancellationRequested();
-            var member = members[i];
-            try
+            for (var i = 0; i < members.Count; i++)
             {
-                await _connection.RunAsync(service => service.DeleteAsync(member.Path, token));
-                deleted++;
-            }
-            catch (HostFileException ex) when (IsConnectionFailure(ex))
-            {
-                // The rest would fail the same way. Show what did go, then let the banner offer Retry, which asks
-                // again about this member and the ones after it.
-                stoppedAt([.. members.Skip(i)]);
+                token.ThrowIfCancellationRequested();
+                var member = members[i];
                 try
                 {
-                    await LoadMembersCoreAsync(dataset, token);
+                    await _connection.RunAsync(service => service.DeleteAsync(member.Path, token));
+                    deleted++;
                 }
-                catch (Exception refresh) when (refresh is not OperationCanceledException)
+                catch (HostFileException ex) when (IsConnectionFailure(ex))
                 {
-                    // The banner reports the first failure; a refresh failing the same way adds nothing.
+                    // The rest would fail the same way. Show what did go, then let the banner offer Retry, which
+                    // asks again about this member and the ones after it.
+                    stoppedAt([.. members.Skip(i)]);
+                    await RefreshAfterDeleteAsync(dataset, token);
+                    throw;
                 }
-                throw;
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    failures.Add($"{member.Name}: {HostFileMessages.Describe(ex)}");
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                failures.Add($"{member.Name}: {HostFileMessages.Describe(ex)}");
-            }
+            await LoadMembersCoreAsync(dataset, token);
         }
-        await LoadMembersCoreAsync(dataset, token);
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // A delete cannot be undone, so the list and the line show what went before the cancel. The list is the
+            // truth: a request the cancel interrupted may still have deleted its member on the host.
+            await RefreshAfterDeleteAsync(dataset, CancellationToken.None);
+            StatusText = $"– Delete cancelled: deleted {deleted} of {Plural(members.Count, "member")}.";
+            return;
+        }
         StatusText = failures.Count == 0
             ? $"✓ Deleted {deleted} of {Plural(members.Count, "member")}."
             : $"⚠ Deleted {deleted} of {Plural(members.Count, "member")}. ✗ {string.Join("; ", failures)}";
+    }
+
+    /// <summary>A refresh on the way out of a stopped delete: its own failure would only hide the reason for the
+    /// stop, so it is ignored.</summary>
+    private async Task RefreshAfterDeleteAsync(DatasetRow dataset, CancellationToken token)
+    {
+        try
+        {
+            await LoadMembersCoreAsync(dataset, token);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+        }
     }
 }

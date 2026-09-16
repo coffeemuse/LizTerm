@@ -80,6 +80,55 @@ public class MvsmfBrowserDeleteTests
 
         Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("delete:"));
         Assert.Equal(3, t.Vm.Members.Count);
+        Assert.Equal("– Delete cancelled.", t.Vm.StatusText);
+    }
+
+    [Fact]
+    public async Task Cancel_part_way_refreshes_and_says_what_was_deleted()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ChooseAsync("MVSCE02.CNTL");
+        t.Select("ALLOC", "HELLO");
+        var gate = new TaskCompletionSource();
+        t.Host.Gate = gate;
+
+        var deleting = t.Vm.DeleteCommand.ExecuteAsync(null);
+        await AskedAsync(t, deleting);
+        t.Vm.Confirmation!.PrimaryCommand.Execute(null);
+        await Wait.UntilAsync(() => t.Host.CallsSnapshot().Contains("delete:MVSCE02.CNTL(ALLOC)"), "the first delete");
+        t.Vm.CancelCommand.Execute(null);
+        gate.SetResult();
+        await deleting;
+
+        Assert.Equal("– Delete cancelled: deleted 0 of 2 members.", t.Vm.StatusText);
+        Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO" }, t.Vm.Members.Select(m => m.Name));
+        Assert.DoesNotContain("delete:MVSCE02.CNTL(HELLO)", t.Host.CallsSnapshot());
+    }
+
+    [Fact]
+    public async Task Cancel_after_one_delete_counts_it_and_shows_it_gone()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ChooseAsync("MVSCE02.CNTL");
+        t.Select("ALLOC", "HELLO");
+        var first = new TaskCompletionSource();
+        t.Host.Gate = first;
+
+        var deleting = t.Vm.DeleteCommand.ExecuteAsync(null);
+        await AskedAsync(t, deleting);
+        t.Vm.Confirmation!.PrimaryCommand.Execute(null);
+        await Wait.UntilAsync(() => t.Host.CallsSnapshot().Contains("delete:MVSCE02.CNTL(ALLOC)"), "the first delete");
+        var second = new TaskCompletionSource();
+        t.Host.Gate = second;
+        first.SetResult();
+        await Wait.UntilAsync(() => t.Host.CallsSnapshot().Contains("delete:MVSCE02.CNTL(HELLO)"), "the second delete");
+        t.Vm.CancelCommand.Execute(null);
+        second.SetResult();
+        await deleting;
+
+        Assert.Equal("– Delete cancelled: deleted 1 of 2 members.", t.Vm.StatusText);
+        Assert.Equal(new[] { "COMPILE", "HELLO" }, t.Vm.Members.Select(m => m.Name));
+        Assert.Empty(t.Vm.SelectedMembers);
     }
 
     [Fact]
