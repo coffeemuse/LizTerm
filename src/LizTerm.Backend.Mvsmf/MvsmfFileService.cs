@@ -157,13 +157,61 @@ public sealed class MvsmfFileService : IHostFileService
     }
 
     public Task WriteTextAsync(HostPath path, IReadOnlyList<string> lines, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("Task 9");
+        PutAsync(path, EncodeText(lines), "text", "text/plain", cancellationToken);
 
-    public Task WriteBinaryAsync(HostPath path, Stream source, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("Task 9");
+    public async Task WriteBinaryAsync(HostPath path, Stream source, CancellationToken cancellationToken = default)
+    {
+        // Held in memory so the repeat after a 401 can send the same bytes.
+        using var copy = new MemoryStream();
+        await source.CopyToAsync(copy, cancellationToken);
+        await PutAsync(path, copy.ToArray(), "binary", "application/octet-stream", cancellationToken);
+    }
 
-    public Task DeleteAsync(HostPath path, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("Task 9");
+    public async Task DeleteAsync(HostPath path, CancellationToken cancellationToken = default)
+    {
+        if (path.Kind != HostPathKind.Member) throw new NotSupportedException("Deleting a whole dataset is not supported in this release.");
+        var what = path.ToString();
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Delete, Url(DatasetPath(path))), what, idle, cancellationToken);
+    }
+
+    private async Task PutAsync(HostPath path, byte[] body, string dataType, string contentType, CancellationToken cancellationToken)
+    {
+        var what = path.ToString();
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        using var response = await SendAsync(() =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Put, Url(DatasetPath(path)))
+            {
+                // mvsMF-compat: put-json-is-rename — Content-Type application/json turns a PUT into a rename, so a
+                // write only ever sends text/plain or application/octet-stream.
+                Content = new ByteArrayContent(body) { Headers = { ContentType = new MediaTypeHeaderValue(contentType) } },
+            };
+            request.Headers.Add("X-IBM-Data-Type", dataType);
+            return request;
+        }, what, idle, cancellationToken);
+    }
+
+    /// <summary>The wire form of text: each line, then LF, in ISO-8859-1.</summary>
+    /// <exception cref="ArgumentException">A line holds a line break or a character outside Latin-1.</exception>
+    internal static byte[] EncodeText(IReadOnlyList<string> lines)
+    {
+        var text = new StringBuilder();
+        foreach (var line in lines)
+        {
+            if (line.AsSpan().IndexOfAny('\r', '\n') >= 0)
+                throw new ArgumentException("A line cannot hold a line break.", nameof(lines));
+            if (line.AsSpan().IndexOfAnyExceptInRange('\0', 'ÿ') >= 0)
+                throw new ArgumentException("A line holds a character outside Latin-1; check the text with TextUploadCheck first.", nameof(lines));
+            // mvsMF-compat: text-write-drops-empty-lines — the host drops an empty line but stores a single blank as
+            // a blank record.
+            text.Append(line.Length == 0 ? " " : line).Append('\n');
+        }
+        // mvsMF-compat: text-body-is-latin1 — the host reads the body as ISO-8859-1 whatever charset says.
+        // mvsMF-compat: text-write-truncates-silently — an over-long line is cut to the record length and still
+        // answered 204; TextUploadCheck refuses such lines before they reach this method.
+        return Encoding.Latin1.GetBytes(text.ToString());
+    }
 
     public void Dispose() => _http.Dispose();
 
