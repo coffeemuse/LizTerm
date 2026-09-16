@@ -8,6 +8,11 @@ What changed in each LizTerm release, newest first. Downloads are on the
 - **Custom screen sizes are easier to set.** In the profile editor, choose **Other (custom size)** at the end of the
   Model list, then type the columns and rows in two separate boxes. The boxes show the model's own size the rest of
   the time.
+- **A tidier profile editor.** Its settings are now on three tabs, Connection, Terminal and Organize, with more room
+  between them. Tags are colored chips you add with Enter or a comma, with the tags you already use offered as you
+  type; a new tag shows the color it will get. The custom screen size has arrow buttons, and choosing **Other**
+  starts from the model's own size. When **Save** can't accept something, the editor shows that tab and outlines the
+  setting.
 
 ## 0.6.1
 

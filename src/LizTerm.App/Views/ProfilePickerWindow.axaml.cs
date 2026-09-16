@@ -37,7 +37,7 @@ public partial class ProfilePickerWindow : Window
         var vm = new ProfilePickerViewModel(
             store,
             openSession,
-            existing => new ProfileEditorWindow(existing).ShowDialogAbove<ProfileEdit?>(this),
+            (existing, registry) => new ProfileEditorWindow(existing, registry).ShowDialogAbove<ProfileEdit?>(this),
             quit,
             tags,
             // Modal over this picker, so it cannot be open at the same time as the picker's own editor (spec 2.1).

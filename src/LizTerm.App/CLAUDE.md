@@ -533,6 +533,32 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   `IsDefault`, so Enter in the name box renames instead of closing the window. The failure line sits under the
   panel, not in it, so it survives a change of selection.
 
+## The profile editor
+
+- **Three tabs** — Connection, Terminal, Organize — in Preferences' shape (a 120 px label column, labels at the top
+  of each row, a fixed height set by the tallest tab, a pinned profile's Connection). `TryBuild` names the field it
+  refused in `ValidationField` (`ProfileEditorField`); on a refused Save the window selects that field's tab
+  (`TabOf`) and gives the field the `invalid` class, which follows `ValidationField` and so goes when the message does.
+- **The size boxes are `NumericUpDown`s with no range**, bound to `Text`. Measured on 12.1.2 with typed input: with
+  `ClipValueToMinMax` a number outside Minimum/Maximum is snapped into range, and without it the box is emptied when
+  focus leaves, both in silence. Only `Minimum="0"` is set, so a typed 40 or 20000 stays for the view model's message
+  to explain. Text that is not a whole number is still emptied on leaving; Save then asks for both numbers. Choosing
+  Other fills the boxes from the model's size when both are empty, so the arrows have something to count from.
+- **Tags are chips.** The view model keeps the names in order (`TagNames`) and projects `TagChips` against
+  `_registry.Register(names)`, a preview never saved, so a new tag shows the color the picker's reconciliation will
+  give it. The callers pass the registry: the picker its reconciled `_registry` (the edit delegate's second
+  argument), and `App.OpenSession`'s edit route a fresh `Load()`. `TagSuggestions` is the registry's known tags the
+  profile lacks. A comma in `TagEntry`, typed or pasted, turns what precedes it into chips (`OnTagEntryChanged`);
+  Enter and losing focus call `CommitTagEntry`, and `TryBuild` commits a name left in the box.
+- `TagBox` is an `AutoCompleteBox` inside a drawn `Border`, sharing a `WrapPanel` with the chips. `TagChip.ToString`
+  returns the text, which is what the box puts in its text for a chosen suggestion. Its keys are tunnelled: Enter
+  with text or a highlighted suggestion adds it and is handled, so it never reaches Save, the default button; Enter
+  in the empty box does reach Save. Two traps: the view model rewriting `TagEntry` inside the binding's own write
+  never reaches the box, so the window posts the text back (the Wire Log correction's problem); and adding a
+  suggestion clears the box, which closes and reselects inside the drop-down and re-enters `DropDownClosed`, so
+  `AddSuggestion` is guarded by `_choosing` and adds through `AddTag`, not through the box's text. Without the guard
+  the test process died of a stack overflow.
+
 ## Quick Connect's recent hosts
 
 - The picker has two zones: the saved sessions (heading, filter, list, button column) and a Quick Connect footer

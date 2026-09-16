@@ -73,7 +73,7 @@ public class ProfileViewModelsTests : IDisposable
         bool? openedFromStore = null;
         var quit = false;
         SessionProfile? toReturn = new SessionProfile { Name = "c", Host = "c.host" };
-        var vm = new ProfilePickerViewModel(_store, (p, s) => { opened = p; openedFromStore = s; }, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
+        var vm = new ProfilePickerViewModel(_store, (p, s) => { opened = p; openedFromStore = s; }, (_, _) => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
 
         Assert.Equal(["a", "b"], vm.Profiles.Select(p => p.Name));
         Assert.False(vm.ConnectCommand.CanExecute(null));
@@ -106,7 +106,7 @@ public class ProfileViewModelsTests : IDisposable
     [Fact]
     public async Task Cancelled_editor_changes_nothing()
     {
-        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { });
         await vm.NewCommand.ExecuteAsync(null);
         Assert.Empty(vm.Profiles);
     }
@@ -121,7 +121,7 @@ public class ProfileViewModelsTests : IDisposable
         var pin = new CertificatePin("AA:BB", "CN=mvs", "pem");
 
         var picker = new ProfilePickerViewModel(_store, (_, _) => { },
-            existing =>
+            (existing, _) =>
             {
                 // Stands in for the session window pinning a certificate while the editor is open.
                 _store.Update(existing!, p => p with { PinnedCertificate = pin });
@@ -141,7 +141,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = new CertificatePin("AA:BB", "CN=mvs", "pem") });
 
         var picker = new ProfilePickerViewModel(_store, (_, _) => { },
-            existing => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { PinnedCertificate = null }, PinCleared: true)),
+            (existing, _) => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { PinnedCertificate = null }, PinCleared: true)),
             () => { });
 
         picker.SelectedRow = picker.VisibleRows.Single();
@@ -159,7 +159,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = pin });
 
         var picker = new ProfilePickerViewModel(_store, (_, _) => { },
-            existing => Task.FromResult<ProfileEdit?>(
+            (existing, _) => Task.FromResult<ProfileEdit?>(
                 new ProfileEdit(existing! with { Name = "MVS-CE", PinnedCertificate = null }, PinCleared: false)),
             () => { });
 
@@ -176,7 +176,8 @@ public class ProfileViewModelsTests : IDisposable
         var pin = new CertificatePin("8C:13:6A:01", "CN=gw", "pem");
         var vm = new ProfileEditorViewModel(new SessionProfile { Name = "gw", Host = "gw", UseTls = true, PinnedCertificate = pin });
         Assert.True(vm.HasPinnedCertificate);
-        Assert.Equal("Pinned certificate: SHA-256 8C:13:6A:01 (CN=gw)", vm.PinnedCertificateText);
+        Assert.Equal("CN=gw", vm.PinnedSubject);
+        Assert.Equal("8C:13:6A:01", vm.PinnedFingerprint);
         Assert.Same(pin, vm.TryBuild()!.PinnedCertificate);
 
         var changes = new List<string?>();
@@ -185,10 +186,23 @@ public class ProfileViewModelsTests : IDisposable
         vm.ForgetPinCommand.Execute(null);
         Assert.True(vm.PinCleared);
         Assert.False(vm.HasPinnedCertificate);
-        Assert.Null(vm.PinnedCertificateText);
+        Assert.Null(vm.PinnedSubject);
+        Assert.Null(vm.PinnedFingerprint);
         Assert.Null(vm.TryBuild()!.PinnedCertificate);
         Assert.Contains(nameof(vm.HasPinnedCertificate), changes);
-        Assert.Contains(nameof(vm.PinnedCertificateText), changes);
+        Assert.Contains(nameof(vm.PinnedSubject), changes);
+        Assert.Contains(nameof(vm.PinnedFingerprint), changes);
+    }
+
+    /// <summary>A full SHA-256 is 95 characters with no space; left to wrap it breaks mid-byte.</summary>
+    [Fact]
+    public void A_full_fingerprint_shows_on_two_lines_broken_between_bytes()
+    {
+        var bytes = Enumerable.Range(0, 32).Select(i => i.ToString("X2")).ToArray();
+        var pin = new CertificatePin(string.Join(':', bytes), "CN=gw", "pem");
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "gw", Host = "gw", UseTls = true, PinnedCertificate = pin });
+
+        Assert.Equal(string.Join(':', bytes[..16]) + ":\n" + string.Join(':', bytes[16..]), vm.PinnedFingerprint);
     }
 
     /// <summary>A pin was taken from one host and port; a profile pointed somewhere else must not carry it, and the
@@ -251,7 +265,7 @@ public class ProfileViewModelsTests : IDisposable
     {
         var vm = new ProfileEditorViewModel(null);
         Assert.False(vm.HasPinnedCertificate);
-        Assert.Null(vm.PinnedCertificateText);
+        Assert.Null(vm.PinnedFingerprint);
         Assert.Null(vm.TryBuild()?.PinnedCertificate);
     }
 
@@ -408,6 +422,27 @@ public class ProfileViewModelsTests : IDisposable
         var built = vm.TryBuild()!;
         Assert.Equal(2, built.Model);
         Assert.Equal("100x30", built.Oversize);
+    }
+
+    /// <summary>Other starts from the size on screen, so the spinners have a number to count from; numbers already
+    /// typed win.</summary>
+    [Fact]
+    public void Choosing_other_starts_from_the_models_size()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 4);
+
+        vm.SelectedModelChoice = ModelChoice.Other;
+
+        Assert.Equal("80", vm.ColumnsDisplay);
+        Assert.Equal("43", vm.RowsDisplay);
+        Assert.Equal("80x43", vm.TryBuild()!.Oversize);
+
+        vm.ColumnsDisplay = "100";
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 5);
+        vm.SelectedModelChoice = ModelChoice.Other;
+        Assert.Equal("100", vm.ColumnsDisplay);
+        Assert.Equal("43", vm.RowsDisplay);
     }
 
     /// <summary>Outside Other the boxes are read-only and show the chosen model's own size, so they always say
@@ -574,6 +609,7 @@ public class ProfileViewModelsTests : IDisposable
     {
         var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
         vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "";
         Assert.Null(vm.TryBuild());
         Assert.NotNull(vm.ValidationMessage);
 
@@ -712,13 +748,13 @@ public class ProfileViewModelsTests : IDisposable
     }
 
     private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession) =>
-        new(_store, openSession, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+        new(_store, openSession, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { });
 
     /// <summary>In a subdirectory, so the profile store's directory read never meets it.</summary>
     private RecentHostsStore RecentStore() => new(Path.Combine(_dir, "config", "recent-hosts.json"));
 
     private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession, RecentHostsStore recent) =>
-        new(_store, openSession, _ => Task.FromResult<ProfileEdit?>(null), () => { }, recentHosts: recent);
+        new(_store, openSession, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { }, recentHosts: recent);
 
     [Fact]
     public void Quick_connect_remembers_ad_hoc_hosts_as_typed_newest_first()
@@ -778,6 +814,29 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(["a.example", "c.example"], recent.Load().Entries);
     }
 
+    /// <summary>The editor draws its chips against the registry the picker just reconciled, so a tag's color in
+    /// the editor is the one the list shows.</summary>
+    [Fact]
+    public async Task The_picker_hands_the_editor_its_registry()
+    {
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new("PROD", TagColor.Teal)]));
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD", "MVS"]) });
+        var seen = new List<TagRegistry>();
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { },
+            (_, registry) => { seen.Add(registry); return Task.FromResult<ProfileEdit?>(null); }, () => { }, tags);
+
+        await vm.NewCommand.ExecuteAsync(null);
+        await vm.EditCommand.ExecuteAsync(vm.VisibleRows.Single());
+
+        Assert.Equal(2, seen.Count);
+        Assert.All(seen, registry =>
+        {
+            Assert.Equal(TagColor.Teal, registry.ColorOf("PROD"));
+            Assert.True(registry.Contains("MVS"));
+        });
+    }
+
     [Fact]
     public void Editor_round_trips_tags_and_a_note()
     {
@@ -787,9 +846,10 @@ public class ProfileViewModelsTests : IDisposable
         };
         var vm = new ProfileEditorViewModel(existing);
 
-        // FAVORITE belongs to the checkbox, so it must not also appear in the box the user edits.
+        // FAVORITE belongs to the checkbox, so it must not also appear as a chip.
         Assert.True(vm.IsFavorite);
-        Assert.Equal("PROD, MVS", vm.TagsText);
+        Assert.Equal(["PROD", "MVS"], vm.TagNames);
+        Assert.Equal(["PROD", "MVS"], vm.TagChips.Select(c => c.Text));
         Assert.Equal("no live data", vm.Note);
 
         var built = vm.TryBuild()!;
@@ -802,51 +862,200 @@ public class ProfileViewModelsTests : IDisposable
     {
         var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
         Assert.False(vm.IsFavorite);
-        Assert.Equal("", vm.TagsText);
+        Assert.Empty(vm.TagChips);
+        Assert.Equal("", vm.TagEntry);
         var built = vm.TryBuild()!;
         Assert.True(built.Tags.IsEmpty);
         Assert.Null(built.Note);
     }
 
+    /// <summary>A comma ends a tag whether it is typed or pasted; what follows the last one stays in the box.</summary>
     [Fact]
-    public void Editor_normalises_the_tag_box_and_puts_the_checkbox_first()
+    public void A_comma_turns_the_text_before_it_into_chips()
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", IsFavorite = true, TagsText = " #prod , mvs ,, prod " };
-        var built = vm.TryBuild()!;
-        Assert.Equal(["FAVORITE", "prod", "mvs"], built.Tags.Names);
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+
+        vm.TagEntry = "prod,";
+        Assert.Equal(["prod"], vm.TagNames);
+        Assert.Equal("", vm.TagEntry);
+
+        vm.TagEntry = " #mvs ,, prod , te";
+        Assert.Equal(["prod", "mvs"], vm.TagNames);
+        Assert.Equal("te", vm.TagEntry);
+        Assert.Null(vm.TagMessage);
     }
 
-    /// <summary>The checkbox owns the reserved tag, so typing it is forgiven rather than refused: the box drops
-    /// it and the checkbox visibly turns on, which explains itself without a validation message.</summary>
     [Fact]
-    public void Typing_the_reserved_tag_turns_the_checkbox_on_and_drops_it_from_the_box()
+    public void Commit_adds_the_box_and_puts_the_checkbox_first_on_save()
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", TagsText = "favorite, PROD" };
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", IsFavorite = true };
+        vm.TagEntry = " #prod ";
+        Assert.True(vm.CommitTagEntry());
+        Assert.Equal("", vm.TagEntry);
+
+        // A name still in the box when Save is pressed is added, not dropped.
+        vm.TagEntry = "mvs";
+        var built = vm.TryBuild()!;
+        Assert.Equal(["FAVORITE", "prod", "mvs"], built.Tags.Names);
+        Assert.Equal("", vm.TagEntry);
+    }
+
+    /// <summary>Chips are drawn uppercase in the registry's color, and a name the registry does not know yet in the
+    /// color the picker's reconciliation will give it — the least used one.</summary>
+    [Fact]
+    public void Chips_preview_the_color_a_new_tag_will_get()
+    {
+        var registry = new TagRegistry([new("PROD", TagColor.Blue)]);
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(["prod"]) }, registry);
+        vm.TagEntry = "mvs,";
+
+        var expected = registry.Register(["prod", "mvs"]).Registry;
+        Assert.Equal(["PROD", "MVS"], vm.TagChips.Select(c => c.Text));
+        Assert.Equal(TagPalette.Brush(TagColor.Blue), vm.TagChips[0].Background);
+        Assert.Equal(TagPalette.Brush(expected.ColorOf("MVS")), vm.TagChips[1].Background);
+        Assert.NotEqual(TagColor.Blue, expected.ColorOf("MVS"));
+    }
+
+    /// <summary>The drop-down offers the known tags the profile does not carry, in the registry's order.</summary>
+    [Fact]
+    public void Suggestions_are_the_known_tags_not_yet_on_the_profile()
+    {
+        var registry = new TagRegistry([new("VM", TagColor.Red), new("PROD", TagColor.Blue), new("MVS", TagColor.Green)]);
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(["prod"]) }, registry);
+        Assert.Equal(["MVS", "VM"], vm.TagSuggestions.Select(c => c.Text));
+        Assert.Equal(TagPalette.Brush(TagColor.Green), vm.TagSuggestions[0].Background);
+
+        vm.TagEntry = "vm,";
+        Assert.Equal(["MVS"], vm.TagSuggestions.Select(c => c.Text));
+
+        vm.RemoveTagCommand.Execute(vm.TagChips[0]);
+        Assert.Equal(["vm"], vm.TagNames);
+        Assert.Equal(["MVS", "PROD"], vm.TagSuggestions.Select(c => c.Text));
+    }
+
+    [Fact]
+    public void Remove_last_and_repeats_leave_the_rest_alone()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = "a, b, A,";
+        Assert.Equal(["a", "b"], vm.TagNames);
+        Assert.Null(vm.TagMessage);
+
+        vm.RemoveLastTag();
+        Assert.Equal(["a"], vm.TagNames);
+        vm.RemoveLastTag();
+        vm.RemoveLastTag();
+        Assert.Empty(vm.TagNames);
+    }
+
+    /// <summary>The checkbox owns the reserved tag, so typing it is forgiven rather than refused: it becomes no chip
+    /// and the checkbox visibly turns on, which explains itself without a message.</summary>
+    [Fact]
+    public void Typing_the_reserved_tag_turns_the_checkbox_on_instead_of_adding_a_chip()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = "favorite, PROD,";
         Assert.True(vm.IsFavorite);
-        Assert.Equal("PROD", vm.TagsText);
+        Assert.Equal(["PROD"], vm.TagNames);
+        Assert.Null(vm.TagMessage);
         Assert.Equal(["FAVORITE", "PROD"], vm.TryBuild()!.Tags.Names);
     }
 
+    /// <summary>An over-long name stays in the box with the reason under it, and the names after it wait there too,
+    /// so nothing typed is lost.</summary>
     [Fact]
-    public void Editor_refuses_an_over_long_tag_name()
+    public void An_over_long_name_stays_in_the_box_with_the_reason()
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", TagsText = new string('x', 17) };
-        Assert.Null(vm.TryBuild());
-        Assert.Contains("16", vm.ValidationMessage);
+        var tooLong = new string('x', TagSet.MaxNameLength + 1);
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = $"ok, {tooLong}, after,";
+
+        Assert.Equal(["ok"], vm.TagNames);
+        Assert.Equal($"{tooLong}, after", vm.TagEntry);
+        Assert.Contains($"{TagSet.MaxNameLength}", vm.TagMessage);
+
+        // The next keystroke clears the reason.
+        vm.TagEntry = "short";
+        Assert.Null(vm.TagMessage);
     }
 
-    /// <summary>Counted before TagSet.From runs. Afterwards From has already discarded the surplus, so the
-    /// check could never fire and nine tags would silently become eight.</summary>
+    [Fact]
+    public void Save_refuses_an_over_long_name_left_in_the_box()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = new string('x', TagSet.MaxNameLength + 1);
+        Assert.Null(vm.TryBuild());
+        Assert.Contains($"{TagSet.MaxNameLength}", vm.ValidationMessage);
+        Assert.Equal(ProfileEditorField.Tags, vm.ValidationField);
+    }
+
+    /// <summary>The box refuses a chip past the cap as it is typed, FAVORITE counted, and Save refuses the one way
+    /// left to pass it: turning FAVORITE on beside a full set.</summary>
     [Fact]
     public void Editor_refuses_more_tags_than_the_cap_including_the_reserved_one()
     {
-        var eight = string.Join(",", Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}"));
-        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", TagsText = eight };
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = string.Join(",", Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}")) + ",";
+        Assert.Equal(TagSet.MaxTags, vm.TagNames.Count);
+        Assert.False(vm.CanAddTag);
+        Assert.Equal($"{TagSet.MaxTags} tags at most", vm.TagPlaceholder);
         Assert.NotNull(vm.TryBuild());
 
+        vm.TagEntry = "extra,";
+        Assert.Equal(TagSet.MaxTags, vm.TagNames.Count);
+        Assert.Contains($"{TagSet.MaxTags}", vm.TagMessage);
+
+        vm.TagEntry = "";
         vm.IsFavorite = true;
         Assert.Null(vm.TryBuild());
         Assert.Contains($"{TagSet.MaxTags}", vm.ValidationMessage);
+        Assert.Equal(ProfileEditorField.Tags, vm.ValidationField);
+
+        vm.RemoveLastTag();
+        Assert.NotNull(vm.TryBuild());
+        Assert.Null(vm.ValidationField);
+    }
+
+    /// <summary>Each refusal names its field, which is how the window picks the tab to show.</summary>
+    [Fact]
+    public void Each_refusal_names_its_field()
+    {
+        var vm = new ProfileEditorViewModel(null);
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.Name, vm.ValidationField);
+
+        vm.Name = "n";
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.Host, vm.ValidationField);
+
+        vm.Host = "h";
+        vm.PortText = "0";
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.Port, vm.ValidationField);
+
+        vm.PortText = "23";
+        vm.KeepAliveText = "x";
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.KeepAlive, vm.ValidationField);
+
+        vm.KeepAliveText = "60";
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "10";
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.ScreenSize, vm.ValidationField);
+
+        vm.ColumnsDisplay = "80";
+        Assert.NotNull(vm.TryBuild());
+        Assert.Null(vm.ValidationMessage);
+        Assert.Null(vm.ValidationField);
+    }
+
+    [Fact]
+    public void A_blank_code_page_names_its_field()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "p", Host = "h", CodePage = " " });
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.CodePage, vm.ValidationField);
     }
 
     [Fact]
@@ -859,7 +1068,7 @@ public class ProfileViewModelsTests : IDisposable
     }
 
     private ProfilePickerViewModel Picker(TagRegistryStore? tags = null) =>
-        new(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, tags);
+        new(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { }, tags);
 
     [Fact]
     public void Picker_shows_every_profile_until_something_narrows_it()
@@ -943,7 +1152,7 @@ public class ProfileViewModelsTests : IDisposable
     {
         _store.Save(new SessionProfile { Name = "tk5", Host = "tk5.local", Port = 3270 });
         SessionProfile? opened = null;
-        var vm = new ProfilePickerViewModel(_store, (p, _) => opened = p, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+        var vm = new ProfilePickerViewModel(_store, (p, _) => opened = p, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { });
 
         vm.FilterText = "zzz";
         Assert.Empty(vm.VisibleRows);
@@ -1273,7 +1482,7 @@ public class ProfileViewModelsTests : IDisposable
         Directory.CreateDirectory(tagFile + ".tmp");
         var tags = new TagRegistryStore(tagFile);
 
-        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { },
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { },
             tags, () => Task.CompletedTask);
         vm.Reload();
         await vm.ManageTagsCommand.ExecuteAsync(null);
@@ -1286,7 +1495,7 @@ public class ProfileViewModelsTests : IDisposable
     {
         _store.Save(new SessionProfile { Name = "a", Host = "h" });
         var opened = 0;
-        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, null,
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { }, null,
             () =>
             {
                 opened++;
@@ -1308,7 +1517,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
         var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
         tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
-        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, tags,
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { }, tags,
             () =>
             {
                 tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Green)]));

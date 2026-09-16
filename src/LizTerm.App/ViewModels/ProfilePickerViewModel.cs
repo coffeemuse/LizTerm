@@ -15,7 +15,7 @@ public partial class ProfilePickerViewModel : ObservableObject
 {
     private readonly ProfileStore _store;
     private readonly Action<SessionProfile, bool> _openSession;
-    private readonly Func<SessionProfile?, Task<ProfileEdit?>> _editProfile;
+    private readonly Func<SessionProfile?, TagRegistry, Task<ProfileEdit?>> _editProfile;
     private readonly Action _quit;
     private readonly TagRegistryStore? _tags;
     private readonly Func<Task>? _manageTags;
@@ -57,14 +57,15 @@ public partial class ProfilePickerViewModel : ObservableObject
     /// <param name="openSession">Opens a session. The bool is whether the profile came from the store: a pin
     /// chosen in that window can be written back only for a saved profile, and Quick Connect's ad hoc profiles
     /// are not saved.</param>
-    /// <param name="editProfile">Shows the editor for an existing profile (or null for a new one); returns null when cancelled.</param>
+    /// <param name="editProfile">Shows the editor for an existing profile (or null for a new one), drawing its tag
+    /// chips against the registry passed; returns null when cancelled.</param>
     /// <param name="tags">The tag registry's file, or null for an in-memory registry that is never written,
     /// which is what a test wants.</param>
     /// <param name="manageTags">Shows Manage Tags and completes when it closes, or null where there is no tag file
     /// to manage — which is also what a test that does not care wants.</param>
     /// <param name="recentHosts">Quick Connect's history file, or null for a history kept in memory only.</param>
     public ProfilePickerViewModel(ProfileStore store, Action<SessionProfile, bool> openSession,
-        Func<SessionProfile?, Task<ProfileEdit?>> editProfile, Action quit, TagRegistryStore? tags = null,
+        Func<SessionProfile?, TagRegistry, Task<ProfileEdit?>> editProfile, Action quit, TagRegistryStore? tags = null,
         Func<Task>? manageTags = null, RecentHostsStore? recentHosts = null)
     {
         _store = store;
@@ -210,7 +211,7 @@ public partial class ProfilePickerViewModel : ObservableObject
     [RelayCommand]
     private async Task NewAsync()
     {
-        var edit = await _editProfile(null);
+        var edit = await _editProfile(null, _registry);
         if (edit is null) return;
         _store.Save(edit.Profile);
         Reload();
@@ -224,7 +225,7 @@ public partial class ProfilePickerViewModel : ObservableObject
         Reload();
         // Read the file, not the copy this picker has been holding: a session window may have written a pin into
         // it since Reload last ran, and the editor was handed the older copy.
-        var edit = await _editProfile(_store.Load(original.Name) ?? original);
+        var edit = await _editProfile(_store.Load(original.Name) ?? original, _registry);
         if (edit is null) return;
 
         // Under the ORIGINAL name. A rename deletes that file below, so looking the pin up under the new one
