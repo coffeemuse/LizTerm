@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/LizTerm.Backend.B3270/LizTerm.Backend.B3270.csproj" />
+    <ProjectReference Include="../../src/LizTerm.Backend.Mvsmf/LizTerm.Backend.Mvsmf.csproj" />
   </ItemGroup>
 
   <!-- Bundle the locally built b3270 for the host runtime, when native/build/build-macos.sh (or, on Linux,
