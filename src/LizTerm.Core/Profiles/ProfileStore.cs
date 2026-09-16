@@ -66,6 +66,8 @@ public sealed class ProfileStore(string directory)
         if (profile is null || string.IsNullOrWhiteSpace(profile.Name)) return null;
         if (profile.PinnedCertificate is { } pin && (string.IsNullOrWhiteSpace(pin.Pem) || string.IsNullOrWhiteSpace(pin.Sha256)))
             profile = profile with { PinnedCertificate = null };
+        if (profile.HostFilesPinnedCertificate is { } restPin && (string.IsNullOrWhiteSpace(restPin.Pem) || string.IsNullOrWhiteSpace(restPin.Sha256)))
+            profile = profile with { HostFilesPinnedCertificate = null };
         return profile;
     }
 

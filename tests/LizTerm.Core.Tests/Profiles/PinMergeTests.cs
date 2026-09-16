@@ -71,4 +71,40 @@ public class PinMergeTests
     {
         Assert.Null(PinMerge.Resolve(Profile(pin: null), Profile(pin: null), pinCleared: false));
     }
+
+    private static SessionProfile Rest(string? url = "http://mvs:8080/zosmf", CertificatePin? pin = null) =>
+        new() { Name = "MVS", Host = "mvs", HostFilesUrl = url, HostFilesPinnedCertificate = pin };
+
+    [Fact]
+    public void A_rest_pin_written_since_the_editor_opened_is_carried_forward() =>
+        Assert.Equal(Fresh, PinMerge.ResolveHostFiles(Rest(pin: null), Rest(pin: Fresh), pinCleared: false));
+
+    [Fact]
+    public void Forget_clears_the_rest_pin_even_when_disk_still_has_one() =>
+        Assert.Null(PinMerge.ResolveHostFiles(Rest(pin: null), Rest(pin: Fresh), pinCleared: true));
+
+    [Fact]
+    public void Repointing_the_rest_url_drops_its_pin() =>
+        Assert.Null(PinMerge.ResolveHostFiles(Rest(url: "https://proxy/zosmf"), Rest(pin: Fresh), pinCleared: false));
+
+    [Fact]
+    public void A_rest_url_differing_only_in_case_or_a_trailing_slash_keeps_its_pin() =>
+        Assert.Equal(Fresh, PinMerge.ResolveHostFiles(Rest(url: "HTTP://MVS:8080/zosmf/"), Rest(pin: Fresh), pinCleared: false));
+
+    [Fact]
+    public void Without_a_file_the_editors_rest_pin_stands() =>
+        Assert.Equal(Stale, PinMerge.ResolveHostFiles(Rest(pin: Stale), onDisk: null, pinCleared: false));
+
+    [Fact]
+    public void Apply_resolves_both_pins_independently()
+    {
+        var edited = new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, HostFilesUrl = "http://mvs:8080/zosmf" };
+        var onDisk = edited with { PinnedCertificate = Fresh, HostFilesPinnedCertificate = Stale };
+
+        var merged = PinMerge.Apply(edited, onDisk, pinCleared: true, hostFilesPinCleared: false);
+
+        Assert.Null(merged.PinnedCertificate);
+        Assert.Equal(Stale, merged.HostFilesPinnedCertificate);
+        Assert.Equal(edited with { HostFilesPinnedCertificate = Stale }, merged);
+    }
 }
