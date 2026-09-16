@@ -3,10 +3,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
@@ -17,13 +19,6 @@ public partial class ProfileEditorWindow : Window
 {
     private readonly ProfileEditorViewModel _vm;
     private Control[] _invalid = [];
-
-    /// <summary>Whether the tag box's drop-down was last closed by Escape, which must not add what was highlighted.</summary>
-    private bool _suggestionsEscaped;
-
-    /// <summary>Set while a suggestion is being added: clearing the box closes and reselects inside the drop-down,
-    /// which would otherwise add the same suggestion again, without end.</summary>
-    private bool _choosing;
 
     public ProfileEditorWindow() : this(null) { }
 
@@ -39,21 +34,25 @@ public partial class ProfileEditorWindow : Window
         // Tunnelled: AutoCompleteBox handles Enter and Backspace itself, and Enter must add a tag rather than reach
         // Save, which is the default button.
         TagBox.AddHandler(KeyDownEvent, OnTagBoxKeyDown, RoutingStrategies.Tunnel);
-        TagBox.LostFocus += (_, _) =>
+        // Posted: a click on a suggestion takes focus from the box before the click is handled, and the box takes it
+        // back afterwards. Committing at once would add the half-typed text instead of the suggestion.
+        TagBox.LostFocus += (_, _) => Dispatcher.UIThread.Post(() =>
         {
-            if (!TagBox.IsDropDownOpen && _vm.TagEntry.Trim().Length > 0) _vm.CommitTagEntry();
-        };
+            if (!TagBox.IsKeyboardFocusWithin && _vm.TagEntry.Trim().Length > 0) _vm.CommitTagEntry();
+        });
         TagBox.GotFocus += (_, _) =>
         {
             if (_vm.CanAddTag && _vm.TagSuggestions.Count > 0) TagBox.IsDropDownOpen = true;
         };
-        // A click on a suggestion puts its text in the box and closes the list; that choice is the tag.
-        TagBox.DropDownClosed += (_, _) =>
+        // A click on a suggestion is the choice. Read from the clicked row rather than SelectedItem: the drop-down
+        // closes (focus has left the box) before the box records the selection, so on the first click SelectedItem
+        // is still empty. The release bubbles out of the drop-down's popup to the box; posted so the box finishes
+        // its own commit, which writes the suggestion's text into it, before this clears it.
+        TagBox.AddHandler(PointerReleasedEvent, (_, e) =>
         {
-            if (_choosing) return;
-            if (!_suggestionsEscaped && TagBox.SelectedItem is TagChip chip) AddSuggestion(chip);
-            _suggestionsEscaped = false;
-        };
+            if (e.Source is Visual source && source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is { DataContext: TagChip chip })
+                Dispatcher.UIThread.Post(() => AddSuggestion(chip));
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
         Opened += (_, _) => NameBox.Focus();
     }
 
@@ -76,28 +75,17 @@ public partial class ProfileEditorWindow : Window
                 _vm.RemoveLastTag();
                 e.Handled = true;
                 break;
-            case Key.Escape when TagBox.IsDropDownOpen:
-                _suggestionsEscaped = true;
-                break;
         }
     }
 
+    /// <summary>Adds the tag itself rather than through the box's text, then empties the box.</summary>
     private void AddSuggestion(TagChip chip)
     {
-        if (_choosing) return;
-        _choosing = true;
-        try
-        {
-            _vm.AddTag(chip.Text);
-            TagBox.IsDropDownOpen = false;
-            TagBox.SelectedItem = null;
-            TagBox.Text = "";
-            _vm.TagEntry = "";
-        }
-        finally
-        {
-            _choosing = false;
-        }
+        _vm.AddTag(chip.Text);
+        TagBox.IsDropDownOpen = false;
+        TagBox.SelectedItem = null;
+        TagBox.Text = "";
+        _vm.TagEntry = "";
     }
 
     /// <summary>A click anywhere in the drawn field, chips aside, types into the box.</summary>

@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -204,6 +205,42 @@ public class ProfileEditorWindowTests
         Assert.Equal(["MVS"], Vm(window).TagSuggestions.Select(c => c.Text));
         Assert.Equal("", Vm(window).TagEntry);
     }
+
+    /// <summary>A real press and release on a suggestion, because the pointer path is the one that misbehaved in
+    /// the app: the drop-down closed before the box recorded the choice, so the first click only put the text in the
+    /// box and the second one added the chip.</summary>
+    [AvaloniaFact]
+    public void A_clicked_suggestion_becomes_a_chip_on_the_first_click()
+    {
+        var registry = new TagRegistry([new("BBS", TagColor.Amber), new("VM", TagColor.Red)]);
+        var window = new ProfileEditorWindow(new SessionProfile { Name = "p", Host = "h", Tags = TagSet.From(["MVS"]) }, registry);
+        window.Show();
+        window.FindControl<TabControl>("Tabs")!.SelectedItem = window.FindControl<TabItem>("OrganizeTab");
+        window.UpdateLayout();
+        var box = window.FindControl<AutoCompleteBox>("TagBox")!;
+        FocusTagBox(window);
+        window.KeyTextInput("BB");
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        window.UpdateLayout();
+        Assert.True(box.IsDropDownOpen);
+
+        var item = box.GetVisualDescendants().OfType<ListBoxItem>()
+            .Concat(TopLevelItems(window))
+            .First(i => i.DataContext is TagChip { Text: "BBS" });
+        var host = TopLevel.GetTopLevel(item)!;
+        var centre = item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), host)!.Value;
+        host.MouseDown(centre, MouseButton.Left);
+        host.MouseUp(centre, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["MVS", "BBS"], Vm(window).TagNames);
+        Assert.Equal("", Vm(window).TagEntry);
+        Assert.Equal("", box.Text);
+    }
+
+    private static IEnumerable<ListBoxItem> TopLevelItems(Window window) =>
+        window.GetVisualDescendants().OfType<ListBoxItem>();
 
     /// <summary>A pasted paragraph must not reach the list, where it would reshape every row.</summary>
     [AvaloniaFact]
