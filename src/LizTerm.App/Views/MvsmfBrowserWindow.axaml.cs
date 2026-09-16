@@ -161,7 +161,8 @@ public partial class MvsmfBrowserWindow : Window
                 e.Handled = true;
                 if (vm.DownloadCommand.CanExecute(null)) _ = vm.DownloadCommand.ExecuteAsync(null);
                 break;
-            case Key.Delete when MemberList.IsKeyboardFocusWithin:
+            // Backspace is the key Apple labels "delete".
+            case Key.Delete or Key.Back when MemberList.IsKeyboardFocusWithin:
                 e.Handled = true;
                 if (vm.DeleteCommand.CanExecute(null)) _ = vm.DeleteCommand.ExecuteAsync(null);
                 break;

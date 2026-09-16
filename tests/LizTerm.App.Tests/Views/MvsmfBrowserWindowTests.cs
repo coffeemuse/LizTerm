@@ -219,6 +219,24 @@ public class MvsmfBrowserWindowTests
     }
 
     [AvaloniaFact]
+    public async Task Backspace_in_the_member_list_asks_about_the_selection()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        t.Vm.SelectedDataset = t.Vm.Datasets[0];
+        await Wait.UntilAsync(() => !t.Vm.IsBusy, "the members");
+        var members = Named<ListBox>(window, "MemberList");
+        members.SelectedItems!.Add(t.Vm.VisibleMembers[2]);
+        window.UpdateLayout();
+        Assert.True(members.ContainerFromIndex(2)!.Focus());
+
+        window.KeyPress(Key.Back, RawInputModifiers.None, PhysicalKey.Backspace, null);
+
+        await Wait.UntilAsync(() => t.Vm.HasConfirmation, "the question");
+        Assert.Equal("Delete 1 member", t.Vm.Confirmation!.PrimaryLabel);
+    }
+
+    [AvaloniaFact]
     public void Escape_with_nothing_pending_closes_the_window()
     {
         var (window, t) = Show(userid: null);

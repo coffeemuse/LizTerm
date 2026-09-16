@@ -740,7 +740,8 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
 - **Delete** asks once, naming up to five members. A delete cancelled part-way refreshes the list and says how
   many members went, because a delete cannot be undone and the interrupted request may have deleted its member.
 - The window pushes the member selection through `SetSelectedMembers`, and only rows the member filter still
-  shows, so a transfer or a delete never acts on a member the user cannot see. A question moves focus to its
+  shows, so a transfer or a delete never acts on a member the user cannot see. In the member list, Enter downloads,
+  and Delete or Backspace (the key Apple labels "delete") deletes. A question moves focus to its
   Cancel button, posted at `Loaded` priority because a control that is still hidden refuses focus. Escape cancels
   a question, else the running operation, else closes the window.
 - **Focus survives an operation.** In Avalonia 12.1.2, disabling a list whose row has the focus drops the focus,
