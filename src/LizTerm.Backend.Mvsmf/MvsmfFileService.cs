@@ -121,11 +121,40 @@ public sealed class MvsmfFileService : IHostFileService
     private static int? Number(string? value) =>
         int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
 
-    public Task<IReadOnlyList<string>> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("Task 8");
+    public async Task<IReadOnlyList<string>> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var what = path.ToString();
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        using var response = await SendAsync(() => Get(path, "text"), what, idle, cancellationToken);
+        using var body = new MemoryStream();
+        await CopyBodyAsync(response, body, idle, progress, what, cancellationToken);
+        // mvsMF-compat: text-read-keeps-trailing-blanks — fixed records arrive padded; HostFileTransfer trims them.
+        return SplitRecords(body.GetBuffer().AsSpan(0, (int)body.Length));
+    }
 
-    public Task<long> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("Task 8");
+    public async Task<long> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var what = path.ToString();
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        using var response = await SendAsync(() => Get(path, "binary"), what, idle, cancellationToken);
+        return await CopyBodyAsync(response, destination, idle, progress, what, cancellationToken);
+    }
+
+    private HttpRequestMessage Get(HostPath path, string dataType)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, Url(DatasetPath(path)));
+        request.Headers.Add("X-IBM-Data-Type", dataType);
+        return request;
+    }
+
+    /// <summary>One string per record: records end in LF, and a CR is data.</summary>
+    internal static List<string> SplitRecords(ReadOnlySpan<byte> body)
+    {
+        // mvsMF-compat: text-body-is-latin1 — the body is ISO-8859-1 whatever the headers say.
+        var lines = Encoding.Latin1.GetString(body).Split('\n').ToList();
+        if (lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
+        return lines;
+    }
 
     public Task WriteTextAsync(HostPath path, IReadOnlyList<string> lines, CancellationToken cancellationToken = default) =>
         throw new NotImplementedException("Task 9");
