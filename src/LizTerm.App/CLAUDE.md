@@ -623,7 +623,11 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   input while its modal child is open. `ShowDialogAbove` gives the dialog its owner's `Topmost` and follows changes
   while it is open, because the macOS menu bar stays live over a modal dialog.
   `ModalDialogsTests.Every_dialog_in_the_app_opens_through_ShowDialogAbove` fails for any other `ShowDialog` call.
-  Modeless, unowned windows (Preferences, the picker) are not covered: a Keep on Top session stays above them.
+- **The app's own windows are kept on top while any session is** (`SessionList.AnyKeepOnTop`). Preferences, the
+  picker, and an unowned About or update check belong to no session, so they cannot follow an owner, yet they open
+  from a session's menus and a Keep on Top session window would cover them. `App.KeepAppWindowsOnTop` runs on every
+  `SessionList.Changed`, and each of those windows takes the value before `Show()`. While a session is kept on top
+  they also float above other applications.
 - Minimize and Zoom are hidden off macOS by `ApplyPlatformMenuRules` reading `_isMacOS`, the constructor's
   platform — unlike About and Preferences, which read the running OS — so a test can build either shape.
 - **The Dock menu** is `Menus/DockMenu`, attached to the application with `NativeDock.SetMenu` on macOS only and

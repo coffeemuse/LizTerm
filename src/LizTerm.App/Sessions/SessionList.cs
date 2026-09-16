@@ -28,6 +28,10 @@ public sealed class SessionList
 
     public SessionEntry? Previous => _used.Count > 1 ? _used[1] : null;
 
+    /// <summary>Whether any open session is kept on top: App keeps its own windows, which belong to no session, on
+    /// top while this holds. Changed is raised whenever it can change.</summary>
+    public bool AnyKeepOnTop => _opened.Any(entry => entry.Host.KeepOnTop);
+
     /// <summary>Raised after Add, Remove, an Activated that changes Current, a Connection change on any listed
     /// session, and any host's KeepOnTopChanged.</summary>
     public event EventHandler? Changed;

@@ -70,6 +70,27 @@ public class SessionListTests
         Assert.Same(a, list.Previous);
     }
 
+    /// <summary>What App keeps its own windows (the picker, Preferences) on top by: any open session kept on top.</summary>
+    [Fact]
+    public void Any_keep_on_top_is_true_while_some_open_session_is_kept_on_top()
+    {
+        var list = new SessionList();
+        var (a, _, aHost) = TestSessions.Create("A");
+        var (b, _, bHost) = TestSessions.Create("B");
+        list.Add(a);
+        list.Add(b);
+        Assert.False(list.AnyKeepOnTop);
+
+        bHost.KeepOnTop = true;
+        Assert.True(list.AnyKeepOnTop);
+        aHost.KeepOnTop = true;
+        bHost.KeepOnTop = false;
+        Assert.True(list.AnyKeepOnTop);
+
+        list.Remove(a);
+        Assert.False(list.AnyKeepOnTop);
+    }
+
     [Fact]
     public void Changed_fires_on_add_remove_activation_connection_and_keep_on_top()
     {
