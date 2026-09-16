@@ -21,6 +21,26 @@ public sealed class AvaloniaFilePicker(TopLevel topLevel) : IFilePicker
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
+    public async Task<IReadOnlyList<string>> PickFilesToSendAsync(string title)
+    {
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = true,
+        });
+        return [.. files.Select(f => f.TryGetLocalPath()).OfType<string>()];
+    }
+
+    public async Task<string?> PickFolderAsync(string title)
+    {
+        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+        });
+        return folders.Count == 0 ? null : folders[0].TryGetLocalPath();
+    }
+
     public async Task<string?> PickSaveLocationAsync(string suggestedFileName, string title, IReadOnlyList<SaveFormat>? formats = null)
     {
         var options = new FilePickerSaveOptions
