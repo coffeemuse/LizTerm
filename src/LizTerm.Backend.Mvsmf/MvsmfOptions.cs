@@ -28,6 +28,11 @@ public sealed record MvsmfOptions(Uri BaseUrl, CertificatePin? PinnedCertificate
             error = "Enter an http:// or https:// URL.";
             return false;
         }
+        if (parsed.UserInfo.Length > 0)
+        {
+            error = "Leave the userid and password out of the URL.";
+            return false;
+        }
         if (parsed.Query.Length > 0 || parsed.Fragment.Length > 0)
         {
             error = "The URL cannot have a query or a fragment.";
