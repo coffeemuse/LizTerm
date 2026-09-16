@@ -56,8 +56,9 @@ public sealed class SslStreamCertificateFetcher : ICertificateFetcher
     /// handshake, which SslStream places in the chain policy's ExtraStore before building. A root the chain engine
     /// pulled from the system store was never on the wire and must not be pinned: with acceptHostname any, pinning
     /// a public CA's root would trust every certificate that CA issued, for any name (final review, spec 11).
-    /// Copies go through the DER bytes; the callback's objects die with the stream.</summary>
-    internal static List<X509Certificate2> SelectPresented(X509Certificate certificate, X509Chain? chain)
+    /// Copies go through the DER bytes; the callback's objects die with the stream. Public so every TLS client in
+    /// the app pins the same certificates; the caller disposes the list.</summary>
+    public static List<X509Certificate2> SelectPresented(X509Certificate certificate, X509Chain? chain)
     {
         var presented = new List<X509Certificate2> { X509CertificateLoader.LoadCertificate(certificate.Export(X509ContentType.Cert)) };
         if (chain is null) return presented;

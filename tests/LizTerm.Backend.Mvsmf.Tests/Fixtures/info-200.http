@@ -1,0 +1,9 @@
+HTTP/1.1 200 OK
+Server: HTTPD Server
+Connection: keep-alive
+Content-Type: application/json
+Content-Length: 182
+Cache-Control: no-store
+Access-Control-Allow-Origin: *
+
+{"zosmf_hostname":"mvs.test","zosmf_port":"8080","zosmf_version":"1.0.0-dev","zosmf_full_version":"1.0.0-dev","zosmf_saf_realm":"SAFRealm","api_version":"1","zos_version":"MVS 3.8j"}

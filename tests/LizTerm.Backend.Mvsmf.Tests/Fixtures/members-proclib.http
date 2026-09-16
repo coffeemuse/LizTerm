@@ -1,0 +1,162 @@
+HTTP/1.1 200 OK
+Server: HTTPD Server
+Connection: keep-alive
+Cache-Control: no-store
+Content-Type: application/json
+Pragma: no-cache
+Access-Control-Allow-Origin: *
+Transfer-Encoding: chunked
+
+{
+  "items": [
+    {
+      "member": "ASMFC   "
+    }
+   ,{
+      "member": "ASMFCG  "
+    }
+   ,{
+      "member": "ASMFCL  "
+    }
+   ,{
+      "member": "ASMFCLG "
+    }
+   ,{
+      "member": "ASMS    "
+    }
+   ,{
+      "member": "DEALLOC "
+    }
+   ,{
+      "member": "DLBACC  "
+    }
+   ,{
+      "member": "DLBALLOC"
+    }
+   ,{
+      "member": "DLBDELTE"
+    }
+   ,{
+      "member": "DLBDELT2"
+    }
+   ,{
+      "member": "DLBPROC "
+    }
+   ,{
+      "member": "DLBREC  "
+    }
+   ,{
+      "member": "DLBREJ  "
+    }
+   ,{
+      "member": "DLBUCL  "
+    }
+   ,{
+      "member": "GTF     "
+    }
+   ,{
+      "member": "HASPASM "
+    }
+   ,{
+      "member": "IEEVMPCR"
+    }
+   ,{
+      "member": "IKJACCNT"
+    }
+   ,{
+      "member": "INIT    "
+    }
+   ,{
+      "member": "JES2    "
+    }
+   ,{
+      "member": "JES2BLD "
+    }
+   ,{
+      "member": "JES2JOB "
+    }
+   ,{
+      "member": "JES2LNK "
+    }
+   ,{
+      "member": "JES20098"
+    }
+   ,{
+      "member": "JES20099"
+    }
+   ,{
+      "member": "LINKS   "
+    }
+   ,{
+      "member": "LIST    "
+    }
+   ,{
+      "member": "LKED    "
+    }
+   ,{
+      "member": "LKEDG   "
+    }
+   ,{
+      "member": "MF1     "
+    }
+   ,{
+      "member": "MOD     "
+    }
+   ,{
+      "member": "NET     "
+    }
+   ,{
+      "member": "OFFLOAD "
+    }
+   ,{
+      "member": "PRDMP   "
+    }
+   ,{
+      "member": "PTFLE   "
+    }
+   ,{
+      "member": "RACIND  "
+    }
+   ,{
+      "member": "RAKF    "
+    }
+   ,{
+      "member": "RAKFPROF"
+    }
+   ,{
+      "member": "RAKFPWUP"
+    }
+   ,{
+      "member": "RAKFUSER"
+    }
+   ,{
+      "member": "RDR     "
+    }
+   ,{
+      "member": "RDR3200 "
+    }
+   ,{
+      "member": "RDR400  "
+    }
+   ,{
+      "member": "RMTGEN  "
+    }
+   ,{
+      "member": "SMFDUMP "
+    }
+   ,{
+      "member": "SMPIO   "
+    }
+   ,{
+      "member": "SMPNUC  "
+    }
+   ,{
+      "member": "TSO     "
+    }
+   ,{
+      "member": "XWTR    "
+    }
+  ],
+  "returnedRows": 49,
+  "JSONversion": 1
+} 

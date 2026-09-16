@@ -1,0 +1,7 @@
+HTTP/1.1 204 No Content
+Server: HTTPD Server
+Connection: keep-alive
+Content-Type: application/json
+Cache-Control: no-store
+Access-Control-Allow-Origin: *
+

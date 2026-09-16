@@ -1,0 +1,9 @@
+HTTP/1.1 400 Bad Request
+Server: HTTPD Server
+Connection: keep-alive
+Content-Type: application/json
+Content-Length: 140
+Cache-Control: no-store
+Access-Control-Allow-Origin: *
+
+{"rc":8,"category":6,"reason":1,"message":"Dataset is a partitioned dataset (PDS). Use /ds/{dataset-name}({member-name}) to access members"}

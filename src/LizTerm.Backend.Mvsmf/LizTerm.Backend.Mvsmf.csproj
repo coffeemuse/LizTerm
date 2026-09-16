@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../LizTerm.Core/LizTerm.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="LizTerm.Backend.Mvsmf.Tests" />
+    <InternalsVisibleTo Include="LizTerm.Integration.Tests" />
+  </ItemGroup>
+</Project>

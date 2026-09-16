@@ -1,0 +1,15 @@
+HTTP/1.1 200 OK
+Server: HTTPD Server
+Connection: keep-alive
+Cache-Control: no-store
+Content-Type: application/json
+Pragma: no-cache
+Access-Control-Allow-Origin: *
+Transfer-Encoding: chunked
+
+{
+  "items": [
+  ],
+  "returnedRows": 0,
+  "JSONversion": 1
+} 

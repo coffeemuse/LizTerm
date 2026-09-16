@@ -141,19 +141,24 @@ tools/build-app-icons.sh
 | `LIZTERM_TEST_TLS` | `1` if the test host speaks TLS. |
 | `LIZTERM_TEST_VERIFY_CERT` | `0` to accept the test host's self-signed certificate. |
 | `LIZTERM_TEST_USER`, `LIZTERM_TEST_PASSWORD` | Additionally enable the IND$FILE round-trip test. |
+| `LIZTERM_MVSMF_URL` | The mvsMF base, for example `http://host:8080/zosmf`; with the three below, enables the live mvsMF tests. |
+| `LIZTERM_MVSMF_USER`, `LIZTERM_MVSMF_PASSWORD` | Credentials for the live mvsMF tests and for `tools/record-mvsmf-fixture.sh`. |
+| `LIZTERM_MVSMF_SCRATCH_PDS` | A PDS the live mvsMF tests may write the member `LIZITEST` into and delete it from. |
 | `LIZTERM_TEST_BELL` | Any non-blank value runs the system-alert ring test on macOS and Windows, where it is audible; unset, it skips there. On Linux the ring is a no-op and the test always runs. |
 | `LIZTERM_REQUIRE_ENGINE` | Any non-blank value makes the engine smoke test fail, instead of skip, when the test output has no bundled engine. CI sets it; leave it unset locally. |
 
 ## Tests
 
-`dotnet test LizTerm.slnx` runs four projects:
+`dotnet test LizTerm.slnx` runs five projects:
 
 - **`LizTerm.Core.Tests`**: the domain model, profiles, certificates, and the repository-wide licence header check.
 - **`LizTerm.Backend.B3270.Tests`**: the b3270 protocol against a fake engine process, plus replay tests that feed
   recorded engine output through a session and assert the resulting screens.
+- **`LizTerm.Backend.Mvsmf.Tests`**: the mvsMF client against recorded HTTP exchanges, and its TLS trust against a
+  loopback server.
 - **`LizTerm.App.Tests`**: view models against a fake session, and controls on Avalonia's headless platform.
 - **`LizTerm.Integration.Tests`**: the engine smoke test, which starts the bundled engine, and the live tests
-  against a real host.
+  against a real host and a real mvsMF.
 
 The engine smoke test skips when no bundled engine is in the test output — unless `LIZTERM_REQUIRE_ENGINE` is set —
 but an engine that is present and not executable always fails it, so a forgotten `chmod +x` cannot pass as a skip.
@@ -168,17 +173,29 @@ The password is typed through the session, so a wire log of that run holds it on
 one. Keep these variables in a file outside the repository and `source` it in the shell that runs `dotnet test`,
 rather than exporting them on a command line.
 
+### Live mvsMF tests
+
+Set all four `LIZTERM_MVSMF_*` variables. The tests read the server information, list the scratch PDS, upload a
+small text member through the same checks the app uses, verify and download it, delete it, and make two sign-in
+attempts with a wrong password. The wrong-password test fails two sign-ins per run; on a host whose security
+product revokes a userid after failed attempts, point it at a userid that can take that. Keep them with the other
+live-test variables, in the file outside the repository that you `source`.
+
 ### Replay fixtures
 
 `tests/LizTerm.Backend.B3270.Tests/Fixtures/` holds raw b3270 output recorded from real sessions and host traces;
 its [README](../tests/LizTerm.Backend.B3270.Tests/Fixtures/README.md) documents each one. Every bug found in the
-field should add a trimmed fixture. There are two recorders:
+field should add a trimmed fixture. b3270 fixtures have two recorders:
 
 - `tools/wirelog-to-fixture.sh <wire.log> <out.jsonl>` turns a `LIZTERM_WIRE_LOG` file from a real session into a
   fixture: inbound lines only, timestamps stripped.
 - `tools/record-fixture.sh <trace.trc> <out.jsonl> [model] [playback-step]` replays an x3270 `.trc` host trace
   through b3270 and saves its output. It needs x3270's `playback` tool, built by `native/build/build-playback.sh`,
   which applies LizTerm's patches and so needs `patch` installed (macOS has it).
+
+`tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/` holds recorded mvsMF exchanges, one per file, made by
+`tools/record-mvsmf-fixture.sh`; its [README](../tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md) lists them.
+Re-record them when checking a new mvsMF build against [the compatibility log](mvsmf-compatibility.md).
 
 Before committing a fixture, cut any logon from it and replace real host addresses.
 
