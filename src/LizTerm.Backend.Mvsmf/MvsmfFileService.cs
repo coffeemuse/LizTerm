@@ -330,7 +330,7 @@ public sealed class MvsmfFileService : IHostFileService
 
     private HostFileException Unreachable(string what, HttpRequestException ex)
     {
-        if (IsCertificateFailure(ex) && _certificates?.LastRejected is { } presented)
+        if (IsCertificateFailure(ex) && _certificates?.TakeRejected() is { } presented)
         {
             return new HostFileException(HostFileErrorKind.CertificateRejected,
                 $"{what}: the host's certificate is not trusted.", certificate: presented, inner: ex);

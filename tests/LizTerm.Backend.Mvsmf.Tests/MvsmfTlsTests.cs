@@ -69,7 +69,7 @@ public class MvsmfTlsTests
     {
         var check = new MvsmfCertificateCheck(null);
         Assert.False(check.Validate(new object(), null, null, SslPolicyErrors.RemoteCertificateNotAvailable));
-        Assert.Null(check.LastRejected);
+        Assert.Null(check.TakeRejected());
     }
 
     [Fact]
@@ -79,5 +79,41 @@ public class MvsmfTlsTests
         var check = new MvsmfCertificateCheck(PinFor(certificate));
         Assert.True(check.Validate(new object(), certificate, null,
             SslPolicyErrors.RemoteCertificateNameMismatch | SslPolicyErrors.RemoteCertificateChainErrors));
+        Assert.Null(check.TakeRejected());
+    }
+
+    [Fact]
+    public void A_refusal_is_reported_once()
+    {
+        var check = new MvsmfCertificateCheck(null);
+        using var certificate = TestCertificates.SelfSigned();
+
+        Assert.False(check.Validate(new object(), certificate, null, SslPolicyErrors.RemoteCertificateChainErrors));
+
+        var rejected = check.TakeRejected();
+        Assert.NotNull(rejected);
+        Assert.Equal(CertificateReader.Fingerprint(certificate), rejected!.Sha256);
+        Assert.Null(check.TakeRejected());
+    }
+
+    [Fact]
+    public async Task A_later_handshake_failure_is_not_blamed_on_an_old_certificate()
+    {
+        var check = new MvsmfCertificateCheck(null);
+        using var certificate = TestCertificates.SelfSigned();
+        Assert.False(check.Validate(new object(), certificate, null, SslPolicyErrors.RemoteCertificateChainErrors));
+
+        var handler = new RecordedHandler()
+            .Then((_, _) => throw new HttpRequestException("handshake failed", new System.Security.Authentication.AuthenticationException("tls")))
+            .Then((_, _) => throw new HttpRequestException("handshake failed", new System.Security.Authentication.AuthenticationException("tls")));
+        using var service = new MvsmfFileService(handler, new Uri("https://mvs.test/zosmf"),
+            MvsmfAuthTests.Answering([], new HostCredentials("U", "p")), certificates: check);
+
+        var first = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(HostFileErrorKind.CertificateRejected, first.Kind);
+        Assert.NotNull(first.Certificate);
+
+        var second = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(HostFileErrorKind.Unreachable, second.Kind);
     }
 }

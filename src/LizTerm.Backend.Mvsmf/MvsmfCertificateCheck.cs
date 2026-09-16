@@ -19,7 +19,8 @@ internal sealed class MvsmfCertificateCheck(CertificatePin? pin)
 
     public CertificatePin? Pin { get; } = pin;
 
-    public PresentedCertificate? LastRejected => Volatile.Read(ref _lastRejected);
+    /// <summary>The certificate refused since the last call, if any; each refusal is reported once.</summary>
+    public PresentedCertificate? TakeRejected() => Interlocked.Exchange(ref _lastRejected, null);
 
     public bool Validate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors)
     {
@@ -30,7 +31,7 @@ internal sealed class MvsmfCertificateCheck(CertificatePin? pin)
             var trusted = Pin is not null
                 ? CertificateReader.SameFingerprint(CertificateReader.Fingerprint(presented[0]), Pin.Sha256)
                 : errors == SslPolicyErrors.None;
-            if (!trusted) Volatile.Write(ref _lastRejected, CertificateReader.Read(presented));
+            Volatile.Write(ref _lastRejected, trusted ? null : CertificateReader.Read(presented));
             return trusted;
         }
         finally
