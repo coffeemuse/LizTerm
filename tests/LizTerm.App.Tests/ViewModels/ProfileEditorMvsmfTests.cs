@@ -182,6 +182,38 @@ public class ProfileEditorMvsmfTests
     }
 
     [Fact]
+    public async Task A_url_edit_during_a_test_discards_its_result()
+    {
+        var tester = new Tester { Gate = new TaskCompletionSource() };
+        var vm = new ProfileEditorViewModel(Rest(), tester.TestAsync);
+
+        var testing = vm.TestMvsmfCommand.ExecuteAsync(null);
+        vm.MvsmfUrl = "http://other";
+        tester.Gate.SetResult();
+        await testing;
+
+        Assert.Null(vm.MvsmfTestResult);
+        Assert.False(vm.IsTestingMvsmf);
+    }
+
+    [Fact]
+    public async Task A_userid_edit_or_forget_clears_the_result()
+    {
+        var tester = new Tester();
+        var vm = new ProfileEditorViewModel(Rest(pin: Pin), tester.TestAsync);
+
+        await vm.TestMvsmfCommand.ExecuteAsync(null);
+        Assert.NotNull(vm.MvsmfTestResult);
+        vm.MvsmfUserid = "IBMUSER";
+        Assert.Null(vm.MvsmfTestResult);
+
+        await vm.TestMvsmfCommand.ExecuteAsync(null);
+        Assert.NotNull(vm.MvsmfTestResult);
+        vm.ForgetMvsmfPinCommand.Execute(null);
+        Assert.Null(vm.MvsmfTestResult);
+    }
+
+    [Fact]
     public void Without_a_tester_there_is_no_test()
     {
         var vm = new ProfileEditorViewModel(Rest());

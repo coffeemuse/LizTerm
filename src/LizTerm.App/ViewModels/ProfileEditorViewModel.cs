@@ -226,11 +226,23 @@ public partial class ProfileEditorViewModel : ObservableObject
         PinCleared = true;
     }
 
+    /// <summary>Bumped by every change that makes a Test result stale, so a test still running when the profile
+    /// changes under it drops its result instead of reporting on values it never tried.</summary>
+    private int _testGeneration;
+
+    private void InvalidateTestResult()
+    {
+        _testGeneration++;
+        MvsmfTestResult = null;
+    }
+
     partial void OnMvsmfUrlChanged(string value)
     {
         MvsmfPinnedCertificate = SameRestUrl(value, _mvsmfPinnedUrl) ? _mvsmfPinnedFor : null;
-        MvsmfTestResult = null;
+        InvalidateTestResult();
     }
+
+    partial void OnMvsmfUseridChanged(string value) => InvalidateTestResult();
 
     private static bool SameRestUrl(string? first, string? second) =>
         string.Equals(first?.Trim().TrimEnd('/'), second?.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
@@ -241,6 +253,7 @@ public partial class ProfileEditorViewModel : ObservableObject
         _mvsmfPinnedFor = null;
         MvsmfPinnedCertificate = null;
         MvsmfPinCleared = true;
+        InvalidateTestResult();
     }
 
     private bool CanTestMvsmf => _tester is not null && !IsTestingMvsmf;
@@ -260,24 +273,27 @@ public partial class ProfileEditorViewModel : ObservableObject
         }
         IsTestingMvsmf = true;
         MvsmfTestResult = "⟳ Testing…";
+        var generation = _testGeneration;
+        string result;
         try
         {
             var name = string.IsNullOrWhiteSpace(Name) ? "This profile" : Name.Trim();
             var info = await _tester!(name, url, userid, MvsmfPinnedCertificate, CancellationToken.None);
-            MvsmfTestResult = $"✓ Connected: {info.Product} {info.ProductVersion} on {info.SystemVersion}";
+            result = $"✓ Connected: {info.Product} {info.ProductVersion} on {info.SystemVersion}";
         }
         catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.CertificateRejected)
         {
-            MvsmfTestResult = "✗ The host's certificate is not trusted. Open the mvsMF Browser from a session to review it.";
+            result = "✗ The host's certificate is not trusted. Open the mvsMF Browser from a session to review it.";
         }
         catch (Exception ex)
         {
-            MvsmfTestResult = "✗ " + HostFileMessages.Describe(ex);
+            result = "✗ " + HostFileMessages.Describe(ex);
         }
         finally
         {
             IsTestingMvsmf = false;
         }
+        if (generation == _testGeneration) MvsmfTestResult = result;
     }
 
     /// <summary>The REST URL (null when blank) and userid as Save and Test read them.</summary>
