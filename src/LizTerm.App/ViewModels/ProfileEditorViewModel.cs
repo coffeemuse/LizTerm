@@ -25,7 +25,16 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private bool _destructiveBackspace = true;
     [ObservableProperty] private string _keepAliveText = "60";
     [ObservableProperty] private bool _autoReconnect;
-    [ObservableProperty] private string _oversize = "";
+
+    /// <summary>Whether the drop-down is on Other. The boxes below are the custom size only while this is on.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedModelChoice), nameof(ColumnsDisplay), nameof(RowsDisplay))]
+    private bool _isCustomSize;
+
+    /// <summary>What the user typed for the custom size. Kept while the drop-down is on a model, so returning to
+    /// Other before closing the editor brings the numbers back; TryBuild ignores them outside Other.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ColumnsDisplay))] private string _columnsText = "";
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(RowsDisplay))] private string _rowsText = "";
 
     /// <summary>The tag names as the user edits them, comma-separated, WITHOUT the reserved tag —
     /// <see cref="IsFavorite"/> owns that one.</summary>
@@ -56,17 +65,55 @@ public partial class ProfileEditorViewModel : ObservableObject
     /// file, or a model a newer engine adds. A ComboBox bound SelectedItem has nothing to select otherwise, and
     /// merely opening the editor would drop a working profile's setting. Model gets no validation in TryBuild,
     /// so nothing else would catch it either.</summary>
-    public IReadOnlyList<TerminalModel> TerminalModels { get; }
+    private readonly IReadOnlyList<TerminalModel> _terminalModels;
 
-    /// <summary>Same seeding rule as <see cref="TerminalModels"/>.</summary>
+    /// <summary>The drop-down: the catalogue (seeded as above), then Other.</summary>
+    public IReadOnlyList<ModelChoice> ModelChoices { get; }
+
+    /// <summary>Same seeding rule as the models.</summary>
     public IReadOnlyList<CodePage> CodePages { get; }
 
-    /// <summary>A view over <see cref="Model"/>, which stays the property TryBuild reads.</summary>
-    public TerminalModel SelectedModel
+    /// <summary>The model Other saves. With an oversize, b3270 sends IBM-DYNAMIC and starts on 24x80 whatever the
+    /// model is, so the model's only remaining effect is the floor the oversize must clear; model 2's is the
+    /// lowest, so it refuses nothing a custom size could legally be.</summary>
+    public static TerminalModel CustomSizeModel { get; } = TerminalModel.Find(2)!;
+
+    /// <summary>A view over <see cref="Model"/> and <see cref="IsCustomSize"/>, which stay the properties TryBuild
+    /// reads. Choosing Other sets the model to <see cref="CustomSizeModel"/>, so Model is always what Save writes.</summary>
+    public ModelChoice SelectedModelChoice
     {
-        get => TerminalModels.FirstOrDefault(m => m.Number == Model) ?? TerminalModels[0];
-        set { if (value is not null) Model = value.Number; OnPropertyChanged(); }
+        get => IsCustomSize
+            ? ModelChoice.Other
+            : ModelChoices.FirstOrDefault(c => c.Model?.Number == Model) ?? ModelChoices[0];
+        set
+        {
+            if (value is null) return;
+            Model = value.Model?.Number ?? CustomSizeModel.Number;
+            IsCustomSize = value.Model is null;
+            OnPropertyChanged();
+        }
     }
+
+    /// <summary>What the Columns box shows: the typed number under Other, else the chosen model's own width (blank
+    /// for a model outside the catalogue, whose geometry is unknown). Writes land only under Other; the box is
+    /// disabled otherwise, so a write then can only be the binding echoing the model's size back.</summary>
+    public string ColumnsDisplay
+    {
+        get => IsCustomSize ? ColumnsText : ModelDimension(m => m.Columns);
+        set { if (IsCustomSize) ColumnsText = value ?? ""; }
+    }
+
+    /// <summary>Same rule as <see cref="ColumnsDisplay"/>, for the Rows box.</summary>
+    public string RowsDisplay
+    {
+        get => IsCustomSize ? RowsText : ModelDimension(m => m.Rows);
+        set { if (IsCustomSize) RowsText = value ?? ""; }
+    }
+
+    private string ModelDimension(Func<TerminalModel, int> dimension) =>
+        _terminalModels.FirstOrDefault(m => m.Number == Model) is { Rows: > 0, Columns: > 0 } model
+            ? dimension(model).ToString(CultureInfo.InvariantCulture)
+            : "";
 
     /// <summary>A view over <see cref="CodePage"/>, which stays the property TryBuild reads.</summary>
     public CodePage SelectedCodePage
@@ -81,10 +128,12 @@ public partial class ProfileEditorViewModel : ObservableObject
     {
         IsNew = existing is null;
 
+        var custom = SplitOversize(existing?.Oversize);
         var models = TerminalModel.All.ToList();
-        if (existing is not null && TerminalModel.Find(existing.Model) is null)
+        if (existing is not null && custom is null && TerminalModel.Find(existing.Model) is null)
             models.Add(new TerminalModel(existing.Model, 0, 0));
-        TerminalModels = models;
+        _terminalModels = models;
+        ModelChoices = [.. models.Select(m => new ModelChoice(m)), ModelChoice.Other];
 
         // Qualified with the namespace: the CodePage *property* below (a string) shares its name with the
         // CodePage *type*, and unqualified "CodePage.All"/"CodePage.Find" bind to the property (per C#'s
@@ -100,14 +149,18 @@ public partial class ProfileEditorViewModel : ObservableObject
         _portText = existing.Port.ToString();
         _useTls = existing.UseTls;
         _verifyCertificate = existing.VerifyCertificate;
-        _model = existing.Model;
+        _model = custom is null ? existing.Model : CustomSizeModel.Number;
         _extended = existing.Extended;
         _codePage = existing.CodePage;
         _luName = existing.LuName ?? "";
         _destructiveBackspace = existing.DestructiveBackspace;
         _keepAliveText = existing.KeepAliveSeconds.ToString(CultureInfo.InvariantCulture);
         _autoReconnect = existing.AutoReconnect;
-        _oversize = existing.Oversize ?? "";
+        if (custom is { } size)
+        {
+            _isCustomSize = true;
+            (_columnsText, _rowsText) = size;
+        }
         _isFavorite = existing.Tags.Contains(TagRegistry.FavoriteName);
         _tagsText = string.Join(", ", existing.Tags.Names.Where(name => !TagRegistry.IsReserved(name)));
         _note = existing.Note ?? "";
@@ -123,41 +176,86 @@ public partial class ProfileEditorViewModel : ObservableObject
         else if (!value && PortText == "992") PortText = "23";
     }
 
-    /// <summary>The oversize verdict currently in the validation box, or null when what is there came from
-    /// another rule (or nothing is). <see cref="OnModelChanged"/> withdraws only its own message; see there.</summary>
-    private string? _oversizeMessage;
-
-    /// <summary>The one writer of <see cref="ValidationMessage"/>, so the box always knows whether what it holds
-    /// is the oversize rule's verdict.</summary>
-    private void SetValidation(string? message, bool fromOversize = false)
+    /// <summary>Splits a saved oversize into the two boxes' text, or null when the profile has none. b3270's own
+    /// "0x0" means none too. Text that is not two parts still opens on Other, with both boxes empty, so a
+    /// hand-edited value is not silently turned into "no oversize"; Save then refuses the empty boxes.</summary>
+    private static (string Columns, string Rows)? SplitOversize(string? oversize)
     {
-        ValidationMessage = message;
-        _oversizeMessage = fromOversize ? message : null;
+        if (string.IsNullOrWhiteSpace(oversize)) return null;
+        var parts = oversize.Trim().Split('x', 'X');
+        if (parts.Length != 2) return ("", "");
+        if (PlainNumber.TryParse(parts[0], 0, 0, out _) && PlainNumber.TryParse(parts[1], 0, 0, out _)) return null;
+        return (parts[0], parts[1]);
     }
 
-    /// <summary>An oversize legal under one model can be below another's floor — 100x30 clears model 2 and is
-    /// short of model 5's floor — so a model change has to re-run the check rather than leave a stale verdict
-    /// beside the box.</summary>
-    partial void OnModelChanged(int value) => RevalidateOversize();
+    /// <summary>The size verdict currently in the validation box, or null when what is there came from another
+    /// rule (or nothing is). <see cref="RevalidateCustomSize"/> withdraws only its own message; see there.</summary>
+    private string? _sizeMessage;
 
-    /// <summary>And the box itself: a verdict the user has since typed their way out of is a red line under text
-    /// that no longer says what it complains about — the same reason
-    /// <see cref="ProfilePickerViewModel.OnQuickConnectTextChanged"/> clears its own message on the first
-    /// keystroke. Withdrawing the message on a change the model did not cause is the other half of the rule
-    /// <see cref="OnModelChanged"/> already applies.</summary>
-    partial void OnOversizeChanged(string value) => RevalidateOversize();
-
-    /// <summary>Re-runs the oversize rule and writes only its own verdict. The gate is the whole point: the box
-    /// is this rule's to write only while it is empty or already holding what this rule last put there. A message
-    /// another rule owns — "Give the profile a name.", which Save will still refuse on first — stays put whichever
-    /// way the geometry now reads, because neither the model nor the geometry says anything about the name.
-    /// A blank oversize needs no special case: <see cref="OversizeGeometry.TryParse"/> accepts it and yields no
-    /// error, so emptying the box withdraws the message the same way correcting it does.</summary>
-    private void RevalidateOversize()
+    /// <summary>The one writer of <see cref="ValidationMessage"/>, so the box always knows whether what it holds
+    /// is the size rule's verdict.</summary>
+    private void SetValidation(string? message, bool fromSize = false)
     {
-        if (ValidationMessage != _oversizeMessage) return;
-        OversizeGeometry.TryParse(Oversize, SelectedModel, out _, out var error);
-        SetValidation(error, fromOversize: true);
+        ValidationMessage = message;
+        _sizeMessage = fromSize ? message : null;
+    }
+
+    /// <summary>Leaving Other makes any size verdict moot, and typing in a box can make it stale: a red line under
+    /// numbers the user has since corrected — the same reason
+    /// <see cref="ProfilePickerViewModel.OnQuickConnectTextChanged"/> clears its own message on the first
+    /// keystroke.</summary>
+    partial void OnIsCustomSizeChanged(bool value) => RevalidateCustomSize();
+
+    partial void OnColumnsTextChanged(string value) => RevalidateCustomSize();
+
+    partial void OnRowsTextChanged(string value) => RevalidateCustomSize();
+
+    partial void OnModelChanged(int value)
+    {
+        OnPropertyChanged(nameof(ColumnsDisplay));
+        OnPropertyChanged(nameof(RowsDisplay));
+    }
+
+    /// <summary>Re-runs the size rule and writes only its own verdict. The gate is the whole point: the box is
+    /// this rule's to write only while it is empty or already holding what this rule last put there. A message
+    /// another rule owns — "Give the profile a name.", which Save will still refuse on first — stays put. An empty
+    /// box mid-edit is not yet a mistake, so it withdraws the verdict; Save still refuses it.</summary>
+    private void RevalidateCustomSize()
+    {
+        if (ValidationMessage != _sizeMessage) return;
+        var error = IsCustomSize && !string.IsNullOrWhiteSpace(ColumnsText) && !string.IsNullOrWhiteSpace(RowsText)
+            ? CheckCustomSize(out _)
+            : null;
+        SetValidation(error, fromSize: true);
+    }
+
+    /// <summary>The custom size as the boxes hold it, or the reason it cannot be saved. The floor is checked here,
+    /// in the editor's own words, because OversizeGeometry's names model 2, which Other does not show; what is
+    /// left for OversizeGeometry is the engine's area limit.</summary>
+    private string? CheckCustomSize(out OversizeGeometry? geometry)
+    {
+        geometry = null;
+        var columnsText = ColumnsText.Trim();
+        var rowsText = RowsText.Trim();
+        if (columnsText.Length == 0 || rowsText.Length == 0)
+            return "Enter both a column count and a row count for the custom size.";
+        if (DimensionError(columnsText, "Columns", out var columns) is { } columnsError) return columnsError;
+        if (DimensionError(rowsText, "Rows", out var rows) is { } rowsError) return rowsError;
+        if (columns < CustomSizeModel.Columns || rows < CustomSizeModel.Rows)
+            return $"A custom size must be at least {CustomSizeModel.Columns} columns and {CustomSizeModel.Rows} rows.";
+        OversizeGeometry.TryParse($"{columns}x{rows}", CustomSizeModel, out geometry, out var error);
+        return error;
+    }
+
+    /// <summary>One box's number, or the reason it is not one. The per-dimension ceiling is checked here too, so
+    /// OversizeGeometry's "Oversize columns ..." wording never reaches a window with no Oversize field, and a run of
+    /// digits too long for an int is called too large rather than not a whole number.</summary>
+    private static string? DimensionError(string text, string name, out int value)
+    {
+        if (PlainNumber.TryParse(text, 0, OversizeGeometry.MaxCells, out value)) return null;
+        return text.All(char.IsAsciiDigit)
+            ? $"{name} must be at most {OversizeGeometry.MaxCells.ToString("N0", CultureInfo.InvariantCulture)}."
+            : $"{name} must be a whole number.";
     }
 
     partial void OnHostChanged(string value) => RefreshPin();
@@ -212,9 +310,10 @@ public partial class ProfileEditorViewModel : ObservableObject
             SetValidation("Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).");
             return null;
         }
-        if (!OversizeGeometry.TryParse(Oversize, SelectedModel, out var oversize, out var oversizeError))
+        OversizeGeometry? oversize = null;
+        if (IsCustomSize && CheckCustomSize(out oversize) is { } sizeError)
         {
-            SetValidation(oversizeError, fromOversize: true);
+            SetValidation(sizeError, fromSize: true);
             return null;
         }
         // Counted from what the user typed, BEFORE TagSet.From runs: From enforces the caps by discarding what

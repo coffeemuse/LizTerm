@@ -3,6 +3,12 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
+## Unreleased
+
+- **Custom screen sizes are easier to set.** In the profile editor, choose **Other (custom size)** at the end of the
+  Model list, then type the columns and rows in two separate boxes. The boxes show the model's own size the rest of
+  the time.
+
 ## 0.6.1
 
 - **A new app icon**: Liz on a green 3270 screen, without the "3270" lettering in title bars and on the taskbar,

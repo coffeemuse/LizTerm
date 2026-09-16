@@ -47,9 +47,9 @@ first. **FAVORITE** is fixed: it can't be renamed, recoloured or deleted.
 | Verify host certificate | Check the host's certificate (on by default). See [TLS and certificates](#tls-and-certificates). |
 | Keep-alive every *n* seconds | Keeps the network connection open through firewalls and routers that drop idle connections. `0` turns it off. It does not stop the host logging you off for being idle. |
 | Reconnect automatically | Reconnect if the host drops the session. |
-| Model | The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132). |
+| Model | The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132), or **Other (custom size)** for a size of your own, for hosts that support one. |
 | Extended data stream | Colours and extended attributes (on by default). |
-| Oversize | A custom screen size, written as columns x rows (for example `132x43`), for hosts that support one. Leave it blank for the model's own size. |
+| Screen size | Columns and rows. They show the model's own size, and you can type in them only when Model is **Other**. A custom size must be at least 80 columns and 24 rows, and columns times rows can be at most 16,383 (at 160 columns, 102 rows at most). |
 | Code page | The host's character set. The default is `cp037` (US/Canada); TK4- and TK5 users may want `bracket`, which maps the 3270 bracket characters. |
 | LU name | Request a specific logical unit from the host. Optional. |
 | Backspace erases | On by default: Backspace erases the previous character. Off: Backspace only moves the cursor left. |

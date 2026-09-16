@@ -259,13 +259,16 @@ public class ProfileViewModelsTests : IDisposable
     public void Editor_offers_models_with_their_geometry()
     {
         var vm = new ProfileEditorViewModel(null);
-        Assert.Equal(4, vm.TerminalModels.Count);
-        Assert.Equal("3 — 32x80", vm.TerminalModels.Single(m => m.Number == 3).ToString());
-        Assert.Equal(2, vm.SelectedModel.Number);
+        Assert.Equal(5, vm.ModelChoices.Count);
+        Assert.Equal("3 — 32x80", vm.ModelChoices.Single(c => c.Model?.Number == 3).ToString());
+        Assert.Same(ModelChoice.Other, vm.ModelChoices[^1]);
+        Assert.Equal("Other (custom size)", ModelChoice.Other.ToString());
+        Assert.Equal(2, vm.SelectedModelChoice.Model!.Number);
+        Assert.False(vm.IsCustomSize);
 
         vm.Name = "n";
         vm.Host = "h";
-        vm.SelectedModel = vm.TerminalModels.Single(m => m.Number == 5);
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 5);
         Assert.Equal(5, vm.Model);
         Assert.Equal(5, vm.TryBuild()!.Model);
     }
@@ -290,9 +293,9 @@ public class ProfileViewModelsTests : IDisposable
         var odd = new SessionProfile { Name = "odd", Host = "h", Model = 9, CodePage = "cp9999" };
         var vm = new ProfileEditorViewModel(odd);
 
-        Assert.Equal(9, vm.SelectedModel.Number);
+        Assert.Equal(9, vm.SelectedModelChoice.Model!.Number);
         Assert.Equal("cp9999", vm.SelectedCodePage.Name);
-        Assert.Contains(vm.TerminalModels, m => m.Number == 9);
+        Assert.Contains(vm.ModelChoices, c => c.Model?.Number == 9);
         Assert.Contains(vm.CodePages, p => p.Name == "cp9999");
 
         var built = vm.TryBuild()!;
@@ -361,126 +364,240 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal("Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).", vm.ValidationMessage);
     }
 
+    /// <summary>A profile with an oversize opens on Other, with the geometry split into the two boxes, and saves
+    /// back to the same text.</summary>
     [Fact]
-    public void The_editor_round_trips_an_oversize_geometry()
+    public void An_oversize_profile_opens_on_other_and_round_trips()
     {
         var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Oversize = "132x43" });
-        Assert.Equal("132x43", vm.Oversize);
+
+        Assert.True(vm.IsCustomSize);
+        Assert.Same(ModelChoice.Other, vm.SelectedModelChoice);
+        Assert.Equal("132", vm.ColumnsText);
+        Assert.Equal("43", vm.RowsText);
+        var built = vm.TryBuild()!;
+        Assert.Equal("132x43", built.Oversize);
+        Assert.Equal(2, built.Model);
+    }
+
+    /// <summary>With an oversize b3270 sends IBM-DYNAMIC and starts on 24x80 whatever the model, so the model's
+    /// only remaining effect is the floor. Model 2 has the lowest, so Other always saves it — including for a
+    /// profile that used to pair an oversize with another model.</summary>
+    [Fact]
+    public void Other_saves_model_2_whatever_the_profile_had()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Model = 5, Oversize = "140x30" });
+
+        var built = vm.TryBuild()!;
+        Assert.Equal(2, built.Model);
+        Assert.Equal("140x30", built.Oversize);
+    }
+
+    [Fact]
+    public void Choosing_other_enables_the_boxes_and_saves_what_is_typed()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 5);
+        Assert.False(vm.IsCustomSize);
+
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "100";
+        vm.RowsDisplay = "30";
+
+        Assert.True(vm.IsCustomSize);
+        var built = vm.TryBuild()!;
+        Assert.Equal(2, built.Model);
+        Assert.Equal("100x30", built.Oversize);
+    }
+
+    /// <summary>Outside Other the boxes are read-only and show the chosen model's own size, so they always say
+    /// what the screen will be.</summary>
+    [Fact]
+    public void Outside_other_the_boxes_show_the_models_own_size_and_ignore_writes()
+    {
+        var vm = new ProfileEditorViewModel(null);
+        Assert.Equal("80", vm.ColumnsDisplay);
+        Assert.Equal("24", vm.RowsDisplay);
+
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 5);
+
+        Assert.Equal("132", vm.ColumnsDisplay);
+        Assert.Equal("27", vm.RowsDisplay);
+        Assert.Contains(nameof(vm.ColumnsDisplay), changed);
+        Assert.Contains(nameof(vm.RowsDisplay), changed);
+
+        vm.ColumnsDisplay = "999";
+        Assert.Equal("132", vm.ColumnsDisplay);
+        Assert.Equal("", vm.ColumnsText);
+    }
+
+    /// <summary>Leaving Other drops the custom size from the profile, but the typed numbers come back if the user
+    /// returns to Other before closing the editor.</summary>
+    [Fact]
+    public void Leaving_other_saves_no_oversize_and_returning_restores_the_numbers()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Oversize = "132x43" });
+
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 4);
+        Assert.Equal("80", vm.ColumnsDisplay);
+        var built = vm.TryBuild()!;
+        Assert.Null(built.Oversize);
+        Assert.Equal(4, built.Model);
+
+        vm.SelectedModelChoice = ModelChoice.Other;
+        Assert.Equal("132", vm.ColumnsDisplay);
+        Assert.Equal("43", vm.RowsDisplay);
         Assert.Equal("132x43", vm.TryBuild()!.Oversize);
     }
 
-    /// <summary>Blank means the model's own geometry, and must save as null rather than "": the argv check is
-    /// IsNullOrWhiteSpace, but a "" in the file would still be a lie about what the user chose.</summary>
-    [Fact]
-    public void A_blank_oversize_saves_as_null()
+    [Theory]
+    [InlineData("", "43")]
+    [InlineData("132", "")]
+    [InlineData("  ", "  ")]
+    public void Other_with_an_empty_box_blocks_save(string columns, string rows)
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "   " };
-        Assert.Null(vm.TryBuild()!.Oversize);
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = columns;
+        vm.RowsDisplay = rows;
+
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Enter both a column count and a row count for the custom size.", vm.ValidationMessage);
     }
 
-    [Fact]
-    public void An_illegal_oversize_blocks_save_with_the_rules_own_message()
+    [Theory]
+    [InlineData("abc", "43", "Columns must be a whole number.")]
+    [InlineData("-132", "43", "Columns must be a whole number.")]
+    [InlineData("132", "4 3", "Rows must be a whole number.")]
+    [InlineData("20000", "30", "Columns must be at most 16,383.")]
+    [InlineData("132", "99999999999", "Rows must be at most 16,383.")]
+    [InlineData("79", "43", "A custom size must be at least 80 columns and 24 rows.")]
+    [InlineData("132", "23", "A custom size must be at least 80 columns and 24 rows.")]
+    [InlineData("0", "0", "A custom size must be at least 80 columns and 24 rows.")]
+    public void Other_with_a_bad_number_blocks_save(string columns, string rows, string message)
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = columns;
+        vm.RowsDisplay = rows;
+
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(message, vm.ValidationMessage);
+    }
+
+    /// <summary>Stray spaces are forgiven the way the port's are.</summary>
+    [Fact]
+    public void Other_trims_the_boxes()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = " 132 ";
+        vm.RowsDisplay = "43 ";
+
+        Assert.Equal("132x43", vm.TryBuild()!.Oversize);
+    }
+
+    /// <summary>The engine's area limit stays OversizeGeometry's, message and all.</summary>
+    [Fact]
+    public void An_oversize_past_the_area_limit_blocks_save_with_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "200";
+        vm.RowsDisplay = "200";
+
         Assert.Null(vm.TryBuild());
         Assert.StartsWith("200 columns by 200 rows is 40,000 cells", vm.ValidationMessage);
     }
 
-    /// <summary>100x30 clears model 2's floor (80 columns, 24 rows) but falls short of model 5's floor (132
-    /// columns, 27 rows) on the column count, so switching the model has to re-run the check — otherwise the
-    /// editor shows a stale verdict about the geometry in the box.
-    ///
-    /// Note: Oversize is columns x rows. A geometry that clears one model's floor may fail another's. So this
-    /// test exercises the re-validation path by switching models after setting an oversize that is valid for
-    /// model 2 but fails model 5's column floor.</summary>
+    /// <summary>b3270's own spelling of "no oversize", which a hand-edited profile can carry, is not Other.</summary>
     [Fact]
-    public void Changing_the_model_re_validates_the_oversize()
+    public void A_zero_by_zero_oversize_opens_on_the_profiles_model()
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "100x30" };
-        Assert.NotNull(vm.TryBuild());
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "p", Host = "h", Model = 3, Oversize = "0x0" });
 
-        vm.SelectedModel = TerminalModel.Find(5)!;
-        Assert.Equal("Oversize must be at least 132 columns and 27 rows for model 5.", vm.ValidationMessage);
+        Assert.False(vm.IsCustomSize);
+        Assert.Equal(3, vm.SelectedModelChoice.Model!.Number);
+        Assert.Null(vm.TryBuild()!.Oversize);
+    }
+
+    /// <summary>A hand-edited oversize that is not two numbers still opens on Other, so it is not silently
+    /// dropped; Save then says what is wrong with it rather than passing it through.</summary>
+    [Fact]
+    public void A_garbled_oversize_opens_on_other_and_blocks_save()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "p", Host = "h", Oversize = "132x4x3" });
+
+        Assert.True(vm.IsCustomSize);
         Assert.Null(vm.TryBuild());
+        Assert.NotNull(vm.ValidationMessage);
+    }
 
-        vm.SelectedModel = TerminalModel.Find(2)!;
+    /// <summary>A verdict the user has since typed their way out of is a red line under numbers that are no longer
+    /// there — the same rule the picker's Quick Connect box follows.</summary>
+    [Fact]
+    public void Correcting_a_box_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "200";
+        vm.RowsDisplay = "200";
+        Assert.Null(vm.TryBuild());
+        Assert.NotNull(vm.ValidationMessage);
+
+        vm.RowsDisplay = "43";
+
         Assert.Null(vm.ValidationMessage);
         Assert.NotNull(vm.TryBuild());
     }
 
-    /// <summary>Only the oversize verdict moves with the model. A blank box has nothing to say about it, and
-    /// clearing an unrelated message would be a second, invisible behaviour.</summary>
+    /// <summary>Emptying a box mid-edit is not yet a mistake, so it withdraws the verdict rather than replacing it
+    /// with "enter both"; Save still refuses it.</summary>
     [Fact]
-    public void Changing_the_model_leaves_an_unrelated_message_alone()
+    public void Emptying_a_box_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "200";
+        vm.RowsDisplay = "200";
+        Assert.Null(vm.TryBuild());
+
+        vm.RowsDisplay = "";
+
+        Assert.Null(vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void Leaving_other_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        Assert.Null(vm.TryBuild());
+        Assert.NotNull(vm.ValidationMessage);
+
+        vm.SelectedModelChoice = vm.ModelChoices[0];
+
+        Assert.Null(vm.ValidationMessage);
+    }
+
+    /// <summary>The size rule has no claim on a message another rule owns: "Give the profile a name." stays put
+    /// whatever happens to the size, because Save will still refuse on it first.</summary>
+    [Fact]
+    public void Size_edits_leave_an_unrelated_message_alone()
     {
         var vm = new ProfileEditorViewModel(null) { Host = "h" };
         Assert.Null(vm.TryBuild());
         Assert.Equal("Give the profile a name.", vm.ValidationMessage);
 
-        vm.SelectedModel = TerminalModel.Find(4)!;
-        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
-    }
-
-    /// <summary>The test above only covers a *blank* box, which the rule returns early on — so it passed while
-    /// the hook still wiped anything in the message box whenever the oversize happened to be legal. With a
-    /// non-blank oversize that is valid under both models, a model change used to clear "Give the profile a
-    /// name." as a side effect. The rule now withdraws only the message it put there itself.</summary>
-    [Fact]
-    public void Changing_the_model_leaves_an_unrelated_message_alone_with_a_valid_oversize_in_the_box()
-    {
-        var vm = new ProfileEditorViewModel(null) { Host = "h", Oversize = "132x43" };
-        Assert.Null(vm.TryBuild());
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "200";
+        vm.RowsDisplay = "200";
         Assert.Equal("Give the profile a name.", vm.ValidationMessage);
 
-        // 132x43 clears both model 2's floor and model 4's, so the oversize rule has nothing to say here.
-        vm.SelectedModel = TerminalModel.Find(4)!;
+        vm.SelectedModelChoice = vm.ModelChoices[1];
         Assert.Equal("Give the profile a name.", vm.ValidationMessage);
-    }
-
-    /// <summary>And the harder half, which the two above cannot see: when the model change makes the geometry
-    /// ILLEGAL, the rule still has no claim on a box another rule owns. It used to overwrite it, so a user with a
-    /// blank name was sent to fix the oversize while Save went on refusing the name.</summary>
-    [Fact]
-    public void Changing_the_model_leaves_an_unrelated_message_alone_even_when_the_oversize_turns_illegal()
-    {
-        var vm = new ProfileEditorViewModel(null) { Host = "h", Oversize = "100x30" };
-        Assert.Null(vm.TryBuild());
-        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
-
-        // 100x30 clears model 2's floor and falls short of model 5's, so the rule does have a verdict here.
-        vm.SelectedModel = TerminalModel.Find(5)!;
-
-        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
-    }
-
-    /// <summary>The model is not the only thing that can make the verdict stale: typing in the box does too, and
-    /// a red line under text the user has since corrected complains about numbers that are no longer there. Same
-    /// rule the picker's Quick Connect box follows.</summary>
-    [Fact]
-    public void Correcting_the_oversize_withdraws_the_rules_own_message()
-    {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
-        Assert.Null(vm.TryBuild());
-        Assert.StartsWith("200 columns by 200 rows", vm.ValidationMessage);
-
-        vm.Oversize = "132x43";
-
-        Assert.Null(vm.ValidationMessage);
-        Assert.NotNull(vm.TryBuild());
-    }
-
-    /// <summary>Emptying the box is a correction like any other: blank is a legal oversize, so the message goes
-    /// with it rather than needing a special case.</summary>
-    [Fact]
-    public void Emptying_the_oversize_withdraws_the_rules_own_message()
-    {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
-        Assert.Null(vm.TryBuild());
-        Assert.NotNull(vm.ValidationMessage);
-
-        vm.Oversize = "";
-
-        Assert.Null(vm.ValidationMessage);
     }
 
     /// <summary>The box inherits the command line's tie-break rule by calling the same Parse and Resolve, so
