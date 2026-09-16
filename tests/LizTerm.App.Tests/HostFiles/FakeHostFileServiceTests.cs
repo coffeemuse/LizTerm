@@ -30,6 +30,20 @@ public class FakeHostFileServiceTests
     }
 
     [Fact]
+    public async Task A_store_transform_alters_what_a_text_write_keeps()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var host = new FakeHostFileService { StoreTransform = (path, lines) => [path, .. lines.Skip(1)] };
+        host.AddDataset("A.CNTL");
+        var one = HostPath.ForMember("A.CNTL", "ONE");
+
+        await host.WriteTextAsync(one, ["X", "Y"], token);
+
+        Assert.Equal(new[] { "A.CNTL(ONE)", "Y" }, host.Text["A.CNTL(ONE)"]);
+        Assert.Contains("writetext:A.CNTL(ONE):2", host.CallsSnapshot());
+    }
+
+    [Fact]
     public async Task A_failure_is_thrown_by_the_matching_call()
     {
         var token = TestContext.Current.CancellationToken;

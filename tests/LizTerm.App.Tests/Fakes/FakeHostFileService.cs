@@ -22,6 +22,9 @@ public sealed class FakeHostFileService : IHostFileService
     public Dictionary<string, List<string>> Text { get; } = [];
     public Dictionary<string, byte[]> Binary { get; } = [];
     public Dictionary<string, Exception> Failures { get; } = [];
+    /// <summary>When set, a text write stores what this returns for (path, lines) instead of the lines: a host that
+    /// alters what it stores.</summary>
+    public Func<string, IReadOnlyList<string>, List<string>>? StoreTransform { get; set; }
     public HostServerInfo Info { get; set; } = new("mvsMF", "1.0.0-dev", "MVS 3.8j");
     /// <summary>When set, every call waits for it (and for its token) after being logged.</summary>
     public TaskCompletionSource? Gate { get; set; }
@@ -102,7 +105,7 @@ public sealed class FakeHostFileService : IHostFileService
         {
             lock (_lock)
             {
-                Text[path.ToString()] = [.. lines];
+                Text[path.ToString()] = StoreTransform?.Invoke(path.ToString(), lines) ?? [.. lines];
                 AddMember(path);
             }
         }

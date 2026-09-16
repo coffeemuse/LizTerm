@@ -42,4 +42,13 @@ public class HostFileMessagesTests
         Assert.Equal("Not authorized.",
             HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.NotAuthorized, "x")));
     }
+
+    [Fact]
+    public void A_sequential_dataset_is_named_as_the_dataset_that_may_be_partly_written()
+    {
+        Assert.Equal("Server error (reason 3). The dataset may be partly written.",
+            HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.ServerError, "x", 3), dataset: true));
+        Assert.Equal("Not authorized.",
+            HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.NotAuthorized, "x"), dataset: true));
+    }
 }

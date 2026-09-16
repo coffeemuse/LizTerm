@@ -70,6 +70,9 @@ public sealed partial class UploadRow : ObservableObject
     /// and its member name is no longer editable.</summary>
     [ObservableProperty] private bool _sent;
 
+    /// <summary>The read-back found the host copy different; the batch summary is a warning then.</summary>
+    public bool HostCopyDiffers { get; set; }
+
     public string UploadName => MemberName.Trim().ToUpperInvariant();
 
     public string? NameProblem => HostPath.MemberNameError(MemberName) is { } error ? "✗ " + error : null;

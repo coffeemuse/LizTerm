@@ -31,8 +31,12 @@ public static class HostFileMessages
     };
 
     /// <summary>The host does not roll back a failed write (spec §5.3), so a failure that can happen mid-write says so.</summary>
-    public static string DescribeUploadFailure(Exception ex) =>
+    public static string DescribeUploadFailure(Exception ex) => DescribeUploadFailure(ex, dataset: false);
+
+    /// <summary>As <see cref="DescribeUploadFailure(Exception)"/>; <paramref name="dataset"/> names a sequential
+    /// dataset, rather than a member, as what may be partly written.</summary>
+    public static string DescribeUploadFailure(Exception ex, bool dataset) =>
         ex is HostFileException { Kind: HostFileErrorKind.ServerError or HostFileErrorKind.Unreachable }
-            ? Describe(ex) + " The member may be partly written."
+            ? Describe(ex) + (dataset ? " The dataset may be partly written." : " The member may be partly written.")
             : Describe(ex);
 }

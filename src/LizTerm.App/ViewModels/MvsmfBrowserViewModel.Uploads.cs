@@ -52,7 +52,7 @@ public sealed partial class MvsmfBrowserViewModel
         if (dataset.IsSequential)
         {
             await RunExclusiveAsync(token => UploadSequentialAsync(dataset, token), () => UploadAsync(),
-                HostFileMessages.DescribeUploadFailure);
+                ex => HostFileMessages.DescribeUploadFailure(ex, dataset: true));
             return;
         }
         var files = await TryPickAsync(() => _picker.PickFilesToSendAsync($"Upload to {dataset.Name}"));
@@ -69,9 +69,13 @@ public sealed partial class MvsmfBrowserViewModel
     private Task StartUploadAsync() => RunExclusiveAsync(StartUploadCoreAsync, () => StartUploadAsync(),
         ex => _uploadStoppedMidWrite ? HostFileMessages.DescribeUploadFailure(ex) : HostFileMessages.Describe(ex));
 
+    /// <summary>A Retry left by a stopped upload belongs to this review, so it goes with it.</summary>
     [RelayCommand(CanExecute = nameof(CanCloseReview))]
     private void CloseReview()
     {
+        _retry = null;
+        ErrorText = null;
+        OnPropertyChanged(nameof(CanRetry));
         IsReviewingUpload = false;
         UploadFinished = false;
         ReviewMessage = null;
@@ -104,6 +108,7 @@ public sealed partial class MvsmfBrowserViewModel
 
     private async Task StartUploadCoreAsync(CancellationToken token)
     {
+        if (!IsReviewingUpload) return;
         if (SelectedDataset is not { } dataset)
         {
             ReviewMessage = "✗ Choose the dataset again.";
@@ -132,7 +137,11 @@ public sealed partial class MvsmfBrowserViewModel
         }
         ReviewMessage = null;
         var pending = Uploads.Where(row => !row.Sent).ToList();
-        foreach (var row in pending) row.Status = "";
+        foreach (var row in pending)
+        {
+            row.Status = "";
+            row.HostCopyDiffers = false;
+        }
 
         // Asked of the host now, never of the list on screen: that one can be empty after a failed listing, or miss
         // members an earlier, stopped run of this review created.
@@ -182,18 +191,28 @@ public sealed partial class MvsmfBrowserViewModel
                 continue;
             }
             row.Status = "⟳ Sending";
+            var started = false;
             var path = dataset.Path.WithMember(row.UploadName);
             try
             {
                 if (mode == HostTransferMode.Text)
                 {
                     var check = row.Check!;
-                    var outcome = await _connection.RunAsync(service => HostFileTransfer.UploadTextAsync(service, path, check, verify, token));
+                    var outcome = await _connection.RunAsync(service =>
+                    {
+                        started = true;
+                        return HostFileTransfer.UploadTextAsync(service, path, check, verify, token);
+                    });
                     row.Status = Describe(outcome);
+                    row.HostCopyDiffers = outcome.Verification == UploadVerification.Differs;
                 }
                 else
                 {
-                    await _connection.RunAsync(service => HostFileTransfer.UploadBinaryAsync(service, path, row.LocalPath, token));
+                    await _connection.RunAsync(service =>
+                    {
+                        started = true;
+                        return HostFileTransfer.UploadBinaryAsync(service, path, row.LocalPath, token);
+                    });
                     row.Status = "✓ Uploaded";
                 }
                 row.Sent = true;
@@ -201,7 +220,8 @@ public sealed partial class MvsmfBrowserViewModel
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
-                row.Status = "– Cancelled";
+                // A write the cancel interrupted may have reached the host in part.
+                row.Status = started ? "– Cancelled: the member may be partly written" : "– Cancelled";
             }
             catch (HostFileException ex) when (IsConnectionFailure(ex))
             {
@@ -225,9 +245,12 @@ public sealed partial class MvsmfBrowserViewModel
             return;
         }
         await LoadMembersCoreAsync(dataset, token);
-        StatusText = $"{(sent == Uploads.Count ? "✓" : "⚠")} Uploaded {sent} of {Plural(Uploads.Count, "file")} to {dataset.Name}.";
+        var clean = sent == Uploads.Count && !Uploads.Any(row => row.HostCopyDiffers);
+        StatusText = $"{(clean ? "✓" : "⚠")} Uploaded {sent} of {Plural(Uploads.Count, "file")} to {dataset.Name}.";
     }
 
+    /// <summary>A text file is checked before the question, so a file that cannot be sent is never asked about and
+    /// the question names what the check warns of.</summary>
     private async Task UploadSequentialAsync(DatasetRow dataset, CancellationToken token)
     {
         var file = await TryPickAsync(() => _picker.PickFileToSendAsync());
@@ -238,7 +261,28 @@ public sealed partial class MvsmfBrowserViewModel
             return;
         }
         var name = Path.GetFileName(file);
-        var answer = await AskAsync(new ConfirmationRequest($"Replace the contents of {dataset.Name} with {name}?", "Replace"));
+        var mode = Mode;
+        var verify = VerifyUploads;
+        TextUploadResult? check = null;
+        if (mode == HostTransferMode.Text)
+        {
+            try
+            {
+                check = HostFileTransfer.CheckTextFile(file, dataset.Attributes, new TextUploadOptions(ExpandTabs));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                StatusText = "✗ Not sent: " + HostFileMessages.Describe(ex);
+                return;
+            }
+            if (!check.CanUpload)
+            {
+                StatusText = "✗ Not sent: " + check.Errors[0].Message;
+                return;
+            }
+        }
+        var warnings = string.Concat(check?.Warnings.Select(warning => " ⚠ " + warning.Message) ?? []);
+        var answer = await AskAsync(new ConfirmationRequest($"Replace the contents of {dataset.Name} with {name}?{warnings}", "Replace"));
         if (answer.Choice != ConfirmChoice.Primary)
         {
             StatusText = "– Upload cancelled.";
@@ -246,15 +290,9 @@ public sealed partial class MvsmfBrowserViewModel
         }
         try
         {
-            if (Mode == HostTransferMode.Text)
+            if (check is not null)
             {
-                var check = HostFileTransfer.CheckTextFile(file, dataset.Attributes, new TextUploadOptions(ExpandTabs));
-                if (!check.CanUpload)
-                {
-                    StatusText = "✗ Not sent: " + check.Errors[0].Message;
-                    return;
-                }
-                var outcome = await _connection.RunAsync(service => HostFileTransfer.UploadTextAsync(service, dataset.Path, check, VerifyUploads, token));
+                var outcome = await _connection.RunAsync(service => HostFileTransfer.UploadTextAsync(service, dataset.Path, check, verify, token));
                 StatusText = outcome.Verification == UploadVerification.Differs
                     ? $"{Describe(outcome)} — {dataset.Name}"
                     : $"✓ Uploaded {name} to {dataset.Name}.";
@@ -267,7 +305,7 @@ public sealed partial class MvsmfBrowserViewModel
         }
         catch (Exception ex) when (ex is not OperationCanceledException && !(ex is HostFileException host && IsConnectionFailure(host)))
         {
-            StatusText = "✗ Failed: " + HostFileMessages.DescribeUploadFailure(ex);
+            StatusText = "✗ Failed: " + HostFileMessages.DescribeUploadFailure(ex, dataset: true);
         }
     }
 

@@ -727,16 +727,23 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   cancels its other transfers through a linked token and rethrows the first failure once; its rows say
   `– Stopped`, told apart from the user's `– Cancelled` by the outer token. An upload stops at its row, and a
   delete stops at its member and refreshes the list first. `RunExclusiveAsync` takes an optional `describe` for
-  the banner's words: uploads use `HostFileMessages.DescribeUploadFailure`, which adds that the member may be
-  partly written only for a failure that can happen mid-write (unreachable, server error); a PDS upload uses it
-  for the banner only when the failure came during a write. A delete's Retry asks again about the members the
-  failure left. Changing the dataset clears a pending retry, so Retry never acts on another dataset.
+  the banner's words: uploads use `HostFileMessages.DescribeUploadFailure`, which adds that the member (with
+  `dataset: true`, for a sequential dataset, the dataset) may be partly written only for a failure that can happen
+  mid-write (unreachable, server error); a PDS upload uses it for the banner only when the failure came during a
+  write. A delete's Retry asks again about the members the failure left. Changing the dataset clears a pending
+  retry, so Retry never acts on another dataset, and so does closing an upload review, which also clears the
+  banner; Start does nothing once its review is closed.
 - **Uploads.** A PDS upload opens a review (`Uploads`, `UploadRow`) in place of the member list. While it is open
   the dataset list and List are off, and a dataset change closes it unless an upload is running. Start snapshots
   Mode, Expand tabs and Verify, rechecks the files with them, and reloads the member list from the host before
   asking about existing members, since the list on screen can be empty or stale. A row that reached the host is
   marked `Sent`, so a retry of the same review skips it, and the window makes its member-name box read-only. A
-  sequential dataset has no review: one file, and a question before its contents are replaced.
+  row the user cancels once its transfer was handed to the service says `– Cancelled: the member may be partly
+  written` (the hand-over includes any sign-in prompt, so this errs on the side of the warning); rows not yet
+  started say `– Cancelled`. The summary is `⚠` when a file was not sent or any row's read-back differed
+  (`UploadRow.HostCopyDiffers`), `✓` only when every file went and matched. A sequential dataset has no review:
+  one file, checked first (a text file that fails its check is `✗ Not sent` with no question), then a question
+  before its contents are replaced that names the check's warnings.
 - **Delete** asks once, naming up to five members. A delete cancelled part-way refreshes the list and says how
   many members went, because a delete cannot be undone and the interrupted request may have deleted its member.
 - The window pushes the member selection through `SetSelectedMembers`, and only rows the member filter still

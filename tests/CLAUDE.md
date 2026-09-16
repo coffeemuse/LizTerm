@@ -62,8 +62,9 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 - `FakeHostFileService` (`Fakes/`) is an in-memory mvsMF: `AddDataset` seeds `Datasets` and `Members`, and `Text`
   and `Binary` hold contents keyed by `HostPath.ToString()`. `Calls` records `list:<pattern>`, `members:<dsn>`,
   `readtext:<path>`, `readbinary:<path>`, `writetext:<path>:<lines>`, `writebinary:<path>`, `delete:<path>` and
-  `info`; a `Failures` entry under the same key, without the line count, makes that call throw. `Gate` holds every
-  call after it is logged (a call still honours its token), `MaxConcurrent` is the most calls seen running at
+  `info`; a `Failures` entry under the same key, without the line count, makes that call throw. `StoreTransform`
+  ((path, lines) → what is stored) plays a host that alters what a text write keeps, for a read-back that differs.
+  `Gate` holds every call after it is logged (a call still honours its token), `MaxConcurrent` is the most calls seen running at
   once, and `Disposed` says whether the service was released. The operations take a lock the test cannot: seed
   everything before the view model runs, and read the log through `CallsSnapshot()` while calls may be running.
   Core.Tests has a smaller fake of the same name for `HostFileTransfer` (see "Core tests").

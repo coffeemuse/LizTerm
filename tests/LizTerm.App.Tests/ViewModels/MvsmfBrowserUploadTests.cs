@@ -196,7 +196,7 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
         t.Vm.CancelCommand.Execute(null);
         await upload;
 
-        Assert.Equal(new[] { "– Cancelled", "– Cancelled" }, t.Vm.Uploads.Select(u => u.Status));
+        Assert.Equal(new[] { "– Cancelled: the member may be partly written", "– Cancelled" }, t.Vm.Uploads.Select(u => u.Status));
         Assert.Equal("– Upload cancelled.", t.Vm.StatusText);
     }
 
@@ -240,20 +240,67 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
     }
 
     [Fact]
-    public async Task A_sequential_text_upload_is_checked_first()
+    public async Task A_sequential_text_upload_that_fails_its_check_is_not_sent_or_asked_about()
     {
         var t = BrowserTestHost.Create();
         await t.ChooseAsync("MVSCE02.UFSHOME");
         t.Vm.IsTextMode = true;
         t.Picker.Result = Write("wide.txt", new string('X', 5000));
 
-        var upload = t.Vm.UploadCommand.ExecuteAsync(null);
-        await Wait.UntilAsync(() => t.Vm.Confirmation is not null, "the replace question");
-        t.Vm.Confirmation!.PrimaryCommand.Execute(null);
-        await upload;
+        await t.Vm.UploadCommand.ExecuteAsync(null).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
+        Assert.Null(t.Vm.Confirmation);
         Assert.Equal("✗ Not sent: Line 1 is 5000 characters; the limit is 4096.", t.Vm.StatusText);
         Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("write"));
+    }
+
+    [Fact]
+    public async Task A_sequential_text_upload_names_its_warnings_in_the_question()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ChooseAsync("MVSCE02.UFSHOME");
+        t.Vm.IsTextMode = true;
+        t.Picker.Result = Write("f.txt", "A\tB\nC\tD\n");
+
+        var upload = t.Vm.UploadCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => t.Vm.Confirmation is not null, "the replace question");
+
+        Assert.Equal("Replace the contents of MVSCE02.UFSHOME with f.txt? ⚠ 2 lines contain tab characters.", t.Vm.Confirmation!.Message);
+        Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("write"));
+        t.Vm.Confirmation.PrimaryCommand.Execute(null);
+        await upload;
+        Assert.Equal(new[] { "A       B", "C       D" }, t.Host.Text["MVSCE02.UFSHOME"]);
+    }
+
+    [Fact]
+    public async Task A_host_copy_that_differs_is_a_warning_even_when_every_file_was_sent()
+    {
+        var t = await ReviewAsync(Write("hello.jcl", "A\nB\n"));
+        t.Host.StoreTransform = (_, lines) => [.. lines.Take(lines.Count - 1)];
+
+        await StartAsync(t);
+
+        Assert.Equal("⚠ Uploaded, but the host copy differs at line 2", t.Vm.Uploads[0].Status);
+        Assert.Equal("⚠ Uploaded 1 of 1 file to MVSCE02.CNTL.", t.Vm.StatusText);
+    }
+
+    [Fact]
+    public async Task Closing_the_review_drops_a_pending_retry()
+    {
+        var t = await ReviewAsync(Write("hello.jcl", "x\n"));
+        t.Host.Failures["writetext:MVSCE02.CNTL(HELLO)"] = new HostFileException(HostFileErrorKind.Unreachable, "down");
+        await StartAsync(t);
+        Assert.True(t.Vm.CanRetry);
+        var calls = t.Host.CallsSnapshot().Length;
+
+        t.Vm.CloseReviewCommand.Execute(null);
+        Assert.False(t.Vm.CanRetry);
+        Assert.False(t.Vm.HasError);
+        t.Host.Failures.Clear();
+        await t.Vm.RetryCommand.ExecuteAsync(null);
+
+        Assert.DoesNotContain(t.Host.CallsSnapshot().Skip(calls), c => c.StartsWith("write") || c.StartsWith("members:"));
+        Assert.DoesNotContain("Uploaded 0 of 0", t.Vm.StatusText);
     }
 
     [Fact]
@@ -309,7 +356,7 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
         t.Vm.Confirmation!.PrimaryCommand.Execute(null);
         await upload;
 
-        Assert.Equal(message + " The member may be partly written.", t.Vm.ErrorText);
+        Assert.Equal(message + " The dataset may be partly written.", t.Vm.ErrorText);
         Assert.True(t.Vm.CanRetry);
 
         t.Host.Failures.Clear();
