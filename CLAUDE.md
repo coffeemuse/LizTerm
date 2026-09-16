@@ -73,9 +73,11 @@ test ignore the override and need a built engine.
 - **Dependency rule** (enforced in review): `LizTerm.Core` depends only on the BCL and never mentions Avalonia,
   b3270 or mvsMF. `LizTerm.Backend.B3270` depends on Core and is the only project that knows b3270 exists;
   `LizTerm.Backend.Mvsmf` depends on Core and is the only project that knows mvsMF exists; the two backends never
-  reference each other. `LizTerm.App` names the b3270 backend in exactly one place, `src/LizTerm.App/SessionFactory.cs`;
-  everything else in App talks to `IEmulatorSession`. That is what lets the App tests run against `FakeEmulatorSession`
-  and keeps a future managed engine possible. The App *tests* name the backend in exactly one place too (see
+  reference each other. `LizTerm.App` names the b3270 backend in exactly one place,
+  `src/LizTerm.App/SessionFactory.cs`, and the mvsMF backend in exactly one place,
+  `src/LizTerm.App/HostFileServiceFactory.cs`; everything else in App talks to `IEmulatorSession` and
+  `IHostFileService`. That is what lets the App tests run against `FakeEmulatorSession` and `FakeHostFileService`
+  and keeps a future managed engine possible. The App *tests* name each backend in exactly one place too (see
   `tests/CLAUDE.md`).
 - **One window, one session, one profile.** `IEmulatorSession` is bound to its `SessionProfile` at construction.
 - **Snapshots, never shared state.** The backend owns the mutable `ScreenBuffer` (single writer) and publishes

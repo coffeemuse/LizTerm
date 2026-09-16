@@ -10,15 +10,17 @@ LizTerm is the client experience around it. The reasoning, and the alternatives 
 
 | Project | Role | Depends on |
 |---|---|---|
-| `src/LizTerm.Core` | The domain model: screen snapshots, connection and keyboard state, profiles and settings, the `IEmulatorSession` interface, certificate utilities, the release check. | The BCL only |
+| `src/LizTerm.Core` | The domain model: screen snapshots, connection and keyboard state, profiles and settings, the `IEmulatorSession` interface, host-neutral file access (`IHostFileService`), certificate utilities, the release check. | The BCL only |
 | `src/LizTerm.Backend.B3270` | `B3270Session`, the implementation of `IEmulatorSession`: process host, JSON protocol, engine locator, wire log. | Core |
-| `src/LizTerm.Backend.Mvsmf` | The HTTP client for mvsMF, for the dataset browser that arrives in a later release; the only project that knows mvsMF exists. | Core |
-| `src/LizTerm.App` | The Avalonia UI: splash, profile picker and editor, session window, terminal control, dialogs, menus. | Core, and the backend in one file only |
+| `src/LizTerm.Backend.Mvsmf` | `MvsmfFileService`, the implementation of `IHostFileService`: the HTTP client for mvsMF used by the mvsMF Browser; the only project that knows mvsMF exists. | Core |
+| `src/LizTerm.App` | The Avalonia UI: splash, profile picker and editor, session window, terminal control, dialogs, menus, and the mvsMF Browser, which reaches its backend through `HostFileServiceFactory`. | Core, and each backend in one file only |
 
-**The dependency rule.** Core never mentions Avalonia, b3270 or mvsMF. The b3270 backend is the only project that
-knows b3270 exists. The App names that backend in exactly one file, `src/LizTerm.App/SessionFactory.cs`; everything else talks
-to `IEmulatorSession`. That is what lets the App tests run against a fake session, and what keeps a future managed
-engine possible. It is enforced in review, not by tooling.
+**The dependency rule.** Core never mentions Avalonia, b3270 or mvsMF. Each backend is the only project that knows
+its product exists, and the two never reference each other. The App names the b3270 backend in exactly one file,
+`src/LizTerm.App/SessionFactory.cs`, and the mvsMF backend in exactly one file,
+`src/LizTerm.App/HostFileServiceFactory.cs`; everything else talks to `IEmulatorSession` and `IHostFileService`.
+That is what lets the App tests run against fakes, and what keeps a future managed engine possible. It is enforced
+in review, not by tooling.
 
 ## How a session works
 
@@ -38,12 +40,14 @@ engine possible. It is enforced in review, not by tooling.
 
 ## The release check
 
-The release check is the only HTTP request the app makes today. Core's `GitHubReleaseChecker` asks GitHub's
-releases API for the latest release (`GET https://api.github.com/repos/coffeemuse/LizTerm/releases/latest`, with a
-10 s timeout and the User-Agent `LizTerm/<version>`) when the app starts, if Preferences > General > Updates is on,
-and whenever Help > Check for Updates... is chosen. The App compares that version with its own and decides whether
-to say anything. The endpoint never returns a draft, so installed copies hear about a release only once it is
-published (see [CI and release](ci-and-release.md#publishing)).
+The release check is the only HTTP request the app makes on its own. The mvsMF Browser, and the profile editor's
+Test button, talk only to the URL a profile names, and only when the user asks. Core's `GitHubReleaseChecker` asks
+GitHub's releases API for the latest release
+(`GET https://api.github.com/repos/coffeemuse/LizTerm/releases/latest`, with a 10 s timeout and the User-Agent
+`LizTerm/<version>`) when the app starts, if Preferences > General > Updates is on, and whenever Help > Check for
+Updates... is chosen. The App compares that version with its own and decides whether to say anything. The endpoint
+never returns a draft, so installed copies hear about a release only once it is published (see
+[CI and release](ci-and-release.md#publishing)).
 
 ## Where the detail lives
 
