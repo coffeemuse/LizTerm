@@ -9,10 +9,11 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.Backend.Mvsmf;
 
-/// <summary>Decides whether an https host is trusted. With a pin, the leaf's SHA-256 must match it and nothing else
-/// is consulted — the same trust a pinned 3270 connection gives, which also accepts any host name. Without one, the
-/// system's verdict stands. The last certificate refused is kept for the error the service raises; a service talks
-/// to one host, so one slot is enough.</summary>
+/// <summary>Decides whether an https host is trusted. A pin trusts exactly its leaf certificate while that
+/// certificate is in date, whatever the system store and the host name say. Unlike the 3270 pin, which is a PEM trust
+/// store, a pin holding a chain does not extend trust to other leaves. Without a pin, the system's verdict stands. The
+/// refused certificate is kept until <see cref="TakeRejected"/> reports it once; a service talks to one host, so one
+/// slot is enough.</summary>
 internal sealed class MvsmfCertificateCheck(CertificatePin? pin)
 {
     private PresentedCertificate? _lastRejected;
@@ -30,6 +31,7 @@ internal sealed class MvsmfCertificateCheck(CertificatePin? pin)
         {
             var trusted = Pin is not null
                 ? CertificateReader.SameFingerprint(CertificateReader.Fingerprint(presented[0]), Pin.Sha256)
+                  && InDate(presented[0])
                 : errors == SslPolicyErrors.None;
             Volatile.Write(ref _lastRejected, trusted ? null : CertificateReader.Read(presented));
             return trusted;
@@ -38,5 +40,11 @@ internal sealed class MvsmfCertificateCheck(CertificatePin? pin)
         {
             foreach (var copy in presented) copy.Dispose();
         }
+    }
+
+    private static bool InDate(X509Certificate2 leaf)
+    {
+        var now = DateTime.Now;
+        return now >= leaf.NotBefore && now <= leaf.NotAfter;
     }
 }

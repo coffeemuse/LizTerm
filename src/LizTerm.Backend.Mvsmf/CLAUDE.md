@@ -26,8 +26,9 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
   `HostFileErrorKind.Unreachable`, "cannot reach the host (no answer within 10 s)".
 - **Bodies are built once per call**, so the repeat after a 401 sends the same bytes; `WriteBinaryAsync` therefore
   reads its source into memory first.
-- **TLS:** `MvsmfCertificateCheck` trusts a pinned leaf fingerprint and nothing else, or, without a pin, the system's
-  verdict. `TakeRejected()` returns the certificate refused since the last call and clears the slot (one slot: a
+- **TLS:** `MvsmfCertificateCheck` trusts exactly the pinned leaf while it is in date (`NotBefore`..`NotAfter`),
+  whatever the system store and the host name say, or, without a pin, the system's verdict. Unlike the 3270 pin (a
+  PEM trust store verified by OpenSSL), a pin holding a chain does not extend trust to other leaves. `TakeRejected()` returns the certificate refused since the last call and clears the slot (one slot: a
   service talks to one host), so each refusal is reported once and an accepted handshake clears it; the service
   raises `CertificateRejected` with the `PresentedCertificate`. It uses Core's
   `SslStreamCertificateFetcher.SelectPresented`, so a pin covers exactly what was on the wire.

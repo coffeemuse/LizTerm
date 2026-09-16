@@ -83,6 +83,16 @@ public class MvsmfTlsTests
     }
 
     [Fact]
+    public void A_pin_refuses_its_certificate_once_it_has_expired()
+    {
+        using var certificate = TestCertificates.SelfSigned(
+            notBefore: DateTimeOffset.UtcNow.AddDays(-10), notAfter: DateTimeOffset.UtcNow.AddDays(-1));
+        var check = new MvsmfCertificateCheck(PinFor(certificate));
+        Assert.False(check.Validate(new object(), certificate, null, SslPolicyErrors.None));
+        Assert.NotNull(check.TakeRejected());
+    }
+
+    [Fact]
     public void A_refusal_is_reported_once()
     {
         var check = new MvsmfCertificateCheck(null);

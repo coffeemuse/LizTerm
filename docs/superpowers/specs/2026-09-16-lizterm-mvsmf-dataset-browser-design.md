@@ -112,7 +112,8 @@ the build differs from the source or docs it is marked **RC**. These findings se
 
 The URL's scheme decides. `http` goes direct. `https` validates through the handler's
 `ServerCertificateCustomValidationCallback` with the existing pin model in `LizTerm.Core.Security`; an untrusted
-certificate opens the existing certificate window, and "Remember" stores `MvsmfPinnedCertificate`. No warning is
+certificate opens the existing certificate window, and "Remember" stores `MvsmfPinnedCertificate`. A pin trusts exactly the pinned leaf while it is in date (decided 2026-09-16 in the PR 1
+review); it is not a trust store, so a pinned chain does not extend to other leaves. No warning is
 shown for `http`; the user guide suggests a TLS reverse proxy.
 
 ### 3.5 Compatibility log
