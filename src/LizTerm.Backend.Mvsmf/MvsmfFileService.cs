@@ -89,8 +89,10 @@ public sealed class MvsmfFileService : IHostFileService
         using var response = await SendAsync(
             () => new HttpRequestMessage(HttpMethod.Get, Url($"restfiles/ds?dslevel={EscapeName(filter)}")), what, idle, cancellationToken);
         var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfDatasetList, what, idle, cancellationToken);
-        // mvsMF-compat: dataset-list-morerows-false — moreRows arrives as false rather than absent; with no item limit
-        // it is never true, so it is not read.
+        // mvsMF-compat: dataset-list-morerows-false — moreRows arrives as false rather than absent. No item limit is
+        // ever sent, so a true means the host changed behaviour and the list is partial: refuse it.
+        if (list.MoreRows == true)
+            throw new HostFileException(HostFileErrorKind.ServerError, $"{what}: the host returned only part of the list.");
         return [.. (list.Items ?? Enumerable.Empty<MvsmfDataset>()).Where(d => !string.IsNullOrWhiteSpace(d.Dsname)).Select(ToEntry)];
     }
 

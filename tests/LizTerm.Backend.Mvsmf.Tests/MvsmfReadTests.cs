@@ -28,7 +28,7 @@ public class MvsmfReadTests
 
         var lines = await service.ReadTextAsync(Jes2, cancellationToken: TestContext.Current.CancellationToken);
 
-        // Deviation: the recorded fixture has five spaces before PROC, not four as in the original brief text.
+        // The recording has five spaces before PROC.
         Assert.StartsWith("//JES2     PROC M=JES2PM00,", lines[0]);
         Assert.Equal(80, lines[0].Length);
         Assert.EndsWith("00000010", lines[0]);
@@ -85,7 +85,7 @@ public class MvsmfReadTests
         Assert.Equal(HostFileErrorKind.CannotOpen, ex.Kind);
     }
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public async Task A_host_that_stops_sending_times_out()
     {
         using var service = Service(Answering(new StallingStream()), idle: TimeSpan.FromMilliseconds(200));
@@ -97,7 +97,7 @@ public class MvsmfReadTests
         Assert.StartsWith("SYS1.PROCLIB(JES2): the host stopped answering", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public async Task Cancelling_is_not_reported_as_a_timeout()
     {
         using var service = Service(Answering(new StallingStream()));

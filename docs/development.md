@@ -177,14 +177,15 @@ rather than exporting them on a command line.
 
 Set all four `LIZTERM_MVSMF_*` variables. The tests read the server information, list the scratch PDS, upload a
 small text member through the same checks the app uses, verify and download it, delete it, and make two sign-in
-attempts with a wrong password. Keep the variables in the same file outside the repository as the other live-test
-variables.
+attempts with a wrong password. The wrong-password test fails two sign-ins per run; on a host whose security
+product revokes a userid after failed attempts, point it at a userid that can take that. Keep them with the other
+live-test variables, in the file outside the repository that you `source`.
 
 ### Replay fixtures
 
 `tests/LizTerm.Backend.B3270.Tests/Fixtures/` holds raw b3270 output recorded from real sessions and host traces;
 its [README](../tests/LizTerm.Backend.B3270.Tests/Fixtures/README.md) documents each one. Every bug found in the
-field should add a trimmed fixture. There are two recorders:
+field should add a trimmed fixture. b3270 fixtures have two recorders:
 
 - `tools/wirelog-to-fixture.sh <wire.log> <out.jsonl>` turns a `LIZTERM_WIRE_LOG` file from a real session into a
   fixture: inbound lines only, timestamps stripped.

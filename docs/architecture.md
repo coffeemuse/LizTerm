@@ -1,6 +1,6 @@
 # Architecture
 
-LizTerm is three .NET projects around one decision: it does not implement the 3270 data stream. Emulation —
+LizTerm is four .NET projects around one decision: it does not implement the 3270 data stream. Emulation —
 TN3270E, TLS, code pages, extended attributes, IND$FILE — is done by `b3270`, the headless member of the x3270
 suite, which LizTerm starts as a child process and talks to over stdin and stdout in newline-delimited JSON.
 LizTerm is the client experience around it. The reasoning, and the alternatives that were rejected, are in the
@@ -12,10 +12,11 @@ LizTerm is the client experience around it. The reasoning, and the alternatives 
 |---|---|---|
 | `src/LizTerm.Core` | The domain model: screen snapshots, connection and keyboard state, profiles and settings, the `IEmulatorSession` interface, certificate utilities, the release check. | The BCL only |
 | `src/LizTerm.Backend.B3270` | `B3270Session`, the implementation of `IEmulatorSession`: process host, JSON protocol, engine locator, wire log. | Core |
+| `src/LizTerm.Backend.Mvsmf` | The HTTP client for mvsMF, for the dataset browser that arrives in a later release; the only project that knows mvsMF exists. | Core |
 | `src/LizTerm.App` | The Avalonia UI: splash, profile picker and editor, session window, terminal control, dialogs, menus. | Core, and the backend in one file only |
 
-**The dependency rule.** Core never mentions Avalonia or b3270. The backend is the only project that knows b3270
-exists. The App names the backend in exactly one file, `src/LizTerm.App/SessionFactory.cs`; everything else talks
+**The dependency rule.** Core never mentions Avalonia, b3270 or mvsMF. The b3270 backend is the only project that
+knows b3270 exists. The App names that backend in exactly one file, `src/LizTerm.App/SessionFactory.cs`; everything else talks
 to `IEmulatorSession`. That is what lets the App tests run against a fake session, and what keeps a future managed
 engine possible. It is enforced in review, not by tooling.
 
@@ -37,7 +38,7 @@ engine possible. It is enforced in review, not by tooling.
 
 ## The release check
 
-The release check is the only HTTP request in LizTerm's own code. Core's `GitHubReleaseChecker` asks GitHub's
+The release check is the only HTTP request the app makes today. Core's `GitHubReleaseChecker` asks GitHub's
 releases API for the latest release (`GET https://api.github.com/repos/coffeemuse/LizTerm/releases/latest`, with a
 10 s timeout and the User-Agent `LizTerm/<version>`) when the app starts, if Preferences > General > Updates is on,
 and whenever Help > Check for Updates... is chosen. The App compares that version with its own and decides whether

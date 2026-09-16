@@ -61,7 +61,8 @@ Entries marked *log only* change nothing in the code.
 
 - **Source:** `moreRows` appears only when true.
 - **Observed:** `"moreRows": false` on a complete list.
-- **LizTerm:** does not read `moreRows` (with no item limit it is never true).
+- **LizTerm:** sends no item limit, so `moreRows` should never be true; a true means the host changed behaviour and
+  returned a partial list, which LizTerm reports as a server error rather than showing.
 
 ### `dslevel-is-a-prefix` (log only)
 

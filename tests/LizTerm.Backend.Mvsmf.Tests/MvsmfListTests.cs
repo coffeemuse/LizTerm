@@ -52,6 +52,17 @@ public class MvsmfListTests
     }
 
     [Fact]
+    public async Task Dataset_list_morerows_true_is_an_error()
+    {
+        using var service = Service(new RecordedHandler().Then(HttpStatusCode.OK, """{"items":[{"dsname":"A.B"}],"moreRows":true}"""));
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() => service.ListDatasetsAsync("A.**", TestContext.Current.CancellationToken));
+
+        Assert.Equal(HostFileErrorKind.ServerError, ex.Kind);
+        Assert.Equal("Dataset list: the host returned only part of the list.", ex.Message);
+    }
+
+    [Fact]
     public async Task The_filter_is_folded_and_its_hash_and_percent_are_escaped()
     {
         var handler = new RecordedHandler().Then(HttpStatusCode.OK, """{"items":[],"moreRows":false}""");

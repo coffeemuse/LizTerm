@@ -1,7 +1,7 @@
 # LizTerm.Core
 
 Notes for working in this project. The root `CLAUDE.md` has the rules that apply everywhere (the dependency rule,
-snapshots, threading, zero-based coordinates). Core depends on the BCL only and never names Avalonia or b3270.
+snapshots, threading, zero-based coordinates). Core depends on the BCL only and never names Avalonia, b3270 or mvsMF.
 
 ## Model
 
@@ -68,10 +68,10 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - `TextUploadCheck` runs before any upload: invalid UTF-8, a character above U+00FF, or a line longer than the
   record (`DatasetAttributes.UsableLineLength`) blocks it; tabs are a warning and are expanded by default. It is
   pure, and the file-reading wrapper is `HostFileTransfer.CheckTextFile`.
-- `HostFileTransfer.DownloadAsync` writes a hidden `.part` file beside the destination and renames it only on
-  success. Text downloads trim trailing blanks by default and end lines with the platform's newline unless told
-  otherwise. `UploadTextAsync` refuses text that failed its check and, when asked, reads it back and compares with
-  trailing blanks ignored.
+- `HostFileTransfer.DownloadAsync` writes a dot-prefixed `.part` file (hidden on macOS and Linux) beside the
+  destination and renames it only on success. Text downloads trim trailing blanks by default and end lines with the
+  platform's newline unless told otherwise. `UploadTextAsync` refuses text that failed its check and, when asked,
+  reads it back and compares with trailing blanks ignored.
 - `HostCredentials` is a class, not a record, so no generated `ToString` can print the password.
 
 ## Profiles

@@ -22,7 +22,7 @@ public class MvsmfTlsTests
         new(CertificateReader.Fingerprint(certificate), certificate.Subject, certificate.ExportCertificatePem());
 
     // A TLS regression should fail the test rather than hang the suite: LoopbackHttpsServer's own handshake never
-    // times out on its own, so these three carry an explicit timeout (brief deviation, see task-10-report.md).
+    // times out on its own, so these three carry an explicit timeout.
     [Fact(Timeout = 30000)]
     public async Task An_untrusted_certificate_is_rejected_and_described()
     {

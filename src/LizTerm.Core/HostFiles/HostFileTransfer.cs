@@ -25,10 +25,13 @@ public static class HostFileTransfer
 {
     private static readonly UTF8Encoding Utf8NoMark = new(encoderShouldEmitUTF8Identifier: false);
 
-    /// <summary>Writes to a hidden temporary file beside <paramref name="destinationFile"/> and renames it into place
-    /// only on success, so a failed or cancelled download never leaves a partial file under the real name and never
-    /// damages the file it would have replaced.</summary>
+    /// <summary>Writes to a dot-prefixed <c>.part</c> file (hidden on macOS and Linux) beside
+    /// <paramref name="destinationFile"/> and renames it into place only on success, so a failed or cancelled download
+    /// never leaves a partial file under the real name and never damages the file it would have replaced.</summary>
     /// <returns>The bytes written locally.</returns>
+    /// <exception cref="IOException">The local file could not be written or renamed; not a
+    /// <see cref="HostFileException"/>.</exception>
+    /// <exception cref="UnauthorizedAccessException">The local folder or file is not writable.</exception>
     public static async Task<long> DownloadAsync(IHostFileService service, HostPath path, string destinationFile,
         DownloadOptions options, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
     {
@@ -61,6 +64,9 @@ public static class HostFileTransfer
         }
     }
 
+    /// <summary>Reads <paramref name="sourceFile"/> and runs <see cref="TextUploadCheck"/> on it.</summary>
+    /// <exception cref="IOException">The local file could not be read; not a <see cref="HostFileException"/>.</exception>
+    /// <exception cref="UnauthorizedAccessException">The local file is not readable.</exception>
     public static TextUploadResult CheckTextFile(string sourceFile, DatasetAttributes target, TextUploadOptions? options = null) =>
         TextUploadCheck.Run(File.ReadAllBytes(sourceFile), target, options);
 
@@ -78,6 +84,9 @@ public static class HostFileTransfer
             : UploadOutcome.Matches;
     }
 
+    /// <summary>Sends <paramref name="sourceFile"/> as it is.</summary>
+    /// <exception cref="IOException">The local file could not be read; not a <see cref="HostFileException"/>.</exception>
+    /// <exception cref="UnauthorizedAccessException">The local file is not readable.</exception>
     public static async Task UploadBinaryAsync(IHostFileService service, HostPath path, string sourceFile,
         CancellationToken cancellationToken = default)
     {
