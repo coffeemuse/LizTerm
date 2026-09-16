@@ -230,7 +230,7 @@ public partial class ProfilePickerViewModel : ObservableObject
         // Under the ORIGINAL name. A rename deletes that file below, so looking the pin up under the new one
         // finds nothing and loses it exactly as the bug did.
         var onDisk = _store.Load(original.Name);
-        var merged = edit.Profile with { PinnedCertificate = PinMerge.Resolve(edit.Profile, onDisk, edit.PinCleared) };
+        var merged = PinMerge.Apply(edit.Profile, onDisk, edit.PinCleared, edit.HostFilesPinCleared);
 
         if (!merged.Name.Equals(original.Name, StringComparison.OrdinalIgnoreCase)) _store.Delete(original.Name);
         _store.Save(merged);

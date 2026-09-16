@@ -56,4 +56,33 @@ public class ProfileEditorWindowTests
         Assert.False(note.AcceptsReturn);
         Assert.Equal(120, note.MaxLength);
     }
+
+    [AvaloniaFact]
+    public void The_mvsmf_group_shows_the_profiles_values_and_its_pin()
+    {
+        var window = new ProfileEditorWindow(new SessionProfile
+        {
+            Name = "MVS/CE", Host = "mvs", HostFilesUrl = "http://mvs:8080/zosmf", HostFilesUserid = "MVSCE02",
+            HostFilesPinnedCertificate = new CertificatePin("AA:BB", "CN=proxy", "pem"),
+        });
+        window.Show();
+
+        Assert.Equal("http://mvs:8080/zosmf", window.FindControl<TextBox>("MvsmfUrlBox")!.Text);
+        Assert.Equal("MVSCE02", window.FindControl<TextBox>("MvsmfUseridBox")!.Text);
+        Assert.True(window.FindControl<StackPanel>("MvsmfPinPanel")!.IsVisible);
+        Assert.Equal("Pinned certificate: SHA-256 AA:BB (CN=proxy)", window.FindControl<TextBlock>("MvsmfPinText")!.Text);
+        Assert.True(window.FindControl<Button>("MvsmfTestButton")!.IsEffectivelyEnabled);
+        window.FindControl<Button>("MvsmfForgetButton")!.Command!.Execute(null);
+        Assert.False(window.FindControl<StackPanel>("MvsmfPinPanel")!.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void A_profile_without_mvsmf_shows_an_empty_group()
+    {
+        var window = new ProfileEditorWindow(new SessionProfile { Name = "p", Host = "h" });
+        window.Show();
+
+        Assert.Equal("", window.FindControl<TextBox>("MvsmfUrlBox")!.Text);
+        Assert.False(window.FindControl<StackPanel>("MvsmfPinPanel")!.IsVisible);
+    }
 }

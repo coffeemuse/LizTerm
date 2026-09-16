@@ -11,7 +11,7 @@
         Title="Session Profile" Width="480" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
   <StackPanel Margin="16" Spacing="10">
-    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" >
+    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" >
       <TextBlock Grid.Row="0" Text="Name" VerticalAlignment="Center" />
       <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name}" />
       <TextBlock Grid.Row="1" Text="Host" VerticalAlignment="Center" />
@@ -78,6 +78,26 @@
            would make every row tall and the visible list short. -->
       <TextBox x:Name="NoteBox" Grid.Row="11" Grid.Column="1" Text="{Binding Note}" AcceptsReturn="False"
                MaxLength="120" PlaceholderText="optional — shown under the host in the list" />
+      <TextBlock Grid.Row="12" Grid.Column="0" Text="mvsMF (Preview)" VerticalAlignment="Top" Margin="0,6,0,0" TextWrapping="Wrap" />
+      <StackPanel Grid.Row="12" Grid.Column="1" Spacing="4">
+        <TextBox x:Name="MvsmfUrlBox" Text="{Binding MvsmfUrl}" PlaceholderText="http://host:8080 (optional)" />
+        <TextBlock Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap"
+                   Text="The z/OSMF REST address for File &gt; mvsMF Browser. /zosmf is added when the path is empty; use https:// through a TLS proxy." />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="Userid" VerticalAlignment="Center" />
+          <TextBox x:Name="MvsmfUseridBox" Text="{Binding MvsmfUserid}" Width="120" MaxLength="8" PlaceholderText="optional" />
+          <TextBlock Text="prefills the sign-in" Foreground="#A0A0A0" FontSize="12" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel x:Name="MvsmfPinPanel" Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasMvsmfPin}">
+          <TextBlock x:Name="MvsmfPinText" Text="{Binding MvsmfPinText}" FontSize="12" TextWrapping="Wrap" MaxWidth="260" />
+          <Button x:Name="MvsmfForgetButton" Content="Forget" Command="{Binding ForgetMvsmfPinCommand}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button x:Name="MvsmfTestButton" Content="Test" Command="{Binding TestMvsmfCommand}" />
+          <TextBlock x:Name="MvsmfTestResultText" Text="{Binding MvsmfTestResult}" TextWrapping="Wrap" MaxWidth="260"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+      </StackPanel>
     </Grid>
     <TextBlock Text="{Binding ValidationMessage}" Foreground="#FF8080" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

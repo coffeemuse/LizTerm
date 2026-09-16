@@ -5,7 +5,9 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LizTerm.App.HostFiles;
 using LizTerm.Core;
+using LizTerm.Core.HostFiles;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
 
@@ -52,6 +54,31 @@ public partial class ProfileEditorViewModel : ObservableObject
     public string? PinnedCertificateText =>
         PinnedCertificate is { } pin ? $"Pinned certificate: SHA-256 {pin.Sha256} ({pin.Subject})" : null;
 
+    [ObservableProperty] private string _mvsmfUrl = "";
+    [ObservableProperty] private string _mvsmfUserid = "";
+
+    /// <summary>The REST pin, which belongs to the REST URL as the 3270 pin belongs to host and port.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMvsmfPin), nameof(MvsmfPinText))]
+    private CertificatePin? _mvsmfPinnedCertificate;
+    private CertificatePin? _mvsmfPinnedFor;
+    private readonly string? _mvsmfPinnedUrl;
+
+    public bool HasMvsmfPin => MvsmfPinnedCertificate is not null;
+    public string? MvsmfPinText =>
+        MvsmfPinnedCertificate is { } pin ? $"Pinned certificate: SHA-256 {pin.Sha256} ({pin.Subject})" : null;
+
+    /// <summary>The Test button's own line, kept apart from <see cref="ValidationMessage"/>, which only Save writes.</summary>
+    [ObservableProperty] private string? _mvsmfTestResult;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TestMvsmfCommand))]
+    private bool _isTestingMvsmf;
+
+    private readonly HostFileTester? _tester;
+
+    public bool MvsmfPinCleared { get; private set; }
+
     /// <summary>The catalogue, seeded with this profile's own value when it falls outside it — a hand-edited
     /// file, or a model a newer engine adds. A ComboBox bound SelectedItem has nothing to select otherwise, and
     /// merely opening the editor would drop a working profile's setting. Model gets no validation in TryBuild,
@@ -77,8 +104,9 @@ public partial class ProfileEditorViewModel : ObservableObject
 
     public bool IsNew { get; }
 
-    public ProfileEditorViewModel(SessionProfile? existing)
+    public ProfileEditorViewModel(SessionProfile? existing, HostFileTester? tester = null)
     {
+        _tester = tester;
         IsNew = existing is null;
 
         var models = TerminalModel.All.ToList();
@@ -115,6 +143,11 @@ public partial class ProfileEditorViewModel : ObservableObject
         _pinnedFor = existing.PinnedCertificate;
         _pinnedHost = existing.Host;
         _pinnedPort = existing.Port;
+        _mvsmfUrl = existing.HostFilesUrl ?? "";
+        _mvsmfUserid = existing.HostFilesUserid ?? "";
+        _mvsmfPinnedCertificate = existing.HostFilesPinnedCertificate;
+        _mvsmfPinnedFor = existing.HostFilesPinnedCertificate;
+        _mvsmfPinnedUrl = existing.HostFilesUrl;
     }
 
     partial void OnUseTlsChanged(bool value)
@@ -193,6 +226,83 @@ public partial class ProfileEditorViewModel : ObservableObject
         PinCleared = true;
     }
 
+    partial void OnMvsmfUrlChanged(string value)
+    {
+        MvsmfPinnedCertificate = SameRestUrl(value, _mvsmfPinnedUrl) ? _mvsmfPinnedFor : null;
+        MvsmfTestResult = null;
+    }
+
+    private static bool SameRestUrl(string? first, string? second) =>
+        string.Equals(first?.Trim().TrimEnd('/'), second?.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+
+    [RelayCommand]
+    private void ForgetMvsmfPin()
+    {
+        _mvsmfPinnedFor = null;
+        MvsmfPinnedCertificate = null;
+        MvsmfPinCleared = true;
+    }
+
+    private bool CanTestMvsmf => _tester is not null && !IsTestingMvsmf;
+
+    [RelayCommand(CanExecute = nameof(CanTestMvsmf))]
+    private async Task TestMvsmfAsync()
+    {
+        if (!TryReadMvsmf(out var url, out var userid, out var problem))
+        {
+            MvsmfTestResult = "✗ " + problem;
+            return;
+        }
+        if (url is null)
+        {
+            MvsmfTestResult = "✗ Enter the mvsMF URL first.";
+            return;
+        }
+        IsTestingMvsmf = true;
+        MvsmfTestResult = "⟳ Testing…";
+        try
+        {
+            var name = string.IsNullOrWhiteSpace(Name) ? "This profile" : Name.Trim();
+            var info = await _tester!(name, url, userid, MvsmfPinnedCertificate, CancellationToken.None);
+            MvsmfTestResult = $"✓ Connected: {info.Product} {info.ProductVersion} on {info.SystemVersion}";
+        }
+        catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.CertificateRejected)
+        {
+            MvsmfTestResult = "✗ The host's certificate is not trusted. Open the mvsMF Browser from a session to review it.";
+        }
+        catch (Exception ex)
+        {
+            MvsmfTestResult = "✗ " + HostFileMessages.Describe(ex);
+        }
+        finally
+        {
+            IsTestingMvsmf = false;
+        }
+    }
+
+    /// <summary>The REST URL (null when blank) and userid as Save and Test read them.</summary>
+    private bool TryReadMvsmf(out Uri? url, out string? userid, out string? problem)
+    {
+        url = null;
+        userid = null;
+        problem = null;
+        if (!string.IsNullOrWhiteSpace(MvsmfUrl) && !HostFileServiceFactory.TryNormalizeUrl(MvsmfUrl, out url, out var error))
+        {
+            problem = "mvsMF URL: " + error;
+            return false;
+        }
+        var typed = MvsmfUserid.Trim().ToUpperInvariant();
+        if (typed.Length > 0 && (typed.Length > 8 || !IsUseridStart(typed[0]) || typed.Any(c => !IsUseridStart(c) && !char.IsAsciiDigit(c))))
+        {
+            problem = "The mvsMF userid must be 1 to 8 letters, digits or # $ @, starting with a letter or # $ @.";
+            return false;
+        }
+        userid = typed.Length > 0 ? typed : null;
+        return true;
+    }
+
+    private static bool IsUseridStart(char c) => char.IsAsciiLetterUpper(c) || c is '#' or '$' or '@';
+
     public SessionProfile? TryBuild()
     {
         if (string.IsNullOrWhiteSpace(Name)) { SetValidation("Give the profile a name."); return null; }
@@ -232,6 +342,11 @@ public partial class ProfileEditorViewModel : ObservableObject
             SetValidation($"A profile can carry at most {TagSet.MaxTags} tags.");
             return null;
         }
+        if (!TryReadMvsmf(out var restUrl, out var restUserid, out var restProblem))
+        {
+            SetValidation(restProblem);
+            return null;
+        }
         SetValidation(null);
         return new SessionProfile
         {
@@ -251,6 +366,9 @@ public partial class ProfileEditorViewModel : ObservableObject
             Oversize = oversize?.ToString(),
             Tags = TagSet.From(wanted),
             Note = string.IsNullOrWhiteSpace(Note) ? null : Note.Trim(),
+            HostFilesUrl = restUrl?.ToString(),
+            HostFilesUserid = restUserid,
+            HostFilesPinnedCertificate = restUrl is null ? null : MvsmfPinnedCertificate,
         };
     }
 }

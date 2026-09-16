@@ -188,11 +188,8 @@ public partial class App : Application
                 // The same read-back ProfilePickerViewModel.EditAsync does, for the same reason: this window's
                 // profile was fixed at construction, so the file under that name can already hold a pin written
                 // since — by the picker, or by another session window's WritePinBack. Overwriting the rest is
-                // what the user asked for; dropping a pin they never saw in this editor is not.
-                store.Save(edit.Profile with
-                {
-                    PinnedCertificate = PinMerge.Resolve(edit.Profile, store.Load(edit.Profile.Name), edit.PinCleared),
-                });
+                // what the user asked for; dropping a pin they never saw in this editor is not — the REST pin included.
+                store.Save(PinMerge.Apply(edit.Profile, store.Load(edit.Profile.Name), edit.PinCleared, edit.HostFilesPinCleared));
             },
             settings: Settings,
             bellRinger: _bellRinger,
