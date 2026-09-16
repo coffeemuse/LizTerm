@@ -3,7 +3,7 @@
 Each `.http` file is one exchange recorded from a live mvsMF by `tools/record-mvsmf-fixture.sh`: the response
 headers without CRs (Date, Jobname, Jobid and Node dropped), a blank line, then the body bytes as received.
 `Fixture.Load` turns one into an `HttpResponseMessage`; `Transfer-Encoding`, `Content-Length` and `Connection` are
-ignored because the body is already whole.
+ignored because the body is already whole. `.gitattributes` marks the files `-text` so no checkout converts their line endings.
 
 Recorded 2026-09-16 from an MVS/CE host running a pre-release mvsMF reporting `1.0.0-dev`. See
 `docs/mvsmf-compatibility.md` before re-recording against a newer build: a changed fixture is a changed behaviour.

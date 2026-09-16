@@ -1,3 +1,7 @@
 # The b3270 patches keep LF line endings on every checkout: the x3270 sources they apply to are LF, and
 # native/build/fetch-source.sh applies them with no fuzz.
 native/patches/*.patch text eol=lf
+
+# The mvsMF fixtures are recorded wire bytes: LF-separated headers and exact bodies, one of them binary. No line
+# ending conversion on any checkout, or Windows turns them into CRLF and the fixture parser finds no blank line.
+tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/*.http -text
