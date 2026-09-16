@@ -26,6 +26,9 @@ public sealed class HostFileConnection : IDisposable
     private readonly List<IHostFileService> _made = [];
     private IHostFileService _service;
     private CertificatePin? _servicePin;
+    /// <summary>The service whose refusal the user declined, so the refusals that arrived with it are not asked
+    /// again.</summary>
+    private IHostFileService? _declined;
     private bool _disposed;
 
     internal HostFileConnection(HostFileAccess access, Uri url, HostCredentialProvider credentials, ICertificatePrompt? certificates)
@@ -99,17 +102,26 @@ public sealed class HostFileConnection : IDisposable
         {
             lock (_lock)
             {
+                // Declined already, for an operation that was refused at the same time.
+                if (ReferenceEquals(_declined, refused)) return false;
                 // Answered already, by an operation that was refused at the same time or by another window.
                 if (!ReferenceEquals(_service, refused) || !Equals(_access.Pin, _servicePin)) return true;
+                // The pin in force already trusts exactly this certificate, so the refusal is not about trust (an
+                // expired certificate, say) and asking again cannot help.
+                if (_servicePin is { } inForce && CertificateReader.SameFingerprint(inForce.Sha256, presented.Sha256)) return false;
             }
             if (_certificates is null) return false;
             var canPin = _access.CanRememberPin && presented.Pinnable;
             var cannotPin = _access.CanRememberPin && !presented.Pinnable
-                ? presented.NotPinnableReason ?? "This certificate cannot be pinned."
+                ? $"This certificate cannot be pinned: {presented.NotPinnableReason ?? "it cannot be verified on its own"}. Connect Anyway applies to this session only."
                 : null;
             var decision = await _certificates.AskAsync(new CertificatePromptRequest(
                 _url.Host, [NotTrusted], presented, null, _access.Pin, canPin, cannotPin));
-            if (!decision.ConnectAnyway) return false;
+            if (!decision.ConnectAnyway)
+            {
+                lock (_lock) _declined = refused;
+                return false;
+            }
             var pin = new CertificatePin(presented.Sha256, presented.Subject, presented.Pem);
             _access.AcceptPin(pin, canPin && decision.Remember);
             lock (_lock)

@@ -22,13 +22,15 @@ public class HostFileConnectionTests
         public List<CertificatePin> Saved { get; } = [];
         public HostCredentialProvider? Provider { get; private set; }
         public TaskCompletionSource? FirstGate { get; set; }
+        /// <summary>Services made with a pin refuse too, as for a certificate the pin check can never accept.</summary>
+        public bool AlwaysRefuse { get; init; }
 
         /// <summary>A service made without a pin refuses the certificate; one made with a pin answers.</summary>
         public IHostFileService Create(Uri url, CertificatePin? pin, HostCredentialProvider provider)
         {
             Provider = provider;
             var service = new FakeHostFileService();
-            if (pin is null)
+            if (pin is null || AlwaysRefuse)
             {
                 service.Failures["info"] = new HostFileException(HostFileErrorKind.CertificateRejected, "Server information: the host's certificate is not trusted.", certificate: Presented);
                 service.Gate = FirstGate;
@@ -109,7 +111,8 @@ public class HostFileConnectionTests
         await Assert.ThrowsAsync<HostFileException>(() => Info(connection));
 
         Assert.False(prompt.LastRequest!.CanPin);
-        Assert.Equal("The chain is missing its root", prompt.LastRequest.CannotPinReason);
+        Assert.Equal("This certificate cannot be pinned: The chain is missing its root. Connect Anyway applies to this session only.",
+            prompt.LastRequest.CannotPinReason);
     }
 
     [Fact]
@@ -172,6 +175,49 @@ public class HostFileConnectionTests
         host.FirstGate.SetResult();
         await Task.WhenAll(a, b);
 
+        Assert.Single(prompt.Calls);
+    }
+
+    [Fact]
+    public async Task A_decline_answers_the_refusals_that_arrived_with_it()
+    {
+        var host = new Host { FirstGate = new TaskCompletionSource() };
+        var prompt = new FakeCertificatePrompt();
+        using var connection = host.Access().Connect(new FakeCredentialPrompt(), prompt);
+
+        var a = Info(connection);
+        var b = Info(connection);
+        host.FirstGate.SetResult();
+
+        Assert.Equal(HostFileErrorKind.CertificateRejected, (await Assert.ThrowsAsync<HostFileException>(() => a)).Kind);
+        Assert.Equal(HostFileErrorKind.CertificateRejected, (await Assert.ThrowsAsync<HostFileException>(() => b)).Kind);
+        Assert.Single(prompt.Calls);
+    }
+
+    [Fact]
+    public async Task A_refusal_of_the_pinned_certificate_itself_does_not_ask()
+    {
+        var host = new Host { AlwaysRefuse = true };
+        var prompt = new FakeCertificatePrompt { Decision = new CertificateDecision(true, false) };
+        using var connection = host.Access(profilePin: Accepted).Connect(new FakeCredentialPrompt(), prompt);
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() => Info(connection));
+
+        Assert.Equal(HostFileErrorKind.CertificateRejected, ex.Kind);
+        Assert.Empty(prompt.Calls);
+    }
+
+    [Fact]
+    public async Task Connect_anyway_is_asked_once_for_a_certificate_the_pin_cannot_accept()
+    {
+        var host = new Host { AlwaysRefuse = true };
+        var prompt = new FakeCertificatePrompt { Decision = new CertificateDecision(true, false) };
+        using var connection = host.Access().Connect(new FakeCredentialPrompt(), prompt);
+
+        await Assert.ThrowsAsync<HostFileException>(() => Info(connection));
+        Assert.Single(prompt.Calls);
+
+        await Assert.ThrowsAsync<HostFileException>(() => Info(connection));
         Assert.Single(prompt.Calls);
     }
 
