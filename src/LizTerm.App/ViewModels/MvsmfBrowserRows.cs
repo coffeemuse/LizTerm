@@ -66,6 +66,9 @@ public sealed partial class UploadRow : ObservableObject
 
     [ObservableProperty] private string _status = "";
 
+    /// <summary>This row reached the host in an earlier run of the same review, so a retry does not send it again.</summary>
+    public bool Sent { get; set; }
+
     public string UploadName => MemberName.Trim().ToUpperInvariant();
 
     public string? NameProblem => HostPath.MemberNameError(MemberName) is { } error ? "✗ " + error : null;

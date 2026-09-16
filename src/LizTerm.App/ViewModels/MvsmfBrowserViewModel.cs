@@ -119,8 +119,9 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     partial void OnSelectedDatasetChanged(DatasetRow? value)
     {
         // A review belongs to the dataset it was opened on; the window disables the list while one is open. Closed
-        // before the mode changes, so the old review is not rechecked against the new dataset.
-        if (IsReviewingUpload) CloseReview();
+        // before the mode changes, so the old review is not rechecked against the new dataset. A running upload keeps
+        // its review, which holds its rows' results.
+        if (IsReviewingUpload && !IsBusy) CloseReview();
         if (value is { IsSupported: true }) Mode = value.Attributes.RecordFormat == RecordFormatFamily.Undefined ? HostTransferMode.Binary : HostTransferMode.Text;
         _ = LoadMembersAsync(value);
     }
@@ -155,12 +156,13 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         return RunExclusiveAsync(token => LoadMembersCoreAsync(row, token), () => LoadMembersAsync(SelectedDataset));
     }
 
-    /// <summary>Also used inside other operations (after an upload or a delete), which already hold the busy flag.</summary>
-    private async Task LoadMembersCoreAsync(DatasetRow row, CancellationToken token)
+    /// <summary>Also used inside other operations (after an upload or a delete), which already hold the busy flag.
+    /// Returns what the host listed, whether or not the list still shows <paramref name="row"/>.</summary>
+    private async Task<IReadOnlyList<HostFileEntry>> LoadMembersCoreAsync(DatasetRow row, CancellationToken token)
     {
         StatusText = $"⟳ Listing members of {row.Name}…";
         var entries = await _connection.RunAsync(service => service.ListMembersAsync(row.Path, token));
-        if (!ReferenceEquals(SelectedDataset, row)) return;
+        if (!ReferenceEquals(SelectedDataset, row)) return entries;
         ClearMembers();
         foreach (var entry in entries)
         {
@@ -169,6 +171,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         RefreshVisibleMembers();
         OnPropertyChanged(nameof(MembersHeader));
         StatusText = MembersHeader;
+        return entries;
     }
 
     private void ClearMembers()
@@ -213,8 +216,10 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     }
 
     /// <summary>Runs one operation with the busy flag, its own cancellation, and the failure rules in the class
-    /// summary. A second operation while one runs is ignored; the commands are disabled anyway.</summary>
-    private async Task RunExclusiveAsync(Func<CancellationToken, Task> work, Func<Task>? retry = null)
+    /// summary. A second operation while one runs is ignored; the commands are disabled anyway.
+    /// <paramref name="describe"/> words the banner; the default is <see cref="HostFileMessages.Describe"/>.</summary>
+    private async Task RunExclusiveAsync(Func<CancellationToken, Task> work, Func<Task>? retry = null,
+        Func<Exception, string>? describe = null)
     {
         if (IsBusy || _disposed) return;
         using var cts = new CancellationTokenSource();
@@ -234,7 +239,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         {
             _retry = retry;
             StatusText = "";
-            ErrorText = HostFileMessages.Describe(ex);
+            ErrorText = (describe ?? HostFileMessages.Describe)(ex);
         }
         catch (Exception ex)
         {

@@ -173,9 +173,14 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
     public async Task Cancel_stops_the_file_being_sent_and_the_rest()
     {
         var t = await ReviewAsync(Write("one.jcl", "x\n"), Write("two.jcl", "y\n"));
-        t.Host.Gate = new TaskCompletionSource();
+        // Start lists the members first; let that through, then hold the writes.
+        var listing = new TaskCompletionSource();
+        t.Host.Gate = listing;
 
         var upload = t.Vm.StartUploadCommand.ExecuteAsync(null);
+        Assert.Equal(2, t.Host.CallsSnapshot().Count(c => c == "members:MVSCE02.CNTL"));
+        t.Host.Gate = new TaskCompletionSource();
+        listing.SetResult();
         await Wait.UntilAsync(() => t.Host.CallsSnapshot().Any(c => c.StartsWith("writetext:")), "the first upload");
         t.Vm.CancelCommand.Execute(null);
         await upload;
@@ -250,9 +255,10 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
         await StartAsync(t);
 
         Assert.True(t.Vm.HasError);
-        Assert.Equal(message, t.Vm.ErrorText);
+        Assert.StartsWith(message, t.Vm.ErrorText);
+        Assert.EndsWith("The member may be partly written.", t.Vm.ErrorText);
         Assert.True(t.Vm.CanRetry);
-        Assert.Equal("– Stopped", t.Vm.Uploads[0].Status);
+        Assert.Equal("– Stopped: the member may be partly written", t.Vm.Uploads[0].Status);
         Assert.False(t.Vm.UploadFinished);
         Assert.True(t.Vm.StartUploadCommand.CanExecute(null));
 
@@ -272,7 +278,7 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
 
         await StartAsync(t);
 
-        Assert.Equal(new[] { "– Stopped", "– Stopped" }, t.Vm.Uploads.Select(u => u.Status));
+        Assert.Equal(new[] { "– Stopped: the member may be partly written", "– Stopped" }, t.Vm.Uploads.Select(u => u.Status));
         Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("writetext:MVSCE02.CNTL(SECOND)"));
     }
 
@@ -292,7 +298,7 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
         t.Vm.Confirmation!.PrimaryCommand.Execute(null);
         await upload;
 
-        Assert.Equal(message, t.Vm.ErrorText);
+        Assert.Equal(message + " The member may be partly written.", t.Vm.ErrorText);
         Assert.True(t.Vm.CanRetry);
 
         t.Host.Failures.Clear();
@@ -303,5 +309,49 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
 
         Assert.Equal(new byte[] { 9 }, t.Host.Binary["MVSCE02.UFSHOME"]);
         Assert.Equal("✓ Uploaded data.bin to MVSCE02.UFSHOME.", t.Vm.StatusText);
+    }
+
+    [Fact]
+    public async Task Start_asks_about_a_member_the_list_did_not_show()
+    {
+        var t = BrowserTestHost.Create();
+        t.Host.Text["MVSCE02.CNTL(ALLOC)"] = ["old"];
+        t.Host.Failures["members:MVSCE02.CNTL"] = new HostFileException(HostFileErrorKind.Unreachable, "down");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        Assert.True(t.Vm.HasError);
+        Assert.Empty(t.Vm.Members);
+        t.Host.Failures.Clear();
+        t.Picker.Results = [Write("alloc.jcl", "new\n")];
+        await t.Vm.UploadCommand.ExecuteAsync(null);
+
+        var upload = t.Vm.StartUploadCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => t.Vm.Confirmation is not null, "the replace question");
+        Assert.Equal("Member ALLOC already exists in MVSCE02.CNTL.", t.Vm.Confirmation!.Message);
+        t.Vm.Confirmation.CancelCommand.Execute(null);
+        await upload;
+
+        Assert.Equal(new[] { "old" }, t.Host.Text["MVSCE02.CNTL(ALLOC)"]);
+        Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("write"));
+    }
+
+    [Fact]
+    public async Task Retry_after_a_stop_sends_only_what_was_not_sent()
+    {
+        var t = await ReviewAsync(Write("one.jcl", "x\n"), Write("two.jcl", "y\n"));
+        t.Host.Failures["writetext:MVSCE02.CNTL(TWO)"] = new HostFileException(HostFileErrorKind.Unreachable, "down");
+
+        await StartAsync(t);
+        Assert.Equal(new[] { "✓ Uploaded and verified", "– Stopped: the member may be partly written" },
+            t.Vm.Uploads.Select(u => u.Status));
+        var writes = t.Host.CallsSnapshot().Count(c => c.StartsWith("writetext:"));
+
+        t.Host.Failures.Clear();
+        await t.Vm.RetryCommand.ExecuteAsync(null);
+
+        var after = t.Host.CallsSnapshot().Where(c => c.StartsWith("writetext:")).Skip(writes).ToArray();
+        Assert.Equal(new[] { "writetext:MVSCE02.CNTL(TWO):1" }, after);
+        Assert.Equal(new[] { "✓ Uploaded and verified", "✓ Uploaded and verified" }, t.Vm.Uploads.Select(u => u.Status));
+        Assert.Equal("✓ Uploaded 2 of 2 files to MVSCE02.CNTL.", t.Vm.StatusText);
+        Assert.True(t.Vm.UploadFinished);
     }
 }
