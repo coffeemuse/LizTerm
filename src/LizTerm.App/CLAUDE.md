@@ -554,14 +554,14 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   returns the text, which is what the box puts in its text for a chosen suggestion. Its keys are tunnelled: Enter
   with text or a highlighted suggestion adds it and is handled, so it never reaches Save, the default button; Enter
   in the empty box does reach Save. Two traps. The view model rewriting `TagEntry` inside the binding's own write
-  never reaches the box, so the window posts the text back (the Wire Log correction's problem). And a click on a
-  suggestion takes focus out of the box *before* the box records the choice: in 12.1.2 `OnLostFocus` closes the
-  drop-down, then the list's release sets `SelectedItem` and its commit refocuses the box. So a `DropDownClosed`
-  handler reading `SelectedItem` saw nothing on the first click (the text landed in the box, and only a second click
-  made the chip), and an immediate lost-focus commit added the half-typed text. The window therefore takes the chip
-  from the clicked `ListBoxItem` in a `handledEventsToo` `PointerReleased` handler on the box (the release bubbles
-  out of the popup), posts the add, and posts the lost-focus commit behind a focus check.
-  `A_clicked_suggestion_becomes_a_chip_on_the_first_click` presses a real pointer for that reason. A
+  never reaches the box, so the window posts the text back (the Wire Log correction's problem). And **a suggestion
+  is chosen on the press**, in a tunnelled `PointerPressed` handler on the box that marks the press handled before the
+  row sees it (the press routes out of the drop-down's popup through the box). Left to the row, in 12.1.2 the press
+  selects it, writing its text into the box, and takes focus from the box, whose `OnLostFocus` closes the drop-down;
+  on macOS the drop-down is a native popup, so the release that commits the choice never arrives and the text sat in
+  the box with no chip (Robert's in-app pass, twice: a `DropDownClosed` handler reading `SelectedItem`, then a
+  release handler, both passed headless tests, where the popup is an overlay and the release still lands).
+  `A_pressed_suggestion_becomes_a_chip_without_a_release` presses without releasing for that reason. A
   `DropDownClosed` handler that also cleared the box once re-entered itself until the stack overflowed.
 
 ## Quick Connect's recent hosts

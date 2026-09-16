@@ -34,25 +34,20 @@ public partial class ProfileEditorWindow : Window
         // Tunnelled: AutoCompleteBox handles Enter and Backspace itself, and Enter must add a tag rather than reach
         // Save, which is the default button.
         TagBox.AddHandler(KeyDownEvent, OnTagBoxKeyDown, RoutingStrategies.Tunnel);
-        // Posted: a click on a suggestion takes focus from the box before the click is handled, and the box takes it
-        // back afterwards. Committing at once would add the half-typed text instead of the suggestion.
-        TagBox.LostFocus += (_, _) => Dispatcher.UIThread.Post(() =>
+        TagBox.LostFocus += (_, _) =>
         {
-            if (!TagBox.IsKeyboardFocusWithin && _vm.TagEntry.Trim().Length > 0) _vm.CommitTagEntry();
-        });
+            if (_vm.TagEntry.Trim().Length > 0) _vm.CommitTagEntry();
+        };
         TagBox.GotFocus += (_, _) =>
         {
             if (_vm.CanAddTag && _vm.TagSuggestions.Count > 0) TagBox.IsDropDownOpen = true;
         };
-        // A click on a suggestion is the choice. Read from the clicked row rather than SelectedItem: the drop-down
-        // closes (focus has left the box) before the box records the selection, so on the first click SelectedItem
-        // is still empty. The release bubbles out of the drop-down's popup to the box; posted so the box finishes
-        // its own commit, which writes the suggestion's text into it, before this clears it.
-        TagBox.AddHandler(PointerReleasedEvent, (_, e) =>
-        {
-            if (e.Source is Visual source && source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is { DataContext: TagChip chip })
-                Dispatcher.UIThread.Post(() => AddSuggestion(chip));
-        }, RoutingStrategies.Bubble, handledEventsToo: true);
+        // A press on a suggestion is the choice, taken on the tunnel and handled there, before the row sees it. Left
+        // to the row, the press selects it (writing its text into the box) and takes focus from the box, which
+        // closes the drop-down; on macOS the drop-down is a native popup, so the release that would commit the
+        // choice then never arrives, and the text was left in the box with no chip. The press routes out of the
+        // popup through the box, so the box's tunnel sees it first.
+        TagBox.AddHandler(PointerPressedEvent, OnSuggestionPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         Opened += (_, _) => NameBox.Focus();
     }
 
@@ -79,6 +74,16 @@ public partial class ProfileEditorWindow : Window
     }
 
     /// <summary>Adds the tag itself rather than through the box's text, then empties the box.</summary>
+    private void OnSuggestionPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source is not Visual source
+            || source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { DataContext: TagChip chip }
+            || !e.GetCurrentPoint(source).Properties.IsLeftButtonPressed)
+            return;
+        e.Handled = true;
+        AddSuggestion(chip);
+    }
+
     private void AddSuggestion(TagChip chip)
     {
         _vm.AddTag(chip.Text);

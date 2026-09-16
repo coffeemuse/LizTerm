@@ -239,6 +239,35 @@ public class ProfileEditorWindowTests
         Assert.Equal("", box.Text);
     }
 
+    /// <summary>On macOS the drop-down is a native popup: the press selects the row and takes focus from the box,
+    /// which closes the drop-down, so the release never arrives. The press alone must choose, and leave the box
+    /// focused and empty.</summary>
+    [AvaloniaFact]
+    public void A_pressed_suggestion_becomes_a_chip_without_a_release()
+    {
+        var registry = new TagRegistry([new("BBS", TagColor.Amber), new("DEV", TagColor.Blue)]);
+        var window = new ProfileEditorWindow(new SessionProfile { Name = "p", Host = "h", Tags = TagSet.From(["MVS"]) }, registry);
+        window.Show();
+        window.FindControl<TabControl>("Tabs")!.SelectedItem = window.FindControl<TabItem>("OrganizeTab");
+        window.UpdateLayout();
+        var box = window.FindControl<AutoCompleteBox>("TagBox")!;
+        var text = FocusTagBox(window);
+        window.KeyTextInput("BB");
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        window.UpdateLayout();
+
+        var item = TopLevelItems(window).First(i => i.DataContext is TagChip { Text: "BBS" });
+        var host = TopLevel.GetTopLevel(item)!;
+        host.MouseDown(item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), host)!.Value, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["MVS", "BBS"], Vm(window).TagNames);
+        Assert.Equal("", box.Text);
+        Assert.True(text.IsFocused);
+        Assert.False(box.IsDropDownOpen);
+    }
+
     private static IEnumerable<ListBoxItem> TopLevelItems(Window window) =>
         window.GetVisualDescendants().OfType<ListBoxItem>();
 
