@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Security;
@@ -77,11 +78,48 @@ public sealed class MvsmfFileService : IHostFileService
         return new HostServerInfo("mvsMF", info.ZosmfVersion ?? "unknown", info.ZosVersion ?? "unknown");
     }
 
-    public Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("Task 7");
+    public async Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default)
+    {
+        if (HostPath.DatasetPatternError(pattern) is { } error) throw new HostFileException(HostFileErrorKind.InvalidRequest, error);
+        const string what = "Dataset list";
+        var filter = pattern.Trim().ToUpperInvariant();
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        // mvsMF-compat: dataset-list-ignores-start — this build ignores start, so a list cannot be paged; the whole
+        // list is asked for, with no X-IBM-Max-Items.
+        using var response = await SendAsync(
+            () => new HttpRequestMessage(HttpMethod.Get, Url($"restfiles/ds?dslevel={EscapeName(filter)}")), what, idle, cancellationToken);
+        var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfDatasetList, what, idle, cancellationToken);
+        // mvsMF-compat: dataset-list-morerows-false — moreRows arrives as false rather than absent; with no item limit
+        // it is never true, so it is not read.
+        return [.. (list.Items ?? Enumerable.Empty<MvsmfDataset>()).Where(d => !string.IsNullOrWhiteSpace(d.Dsname)).Select(ToEntry)];
+    }
 
-    public Task<IReadOnlyList<HostFileEntry>> ListMembersAsync(HostPath dataset, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("Task 7");
+    public async Task<IReadOnlyList<HostFileEntry>> ListMembersAsync(HostPath dataset, CancellationToken cancellationToken = default)
+    {
+        if (dataset.Kind != HostPathKind.Dataset) throw new ArgumentException("Only a dataset has members.", nameof(dataset));
+        var what = dataset.ToString();
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        // mvsMF-compat: member-list-ignores-max-items — the host returns every member whatever limit is asked, so
+        // none is sent.
+        using var response = await SendAsync(
+            () => new HttpRequestMessage(HttpMethod.Get, Url(DatasetPath(dataset) + "/member")), what, idle, cancellationToken);
+        var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfMemberList, what, idle, cancellationToken);
+        // mvsMF-compat: member-list-empty-for-missing-dataset — a missing or sequential dataset answers 200 with no
+        // items, so an empty list is passed on as it is; IHostFileService tells callers to confirm the dataset.
+        return [.. (list.Items ?? Enumerable.Empty<MvsmfMember>())
+            .Where(m => !string.IsNullOrWhiteSpace(m.Member))
+            .Select(m => new HostFileEntry(m.Member!.Trim(), HostFileEntryKind.Member))];
+    }
+
+    private static HostFileEntry ToEntry(MvsmfDataset dataset) => new(
+        dataset.Dsname!.Trim(),
+        HostFileEntryKind.Dataset,
+        new DatasetAttributes(Blank(dataset.Dsorg), Blank(dataset.Recfm), Number(dataset.Lrecl), Number(dataset.Blksz), Blank(dataset.Vol)));
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static int? Number(string? value) =>
+        int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
 
     public Task<IReadOnlyList<string>> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default) =>
         throw new NotImplementedException("Task 8");
