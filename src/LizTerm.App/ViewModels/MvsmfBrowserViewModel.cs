@@ -280,6 +280,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     {
         ListCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
+        DownloadCommand.NotifyCanExecuteChanged();
     }
 
     public void Dispose()
