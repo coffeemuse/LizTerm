@@ -11,6 +11,7 @@ using LizTerm.App.Bell;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
+using LizTerm.App.HostFiles;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
 using LizTerm.App.Startup;
@@ -202,6 +203,12 @@ public partial class App : Application
         var entry = new SessionEntry(viewModel, new ProfileRow(profile, tags, isSaved: fromStore), fromStore, window);
         _sessions.Add(entry);
         window.AttachSessions(_sessions, entry);
+        if (!string.IsNullOrWhiteSpace(profile.HostFilesUrl))
+        {
+            // A saved profile can keep a certificate the user trusts; an ad hoc one has nowhere to put it.
+            window.AttachHostFiles(new HostFileAccess(profile, HostFileServiceFactory.Create,
+                fromStore ? pin => WriteHostFilesPinBack(store, profile, pin) : null));
+        }
         // Read in Closing, because Closed carries no reason and by then the shutdown that is closing this window
         // is already counting the windows that are left. A close the owned File Transfer dialog refuses never
         // reaches Closing at all (Window.ShouldCancelClose asks the children first), and the next close attempt
@@ -223,6 +230,11 @@ public partial class App : Application
     /// merged into the profile as it is on disk now rather than written over edits saved from the picker since.</summary>
     private static void WritePinBack(ProfileStore store, SessionProfile updated) =>
         store.Update(updated, current => current with { PinnedCertificate = updated.PinnedCertificate, VerifyCertificate = updated.VerifyCertificate });
+
+    /// <summary>The REST pin's write-back, merged into the profile as it is on disk now, for the reason
+    /// <see cref="WritePinBack"/> gives.</summary>
+    private static void WriteHostFilesPinBack(ProfileStore store, SessionProfile profile, CertificatePin pin) =>
+        store.Update(profile, current => current with { HostFilesPinnedCertificate = pin });
 
     public void ShowPicker()
     {

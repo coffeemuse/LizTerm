@@ -11,6 +11,7 @@ using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Documentation;
 using LizTerm.App.Files;
+using LizTerm.App.HostFiles;
 using LizTerm.App.Rendering;
 using LizTerm.App.Status;
 using LizTerm.Core.Profiles;
@@ -381,6 +382,11 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         };
         return transfer;
     }
+
+    /// <summary>Builds the mvsMF Browser's view model around this session's dispatcher, with Help's user guide
+    /// behind its "What to expect…" link.</summary>
+    public MvsmfBrowserViewModel CreateMvsmfBrowser(HostFileAccess access, HostFileConnection connection, IFilePicker picker) =>
+        new(access, connection, picker, _dispatch, ShowUserGuideAsync);
 
     private void ApplyScreen(ScreenSnapshot snapshot)
     {
