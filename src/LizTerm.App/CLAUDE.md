@@ -2,8 +2,8 @@
 
 Notes for working in this project, the Avalonia UI. It names `LizTerm.Backend.B3270` only in `SessionFactory.cs`
 and `LizTerm.Backend.Mvsmf` only in `HostFileServiceFactory.cs`; everything else talks to `IEmulatorSession` and
-`IHostFileService` (see `src/LizTerm.Core/CLAUDE.md`). The csproj's engine-copy rules
-(`LizTermTargetRid`, `LizTermEngineRid`) are documented in `docs/engines.md`; read it before touching them.
+`IHostFileService` (see `src/LizTerm.Core/CLAUDE.md`). The csproj's engine-copy rules (`LizTermTargetRid`,
+`LizTermEngineRid`) are documented in `docs/engines.md`; read it before touching them.
 
 **Never rename the assembly.** Avalonia resource URIs are keyed on it (`avares://LizTerm.App/...` for the terminal
 font, the window icons and the licence text), and a rename breaks every one of them at run time, not build time.
@@ -690,9 +690,9 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
 
 ## mvsMF Browser
 
-- `HostFileServiceFactory` is the only place the app names `LizTerm.Backend.Mvsmf` (as `SessionFactory` is for
-  b3270). It also reads a typed URL for the profile editor (`TryNormalizeUrl`) and builds the editor's one-shot
-  `HostFileTester`, which signs in through a throwaway `CredentialHolder` and forgets the sign-in afterwards.
+- `HostFileServiceFactory` also reads a typed URL for the profile editor (`TryNormalizeUrl`) and builds the
+  editor's one-shot `HostFileTester`, which signs in through a throwaway `CredentialHolder` and forgets the sign-in
+  afterwards.
 - `App.OpenSession` attaches a `HostFileAccess` to a session window whose profile has a `HostFilesUrl`. The access
   lives as long as the window and holds the session's `CredentialHolder` and the certificate trusted for the
   session (`Pin`: the profile's REST pin, or one accepted since). A saved profile's remembered pin is written back
@@ -727,9 +727,10 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   cancels its other transfers through a linked token and rethrows the first failure once; its rows say
   `– Stopped`, told apart from the user's `– Cancelled` by the outer token. An upload stops at its row, and a
   delete stops at its member and refreshes the list first. `RunExclusiveAsync` takes an optional `describe` for
-  the banner's words: uploads use `HostFileMessages.DescribeUploadFailure`, which warns that the member may be
-  partly written (a PDS upload only when the failure came during a write). A delete's Retry asks again about the
-  members the failure left. Changing the dataset clears a pending retry, so Retry never acts on another dataset.
+  the banner's words: uploads use `HostFileMessages.DescribeUploadFailure`, which adds that the member may be
+  partly written only for a failure that can happen mid-write (unreachable, server error); a PDS upload uses it
+  for the banner only when the failure came during a write. A delete's Retry asks again about the members the
+  failure left. Changing the dataset clears a pending retry, so Retry never acts on another dataset.
 - **Uploads.** A PDS upload opens a review (`Uploads`, `UploadRow`) in place of the member list. While it is open
   the dataset list and List are off, and a dataset change closes it unless an upload is running. Start snapshots
   Mode, Expand tabs and Verify, rechecks the files with them, and reloads the member list from the host before
@@ -743,7 +744,8 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   Cancel button, posted at `Loaded` priority because a control that is still hidden refuses focus. Escape cancels
   a question, else the running operation, else closes the window.
 - The window never refuses to close: closing cancels and disposes the view model, which disposes the connection.
-- Every status the browser shows starts with a mark and words (`✓ ✗ ⚠ ⟳ –`), per the colour rule.
+- Every status that reports an outcome, a warning or progress starts with a mark and words (`✓ ✗ ⚠ ⟳ –`), per
+  the colour rule; plain counts (the dataset count, the member header) carry none.
 - The profile editor's mvsMF group has its own result line (`MvsmfTestResult`), never `ValidationMessage`. A change
   to the URL or userid, or Forget on the REST pin, drops the result, and a Test still running then drops its own
   when it finishes (`_testGeneration`). The REST pin follows the URL as the 3270 pin follows host and port;
