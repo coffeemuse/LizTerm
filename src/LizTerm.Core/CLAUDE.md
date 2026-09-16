@@ -58,6 +58,22 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - `WireLogPath`, `StartWireLog` and `StopWireLog` make the wire log a session capability that survives an engine
   restart.
 
+## Host files
+
+- `LizTerm.Core.HostFiles` is file access outside the 3270 session, host-neutral: it never names a product.
+  `IHostFileService` is the contract; `LizTerm.Backend.Mvsmf` implements it.
+- `HostPath` folds names to upper case and checks the MVS rules when it is made, so a `HostPath` is always a name
+  the host could accept. `DatasetPatternError` is the filter rule.
+- Text crosses the interface as one string per record; the wire encoding is the backend's business.
+- `TextUploadCheck` runs before any upload: invalid UTF-8, a character above U+00FF, or a line longer than the
+  record (`DatasetAttributes.UsableLineLength`) blocks it; tabs are a warning and are expanded by default. It is
+  pure, and the file-reading wrapper is `HostFileTransfer.CheckTextFile`.
+- `HostFileTransfer.DownloadAsync` writes a hidden `.part` file beside the destination and renames it only on
+  success. Text downloads trim trailing blanks by default and end lines with the platform's newline unless told
+  otherwise. `UploadTextAsync` refuses text that failed its check and, when asked, reads it back and compares with
+  trailing blanks ignored.
+- `HostCredentials` is a class, not a record, so no generated `ToString` can print the password.
+
 ## Profiles
 
 - `SessionProfile.PinnedCertificate` is a `CertificatePin` — SHA-256 fingerprint as colon-separated upper-case hex,

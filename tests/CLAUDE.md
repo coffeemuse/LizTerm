@@ -88,12 +88,12 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 ## Core tests
 
 - `TestCertificates` makes self-signed and CA-signed certificates and re-imports them through PKCS#12 so macOS
-  accepts the key for a loopback `SslStream` server. It stays `internal` and is compiled into the integration
-  project by a linked `<Compile Include=...>` item — a source-level share, not a project reference. `CreateRoot` and
-  `Serial` are the shared parts of `CaSigned`, `CaSignedServable(subject)` (whose leaf can serve TLS) and
-  `Ca(subject)` (the root alone, for a test that needs an anchor and no leaf). **Two CAs meant to be unrelated must
-  be given different subjects**: OpenSSL looks an issuer up by subject name, so a shared name tests the
-  wrong-signature path instead.
+  accepts the key for a loopback `SslStream` server. It stays `internal` and is compiled into the integration and
+  mvsMF backend projects by a linked `<Compile Include=...>` item — a source-level share, not a project reference.
+  `CreateRoot` and `Serial` are the shared parts of `CaSigned`, `CaSignedServable(subject)` (whose leaf can serve
+  TLS) and `Ca(subject)` (the root alone, for a test that needs an anchor and no leaf). **Two CAs meant to be
+  unrelated must be given different subjects**: OpenSSL looks an issuer up by subject name, so a shared name tests
+  the wrong-signature path instead.
 - `RepositoryHeadersTests` (`Repository/`) walks the tree and fails for a file missing its licence header. It lives
   in Core.Tests because that project builds on every run, so a new file is caught locally rather than in CI. The rule
   is the pure `LicenseHeader.IsPresent`, unit tested to *reject* an absent header, the wrong licence, someone else's
@@ -108,6 +108,13 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   caught locally rather than in CI. It also holds the guide to what `UserGuideHtml`, the test-only converter, can
   render.
 - `SettingsStoreTests` uses a temp directory per test like `ProfileStoreTests`; `SettingsLayersTests` needs no disk.
+- `FakeHostFileService` (`HostFiles/`) is an in-memory host keyed by `HostPath.ToString()`, with `StoreTransform` to
+  play a host that alters what it stores and `ReadFailure` / `BytesBeforeFailure` for a read that dies part-way.
+
+## mvsMF backend tests
+
+See `src/LizTerm.Backend.Mvsmf/CLAUDE.md`, "Tests". Tests that pin an mvsMF workaround are named after its tag in
+`docs/mvsmf-compatibility.md`.
 
 ## Integration tests
 
@@ -141,3 +148,4 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 - On Robert's Mac the live-lane variables are kept in `~/.config/lizterm-test.env`, outside the repo; `source` it in
   the shell that runs `dotnet test` rather than exporting values on a command line. A wire log of the IND$FILE run
   holds the password on its outbound side and is never committed.
+- `LiveMvsmfTests`: see "Live mvsMF tests" in `docs/development.md`.

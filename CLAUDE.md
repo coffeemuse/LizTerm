@@ -21,6 +21,7 @@ Each fact has one home. When a change makes a documented statement untrue, fix i
 | What changed in each release | `CHANGELOG.md` — new entries go under `## Unreleased`; the release notes copy each version's section |
 | Building, testing, conventions, environment variables | `docs/development.md` |
 | Engine builds and their gates | `docs/engines.md` |
+| mvsMF: where its docs, source and the tested build disagree, and LizTerm's workarounds | `docs/mvsmf-compatibility.md` |
 | Workflows, check names, caches, release, packaging, signing | `docs/ci-and-release.md` |
 | Architecture overview for humans | `docs/architecture.md` |
 | Implementation notes and pitfalls per project | `src/<Project>/CLAUDE.md`, `tests/CLAUDE.md` |
@@ -44,6 +45,7 @@ the same way. Files at the repository root trigger no such load, so:
 ```bash
 dotnet test LizTerm.slnx                       # full suite (~4 s warm); the live-host tests skip themselves
 dotnet test tests/LizTerm.Backend.B3270.Tests  # one project
+dotnet test tests/LizTerm.Backend.Mvsmf.Tests  # the mvsMF client against recorded exchanges
 dotnet test tests/LizTerm.Core.Tests --filter "FullyQualifiedName~ProfileStoreTests"                      # one class
 dotnet test tests/LizTerm.Backend.B3270.Tests --filter "FullyQualifiedName~ReplayTests.Ibmlink_help_screen_replays_to_expected_state"  # one test
 dotnet build LizTerm.slnx
@@ -68,11 +70,13 @@ test ignore the override and need a built engine.
 
 ## Rules that apply everywhere
 
-- **Dependency rule** (enforced in review): `LizTerm.Core` depends only on the BCL and never mentions Avalonia or
-  b3270. `LizTerm.Backend.B3270` depends on Core and is the only project that knows b3270 exists. `LizTerm.App` names
-  the backend in exactly one place, `src/LizTerm.App/SessionFactory.cs`; everything else in App talks to
-  `IEmulatorSession`. That is what lets the App tests run against `FakeEmulatorSession` and keeps a future managed
-  engine possible. The App *tests* name the backend in exactly one place too (see `tests/CLAUDE.md`).
+- **Dependency rule** (enforced in review): `LizTerm.Core` depends only on the BCL and never mentions Avalonia,
+  b3270 or mvsMF. `LizTerm.Backend.B3270` depends on Core and is the only project that knows b3270 exists;
+  `LizTerm.Backend.Mvsmf` depends on Core and is the only project that knows mvsMF exists; the two backends never
+  reference each other. `LizTerm.App` names the b3270 backend in exactly one place, `src/LizTerm.App/SessionFactory.cs`;
+  everything else in App talks to `IEmulatorSession`. That is what lets the App tests run against `FakeEmulatorSession`
+  and keeps a future managed engine possible. The App *tests* name the backend in exactly one place too (see
+  `tests/CLAUDE.md`).
 - **One window, one session, one profile.** `IEmulatorSession` is bound to its `SessionProfile` at construction.
 - **Snapshots, never shared state.** The backend owns the mutable `ScreenBuffer` (single writer) and publishes
   immutable `ScreenSnapshot`s carrying the cursor, so screen and cursor never tear. The UI only ever sees snapshots.
