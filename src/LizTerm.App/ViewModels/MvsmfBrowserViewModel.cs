@@ -118,6 +118,9 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     partial void OnSelectedDatasetChanged(DatasetRow? value)
     {
+        // A pending retry belongs to the dataset it failed on; Retry must never act on another one.
+        _retry = null;
+        OnPropertyChanged(nameof(CanRetry));
         // A review belongs to the dataset it was opened on; the window disables the list while one is open. Closed
         // before the mode changes, so the old review is not rechecked against the new dataset. A running upload keeps
         // its review, which holds its rows' results.
@@ -292,6 +295,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         UploadCommand.NotifyCanExecuteChanged();
         StartUploadCommand.NotifyCanExecuteChanged();
         CloseReviewCommand.NotifyCanExecuteChanged();
+        DeleteCommand.NotifyCanExecuteChanged();
     }
 
     public void Dispose()
