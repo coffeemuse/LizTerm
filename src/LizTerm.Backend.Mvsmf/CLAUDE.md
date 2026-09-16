@@ -5,7 +5,8 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
 
 - `MvsmfFileService` implements `IHostFileService` (Core) over one `HttpClient`. It stores no credentials: it asks
   the `HostCredentialProvider` before every request (`IsRetry: false`), and once more after a 401
-  (`IsRetry: true`) before repeating the request once. The App's credential holder (next PR) will be the only
+  (`IsRetry: true`, `Rejected` = the instance just refused, so a holder serving parallel requests prompts only once)
+  before repeating the request once. The App's credential holder (next PR) will be the only
   store. Never put the userid's password in a message, a log or a `ToString()`.
 - **Every workaround carries `// mvsMF-compat: <tag>`** matching an entry in `docs/mvsmf-compatibility.md`, and a
   test named after the tag pins it. Add all three together, and read that log before changing any behaviour that

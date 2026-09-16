@@ -229,13 +229,13 @@ public sealed class MvsmfFileService : IHostFileService
     private async Task<HttpResponseMessage> SendAsync(Func<HttpRequestMessage> build, string what, IdleTimeout idle, CancellationToken cancellationToken)
     {
         idle.Pause();
-        var credentials = await AskAsync(isRetry: false, cancellationToken);
+        var credentials = await AskAsync(new HostCredentialRequest(false), cancellationToken);
         var response = await SendOnceAsync(build, credentials, what, idle, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             response.Dispose();
             idle.Pause();
-            credentials = await AskAsync(isRetry: true, cancellationToken);
+            credentials = await AskAsync(new HostCredentialRequest(true, credentials), cancellationToken);
             response = await SendOnceAsync(build, credentials, what, idle, cancellationToken);
         }
         if (response.IsSuccessStatusCode) return response;
@@ -247,8 +247,8 @@ public sealed class MvsmfFileService : IHostFileService
         }
     }
 
-    private async Task<HostCredentials> AskAsync(bool isRetry, CancellationToken cancellationToken) =>
-        await _credentials(new HostCredentialRequest(isRetry), cancellationToken)
+    private async Task<HostCredentials> AskAsync(HostCredentialRequest request, CancellationToken cancellationToken) =>
+        await _credentials(request, cancellationToken)
         ?? throw new HostFileException(HostFileErrorKind.Unauthenticated, "Sign-in was cancelled.");
 
     private async Task<HttpResponseMessage> SendOnceAsync(Func<HttpRequestMessage> build, HostCredentials credentials,

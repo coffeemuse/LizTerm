@@ -59,13 +59,16 @@ public class MvsmfAuthTests
     {
         var handler = new RecordedHandler().Then("info-401").Then("info-200");
         var asked = new List<HostCredentialRequest>();
+        var wrong = new HostCredentials("MVSCE02", "wrong");
         using var service = new MvsmfFileService(handler, Base,
-            Answering(asked, new HostCredentials("MVSCE02", "wrong"), new HostCredentials("MVSCE02", "right")));
+            Answering(asked, wrong, new HostCredentials("MVSCE02", "right")));
 
         var info = await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("1.0.0-dev", info.ProductVersion);
-        Assert.Equal(new[] { new HostCredentialRequest(false), new HostCredentialRequest(true) }, asked);
+        Assert.Equal(new[] { false, true }, asked.Select(r => r.IsRetry));
+        Assert.Null(asked[0].Rejected);
+        Assert.Same(wrong, asked[1].Rejected);
         Assert.Equal(new[] { Basic("MVSCE02", "wrong"), Basic("MVSCE02", "right") }, handler.Requests.Select(r => r.Authorization!));
     }
 
