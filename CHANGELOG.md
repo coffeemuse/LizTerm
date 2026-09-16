@@ -11,6 +11,10 @@ What changed in each LizTerm release, newest first. Downloads are on the
   current window: press its number, or type part of its name, host, tag or note. A new **Window** menu lists the
   sessions too, with **Keep on Top** for a session you want in view and **Bring All to Front**, and on macOS the Dock
   icon's menu lists them as well.
+- **Known issue on Windows:** in testing, LizTerm once failed to start after the installer put 0.6.1 over an
+  earlier version, with no error shown. Uninstalling the earlier version first, then installing 0.6.1, fixed it.
+  The ZIP archive doesn't use the installer. If this happens to you, please add what you saw to
+  [issue #129](https://github.com/coffeemuse/LizTerm/issues/129).
 
 ## 0.6.0
 
