@@ -2,11 +2,13 @@
   <Folder Name="/src/">
     <Project Path="src/LizTerm.App/LizTerm.App.csproj" />
     <Project Path="src/LizTerm.Backend.B3270/LizTerm.Backend.B3270.csproj" />
+    <Project Path="src/LizTerm.Backend.Mvsmf/LizTerm.Backend.Mvsmf.csproj" />
     <Project Path="src/LizTerm.Core/LizTerm.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/LizTerm.App.Tests/LizTerm.App.Tests.csproj" />
     <Project Path="tests/LizTerm.Backend.B3270.Tests/LizTerm.Backend.B3270.Tests.csproj" />
+    <Project Path="tests/LizTerm.Backend.Mvsmf.Tests/LizTerm.Backend.Mvsmf.Tests.csproj" />
     <Project Path="tests/LizTerm.Core.Tests/LizTerm.Core.Tests.csproj" />
     <Project Path="tests/LizTerm.Integration.Tests/LizTerm.Integration.Tests.csproj" />
   </Folder>

@@ -1,0 +1,39 @@
+HTTP/1.1 200 OK
+Server: HTTPD Server
+Connection: keep-alive
+Cache-Control: no-store
+Content-Type: text/plain
+Pragma: no-cache
+Access-Control-Allow-Origin: *
+Transfer-Encoding: chunked
+
+//JES2     PROC M=JES2PM00,                                             00000010
+//             N1=SYS1,                                                 00000020
+//             N2=SYS2,                                                 00000030
+//             L=LINKLIB,                                               00000040
+//             U=3350,                                                  00000050
+//             P=PARMLIB                                                00000060
+//IEFPROC  EXEC PGM=HASJES20,                                           00000070
+//             TIME=1440,                                               00000080
+//             DPRTY=(15,15)                                            00000090
+//STEPLIB  DD  UNIT=&U,DISP=SHR,DSN=&N1..&L                             00000100
+//PROC00   DD  DSN=&N1..PROCLIB,DISP=SHR                                00000110
+//         DD  UNIT=&U,VOL=SER=SYSCPK,DISP=SHR,DSN=SYSC.PROCLIB         00000120
+//         DD  DSN=&N2..PROCLIB,DISP=SHR                                00000130
+//         DD  DSN=&N1..PROCLIB,DISP=SHR                                00000140
+//********************************************************************  00000150
+//* ADDED FOR DYNPROC                                                   00000160
+//* SEE HTTP://WWW.JAYMOSELEY.COM/HERCULES/USERMODS/INDEX.HTM           00000170
+//* FOR MORE INFO                                                       00000180
+//********************************************************************  00000190
+//IEF0PDSI DD  DSN=&N1..PROCLIB,DISP=SHR             <---1ST CONVERTER  00000200
+//         DD  UNIT=&U,VOL=SER=SYSCPK,DISP=SHR,DSN=SYSC.PROCLIB         00000210
+//         DD  DSN=&N2..PROCLIB,DISP=SHR                                00000220
+//         DD  DSN=&N1..PROCLIB,DISP=SHR                                00000230
+//IEF1PDSI DD  DSN=&N1..PROCLIB,DISP=SHR             <---2ND CONVERTER  00000240
+//         DD  UNIT=&U,VOL=SER=SYSCPK,DISP=SHR,DSN=SYSC.PROCLIB         00000250
+//         DD  DSN=&N2..PROCLIB,DISP=SHR                                00000260
+//         DD  DSN=&N1..PROCLIB,DISP=SHR                                00000270
+//********************************************************************  00000280
+//HASPPARM DD  DSN=&N1..&P(&M),DISP=SHR                                 00000290
+//HASPLIST DD  DDNAME=IEFRDER                                           00000300
