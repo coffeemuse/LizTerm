@@ -39,10 +39,11 @@ the build differs from the source or docs it is marked **RC**. These findings se
 | Auth | Every route, `/zosmf/info` included, needs Basic auth; the docs say `/info` needs none. **RC**: no `Set-Cookie` on Basic requests (source sends `LtpaToken2`) and no `WWW-Authenticate` on 401 (source sends it) | Send Basic on every request; ignore cookies in the preview |
 | `/zosmf/info` | `{"zosmf_version":"1.0.0-dev","zos_version":"MVS 3.8j",…}` | Used by the profile editor's Test button |
 | Host clock | `Date: Sat, 15 Sep 2096` | Never trust host dates for anything that matters |
-| Dataset list | `GET /restfiles/ds?dslevel=`; `X-IBM-Max-Items` honoured; every item value is a string; `blksz` not `blksize`; dates `YYYY/MM/DD`; `dsntp` `PDS`/`BASIC`; dsorgs seen `PO`, `PS`, `DA`. **RC**: `moreRows` present when `false` (source omits it) | Page with `start`; treat absent and `false` alike |
+| Dataset list | `GET /restfiles/ds?dslevel=`; `X-IBM-Max-Items` honoured; every item value is a string; `blksz` not `blksize`; dates `YYYY/MM/DD`; `dsntp` `PDS`/`BASIC`; dsorgs seen `PO`, `PS`, `DA`. **RC**: `moreRows` present when `false` (source omits it). **RC**: `start` is ignored — every value returns the first page (source honours it) | No paging in the preview: request the whole list without `X-IBM-Max-Items` (`SYS1.**`, 96 entries, is instant) |
 | Member list | Items are `{"member":"NAME"}` only. **RC**: `X-IBM-Max-Items` ignored (742 members for a request of 3). **RC**: a dataset that does not exist, and a sequential dataset, both answer 200 with no items | Expect whole lists; an empty list is ambiguous, so existence comes from the dataset list |
 | Text read | CP037; records end in LF; `¬ ¢ [ ] { } \| ~ \` round-trip. **RC**: trailing blanks not stripped (source strips for F/FB) | Strip on our side |
 | Text write | CR, LF and CRLF all end a record. **RC**: an empty line is dropped; a line of one space is stored as a blank record. **RC**: a 100-character line to an LRECL 80 member is truncated to 80 and answered **204** (source answers 500). A tab is stored as EBCDIC `05` | Pre-flight checks (§5.2); blank lines sent as one space |
+| Text encoding | The body is ISO-8859-1 in both directions, whatever `charset` says: UTF-8 `¬` (`C2 AC`) is stored as two characters, `Â¬`; Latin-1 `AC` is stored as CP037 `5F`. The response carries no charset. Undocumented | Encode to and decode from Latin-1 in the backend; local files are UTF-8 |
 | Binary | Read returns raw records. A 100-byte write to FB 80 reads back as 160 bytes, zero-padded | Not byte-exact for fixed-length datasets; say so |
 | Record mode | Read prefixes each record with a 4-byte length; writes broken (mvsMF #245) | Not offered |
 | New member | `PUT …/ds/DSN(MEMBER)` to an absent member creates it: 204 | Upload-as-new is free |
@@ -59,18 +60,24 @@ the build differs from the source or docs it is marked **RC**. These findings se
 ### 3.1 Projects and the dependency rule
 
 - **`LizTerm.Core`** gains the namespace `LizTerm.Core.HostFiles`, BCL-only and never naming mvsMF:
-  - `IHostFileService`: `ListDatasetsAsync(pattern, start)`, `ListMembersAsync(dataset)`,
-    `DownloadAsync(path, mode, destination, progress, ct)`, `UploadAsync(path, mode, source, progress, ct)`,
-    `DeleteAsync(path, ct)`, `GetServerInfoAsync(ct)`.
-  - `HostPath`: a dataset, or a dataset member; the type has a reserved USS case that nothing constructs yet, so
-    USS arrives as a new case rather than a new interface. Parsing folds to upper case and enforces the
+  - `IHostFileService`: `GetServerInfoAsync`, `ListDatasetsAsync(pattern)`, `ListMembersAsync(dataset)`,
+    `ReadTextAsync(path)` (lines), `ReadBinaryAsync(path, destination stream)`, `WriteTextAsync(path, lines)`,
+    `WriteBinaryAsync(path, source stream)`, `DeleteAsync(path)`, each with a `CancellationToken`; the reads take an
+    `IProgress<long>`. Text crosses the interface as lines of .NET strings, so the encoding is the backend's
+    business.
+  - `HostFileTransfer`: the file side — download to a temporary file and rename, trailing-blank trimming, local
+    line endings, upload through `TextUploadCheck`, verify after upload.
+  - `HostCredentials` and a `HostCredentialProvider` callback (`HostCredentialRequest(IsRetry)`), through which a
+    service asks for credentials; the App's `CredentialHolder` (§3.2) is the provider and the only store.
+  - `HostPath`: a dataset, or a dataset member, with a `Kind`; USS arrives as a new kind and factory on the same
+    type rather than a new interface. Parsing folds to upper case and enforces the
     44-character dataset and 8-character member limits and the member-name rule (1-8 characters, first
     `A-Z $ # @`, rest also `0-9`).
   - `HostFileEntry`: name, kind, and nullable dataset attributes (dsorg, recfm, lrecl, blksize, volume).
   - `HostTransferMode`: `Text`, `Binary`.
-  - `DatasetPage`: entries plus a continuation token.
-  - `HostFileException` with a `HostFileErrorKind` (`NotFound`, `CannotOpen`, `NotAuthorized`, `InvalidName`,
-    `Unauthenticated`, `ServerError`, `Unreachable`) and the server's reason code when there is one.
+  - `HostFileException` with a `HostFileErrorKind` (`NotFound`, `CannotOpen`, `NotAuthorized`, `InvalidRequest`,
+    `Unauthenticated`, `CertificateRejected`, `ServerError`, `Unreachable`), the server's reason code and message
+    when there are any, and, for `CertificateRejected`, the `PresentedCertificate`.
   - `TextUploadCheck` (§5.2): host-neutral MVS record rules.
 - **`LizTerm.Backend.Mvsmf`** (new) depends on Core only. `MvsmfFileService` implements `IHostFileService` on an
   `HttpClient`; JSON types match what the server sends; error classification and every compat workaround live
@@ -113,8 +120,10 @@ shown for `http`; the user guide suggests a TLS reverse proxy.
 `docs/mvsmf-compatibility.md` is the single home for differences between mvsMF's docs, its source and the build we
 test against. It records the tested build and, per behaviour: what the docs or source say, what was observed, and
 our workaround. Every workaround in code carries a matching tag, for example
-`// mvsMF-compat: member-list-ignores-max-items`, and the test that pins it carries the same name. It is added to
-the documentation table in `CLAUDE.md`.
+`// mvsMF-compat: member-list-ignores-max-items`, and the test that pins it carries the same name. A workaround
+that lives in Core because it suits any host (trailing-blank trimming, the pre-flight checks) carries no tag, so Core
+never names mvsMF; its log entry names the Core member instead. The log is added to the documentation table in
+`CLAUDE.md`.
 
 ## 4. The browser window
 
@@ -124,8 +133,7 @@ the documentation table in `CLAUDE.md`.
 - **Column headers are in capitals**, as ISPF shows them: `NAME`, `DSORG`, `RECFM`, `LRECL` in the dataset list,
   and `MEMBER`, `STATUS` in the member list (Robert, 2026-09-16, after the mockup review).
 - **Left pane**: datasets with NAME, DSORG, RECFM, LRECL. VSAM and `DA` entries are dimmed *and* suffixed
-  "(not supported)", so dimming never carries the meaning alone. A **Load more** row appears while the server
-  reports more.
+  "(not supported)", so dimming never carries the meaning alone. The whole list is fetched at once; there is no paging in the preview (§2).
 - **Right pane**: for a PDS, its members with multi-select and a client-side type-ahead filter; for a sequential
   dataset, a line saying actions apply to the dataset itself.
 - **Bottom bar**: **Text / Binary** (Binary preselected for `RECFM=U`, overridable), **Download…**, **Upload…**,
@@ -149,7 +157,7 @@ the documentation table in `CLAUDE.md`.
 
 The response is streamed (`ResponseHeadersRead`) to a temporary file beside the destination and renamed into place
 on success; failure or cancellation deletes it. Progress is bytes received on an indeterminate bar, since the
-server sends no `Content-Length`. In text mode, trailing blanks are stripped by default (tag
+server sends no `Content-Length`. In text mode, trailing blanks are stripped by default (log entry
 `text-read-keeps-trailing-blanks`; a checkbox keeps them) and lines end LF on macOS and Linux, CRLF on Windows. In
 binary mode against a fixed-length dataset, the bar notes "padded to whole records".
 
@@ -162,7 +170,7 @@ request:
    above U+00FF blocks it, since CP037 covers exactly Latin-1; the first few offenders are listed with line
    numbers.
 2. **Line length.** Usable length is LRECL for F, LRECL−4 for V, BLKSIZE for U. A longer line blocks the upload;
-   the first few line numbers and lengths are listed. No "truncate anyway" in the preview (tag
+   the first few line numbers and lengths are listed. No "truncate anyway" in the preview (log entry
    `text-write-truncates-silently`).
 3. **Tabs** are reported, with **Expand tabs (8)** on by default. Unexpanded, a tab is stored as EBCDIC `05`.
 4. **Blank lines** are sent as a single space, which the host stores as a blank record (tag
@@ -196,7 +204,7 @@ older LizTerm drops the fields when it saves the profile; the changelog notes it
 - **`LizTerm.Backend.Mvsmf.Tests`** (new): a fake `HttpMessageHandler` serving **recorded exchanges** from fixture
   files, trimmed from real responses on the host — the HTTP counterpart of the replay fixtures. Each compat
   workaround has a test named after its tag. Pinned: no `application/json` on upload; error classification by
-  reason; 401 → prompt → one retry; paging with `moreRows` absent or `false`; trailing-blank trimming; blank line
+  reason; 401 → prompt → one retry; no `X-IBM-Max-Items` or `start` sent; Latin-1 both ways; trailing-blank trimming; blank line
   sent as a space; temporary file removed on cancel; credentials never in exception text.
 - **`LizTerm.App.Tests`**: the browser view model against `FakeHostFileService` and `FakeCredentialPrompt` —
   selection, the multi-item queue, cancel, Replace/Skip, delete confirmation, the menu item present only with a
