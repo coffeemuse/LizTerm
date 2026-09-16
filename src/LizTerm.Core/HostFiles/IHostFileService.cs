@@ -28,7 +28,7 @@ public interface IHostFileService : IDisposable
     Task<long> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
 
     /// <summary>Replaces the dataset's or member's records, creating a member that does not exist. Every line must
-    /// already have passed <c>TextUploadCheck</c>. A failure may leave the target partly written.</summary>
+    /// already have passed <see cref="TextUploadCheck"/>. A failure may leave the target partly written.</summary>
     Task WriteTextAsync(HostPath path, IReadOnlyList<string> lines, CancellationToken cancellationToken = default);
 
     Task WriteBinaryAsync(HostPath path, Stream source, CancellationToken cancellationToken = default);
