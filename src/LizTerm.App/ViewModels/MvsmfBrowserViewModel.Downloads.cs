@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Globalization;
+using System.Runtime.ExceptionServices;
 using CommunityToolkit.Mvvm.Input;
 using LizTerm.App.HostFiles;
 using LizTerm.Core.HostFiles;
@@ -19,20 +20,21 @@ public sealed partial class MvsmfBrowserViewModel
     private string Extension => Mode == HostTransferMode.Text ? ".txt" : "";
 
     [RelayCommand(CanExecute = nameof(CanDownload))]
-    private Task DownloadAsync() => RunExclusiveAsync(DownloadCoreAsync);
+    private Task DownloadAsync() => RunExclusiveAsync(DownloadCoreAsync, () => DownloadAsync());
 
     private async Task DownloadCoreAsync(CancellationToken token)
     {
         var dataset = SelectedDataset!;
         var options = new DownloadOptions(Mode, TrimTrailingBlanks);
+        var extension = Extension;
         if (dataset.IsSequential || _selectedMembers.Count == 1)
         {
             var row = dataset.IsSequential ? null : _selectedMembers[0];
             var path = row?.Path ?? dataset.Path;
-            var suggested = (path.Member ?? path.Dataset[(path.Dataset.LastIndexOf('.') + 1)..]) + Extension;
+            var suggested = (path.Member ?? path.Dataset[(path.Dataset.LastIndexOf('.') + 1)..]) + extension;
             var file = await TryPickAsync(() => _picker.PickSaveLocationAsync(suggested, $"Download {path}"));
             if (file is null) return;
-            if (await DownloadOneAsync(path, file, options, row, token)) StatusText = $"✓ Downloaded {path} to {file}.";
+            if (await DownloadOneAsync(path, file, options, row, token, token)) StatusText = $"✓ Downloaded {path} to {file}.";
             else if (row is not null) StatusText = row.Status;
             return;
         }
@@ -46,7 +48,7 @@ public sealed partial class MvsmfBrowserViewModel
         bool? replaceAll = null;
         foreach (var member in members)
         {
-            var file = Path.Combine(folder, member.Name + Extension);
+            var file = Path.Combine(folder, member.Name + extension);
             if (File.Exists(file))
             {
                 var replace = replaceAll;
@@ -73,21 +75,31 @@ public sealed partial class MvsmfBrowserViewModel
             plan.Add((member, file));
         }
 
+        // A connection failure stops the whole batch through the linked source, and is rethrown once so the banner
+        // offers Retry; the user's own cancel is still told apart through the outer token.
+        using var batch = CancellationTokenSource.CreateLinkedTokenSource(token);
+        ExceptionDispatchInfo? connectionFailure = null;
         using var slots = new SemaphoreSlim(ParallelDownloads);
         var results = await Task.WhenAll(plan.Select(async item =>
         {
             try
             {
-                await slots.WaitAsync(token);
+                await slots.WaitAsync(batch.Token);
             }
             catch (OperationCanceledException)
             {
-                item.Row.Status = "– Cancelled";
+                item.Row.Status = token.IsCancellationRequested ? "– Cancelled" : "– Stopped";
                 return false;
             }
             try
             {
-                return await DownloadOneAsync(item.Row.Path, item.File, options, item.Row, token);
+                return await DownloadOneAsync(item.Row.Path, item.File, options, item.Row, batch.Token, token);
+            }
+            catch (HostFileException ex) when (IsConnectionFailure(ex))
+            {
+                Interlocked.CompareExchange(ref connectionFailure, ExceptionDispatchInfo.Capture(ex), null);
+                batch.Cancel();
+                return false;
             }
             finally
             {
@@ -100,12 +112,16 @@ public sealed partial class MvsmfBrowserViewModel
             StatusText = "– Download cancelled.";
             return;
         }
+        connectionFailure?.Throw();
         var done = results.Count(ok => ok);
         StatusText = $"{(done == members.Count ? "✓" : "⚠")} Downloaded {done} of {Plural(members.Count, "member")} to {folder}.";
     }
 
-    /// <summary>One transfer, reported on the member's row, or on the status line for a sequential dataset.</summary>
-    private async Task<bool> DownloadOneAsync(HostPath path, string file, DownloadOptions options, MemberRow? row, CancellationToken token)
+    /// <summary>One transfer, reported on the member's row, or on the status line for a sequential dataset.
+    /// <paramref name="token"/> stops it; <paramref name="userToken"/> says whether the user asked for that, as opposed
+    /// to a batch stopped by another item's connection failure. A connection failure is rethrown for the banner.</summary>
+    private async Task<bool> DownloadOneAsync(HostPath path, string file, DownloadOptions options, MemberRow? row,
+        CancellationToken token, CancellationToken userToken)
     {
         void Show(string text)
         {
@@ -125,8 +141,14 @@ public sealed partial class MvsmfBrowserViewModel
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             progress.Close();
-            Show("– Cancelled");
+            Show(userToken.IsCancellationRequested ? "– Cancelled" : "– Stopped");
             return false;
+        }
+        catch (HostFileException ex) when (IsConnectionFailure(ex))
+        {
+            progress.Close();
+            Show("– Stopped");
+            throw;
         }
         catch (Exception ex)
         {
@@ -135,6 +157,9 @@ public sealed partial class MvsmfBrowserViewModel
             return false;
         }
     }
+
+    private static bool IsConnectionFailure(HostFileException ex) =>
+        ex.Kind is HostFileErrorKind.Unreachable or HostFileErrorKind.Unauthenticated or HostFileErrorKind.CertificateRejected;
 
     private static string Bytes(long count) => count.ToString("N0", CultureInfo.InvariantCulture);
 

@@ -177,6 +177,50 @@ public sealed class MvsmfBrowserDownloadTests : IDisposable
     }
 
     [Fact]
+    public async Task A_connection_failure_stops_the_batch_and_offers_retry()
+    {
+        const string message = "MVSCE02.CNTL(ALLOC): cannot reach the host (refused).";
+        var t = await ChosenAsync();
+        t.Select("ALLOC", "COMPILE", "HELLO");
+        t.Picker.FolderResult = _folder;
+        t.Host.Failures["readtext:MVSCE02.CNTL(ALLOC)"] = new HostFileException(HostFileErrorKind.Unreachable, message);
+
+        await t.Vm.DownloadCommand.ExecuteAsync(null);
+
+        Assert.True(t.Vm.HasError);
+        Assert.Equal(message, t.Vm.ErrorText);
+        Assert.True(t.Vm.CanRetry);
+        Assert.Equal("– Stopped", t.Vm.Members[0].Status);
+        Assert.DoesNotContain(t.Vm.Members, m => m.Status.StartsWith("✗"));
+        Assert.False(File.Exists(Local("ALLOC.txt")));
+
+        t.Host.Failures.Clear();
+        foreach (var file in Directory.GetFiles(_folder)) File.Delete(file);
+        await t.Vm.RetryCommand.ExecuteAsync(null);
+
+        Assert.False(t.Vm.HasError);
+        Assert.All(t.Vm.Members, m => Assert.StartsWith("✓ Done", m.Status));
+        Assert.Equal($"✓ Downloaded 3 of 3 members to {_folder}.", t.Vm.StatusText);
+    }
+
+    [Fact]
+    public async Task A_single_download_that_cannot_reach_the_host_shows_the_banner()
+    {
+        const string message = "MVSCE02.CNTL(HELLO): cannot reach the host (refused).";
+        var t = await ChosenAsync();
+        t.Select("HELLO");
+        t.Picker.Result = Local("hello.txt");
+        t.Host.Failures["readtext:MVSCE02.CNTL(HELLO)"] = new HostFileException(HostFileErrorKind.Unreachable, message);
+
+        await t.Vm.DownloadCommand.ExecuteAsync(null);
+
+        Assert.Equal(message, t.Vm.ErrorText);
+        Assert.True(t.Vm.CanRetry);
+        Assert.Equal("– Stopped", t.Vm.Members.Single(m => m.Name == "HELLO").Status);
+        Assert.False(File.Exists(Local("hello.txt")));
+    }
+
+    [Fact]
     public async Task Cancel_stops_running_and_waiting_downloads()
     {
         var t = await ChosenAsync();
