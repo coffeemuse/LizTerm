@@ -248,6 +248,34 @@ public class MvsmfBrowserWindowTests
     }
 
     [AvaloniaFact]
+    public async Task Escape_in_an_open_upload_review_closes_the_review_not_the_window()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        t.Vm.SelectedDataset = t.Vm.Datasets[0];
+        await Wait.UntilAsync(() => !t.Vm.IsBusy, "the members");
+        var folder = Directory.CreateTempSubdirectory("lizterm-window-upload-").FullName;
+        try
+        {
+            var file = Path.Combine(folder, "newmem.jcl");
+            await File.WriteAllTextAsync(file, "//NEWMEM JOB\n");
+            t.Picker.Results = [file];
+            await t.Vm.UploadCommand.ExecuteAsync(null);
+            Assert.True(t.Vm.IsReviewingUpload);
+
+            window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+
+            Assert.False(t.Vm.IsReviewingUpload);
+            Assert.True(window.IsVisible);
+            Assert.False(t.Host.Disposed);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task A_sent_upload_row_keeps_its_member_name()
     {
         var (window, t) = Show();

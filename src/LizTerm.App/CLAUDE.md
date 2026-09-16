@@ -697,7 +697,10 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   lives as long as the window and holds the session's `CredentialHolder` and the certificate trusted for the
   session (`Pin`: the profile's REST pin, or one accepted since). A saved profile's remembered pin is written back
   through `ProfileStore.Update`, like the 3270 pin; an ad hoc profile has nowhere to keep one, so it is not offered
-  Remember. The session window closes its browser, then forgets the sign-in, when it closes.
+  Remember. A save that fails (`IOException`, `UnauthorizedAccessException`, `InvalidDataException`) keeps the pin
+  for the session and raises `HostFileAccess.PinSaveFailed`; the browser shows it as the `⚠` status line once the
+  operation ends, and unsubscribes when disposed. The session window closes its browser, then forgets the sign-in,
+  when it closes.
 - `CredentialHolder` is the only store of the REST password. Its prompts are serialised, so operations that start
   or are refused together share one prompt, and a refused pair is asked about again only while it is still the
   current one (`HostCredentialRequest.Rejected`). A cancelled prompt answers every operation that was already
@@ -707,7 +710,8 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   shows both the classic item and the held native item. It does not need the 3270 connection. A profile URL that
   cannot be used goes to the session's error line rather than opening a browser.
 - The browser is the app's first owned window that does not block its owner: `ModalDialogs.ShowAbove` shows it
-  owned (it closes with the session window) and makes it follow the owner's Keep on Top. One per session window
+  owned (it closes with the session window) and makes it follow the owner's Keep on Top, subscribing only after
+  `Show` returns so a failed show leaves the owner no handler. One per session window
   (`SessionWindow.MvsmfBrowser`); the menu item fronts an open one. It is not in the Window menu (spec §3.3).
 - Each browser window gets its own `HostFileConnection` (`HostFileAccess.Connect`), whose prompts open over the
   browser. An operation refused for an untrusted certificate asks once and, on Connect Anyway, runs once more on a
@@ -721,7 +725,8 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
 - `MvsmfBrowserViewModel` runs one operation at a time (`RunExclusiveAsync`, which ignores a second); only a
   download batch runs two transfers at once (`ParallelDownloads`). Results are set after `await` on the UI
   context; progress goes through `dispatch`, and a closed `RowProgress` drops late reports. Questions are an inline
-  `ConfirmationRequest` strip, awaited by the operation that asked.
+  `ConfirmationRequest` strip, awaited by the operation that asked; a disposed browser shows none and answers
+  Cancel.
 - **Connection failures** (`IsConnectionFailure`: cannot reach, sign-in, certificate) are the red banner with
   Retry; everything else is the status line or a row's status. They stop the whole operation. A download batch
   cancels its other transfers through a linked token and rethrows the first failure once; its rows say
@@ -750,7 +755,7 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   shows, so a transfer or a delete never acts on a member the user cannot see. In the member list, Enter downloads,
   and Delete or Backspace (the key Apple labels "delete") deletes. A question moves focus to its
   Cancel button, posted at `Loaded` priority because a control that is still hidden refuses focus. Escape cancels
-  a question, else the running operation, else closes the window.
+  a question, else the running operation, else an open upload review, else closes the window.
 - **Focus survives an operation.** In Avalonia 12.1.2, disabling a list whose row has the focus drops the focus,
   and enabling it again does not give it back, so arrowing onto a PDS (a member load) or pressing Enter or Delete
   used to strand the keyboard. When `IsBusy` turns on (its notification comes before `IsIdle` and
@@ -765,7 +770,9 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   the colour rule; plain counts (the dataset count, the member header) carry none.
 - The profile editor's mvsMF group has its own result line (`MvsmfTestResult`), never `ValidationMessage`. A change
   to the URL or userid, or Forget on the REST pin, drops the result, and a Test still running then drops its own
-  when it finishes (`_testGeneration`). The REST pin follows the URL as the 3270 pin follows host and port;
+  when it finishes (`_testGeneration`). The REST pin follows the URL as the 3270 pin follows host and port,
+  comparing both URLs as they would be saved (`TryNormalizeUrl`, else the trimmed text) through Core's
+  `PinMerge.SameUrl`, so `http://h:8080` keeps a pin taken for `http://h:8080/zosmf`;
   `PinMerge.Apply` resolves both at every editor save, with `ProfileEdit.HostFilesPinCleared` carrying Forget.
 
 ## Everything else

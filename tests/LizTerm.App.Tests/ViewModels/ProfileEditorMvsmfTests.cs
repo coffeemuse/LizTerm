@@ -44,6 +44,21 @@ public class ProfileEditorMvsmfTests
     }
 
     [Fact]
+    public void A_url_that_normalises_to_the_pinned_one_keeps_the_pin()
+    {
+        var vm = new ProfileEditorViewModel(Rest(url: "http://h:8080/zosmf", pin: Pin));
+
+        vm.MvsmfUrl = "http://h:8080";
+        Assert.True(vm.HasMvsmfPin);
+
+        vm.MvsmfUrl = "http://other:8080";
+        Assert.False(vm.HasMvsmfPin);
+
+        vm.MvsmfUrl = "HTTP://H:8080/zosmf/";
+        Assert.True(vm.HasMvsmfPin);
+    }
+
+    [Fact]
     public void The_url_is_normalised_and_the_userid_upper_cased_on_save()
     {
         var vm = new ProfileEditorViewModel(Rest(url: null, userid: null)) { MvsmfUrl = " http://mvs:8080 ", MvsmfUserid = " ibmuser " };

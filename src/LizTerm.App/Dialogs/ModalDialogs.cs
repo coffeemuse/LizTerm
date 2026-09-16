@@ -47,8 +47,10 @@ public static class ModalDialogs
         }
 
         window.Topmost = owner.Topmost;
+        // Subscribed only once shown: a Show that throws (a closed owner) must not leave the owner holding a
+        // handler that no Closed would ever remove.
+        window.Show(owner);
         owner.PropertyChanged += Follow;
         window.Closed += (_, _) => owner.PropertyChanged -= Follow;
-        window.Show(owner);
     }
 }

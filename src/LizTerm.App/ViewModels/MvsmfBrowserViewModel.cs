@@ -24,6 +24,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     private Func<Task>? _retry;
     private List<MemberRow> _selectedMembers = [];
     private bool _disposed;
+    private string? _pinSaveWarning;
 
     public MvsmfBrowserViewModel(HostFileAccess access, HostFileConnection connection, IFilePicker picker,
         Action<Action> dispatch, Func<Task>? openGuide = null)
@@ -34,7 +35,16 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _dispatch = dispatch;
         _openGuide = openGuide;
         _filter = access.Userid is { Length: > 0 } userid ? userid + ".**" : "";
+        _access.PinSaveFailed += OnPinSaveFailed;
     }
+
+    /// <summary>The operation that accepted the pin goes on; the warning replaces its status line when it ends.</summary>
+    private void OnPinSaveFailed(object? sender, string message) => _dispatch(() =>
+    {
+        if (_disposed) return;
+        if (IsBusy) _pinSaveWarning = message;
+        else StatusText = "⚠ " + message;
+    });
 
     public string Title => $"mvsMF Browser — {_access.ProfileName} (Preview)";
 
@@ -254,13 +264,20 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         finally
         {
             _cts = null;
+            if (_pinSaveWarning is { } warning)
+            {
+                _pinSaveWarning = null;
+                StatusText = "⚠ " + warning;
+            }
             IsBusy = false;
             OnPropertyChanged(nameof(CanRetry));
         }
     }
 
+    /// <summary>A closed browser has no one to ask, so the answer is Cancel.</summary>
     private async Task<ConfirmOutcome> AskAsync(ConfirmationRequest request)
     {
+        if (_disposed) return new ConfirmOutcome(ConfirmChoice.Cancel, false);
         Confirmation = request;
         try
         {
@@ -305,6 +322,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     {
         if (_disposed) return;
         _disposed = true;
+        _access.PinSaveFailed -= OnPinSaveFailed;
         _cts?.Cancel();
         Confirmation?.CancelCommand.Execute(null);
         _connection.Dispose();

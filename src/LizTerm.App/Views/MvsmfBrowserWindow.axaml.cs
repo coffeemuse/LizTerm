@@ -151,6 +151,7 @@ public partial class MvsmfBrowserWindow : Window
                 e.Handled = true;
                 if (vm.Confirmation is { } question) question.CancelCommand.Execute(null);
                 else if (vm.IsBusy) vm.CancelCommand.Execute(null);
+                else if (vm.IsReviewingUpload) vm.CloseReviewCommand.Execute(null);
                 else Close();
                 break;
             case Key.Enter when FilterBox.IsFocused:

@@ -244,8 +244,13 @@ public partial class ProfileEditorViewModel : ObservableObject
 
     partial void OnMvsmfUseridChanged(string value) => InvalidateTestResult();
 
+    /// <summary>Compares the URLs as the profile will store them, so "http://h:8080" and "http://h:8080/zosmf" are
+    /// one URL; text that does not normalise is compared as typed. Core's rule does the comparing.</summary>
     private static bool SameRestUrl(string? first, string? second) =>
-        string.Equals(first?.Trim().TrimEnd('/'), second?.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+        PinMerge.SameUrl(NormalizedOrTyped(first), NormalizedOrTyped(second));
+
+    private static string? NormalizedOrTyped(string? text) =>
+        HostFileServiceFactory.TryNormalizeUrl(text, out var url, out _) && url is not null ? url.ToString() : text?.Trim();
 
     [RelayCommand]
     private void ForgetMvsmfPin()

@@ -2,8 +2,14 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using LizTerm.App.Dialogs;
+using LizTerm.App.Files;
+using LizTerm.App.HostFiles;
+using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.HostFiles;
+using LizTerm.Core.Security;
+using LizTerm.Core.Session;
 
 namespace LizTerm.App.Tests.ViewModels;
 
@@ -209,5 +215,65 @@ public class MvsmfBrowserViewModelTests
         var t = BrowserTestHost.Create();
         t.Vm.Dispose();
         Assert.True(t.Host.Disposed);
+    }
+
+    [Fact]
+    public async Task A_pin_that_cannot_be_saved_is_a_warning_after_the_operation()
+    {
+        var presented = new PresentedCertificate("11:22", "CN=proxy", "pem", true, null);
+        var trusted = new FakeHostFileService();
+        BrowserTestHost.Standard(trusted);
+        var refusing = new FakeHostFileService();
+        refusing.Failures["list:MVSCE02.**"] = new HostFileException(HostFileErrorKind.CertificateRejected, "x", certificate: presented);
+        var access = new HostFileAccess(
+            new SessionProfile { Name = "MVS/CE", Host = "mvs", HostFilesUrl = "https://mvs/zosmf", HostFilesUserid = "MVSCE02" },
+            (_, pin, _) => pin is null ? refusing : trusted, _ => throw new UnauthorizedAccessException("read-only"));
+        var certificates = new FakeCertificatePrompt { Decision = new CertificateDecision(true, true) };
+        var vm = new MvsmfBrowserViewModel(access, access.Connect(new FakeCredentialPrompt(), certificates), new FakeFilePicker(), a => a());
+
+        await vm.ListCommand.ExecuteAsync(null);
+
+        Assert.Equal(4, vm.Datasets.Count);
+        Assert.Equal("⚠ Could not save the certificate to the profile: read-only", vm.StatusText);
+        Assert.False(vm.HasError);
+
+        vm.Dispose();
+        vm.StatusText = "";
+        access.AcceptPin(new CertificatePin("33:44", "CN=other", "pem"), remember: true);
+        Assert.Equal("", vm.StatusText);
+    }
+
+    private sealed class DisposingPicker(Action whilePicking, string file) : IFilePicker
+    {
+        public Task<string?> PickFileToSendAsync()
+        {
+            whilePicking();
+            return Task.FromResult<string?>(file);
+        }
+
+        public Task<IReadOnlyList<string>> PickFilesToSendAsync(string title) => Task.FromResult<IReadOnlyList<string>>([]);
+        public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
+        public Task<string?> PickSaveLocationAsync(string suggestedFileName, string title, IReadOnlyList<SaveFormat>? formats = null) =>
+            Task.FromResult<string?>(null);
+    }
+
+    [Fact]
+    public async Task A_closed_browser_asks_nothing_and_takes_the_answer_as_cancel()
+    {
+        var t = BrowserTestHost.Create();
+        MvsmfBrowserViewModel? vm = null;
+        vm = new MvsmfBrowserViewModel(t.Access, t.Access.Connect(t.Credentials, t.Certificates),
+            new DisposingPicker(() => vm!.Dispose(), "/tmp/lizterm-never-read.bin"), a => a());
+        await vm.ListCommand.ExecuteAsync(null);
+        vm.SelectedDataset = vm.Datasets.Single(d => d.Name == "MVSCE02.UFSHOME");
+        var asked = false;
+        vm.PropertyChanged += (_, e) => asked |= e.PropertyName == nameof(vm.HasConfirmation);
+
+        await vm.UploadCommand.ExecuteAsync(null).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.False(asked);
+        Assert.Null(vm.Confirmation);
+        Assert.Equal("– Upload cancelled.", vm.StatusText);
+        Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("write"));
     }
 }

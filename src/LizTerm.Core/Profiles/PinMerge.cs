@@ -51,6 +51,8 @@ public static class PinMerge
             HostFilesPinnedCertificate = ResolveHostFiles(edited, onDisk, hostFilesPinCleared),
         };
 
-    internal static bool SameUrl(string? first, string? second) =>
+    /// <summary>The one rule for "the same REST URL": ignoring case, surrounding blanks and a trailing slash. The
+    /// profile editor normalises both URLs first and then asks this.</summary>
+    public static bool SameUrl(string? first, string? second) =>
         string.Equals(first?.Trim().TrimEnd('/'), second?.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 }

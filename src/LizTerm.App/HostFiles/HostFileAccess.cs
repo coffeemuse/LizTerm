@@ -42,6 +42,10 @@ public sealed class HostFileAccess
     public CredentialHolder Credentials { get; }
     public bool CanRememberPin => _savePin is not null;
 
+    /// <summary>Remember was chosen but the profile file could not be written; the pin still holds for the
+    /// session. Raised on the thread that accepted the pin, with a sentence for the user.</summary>
+    public event EventHandler<string>? PinSaveFailed;
+
     /// <summary>The certificate trusted for this session: the profile's pin, or one the user accepted since.</summary>
     public CertificatePin? Pin
     {
@@ -63,6 +67,15 @@ public sealed class HostFileAccess
     internal void AcceptPin(CertificatePin pin, bool remember)
     {
         lock (_lock) _pin = pin;
-        if (remember) _savePin?.Invoke(pin);
+        if (!remember || _savePin is null) return;
+        try
+        {
+            _savePin(pin);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            // The operation goes ahead on the pin accepted for the session; only remembering it failed.
+            PinSaveFailed?.Invoke(this, $"Could not save the certificate to the profile: {ex.Message}");
+        }
     }
 }

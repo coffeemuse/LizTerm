@@ -133,6 +133,20 @@ public class ModalDialogsTests
     }
 
     [AvaloniaFact]
+    public void A_window_that_could_not_be_shown_does_not_follow_the_owner()
+    {
+        var owner = new Window();
+        owner.Show();
+        owner.Close();
+        var child = new Window();
+
+        Assert.ThrowsAny<Exception>(() => child.ShowAbove(owner));
+
+        owner.Topmost = true;
+        Assert.False(child.Topmost);
+    }
+
+    [AvaloniaFact]
     public void An_owned_window_closes_with_its_owner()
     {
         var owner = new Window();

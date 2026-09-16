@@ -116,6 +116,24 @@ public class HostFileConnectionTests
     }
 
     [Fact]
+    public async Task A_pin_that_cannot_be_saved_still_holds_for_the_session_and_is_reported()
+    {
+        var host = new Host();
+        var access = new HostFileAccess(
+            new SessionProfile { Name = "MVS", Host = "proxy", HostFilesUrl = "https://proxy/zosmf" },
+            host.Create, _ => throw new IOException("disk full"));
+        var reported = new List<string>();
+        access.PinSaveFailed += (_, message) => reported.Add(message);
+        var prompt = new FakeCertificatePrompt { Decision = new CertificateDecision(true, true) };
+        using var connection = access.Connect(new FakeCredentialPrompt(), prompt);
+
+        await Info(connection);
+
+        Assert.Equal(Accepted, access.Pin);
+        Assert.Equal(new[] { "Could not save the certificate to the profile: disk full" }, reported);
+    }
+
+    [Fact]
     public async Task Declining_keeps_the_refusal()
     {
         var host = new Host();
