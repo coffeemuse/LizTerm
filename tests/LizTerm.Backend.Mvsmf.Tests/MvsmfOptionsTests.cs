@@ -31,4 +31,31 @@ public class MvsmfOptionsTests
         Assert.Null(url);
         Assert.Equal(expected, error);
     }
+    public static TheoryData<Uri, string> BadBaseUrls => new()
+    {
+        { new Uri("zosmf", UriKind.Relative), "Enter an http:// or https:// URL." },
+        { new Uri("ftp://h/zosmf"), "Enter an http:// or https:// URL." },
+        { new Uri("http://alice:secret@h:8080/zosmf"), "Leave the userid and password out of the URL." },
+        { new Uri("http://h:8080/zosmf?x=1"), "The URL cannot have a query or a fragment." },
+        { new Uri("http://h:8080/zosmf#top"), "The URL cannot have a query or a fragment." },
+    };
+
+    [Theory]
+    [MemberData(nameof(BadBaseUrls))]
+    public void The_constructor_refuses_what_is_not_an_http_base(Uri url, string expected)
+    {
+        var e = Assert.Throws<ArgumentException>(() => new MvsmfOptions(url));
+        Assert.StartsWith(expected, e.Message);
+        Assert.DoesNotContain("secret", e.Message);
+    }
+
+    [Fact]
+    public void The_constructor_keeps_a_good_url_as_given()
+    {
+        var url = new Uri("https://proxy.example/mvs/zosmf/");
+        var options = new MvsmfOptions(url);
+        Assert.Same(url, options.BaseUrl);
+        Assert.Null(options.PinnedCertificate);
+        Assert.DoesNotContain("@", options.ToString());
+    }
 }
