@@ -37,3 +37,53 @@ public sealed partial class MemberRow(string dataset, string name) : ObservableO
 
     [ObservableProperty] private string _status = "";
 }
+
+/// <summary>One local file in the upload review. The member name starts as the file name up to its first dot,
+/// upper-cased, and stays editable; <see cref="IsBlocked"/> rows are not sent.</summary>
+public sealed partial class UploadRow : ObservableObject
+{
+    public UploadRow(string localPath)
+    {
+        LocalPath = localPath;
+        FileName = System.IO.Path.GetFileName(localPath);
+        _memberName = FileName.Split('.')[0].ToUpperInvariant();
+    }
+
+    public string LocalPath { get; }
+    public string FileName { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NameProblem), nameof(IsBlocked))]
+    private string _memberName;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Problems), nameof(IsBlocked))]
+    private TextUploadResult? _check;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Problems), nameof(IsBlocked))]
+    private string? _readProblem;
+
+    [ObservableProperty] private string _status = "";
+
+    public string UploadName => MemberName.Trim().ToUpperInvariant();
+
+    public string? NameProblem => HostPath.MemberNameError(MemberName) is { } error ? "✗ " + error : null;
+
+    public string Problems
+    {
+        get
+        {
+            var lines = new List<string>();
+            if (ReadProblem is not null) lines.Add("✗ " + ReadProblem);
+            if (Check is not null)
+            {
+                lines.AddRange(Check.Errors.Select(problem => "✗ " + problem.Message));
+                lines.AddRange(Check.Warnings.Select(problem => "⚠ " + problem.Message));
+            }
+            return string.Join("\n", lines);
+        }
+    }
+
+    public bool IsBlocked => NameProblem is not null || ReadProblem is not null || Check is { CanUpload: false };
+}

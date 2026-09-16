@@ -47,7 +47,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMembers), nameof(ShowSequentialNote), nameof(ShowChooseHint), nameof(ChooseHint),
-        nameof(MembersHeader), nameof(ShowPaddingNote))]
+        nameof(MembersHeader), nameof(ShowPaddingNote), nameof(UploadHeader))]
     private DatasetRow? _selectedDataset;
 
     [ObservableProperty]
@@ -118,6 +118,9 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     partial void OnSelectedDatasetChanged(DatasetRow? value)
     {
+        // A review belongs to the dataset it was opened on; the window disables the list while one is open. Closed
+        // before the mode changes, so the old review is not rechecked against the new dataset.
+        if (IsReviewingUpload) CloseReview();
         if (value is { IsSupported: true }) Mode = value.Attributes.RecordFormat == RecordFormatFamily.Undefined ? HostTransferMode.Binary : HostTransferMode.Text;
         _ = LoadMembersAsync(value);
     }
@@ -227,7 +230,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         {
             StatusText = "– Cancelled.";
         }
-        catch (HostFileException ex) when (ex.Kind is HostFileErrorKind.Unreachable or HostFileErrorKind.Unauthenticated or HostFileErrorKind.CertificateRejected)
+        catch (HostFileException ex) when (IsConnectionFailure(ex))
         {
             _retry = retry;
             StatusText = "";
@@ -281,6 +284,9 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         ListCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         DownloadCommand.NotifyCanExecuteChanged();
+        UploadCommand.NotifyCanExecuteChanged();
+        StartUploadCommand.NotifyCanExecuteChanged();
+        CloseReviewCommand.NotifyCanExecuteChanged();
     }
 
     public void Dispose()
