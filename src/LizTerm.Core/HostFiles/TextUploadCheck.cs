@@ -35,9 +35,11 @@ public static class TextUploadCheck
 
     private static ReadOnlySpan<byte> Utf8Bom => [0xEF, 0xBB, 0xBF];
 
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="TextUploadOptions.TabWidth"/> is less than 1.</exception>
     public static TextUploadResult Run(ReadOnlySpan<byte> file, DatasetAttributes target, TextUploadOptions? options = null)
     {
         options ??= new TextUploadOptions();
+        ArgumentOutOfRangeException.ThrowIfLessThan(options.TabWidth, 1, nameof(options));
         if (file.StartsWith(Utf8Bom)) file = file[Utf8Bom.Length..];
 
         string text;

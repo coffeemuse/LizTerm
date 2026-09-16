@@ -46,6 +46,18 @@ public sealed class HostFileTransferTests : IDisposable
         Assert.Equal("A" + Environment.NewLine, HostFileTransfer.FormatText(["A"], new DownloadOptions(HostTransferMode.Text)));
 
     [Fact]
+    public async Task A_download_to_the_longest_legal_file_name_works()
+    {
+        _host.Binary[Jes2.ToString()] = [0x61];
+        var name = new string('j', 250) + ".bin";
+
+        await HostFileTransfer.DownloadAsync(_host, Jes2, Local(name),
+            new DownloadOptions(HostTransferMode.Binary), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(new byte[] { 0x61 }, await File.ReadAllBytesAsync(Local(name), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task A_binary_download_copies_the_bytes()
     {
         _host.Binary[Jes2.ToString()] = [0x61, 0x61, 0xD1];
