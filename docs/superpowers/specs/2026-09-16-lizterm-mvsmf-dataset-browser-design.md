@@ -121,7 +121,9 @@ the documentation table in `CLAUDE.md`.
 - **Title** "Datasets — {profile} (Preview)". A one-line strip under the filter says the feature is a preview and
   links to the user guide.
 - **Filter** field defaulting to `{userid}.**`, with **List**.
-- **Left pane**: datasets with Name, Dsorg, Recfm, Lrecl. VSAM and `DA` entries are dimmed *and* suffixed
+- **Column headers are in capitals**, as ISPF shows them: `NAME`, `DSORG`, `RECFM`, `LRECL` in the dataset list,
+  and `MEMBER`, `STATUS` in the member list (Robert, 2026-09-16, after the mockup review).
+- **Left pane**: datasets with NAME, DSORG, RECFM, LRECL. VSAM and `DA` entries are dimmed *and* suffixed
   "(not supported)", so dimming never carries the meaning alone. A **Load more** row appears while the server
   reports more.
 - **Right pane**: for a PDS, its members with multi-select and a client-side type-ahead filter; for a sequential
