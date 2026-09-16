@@ -59,6 +59,17 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
     }
 
     [Fact]
+    public async Task Listing_is_off_while_a_review_is_open()
+    {
+        var t = await ReviewAsync(Write("hello.jcl", "//HELLO JOB\n"));
+
+        Assert.False(t.Vm.ListCommand.CanExecute(null));
+
+        t.Vm.CloseReviewCommand.Execute(null);
+        Assert.True(t.Vm.ListCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task Bad_names_stop_the_upload_until_fixed_and_blocked_files_are_not_sent()
     {
         var t = await ReviewAsync(

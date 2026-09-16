@@ -133,11 +133,14 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     partial void OnIsBusyChanged(bool value) => NotifyCommands();
 
-    [RelayCommand(CanExecute = nameof(IsIdle))]
+    /// <summary>Off while a review is open: a listing clears the chosen dataset the review belongs to.</summary>
+    [RelayCommand(CanExecute = nameof(CanChooseDataset))]
     private Task ListAsync() => RunExclusiveAsync(ListCoreAsync, () => ListAsync());
 
     private async Task ListCoreAsync(CancellationToken token)
     {
+        // The command is off during a review; a Retry left over from an earlier failed listing is not.
+        if (IsReviewingUpload) return;
         if (HostPath.DatasetPatternError(Filter) is { } problem)
         {
             StatusText = "✗ " + problem;

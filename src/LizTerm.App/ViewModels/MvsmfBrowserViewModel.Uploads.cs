@@ -48,7 +48,7 @@ public sealed partial class MvsmfBrowserViewModel
     [RelayCommand(CanExecute = nameof(CanUpload))]
     private async Task UploadAsync()
     {
-        var dataset = SelectedDataset!;
+        if (SelectedDataset is not { } dataset) return;
         if (dataset.IsSequential)
         {
             await RunExclusiveAsync(token => UploadSequentialAsync(dataset, token), () => UploadAsync(),
@@ -104,7 +104,11 @@ public sealed partial class MvsmfBrowserViewModel
 
     private async Task StartUploadCoreAsync(CancellationToken token)
     {
-        var dataset = SelectedDataset!;
+        if (SelectedDataset is not { } dataset)
+        {
+            ReviewMessage = "✗ Choose the dataset again.";
+            return;
+        }
         _uploadStoppedMidWrite = false;
         if (UploadFinished)
         {
@@ -228,6 +232,11 @@ public sealed partial class MvsmfBrowserViewModel
     {
         var file = await TryPickAsync(() => _picker.PickFileToSendAsync());
         if (file is null) return;
+        if (!ReferenceEquals(SelectedDataset, dataset))
+        {
+            StatusText = "✗ Choose the dataset again.";
+            return;
+        }
         var name = Path.GetFileName(file);
         var answer = await AskAsync(new ConfirmationRequest($"Replace the contents of {dataset.Name} with {name}?", "Replace"));
         if (answer.Choice != ConfirmChoice.Primary)

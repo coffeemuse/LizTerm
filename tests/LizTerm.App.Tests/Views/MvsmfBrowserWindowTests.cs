@@ -256,4 +256,51 @@ public class MvsmfBrowserWindowTests
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    [AvaloniaFact]
+    public async Task Listing_is_off_while_an_upload_review_is_open()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        t.Vm.SelectedDataset = t.Vm.Datasets[0];
+        await Wait.UntilAsync(() => !t.Vm.IsBusy, "the members");
+        var folder = Directory.CreateTempSubdirectory("lizterm-window-upload-").FullName;
+        try
+        {
+            var file = Path.Combine(folder, "newmem.jcl");
+            await File.WriteAllTextAsync(file, "//NEWMEM JOB\n");
+            t.Picker.Results = [file];
+            await t.Vm.UploadCommand.ExecuteAsync(null);
+
+            Assert.False(Named<Button>(window, "ListButton").IsEffectivelyEnabled);
+            var box = Named<TextBox>(window, "FilterBox");
+            Assert.False(box.IsEffectivelyEnabled);
+            box.Focus();
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+
+            Assert.Equal(1, t.Host.CallsSnapshot().Count(c => c.StartsWith("list:")));
+            Assert.True(t.Vm.IsReviewingUpload);
+            Assert.Same(t.Vm.Datasets[0], t.Vm.SelectedDataset);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_question_takes_the_focus_to_its_cancel_button()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        t.Vm.SelectedDataset = t.Vm.Datasets[0];
+        await Wait.UntilAsync(() => !t.Vm.IsBusy, "the members");
+        t.Select("HELLO");
+
+        _ = t.Vm.DeleteCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => t.Vm.HasConfirmation, "the question");
+
+        await Wait.UntilAsync(() => ReferenceEquals(window.FocusManager?.GetFocusedElement(), Named<Button>(window, "ConfirmCancelButton")),
+            "the focus on Cancel");
+    }
 }
