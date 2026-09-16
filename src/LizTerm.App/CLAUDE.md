@@ -617,6 +617,13 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   Window submenu and its items, found by header in the constructor, because under InWindow the top-level items are
   stashed out of the window's menu where `MenuLookup` cannot see them. Rows come off the end one at a time from the
   same `NativeMenu` (#60), and `BringFromMenu` puts the check marks back after a click, Keys > Insert's pattern.
+- **Keep on Top is the window's `Topmost`, so every dialog opens through `Dialogs/ModalDialogs.ShowDialogAbove`.**
+  On macOS, Avalonia (12.1.2) puts a `Topmost` window at `NSFloatingWindowLevel` and only orders an owned dialog
+  within its own level, so a plain `ShowDialog` draws the dialog beneath a Keep on Top owner, which then refuses
+  input while its modal child is open. `ShowDialogAbove` gives the dialog its owner's `Topmost` and follows changes
+  while it is open, because the macOS menu bar stays live over a modal dialog.
+  `ModalDialogsTests.Every_dialog_in_the_app_opens_through_ShowDialogAbove` fails for any other `ShowDialog` call.
+  Modeless, unowned windows (Preferences, the picker) are not covered: a Keep on Top session stays above them.
 - Minimize and Zoom are hidden off macOS by `ApplyPlatformMenuRules` reading `_isMacOS`, the constructor's
   platform — unlike About and Preferences, which read the running OS — so a test can build either shape.
 - **The Dock menu** is `Menus/DockMenu`, attached to the application with `NativeDock.SetMenu` on macOS only and

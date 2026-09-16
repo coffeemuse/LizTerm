@@ -519,6 +519,24 @@ public class SessionWindowTests
         Assert.Empty(window.OwnedWindows);
     }
 
+    /// <summary>The field bug behind ModalDialogs: over a Keep on Top session, File Transfer opened beneath it on
+    /// macOS, where only a Keep on Top dialog can draw above a Keep on Top window.</summary>
+    [AvaloniaFact]
+    public async Task File_transfer_over_a_keep_on_top_session_opens_keep_on_top()
+    {
+        var (window, _, _, session, _) = Show();
+        session.RaiseConnection(ConnectionState.Connected3270);
+        window.FindControl<MenuItem>("KeepOnTopMenuItem")!.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.True(window.Topmost);
+
+        window.FindControl<MenuItem>("FileTransferMenuItem")!.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+        await Wait.UntilAsync(() => window.OwnedWindows.Count == 1, "the File Transfer dialog");
+        var dialog = Assert.IsType<FileTransferWindow>(Assert.Single(window.OwnedWindows));
+        Assert.True(dialog.Topmost);
+        dialog.Close();
+    }
+
     /// <summary>A second About must not stack on the first. The session's own Help item cannot be reached while
     /// About is modal over that window, but the macOS menu bar stays live over a modal dialog, so the
     /// application menu could ask again — and the second dialog would be owned by the first and, since an

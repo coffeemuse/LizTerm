@@ -167,7 +167,7 @@ public partial class App : Application
             {
                 // The existing editor, pre-filled: it already carries every row, validates them, and knows the
                 // model and code-page catalogues. Saving by name overwrites, exactly as the picker's New does.
-                if (await new ProfileEditorWindow(profile).ShowDialog<ProfileEdit?>(window) is not { } edit) return;
+                if (await new ProfileEditorWindow(profile).ShowDialogAbove<ProfileEdit?>(window) is not { } edit) return;
                 // The same read-back ProfilePickerViewModel.EditAsync does, for the same reason: this window's
                 // profile was fixed at construction, so the file under that name can already hold a pin written
                 // since — by the picker, or by another session window's WritePinBack. Overwriting the rest is
@@ -270,7 +270,7 @@ public partial class App : Application
         _about = about;
         about.Closed += (_, _) => { if (ReferenceEquals(_about, about)) _about = null; };
         if (owner is null) about.Show();
-        else await about.ShowDialog(owner);
+        else await about.ShowDialogAbove(owner);
     }
 
     private void OnPreferencesClick(object? sender, EventArgs e) => ShowPreferences();
@@ -393,7 +393,7 @@ public partial class App : Application
         var target = owner is { IsVisible: true } ? owner : ActiveWindow();
         try
         {
-            if (target is null) window.Show(); else await window.ShowDialog(target);
+            if (target is null) window.Show(); else await window.ShowDialogAbove(target);
         }
         catch
         {

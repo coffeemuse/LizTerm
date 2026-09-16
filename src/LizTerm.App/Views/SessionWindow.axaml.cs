@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
+using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
@@ -808,7 +809,7 @@ public partial class SessionWindow : Window, ISessionHost
         {
             var dialog = new FileTransferWindow();
             dialog.DataContext = vm.CreateTransfer(new AvaloniaFilePicker(dialog));
-            await dialog.ShowDialog(this);
+            await dialog.ShowDialogAbove(this);
         }
         catch (Exception ex)
         {

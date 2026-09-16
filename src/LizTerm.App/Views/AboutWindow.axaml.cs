@@ -4,6 +4,7 @@
 
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using LizTerm.App.Dialogs;
 using LizTerm.App.Status;
 using LizTerm.Core.Session;
 
@@ -25,7 +26,7 @@ public partial class AboutWindow : Window
     }
 
     /// <summary>Modal over About, so About cannot close from under the photo and the link cannot open a second one.</summary>
-    private void OnDedicationClick(object? sender, RoutedEventArgs e) => _ = new LizWindow().ShowDialog(this);
+    private void OnDedicationClick(object? sender, RoutedEventArgs e) => _ = new LizWindow().ShowDialogAbove(this);
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 }
