@@ -9,12 +9,33 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.Backend.Mvsmf;
 
+/// <summary>Decides whether an https host is trusted. With a pin, the leaf's SHA-256 must match it and nothing else
+/// is consulted — the same trust a pinned 3270 connection gives, which also accepts any host name. Without one, the
+/// system's verdict stands. The last certificate refused is kept for the error the service raises; a service talks
+/// to one host, so one slot is enough.</summary>
 internal sealed class MvsmfCertificateCheck(CertificatePin? pin)
 {
+    private PresentedCertificate? _lastRejected;
+
     public CertificatePin? Pin { get; } = pin;
 
-    public PresentedCertificate? LastRejected => null;
+    public PresentedCertificate? LastRejected => Volatile.Read(ref _lastRejected);
 
-    public bool Validate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors) =>
-        errors == SslPolicyErrors.None;
+    public bool Validate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors)
+    {
+        if (certificate is null) return false;
+        var presented = SslStreamCertificateFetcher.SelectPresented(certificate, chain);
+        try
+        {
+            var trusted = Pin is not null
+                ? CertificateReader.SameFingerprint(CertificateReader.Fingerprint(presented[0]), Pin.Sha256)
+                : errors == SslPolicyErrors.None;
+            if (!trusted) Volatile.Write(ref _lastRejected, CertificateReader.Read(presented));
+            return trusted;
+        }
+        finally
+        {
+            foreach (var copy in presented) copy.Dispose();
+        }
+    }
 }
