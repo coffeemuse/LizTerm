@@ -239,12 +239,23 @@ public partial class ProfileEditorViewModel : ObservableObject
         var rowsText = RowsText.Trim();
         if (columnsText.Length == 0 || rowsText.Length == 0)
             return "Enter both a column count and a row count for the custom size.";
-        if (!PlainNumber.TryParse(columnsText, 0, int.MaxValue, out var columns)) return "Columns must be a whole number.";
-        if (!PlainNumber.TryParse(rowsText, 0, int.MaxValue, out var rows)) return "Rows must be a whole number.";
+        if (DimensionError(columnsText, "Columns", out var columns) is { } columnsError) return columnsError;
+        if (DimensionError(rowsText, "Rows", out var rows) is { } rowsError) return rowsError;
         if (columns < CustomSizeModel.Columns || rows < CustomSizeModel.Rows)
             return $"A custom size must be at least {CustomSizeModel.Columns} columns and {CustomSizeModel.Rows} rows.";
         OversizeGeometry.TryParse($"{columns}x{rows}", CustomSizeModel, out geometry, out var error);
         return error;
+    }
+
+    /// <summary>One box's number, or the reason it is not one. The per-dimension ceiling is checked here too, so
+    /// OversizeGeometry's "Oversize columns ..." wording never reaches a window with no Oversize field, and a run of
+    /// digits too long for an int is called too large rather than not a whole number.</summary>
+    private static string? DimensionError(string text, string name, out int value)
+    {
+        if (PlainNumber.TryParse(text, 0, OversizeGeometry.MaxCells, out value)) return null;
+        return text.All(char.IsAsciiDigit)
+            ? $"{name} must be at most {OversizeGeometry.MaxCells.ToString("N0", CultureInfo.InvariantCulture)}."
+            : $"{name} must be a whole number.";
     }
 
     partial void OnHostChanged(string value) => RefreshPin();

@@ -471,6 +471,8 @@ public class ProfileViewModelsTests : IDisposable
     [InlineData("abc", "43", "Columns must be a whole number.")]
     [InlineData("-132", "43", "Columns must be a whole number.")]
     [InlineData("132", "4 3", "Rows must be a whole number.")]
+    [InlineData("20000", "30", "Columns must be at most 16,383.")]
+    [InlineData("132", "99999999999", "Rows must be at most 16,383.")]
     [InlineData("79", "43", "A custom size must be at least 80 columns and 24 rows.")]
     [InlineData("132", "23", "A custom size must be at least 80 columns and 24 rows.")]
     [InlineData("0", "0", "A custom size must be at least 80 columns and 24 rows.")]
