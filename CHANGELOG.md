@@ -3,7 +3,7 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
-## Unreleased
+## 0.6.1
 
 - **A new app icon**: Liz on a green 3270 screen, without the "3270" lettering in title bars and on the taskbar,
   where it is too small to read.
