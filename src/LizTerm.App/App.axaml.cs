@@ -31,6 +31,22 @@ public partial class App : Application
     /// use order for the switcher and for "the session the user was last in", which About and the update check read.
     /// Each window adds itself through AttachSessions and removes itself in OnClosed, before Closed is raised.</summary>
     private readonly SessionList _sessions = new();
+
+    public App() => _sessions.Changed += (_, _) => KeepAppWindowsOnTop();
+
+    /// <summary>For tests, which seed sessions to see what the app's own windows do.</summary>
+    internal SessionList Sessions => _sessions;
+
+    /// <summary>The app's own windows belong to no session, so none can follow one owner's Keep on Top the way a
+    /// dialog does (ModalDialogs). On macOS a Keep on Top session window would cover them, so they are kept on top
+    /// while any session is. An owned About or update check follows its owner instead.</summary>
+    private void KeepAppWindowsOnTop()
+    {
+        foreach (var window in new Window?[] { _picker, _preferences, _about, _updateCheck })
+            if (window is { Owner: null }) KeepOnTopWithSessions(window);
+    }
+
+    private void KeepOnTopWithSessions(Window window) => window.Topmost = _sessions.AnyKeepOnTop;
     /// <summary>The process's one ringer: what it can ring is the answer Preferences shows, so they cannot drift.</summary>
     private readonly SystemBellRinger _bellRinger = new();
     /// <summary>The process's one release checker (#107).</summary>
@@ -228,6 +244,7 @@ public partial class App : Application
         var shutdownClose = false;
         _picker.Closing += (_, e) => shutdownClose = ShutdownPolicy.IsShutdown(e.CloseReason);
         _picker.Closed += (_, _) => { if (ShutdownPolicy.UserClosedLastWindow(_quitting, shutdownClose, _sessions.Count)) { /* picker closed with the X: treat as quit */ Quit(); } };
+        KeepOnTopWithSessions(_picker);
         _picker.Show();
     }
 
@@ -269,7 +286,11 @@ public partial class App : Application
         var about = new AboutWindow(AppVersion.Current, AboutEngine(preferredOwner), SessionFactory.OverrideOrigin);
         _about = about;
         about.Closed += (_, _) => { if (ReferenceEquals(_about, about)) _about = null; };
-        if (owner is null) about.Show();
+        if (owner is null)
+        {
+            KeepOnTopWithSessions(about);
+            about.Show();
+        }
         else await about.ShowDialogAbove(owner);
     }
 
@@ -298,6 +319,7 @@ public partial class App : Application
             MenuStrategy.MenuStyleChoosable(OperatingSystem.IsMacOS()));
         _preferences = window;
         window.Closed += (_, _) => { if (ReferenceEquals(_preferences, window)) _preferences = null; };
+        KeepOnTopWithSessions(window);
         window.Show();
         return window;
     }
@@ -393,7 +415,12 @@ public partial class App : Application
         var target = owner is { IsVisible: true } ? owner : ActiveWindow();
         try
         {
-            if (target is null) window.Show(); else await window.ShowDialogAbove(target);
+            if (target is null)
+            {
+                KeepOnTopWithSessions(window);
+                window.Show();
+            }
+            else await window.ShowDialogAbove(target);
         }
         catch
         {

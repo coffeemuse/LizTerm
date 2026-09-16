@@ -9,6 +9,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
+using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Settings;
@@ -344,6 +345,36 @@ public class PreferencesWindowTests
         var again = app.ShowPreferences(settings);
         Assert.NotSame(first, again);
         again.Close();
+    }
+
+    /// <summary>Preferences belongs to no session, so it cannot follow one owner the way a dialog does: it is
+    /// kept on top while any session is, or a Keep on Top session window on macOS covers it as it opens.</summary>
+    [AvaloniaFact]
+    public void Preferences_is_kept_on_top_while_any_session_is()
+    {
+        var app = (App)Application.Current!;
+        var (entry, _, host) = TestSessions.Create("TSO");
+        host.KeepOnTop = true;
+        app.Sessions.Add(entry);
+        PreferencesWindow? window = null;
+        try
+        {
+            window = app.ShowPreferences(new SettingsViewModel());
+            Assert.True(window.Topmost);
+
+            host.KeepOnTop = false;
+            Assert.False(window.Topmost);
+            host.KeepOnTop = true;
+            Assert.True(window.Topmost);
+
+            app.Sessions.Remove(entry);
+            Assert.False(window.Topmost);
+        }
+        finally
+        {
+            app.Sessions.Remove(entry);
+            window?.Close();
+        }
     }
 
     /// <summary>The same one-way-plus-Click shape as the crosshair radios, over an untouched SettingsViewModel —
