@@ -1,0 +1,29 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LizTerm.App.Views.SignInWindow"
+        Title="Sign in to mvsMF" Width="420" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="16" Spacing="10">
+    <TextBlock x:Name="HostText" FontWeight="SemiBold" TextWrapping="Wrap" />
+    <TextBlock x:Name="RetryText" Foreground="#FF8080" TextWrapping="Wrap"
+               Text="✗ The host rejected the userid or password. Try again." />
+    <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto" RowSpacing="8">
+      <TextBlock Grid.Row="0" Grid.Column="0" Text="Userid" VerticalAlignment="Center" />
+      <TextBox Grid.Row="0" Grid.Column="1" x:Name="UseridBox" MaxLength="8" />
+      <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" VerticalAlignment="Center" />
+      <TextBox Grid.Row="1" Grid.Column="1" x:Name="PasswordBox" PasswordChar="•" />
+    </Grid>
+    <TextBlock x:Name="MissingText" Foreground="#FF8080" IsVisible="False" TextWrapping="Wrap" />
+    <TextBlock Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap"
+               Text="Kept in memory until this session window closes. Never saved to disk." />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" Click="OnCancelClick" />
+      <Button x:Name="SignInButton" Content="Sign In" IsDefault="True" Click="OnSignInClick" />
+    </StackPanel>
+  </StackPanel>
+</Window>
