@@ -114,6 +114,37 @@ public class CredentialHolderTests
     }
 
     [Fact]
+    public async Task Operations_waiting_on_a_cancelled_prompt_fail_with_it()
+    {
+        var (_, prompt, provider) = Create();
+        prompt.Answer = null;
+        prompt.Gate = new TaskCompletionSource();
+
+        var a = provider(First, CancellationToken.None).AsTask();
+        var b = provider(First, CancellationToken.None).AsTask();
+        await Wait.UntilAsync(() => prompt.AskCount == 1, "the first prompt");
+        prompt.Gate.SetResult();
+        var results = await Task.WhenAll(a, b);
+
+        Assert.Equal(new HostCredentials?[] { null, null }, results);
+        Assert.Equal(1, prompt.AskCount);
+
+        await provider(First, CancellationToken.None);
+        Assert.Equal(2, prompt.AskCount);
+    }
+
+    [Fact]
+    public async Task A_cancelled_retry_keeps_nothing()
+    {
+        var (holder, prompt, provider) = Create();
+        var refused = await provider(First, CancellationToken.None);
+        prompt.Answer = null;
+
+        Assert.Null(await provider(new HostCredentialRequest(true, refused), CancellationToken.None));
+        Assert.False(holder.HasCredentials);
+    }
+
+    [Fact]
     public async Task The_userid_typed_last_prefills_the_next_prompt()
     {
         var (holder, prompt, provider) = Create(userid: null);

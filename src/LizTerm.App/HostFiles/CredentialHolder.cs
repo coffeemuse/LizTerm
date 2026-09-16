@@ -16,6 +16,9 @@ public sealed class CredentialHolder(string profileName, string url, string? use
     private readonly object _lock = new();
     private HostCredentials? _current;
     private string? _lastUserid = userid;
+    /// <summary>Cancelled prompts so far. An operation that was already waiting when a prompt was cancelled fails
+    /// with it instead of asking again, so one Cancel answers every operation that shared the prompt.</summary>
+    private int _cancellations;
 
     public bool HasCredentials
     {
@@ -33,6 +36,8 @@ public sealed class CredentialHolder(string profileName, string url, string? use
 
     private async ValueTask<HostCredentials?> GetAsync(ICredentialPrompt prompt, HostCredentialRequest request, CancellationToken token)
     {
+        int cancellationsSeen;
+        lock (_lock) cancellationsSeen = _cancellations;
         await _gate.WaitAsync(token);
         try
         {
@@ -41,11 +46,16 @@ public sealed class CredentialHolder(string profileName, string url, string? use
             {
                 var refusedIsCurrent = request.IsRetry && (request.Rejected is null || ReferenceEquals(_current, request.Rejected));
                 if (_current is { } current && !refusedIsCurrent) return current;
+                if (_cancellations != cancellationsSeen && _current is null) return null;
                 _current = null;
                 prefill = _lastUserid;
             }
             var answer = await prompt.AskAsync(new CredentialPromptRequest(profileName, url, prefill, request.IsRetry));
-            if (answer is null) return null;
+            if (answer is null)
+            {
+                lock (_lock) _cancellations++;
+                return null;
+            }
             lock (_lock)
             {
                 _current = answer;
