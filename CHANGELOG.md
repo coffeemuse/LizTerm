@@ -5,6 +5,9 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **Binary uploads to MVS/CE work.** File transfers now use a 2500-byte buffer unless you set another size under
+  **Advanced**. With the larger size used before, MVS/CE dropped binary uploads at the end, showed its logon screen and
+  left the TSO user logged on ([#137](https://github.com/coffeemuse/LizTerm/issues/137)).
 - **Custom screen sizes are easier to set.** In the profile editor, choose **Other (custom size)** at the end of the
   Model list, then type the columns and rows in two separate boxes. The boxes show the model's own size the rest of
   the time.

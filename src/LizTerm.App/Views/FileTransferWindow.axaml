@@ -59,7 +59,7 @@
           <TextBlock Grid.Row="6" Text="Average block" VerticalAlignment="Center" />
           <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding AverageBlockText}" IsEnabled="{Binding CanSetAverageBlock}" Width="100" HorizontalAlignment="Left" />
           <TextBlock Grid.Row="7" Text="Buffer size" VerticalAlignment="Center" />
-          <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding BufferSizeText}" Width="100" HorizontalAlignment="Left" PlaceholderText="256-32768" />
+          <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding BufferSizeText}" Width="100" HorizontalAlignment="Left" PlaceholderText="2500" />
           <TextBlock Grid.Row="8" Text="Extra options" VerticalAlignment="Center" />
           <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding ExtraOptions}" PlaceholderText="appended to the IND$FILE command" />
         </Grid>

@@ -31,6 +31,9 @@ public sealed record FileTransferRequest
 {
     public const int MinBufferSize = 256;
     public const int MaxBufferSize = 32768;
+    /// <summary>The DFT buffer size used when a request names none. x3270's own 4096 makes MVS/CE's IND$FILE drop a
+    /// binary upload and leave the TSO session hung (#137); 2500 is what Vista TN3270 uses.</summary>
+    public const int DefaultBufferSize = 2500;
 
     public required TransferDirection Direction { get; init; }
     public required string LocalPath { get; init; }
@@ -51,7 +54,7 @@ public sealed record FileTransferRequest
     public int? PrimarySpace { get; init; }
     public int? SecondarySpace { get; init; }
     public int? AverageBlock { get; init; }
-    /// <summary>DFT buffer size, 256 to 32768; null lets the engine choose.</summary>
+    /// <summary>DFT buffer size, 256 to 32768; null means <see cref="DefaultBufferSize"/>.</summary>
     public int? BufferSize { get; init; }
     /// <summary>Appended verbatim to the host's IND$FILE command, for ports with extra keywords.</summary>
     public string? ExtraOptions { get; init; }

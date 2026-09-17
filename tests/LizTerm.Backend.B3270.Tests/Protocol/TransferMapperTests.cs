@@ -18,7 +18,21 @@ public class TransferMapperTests
     private static FileTransferRequest Receive(TransferHostType host = TransferHostType.Tso) =>
         new() { Direction = TransferDirection.Receive, LocalPath = "/tmp/out.txt", HostFile = "LIZTERM.ITEST", HostType = host };
 
+    private const string DefaultBuffer = "buffersize=2500";
+
+    /// <summary>The arguments without the default buffer size, which every request without its own carries, as the
+    /// last argument before any extra options; <see cref="RawArgs"/> keeps it.</summary>
     private static string[] Args(FileTransferRequest request)
+    {
+        var args = RawArgs(request);
+        if (request.BufferSize is not null) return args;
+        var at = Array.IndexOf(args, DefaultBuffer);
+        Assert.True(at >= 0, "the default buffer size is missing");
+        Assert.True(at == args.Length - 1 || args[at + 1].StartsWith("otheroptions=", StringComparison.Ordinal));
+        return [.. args[..at], .. args[(at + 1)..]];
+    }
+
+    private static string[] RawArgs(FileTransferRequest request)
     {
         var action = TransferMapper.ToAction(request);
         Assert.Equal("Transfer", action.Name);
@@ -123,6 +137,24 @@ public class TransferMapperTests
     {
         var r = Receive() with { RecordFormat = RecordFormat.Fixed, Lrecl = 80, Blksize = 3120, AllocationUnits = AllocationUnits.AvBlock, PrimarySpace = 5, SecondarySpace = 1, AverageBlock = 4096 };
         Assert.Equal(["direction=receive", "hostfile=LIZTERM.ITEST", "localfile=/tmp/out.txt", "host=tso", "mode=ascii", "cr=add", "remap=yes", "exist=replace"], Args(r));
+    }
+
+    [Fact]
+    public void Every_transfer_without_a_buffer_size_asks_for_2500_bytes()
+    {
+        // MVS/CE's IND$FILE drops a binary upload with x3270's 4096-byte default (#137); Vista's 2500 works.
+        Assert.Equal(2500, FileTransferRequest.DefaultBufferSize);
+        Assert.Equal(DefaultBuffer, RawArgs(Send() with { Mode = TransferMode.Binary })[^1]);
+        Assert.Equal(DefaultBuffer, RawArgs(Receive(TransferHostType.Vm))[^1]);
+        Assert.Equal([DefaultBuffer, "otheroptions=NOTRUNC"], RawArgs(Send(TransferHostType.Cics) with { ExtraOptions = "NOTRUNC" })[^2..]);
+    }
+
+    [Fact]
+    public void A_buffer_size_of_its_own_replaces_the_default()
+    {
+        var args = RawArgs(Send() with { BufferSize = 4096 });
+        Assert.Equal("buffersize=4096", args[^1]);
+        Assert.DoesNotContain(DefaultBuffer, args);
     }
 
     [Fact]

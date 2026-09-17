@@ -133,6 +133,10 @@ certificate that CA issued for another host from verifying (`CertificateReader.C
 - `TransferMapper` builds the `Transfer` action's `keyword=value` arguments. It omits what b3270 would reject
   (`cr`/`remap` in binary mode; allocation keywords on receive or on non-TSO hosts) or ignore (`lrecl`/`blksize`
   without a `recfm`; space fields without `allocation`). A receive adds `exist=replace` unless appending.
+- Every transfer carries `buffersize`, `FileTransferRequest.DefaultBufferSize` (2500) when the request names none.
+  Leaving it to the engine means x3270's 4096, which makes MVS/CE's IND$FILE abandon a binary upload: the host
+  shows its logon screen instead of the completion message, the TSO user stays logged on, and b3270 waits forever
+  (#137).
 - ISPF is TSO with a prefix: `TransferMapper` sends `host=tso`, then `commandprefix=TSO`, then every TSO keyword. Only
   LizTerm's patched engine knows `commandprefix` (`native/patches`, `docs/engines.md`), and b3270 silently ignores a
   keyword it does not know, so an unpatched engine would type a bare IND$FILE into the ISPF line and time out.
