@@ -5,11 +5,21 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **mvsMF Browser (feature preview).** On MVS 3.8j hosts running [mvsMF](https://github.com/mvslovers/mvsmf), a
+  second way to move files beside IND$FILE. Give a profile an mvsMF address on the profile editor's new **mvsMF**
+  tab, and its session window gains **File > mvsMF Browser...**. The browser lists datasets and members,
+  downloads several members at once, uploads files as new or replacement members (checking each text file first,
+  and reading it back afterwards), and deletes members. You sign in once per session window, and the password is
+  never saved. `https` addresses use the same certificate checks and pinning as TLS sessions. It is a preview: see
+  the user guide's [mvsMF Browser section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-browser-preview) for what it does and doesn't
+  do yet.
+- **If you go back to an older LizTerm**, it drops a profile's mvsMF settings (address, userid and pinned
+  certificate) the next time it saves that profile. Your other settings are kept.
 - **Custom screen sizes are easier to set.** In the profile editor, choose **Other (custom size)** at the end of the
   Model list, then type the columns and rows in two separate boxes. The boxes show the model's own size the rest of
   the time.
-- **A tidier profile editor.** Its settings are now on three tabs, Connection, Terminal and Organize, with more room
-  between them. Tags are colored chips you add with Enter or a comma, with the tags you already use offered as you
+- **A tidier profile editor.** Its settings are now on tabs, Connection, Terminal and Organize (plus the mvsMF tab
+  above), with more room between them. Tags are colored chips you add with Enter or a comma, with the tags you already use offered as you
   type; a new tag shows the color it will get. The custom screen size has arrow buttons, and choosing **Other**
   starts from the model's own size. When **Save** can't accept something, the editor shows that tab and outlines the
   setting.
