@@ -233,9 +233,14 @@ public partial class App : Application
         store.Update(updated, current => current with { PinnedCertificate = updated.PinnedCertificate, VerifyCertificate = updated.VerifyCertificate });
 
     /// <summary>The REST pin's write-back, merged into the profile as it is on disk now, for the reason
-    /// <see cref="WritePinBack"/> gives.</summary>
-    private static void WriteHostFilesPinBack(ProfileStore store, SessionProfile profile, CertificatePin pin) =>
-        store.Update(profile, current => current with { HostFilesPinnedCertificate = pin });
+    /// <see cref="WritePinBack"/> gives. Only while that file still names the URL the certificate was accepted for:
+    /// an edit since may have repointed it, and a rename or delete leaves no file to write. The pin still holds for
+    /// the session either way.</summary>
+    private static void WriteHostFilesPinBack(ProfileStore store, SessionProfile profile, CertificatePin pin)
+    {
+        if (store.Load(profile.Name) is { } current && PinMerge.SameUrl(current.HostFilesUrl, profile.HostFilesUrl))
+            store.Save(current with { HostFilesPinnedCertificate = pin });
+    }
 
     public void ShowPicker()
     {

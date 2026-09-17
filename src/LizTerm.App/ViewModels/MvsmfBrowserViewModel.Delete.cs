@@ -17,8 +17,8 @@ public sealed partial class MvsmfBrowserViewModel
     [RelayCommand(CanExecute = nameof(CanDelete))]
     private Task DeleteAsync() => DeleteMembersAsync(SelectedDataset!, [.. _selectedMembers]);
 
-    /// <summary>A retry deletes the members the connection failure left, not the selection: the refresh after the
-    /// failure clears it.</summary>
+    /// <summary>A retry deletes the members the connection failure left, not the selection: the failure clears it.
+    /// Once every member has gone, only the listing is left to retry.</summary>
     private Task DeleteMembersAsync(DatasetRow dataset, IReadOnlyList<MemberRow> members)
     {
         var remaining = members;
@@ -30,6 +30,11 @@ public sealed partial class MvsmfBrowserViewModel
     private async Task DeleteCoreAsync(DatasetRow dataset, IReadOnlyList<MemberRow> members,
         Action<IReadOnlyList<MemberRow>> stoppedAt, CancellationToken token)
     {
+        if (members.Count == 0)
+        {
+            await LoadMembersCoreAsync(dataset, token);
+            return;
+        }
         var names = string.Join(", ", members.Take(NamesInQuestion).Select(member => member.Name));
         if (members.Count > NamesInQuestion) names += $" and {members.Count - NamesInQuestion} more";
         var label = members.Count == 1 ? "Delete 1 member" : $"Delete {members.Count} members";
@@ -56,9 +61,10 @@ public sealed partial class MvsmfBrowserViewModel
                 catch (HostFileException ex) when (IsConnectionFailure(ex))
                 {
                     // The rest would fail the same way. Show what did go, then let the banner offer Retry, which
-                    // asks again about this member and the ones after it.
+                    // asks again about this member and the ones after it. The list is trimmed here rather than asked
+                    // of the host, which would only fail again, or open a second sign-in after a cancelled one.
                     stoppedAt([.. members.Skip(i)]);
-                    await RefreshAfterDeleteAsync(dataset, token);
+                    RemoveDeletedMembers(dataset, members.Take(i));
                     throw;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -66,6 +72,7 @@ public sealed partial class MvsmfBrowserViewModel
                     failures.Add($"{member.Name}: {HostFileMessages.Describe(ex)}");
                 }
             }
+            stoppedAt([]);
             await LoadMembersCoreAsync(dataset, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
@@ -79,6 +86,15 @@ public sealed partial class MvsmfBrowserViewModel
         StatusText = failures.Count == 0
             ? $"✓ Deleted {deleted} of {Plural(members.Count, "member")}."
             : $"⚠ Deleted {deleted} of {Plural(members.Count, "member")}. ✗ {string.Join("; ", failures)}";
+    }
+
+    private void RemoveDeletedMembers(DatasetRow dataset, IEnumerable<MemberRow> deleted)
+    {
+        if (!ReferenceEquals(SelectedDataset, dataset)) return;
+        foreach (var member in deleted) Members.Remove(member);
+        RefreshVisibleMembers();
+        SetSelectedMembers([]);
+        OnPropertyChanged(nameof(MembersHeader));
     }
 
     /// <summary>A refresh on the way out of a stopped delete: its own failure would only hide the reason for the

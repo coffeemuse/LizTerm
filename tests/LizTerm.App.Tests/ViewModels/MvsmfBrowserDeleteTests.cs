@@ -172,6 +172,37 @@ public class MvsmfBrowserDeleteTests
     }
 
     [Fact]
+    public async Task A_connection_failure_does_not_list_the_members_again()
+    {
+        var t = await FailedByConnectionAsync();
+
+        Assert.Single(t.Host.CallsSnapshot(), call => call == "members:MVSCE02.CNTL");
+    }
+
+    [Fact]
+    public async Task A_listing_that_fails_after_every_delete_retries_only_the_listing()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ChooseAsync("MVSCE02.CNTL");
+        t.Select("ALLOC", "HELLO");
+        t.Host.Failures["members:MVSCE02.CNTL"] =
+            new HostFileException(HostFileErrorKind.Unreachable, "MVSCE02.CNTL: cannot reach the host (refused).");
+
+        var deleting = t.Vm.DeleteCommand.ExecuteAsync(null);
+        await AskedAsync(t, deleting);
+        t.Vm.Confirmation!.PrimaryCommand.Execute(null);
+        await deleting;
+        Assert.True(t.Vm.CanRetry);
+
+        t.Host.Failures.Clear();
+        await t.Vm.RetryCommand.ExecuteAsync(null);
+
+        Assert.False(t.Vm.HasError);
+        Assert.Equal(2, t.Host.CallsSnapshot().Count(call => call.StartsWith("delete:", StringComparison.Ordinal)));
+        Assert.Equal(new[] { "COMPILE" }, t.Vm.Members.Select(m => m.Name));
+    }
+
+    [Fact]
     public async Task Choosing_another_dataset_drops_the_delete_retry()
     {
         var t = await FailedByConnectionAsync();
