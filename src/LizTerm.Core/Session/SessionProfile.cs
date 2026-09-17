@@ -35,6 +35,12 @@ namespace LizTerm.Core.Session;
 /// <param name="Note">A short line the name cannot carry — "no live data", "LAN only" — shown under the host in
 /// the session list, or null. Capped and single-line at the editor, so a pasted paragraph cannot reshape the
 /// list.</param>
+/// <param name="HostFilesUrl">The z/OSMF REST base URL (normalised, e.g. <c>http://host:8080/zosmf</c>) that opens the
+/// dataset browser for this profile, or null for none.</param>
+/// <param name="HostFilesUserid">The userid the REST sign-in prompt starts with, or null. Never a password: the
+/// password is asked for once per session and held in memory only.</param>
+/// <param name="HostFilesPinnedCertificate">The certificate trusted for <paramref name="HostFilesUrl"/> when it is https,
+/// independent of <paramref name="PinnedCertificate"/>, which belongs to the 3270 host and port.</param>
 public sealed record SessionProfile(
     string Name = "",
     string Host = "",
@@ -51,4 +57,7 @@ public sealed record SessionProfile(
     bool AutoReconnect = false,
     string? Oversize = null,
     [property: JsonConverter(typeof(TagSetJsonConverter))] TagSet Tags = default,
-    string? Note = null);
+    string? Note = null,
+    string? HostFilesUrl = null,
+    string? HostFilesUserid = null,
+    CertificatePin? HostFilesPinnedCertificate = null);

@@ -11,6 +11,7 @@ using LizTerm.App.Bell;
 using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
+using LizTerm.App.HostFiles;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
 using LizTerm.App.Startup;
@@ -191,11 +192,8 @@ public partial class App : Application
                 // The same read-back ProfilePickerViewModel.EditAsync does, for the same reason: this window's
                 // profile was fixed at construction, so the file under that name can already hold a pin written
                 // since — by the picker, or by another session window's WritePinBack. Overwriting the rest is
-                // what the user asked for; dropping a pin they never saw in this editor is not.
-                store.Save(edit.Profile with
-                {
-                    PinnedCertificate = PinMerge.Resolve(edit.Profile, store.Load(edit.Profile.Name), edit.PinCleared),
-                });
+                // what the user asked for; dropping a pin they never saw in this editor is not — the REST pin included.
+                store.Save(PinMerge.Apply(edit.Profile, store.Load(edit.Profile.Name), edit.PinCleared, edit.HostFilesPinCleared));
             },
             settings: Settings,
             bellRinger: _bellRinger,
@@ -206,6 +204,12 @@ public partial class App : Application
         var entry = new SessionEntry(viewModel, new ProfileRow(profile, tags, isSaved: fromStore), fromStore, window);
         _sessions.Add(entry);
         window.AttachSessions(_sessions, entry);
+        if (!string.IsNullOrWhiteSpace(profile.HostFilesUrl))
+        {
+            // A saved profile can keep a certificate the user trusts; an ad hoc one has nowhere to put it.
+            window.AttachHostFiles(new HostFileAccess(profile, HostFileServiceFactory.Create,
+                fromStore ? pin => WriteHostFilesPinBack(store, profile, pin) : null));
+        }
         // Read in Closing, because Closed carries no reason and by then the shutdown that is closing this window
         // is already counting the windows that are left. A close the owned File Transfer dialog refuses never
         // reaches Closing at all (Window.ShouldCancelClose asks the children first), and the next close attempt
@@ -227,6 +231,16 @@ public partial class App : Application
     /// merged into the profile as it is on disk now rather than written over edits saved from the picker since.</summary>
     private static void WritePinBack(ProfileStore store, SessionProfile updated) =>
         store.Update(updated, current => current with { PinnedCertificate = updated.PinnedCertificate, VerifyCertificate = updated.VerifyCertificate });
+
+    /// <summary>The REST pin's write-back, merged into the profile as it is on disk now, for the reason
+    /// <see cref="WritePinBack"/> gives. Only while that file still names the URL the certificate was accepted for:
+    /// an edit since may have repointed it, and a rename or delete leaves no file to write. The pin still holds for
+    /// the session either way.</summary>
+    private static void WriteHostFilesPinBack(ProfileStore store, SessionProfile profile, CertificatePin pin)
+    {
+        if (store.Load(profile.Name) is { } current && PinMerge.SameUrl(current.HostFilesUrl, profile.HostFilesUrl))
+            store.Save(current with { HostFilesPinnedCertificate = pin });
+    }
 
     public void ShowPicker()
     {

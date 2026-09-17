@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using LizTerm.App.Dialogs;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Profiles;
 using LizTerm.Core.Session;
@@ -26,7 +27,7 @@ public partial class ProfileEditorWindow : Window
     public ProfileEditorWindow(SessionProfile? existing, TagRegistry? tags = null)
     {
         InitializeComponent();
-        _vm = new ProfileEditorViewModel(existing, tags);
+        _vm = new ProfileEditorViewModel(existing, tags, HostFileServiceFactory.CreateTester(new AvaloniaCredentialPrompt(this)));
         DataContext = _vm;
         Title = existing is null ? "New Session Profile" : $"Edit {existing.Name}";
         _vm.PropertyChanged += OnViewModelChanged;
@@ -120,6 +121,8 @@ public partial class ProfileEditorWindow : Window
             ProfileEditorField.ScreenSize => [ColumnsBox, RowsBox],
             ProfileEditorField.CodePage => [CodePageBox],
             ProfileEditorField.Tags => [TagField],
+            ProfileEditorField.MvsmfUrl => [MvsmfUrlBox],
+            ProfileEditorField.MvsmfUserid => [MvsmfUseridBox],
             _ => [],
         };
         foreach (var control in _invalid) control.Classes.Add("invalid");
@@ -130,6 +133,7 @@ public partial class ProfileEditorWindow : Window
     {
         ProfileEditorField.ScreenSize or ProfileEditorField.CodePage => TerminalTab,
         ProfileEditorField.Tags => OrganizeTab,
+        ProfileEditorField.MvsmfUrl or ProfileEditorField.MvsmfUserid => MvsmfTab,
         _ => ConnectionTab,
     };
 
@@ -137,7 +141,7 @@ public partial class ProfileEditorWindow : Window
     {
         if (_vm.TryBuild() is { } profile)
         {
-            Close(new ProfileEdit(profile, _vm.PinCleared));
+            Close(new ProfileEdit(profile, _vm.PinCleared, _vm.MvsmfPinCleared));
             return;
         }
         if (_vm.ValidationField is { } field) Tabs.SelectedItem = TabOf(field);

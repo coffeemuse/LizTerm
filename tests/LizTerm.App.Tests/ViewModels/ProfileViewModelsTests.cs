@@ -136,6 +136,42 @@ public class ProfileViewModelsTests : IDisposable
     }
 
     [Fact]
+    public async Task Editing_a_stale_profile_does_not_drop_a_rest_pin_written_since()
+    {
+        _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, HostFilesUrl = "http://mvs:8080/zosmf" });
+        var pin = new CertificatePin("CC:DD", "CN=proxy", "pem");
+
+        var picker = new ProfilePickerViewModel(_store, (_, _) => { },
+            (existing, _) =>
+            {
+                // Stands in for a browser window remembering a certificate while the editor is open.
+                _store.Update(existing!, p => p with { HostFilesPinnedCertificate = pin });
+                return Task.FromResult<ProfileEdit?>(new ProfileEdit(existing!, PinCleared: false));
+            },
+            () => { });
+
+        picker.SelectedRow = picker.VisibleRows.Single();
+        await picker.EditCommand.ExecuteAsync(null);
+
+        Assert.Equal(pin, _store.Load("MVS")!.HostFilesPinnedCertificate);
+    }
+
+    [Fact]
+    public async Task Forget_still_clears_a_rest_pin_the_file_has()
+    {
+        _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", HostFilesUrl = "http://mvs/zosmf", HostFilesPinnedCertificate = new CertificatePin("CC:DD", "CN=proxy", "pem") });
+
+        var picker = new ProfilePickerViewModel(_store, (_, _) => { },
+            (existing, _) => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { HostFilesPinnedCertificate = null }, PinCleared: false, HostFilesPinCleared: true)),
+            () => { });
+
+        picker.SelectedRow = picker.VisibleRows.Single();
+        await picker.EditCommand.ExecuteAsync(null);
+
+        Assert.Null(_store.Load("MVS")!.HostFilesPinnedCertificate);
+    }
+
+    [Fact]
     public async Task Forget_still_clears_a_pin_the_file_has()
     {
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = new CertificatePin("AA:BB", "CN=mvs", "pem") });

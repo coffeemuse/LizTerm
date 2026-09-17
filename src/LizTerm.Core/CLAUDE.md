@@ -79,6 +79,11 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - `SessionProfile.PinnedCertificate` is a `CertificatePin` — SHA-256 fingerprint as colon-separated upper-case hex,
   subject, and the PEM chain, leaf first — or null. How the pin, verification and trust anchors combine on a connect
   is the backend's rule (`B3270Session.ConnectAsync`, in `src/LizTerm.Backend.B3270/CLAUDE.md`).
+- `HostFilesUrl`, `HostFilesUserid` and `HostFilesPinnedCertificate` are the REST side of a profile (host-neutral
+  names; the App calls it mvsMF). The REST pin is repaired on load like the 3270 pin (dropped when its PEM or
+  fingerprint is blank), and `PinMerge.ResolveHostFiles` merges it as `PinMerge.Resolve` merges the 3270 pin, keyed
+  on the URL (case and a trailing slash ignored). `PinMerge.Apply` runs both merges, and is the one call an editor
+  save makes.
 - `DestructiveBackspace` defaults to true. Every x3270-family default keymap erases; the old belief that x3270
   defaults to cursor-left came from the name of its `BackSpace()` action.
 - The profile JSON writes every field, so a saved `false` survives a change of default.

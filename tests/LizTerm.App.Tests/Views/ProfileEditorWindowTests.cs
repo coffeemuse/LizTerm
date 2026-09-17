@@ -58,7 +58,7 @@ public class ProfileEditorWindowTests
         Assert.Equal("Backspace erases the previous character", plain.FindControl<CheckBox>("BackspaceBox")!.Content);
     }
 
-    /// <summary>Three tabs, opening on Connection with the cursor in Name.</summary>
+    /// <summary>Four tabs, opening on Connection with the cursor in Name.</summary>
     [AvaloniaFact]
     public void It_opens_on_connection_with_the_name_focused()
     {
@@ -66,7 +66,7 @@ public class ProfileEditorWindowTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(["Connection", "Terminal", "Organize"],
+        Assert.Equal(["Connection", "Terminal", "Organize", "mvsMF"],
             window.FindControl<TabControl>("Tabs")!.Items.Cast<TabItem>().Select(t => t.Header));
         Assert.Same(window.FindControl<TabItem>("ConnectionTab"), SelectedTab(window));
         Assert.True(window.FindControl<TextBox>("NameBox")!.IsFocused);
@@ -115,6 +115,25 @@ public class ProfileEditorWindowTests
 
         Assert.Same(window.FindControl<TabItem>("OrganizeTab"), SelectedTab(window));
         Assert.Contains("invalid", window.FindControl<Border>("TagField")!.Classes);
+    }
+
+    [AvaloniaFact]
+    public void A_refused_mvsmf_field_shows_the_mvsmf_tab()
+    {
+        var window = new ProfileEditorWindow(new SessionProfile { Name = "p", Host = "h" });
+        window.Show();
+        Vm(window).MvsmfUrl = "ftp://mvs";
+
+        Save(window);
+
+        Assert.Same(window.FindControl<TabItem>("MvsmfTab"), SelectedTab(window));
+        Assert.Contains("invalid", window.FindControl<TextBox>("MvsmfUrlBox")!.Classes);
+
+        Vm(window).MvsmfUrl = "http://mvs:8080";
+        Vm(window).MvsmfUserid = "TOOLONGID";
+        Save(window);
+        Assert.DoesNotContain("invalid", window.FindControl<TextBox>("MvsmfUrlBox")!.Classes);
+        Assert.Contains("invalid", window.FindControl<TextBox>("MvsmfUseridBox")!.Classes);
     }
 
     [AvaloniaFact]
@@ -280,6 +299,40 @@ public class ProfileEditorWindowTests
         var note = window.FindControl<TextBox>("NoteBox")!;
         Assert.False(note.AcceptsReturn);
         Assert.Equal(120, note.MaxLength);
+    }
+
+    [AvaloniaFact]
+    public void The_mvsmf_group_shows_the_profiles_values_and_its_pin()
+    {
+        var window = new ProfileEditorWindow(new SessionProfile
+        {
+            Name = "MVS/CE", Host = "mvs", HostFilesUrl = "http://mvs:8080/zosmf", HostFilesUserid = "MVSCE02",
+            HostFilesPinnedCertificate = new CertificatePin("AA:BB", "CN=proxy", "pem"),
+        });
+        window.Show();
+        window.FindControl<TabControl>("Tabs")!.SelectedItem = window.FindControl<TabItem>("MvsmfTab");
+        window.UpdateLayout();
+
+        Assert.Equal("http://mvs:8080/zosmf", window.FindControl<TextBox>("MvsmfUrlBox")!.Text);
+        Assert.Equal("MVSCE02", window.FindControl<TextBox>("MvsmfUseridBox")!.Text);
+        Assert.True(window.FindControl<Border>("MvsmfPinPanel")!.IsEffectivelyVisible);
+        Assert.Equal("CN=proxy", window.FindControl<TextBlock>("MvsmfPinSubject")!.Text);
+        Assert.Equal("SHA-256 AA:BB", window.FindControl<TextBlock>("MvsmfPinFingerprint")!.Text);
+        Assert.True(window.FindControl<Button>("MvsmfTestButton")!.IsEffectivelyEnabled);
+        window.FindControl<Button>("MvsmfForgetButton")!.Command!.Execute(null);
+        Assert.False(window.FindControl<Border>("MvsmfPinPanel")!.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public void A_profile_without_mvsmf_shows_an_empty_group()
+    {
+        var window = new ProfileEditorWindow(new SessionProfile { Name = "p", Host = "h" });
+        window.Show();
+        window.FindControl<TabControl>("Tabs")!.SelectedItem = window.FindControl<TabItem>("MvsmfTab");
+        window.UpdateLayout();
+
+        Assert.Equal("", window.FindControl<TextBox>("MvsmfUrlBox")!.Text);
+        Assert.False(window.FindControl<Border>("MvsmfPinPanel")!.IsEffectivelyVisible);
     }
 
     /// <summary>The size spinners are always there, greyed out showing the model's own size, and open once Other is

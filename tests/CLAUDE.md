@@ -50,12 +50,29 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   Its `Raise*` methods (`RaiseScreen`, `RaiseStatus`, `RaiseConnection`, `RaiseFault`, `RaiseHostMessage`,
   `RaiseBell`) fire the corresponding events.
 - Other fakes: `FakeTextClipboard` (a `Text` string and an optional `Exception`); `FakeFilePicker` (returns
-  `Result`, records `open` and `save:<name>`); `FakeCertificatePrompt` (`Decision`, `OnAsk`, `Calls`,
-  `LastRequest`); `FakeFolderOpener`; `FakeUriOpener` (`Opened`, the list of URLs and paths handed to it; `Result`;
-  an optional `Exception`); `FakeCertificateFetcher` (`Result`, `Exception`, `Calls` as
-  `fetch:<host>:<port>`); `FakeBellRinger` (`Rings`, the list of `BellSound` values asked for, `Available`, what
-  `CanRing` answers, and an optional `Exception`); and `FakeReleaseChecker` (`Result`, an optional `Exception`, `Calls`, and a `Gate`
-  that holds every answer back until the test completes it, for what happens while a request is out).
+  `Result`, records `open` and `save:<name>`; it also answers several files, `Results`, recorded as
+  `open-many:<title>`, and a folder, `FolderResult`, recorded as `folder:<title>`); `FakeCertificatePrompt`
+  (`Decision`, `OnAsk`, `Calls`, `LastRequest`); `FakeFolderOpener`; `FakeUriOpener` (`Opened`, the list of URLs
+  and paths handed to it; `Result`; an optional `Exception`); `FakeCertificateFetcher` (`Result`, `Exception`,
+  `Calls` as `fetch:<host>:<port>`); `FakeBellRinger` (`Rings`, the list of `BellSound` values asked for,
+  `Available`, what `CanRing` answers, and an optional `Exception`); `FakeReleaseChecker` (`Result`, an optional
+  `Exception`, `Calls`, and a `Gate` that holds every answer back until the test completes it, for what happens
+  while a request is out); and `FakeCredentialPrompt` (an `Answers` queue, then `Answer`, where null plays Cancel;
+  `Calls` as `ask:<userid>:<IsRetry>`; `LastRequest`; a `Gate` that holds every prompt open; `AskCount`).
+- `FakeHostFileService` (`Fakes/`) is an in-memory mvsMF: `AddDataset` seeds `Datasets` and `Members`, and `Text`
+  and `Binary` hold contents keyed by `HostPath.ToString()`. `Calls` records `list:<pattern>`, `members:<dsn>`,
+  `readtext:<path>`, `readbinary:<path>`, `writetext:<path>:<lines>`, `writebinary:<path>`, `delete:<path>` and
+  `info`; a `Failures` entry under the same key, without the line count, makes that call throw. `StoreTransform`
+  ((path, lines) → what is stored) plays a host that alters what a text write keeps, for a read-back that differs.
+  `Gate` holds every call after it is logged (a call still honours its token), `MaxConcurrent` is the most calls seen running at
+  once, and `Disposed` says whether the service was released. The operations take a lock the test cannot: seed
+  everything before the view model runs, and read the log through `CallsSnapshot()` while calls may be running.
+  Core.Tests has a smaller fake of the same name for `HostFileTransfer` (see "Core tests").
+- `BrowserTestHost` (`ViewModels/`) builds an `MvsmfBrowserViewModel` over a `FakeHostFileService` seeded by
+  `Standard` (a PDS of three members, a load library, a sequential dataset and a `DA` dataset), with the fake
+  prompts and picker, a `HostFileAccess` that cannot remember a pin, and `GuideOpened` counting the guide link.
+  `ChooseAsync` lists if nothing is listed yet and selects a dataset, waiting for its member list; `Select` sets
+  the member selection the window would push.
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
   `src/LizTerm.App/CLAUDE.md` say why.
 - Session switching tests seed a `SessionList` with `TestSessions`. `Create(name, ...)` builds an entry over a
@@ -80,7 +97,9 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 - The App tests name the backend in exactly one place:
   `SessionFactoryTests.The_session_it_builds_verifies_against_the_system_trust_anchors` casts the factory's result to
   `B3270Session` to read `TrustAnchors`, because what the factory injects is the one thing about the backend the App
-  owns, and asserting it needs the concrete type. Every other App test stays on `IEmulatorSession`.
+  owns, and asserting it needs the concrete type. Every other App test stays on `IEmulatorSession`. Likewise
+  `HostFileServiceFactoryTests` is the one App test that names `LizTerm.Backend.Mvsmf`; every other App test stays
+  on `IHostFileService`.
 - `SessionFactoryTests` never touches the environment. It calls the internal
   `SessionFactory.Create(profile, overridePath, baseDirectory)` seam with a bogus override and an empty temp
   directory, because a bundled engine in the App test output would otherwise satisfy the locator.

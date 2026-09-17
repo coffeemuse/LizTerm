@@ -54,8 +54,8 @@ Entries marked *log only* change nothing in the code.
   `X-IBM-Max-Items`.
 - **Observed:** every `start` value — an existing name, a partial one, lower case — returns the first page.
 - **LizTerm:** never pages. It sends no `X-IBM-Max-Items` and no `start`, and takes the whole list (`SYS1.**`,
-  96 entries, arrives at once). The dataset browser, arriving in the next PR, will have no Load more row. If
-  `start` works in a newer build, paging can come back for very large catalogues.
+  96 entries, arrives at once). The browser has no Load more row; the whole list is shown. If `start` works in a
+  newer build, paging can come back for very large catalogues.
 
 ### `dataset-list-morerows-false`
 
@@ -67,8 +67,7 @@ Entries marked *log only* change nothing in the code.
 ### `dslevel-is-a-prefix` (log only)
 
 - **Observed:** `dslevel=MVSCE02` lists every `MVSCE02.*` dataset, as z/OSMF does.
-- **LizTerm:** the dataset browser, arriving in the next PR, will pick the exact name out of the list for a lookup
-  of one dataset by name.
+- **LizTerm:** the browser shows everything the filter matches, as z/OSMF would.
 
 ### `member-list-ignores-max-items`
 
@@ -135,8 +134,7 @@ Entries marked *log only* change nothing in the code.
 ### `binary-fixed-padding` (log only)
 
 - **Observed:** a 100-byte binary write to an FB 80 member reads back as 160 bytes, the last record zero-padded.
-- **LizTerm:** the dataset browser, arriving in the next PR, will say that binary transfers to fixed-length
-  datasets are padded to whole records.
+- **LizTerm:** the browser's bottom bar says so while Binary is chosen for a fixed-length dataset.
 
 ### `record-write-broken` (log only)
 

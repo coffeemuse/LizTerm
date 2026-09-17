@@ -1,8 +1,9 @@
 # LizTerm.App
 
-Notes for working in this project, the Avalonia UI. It names `LizTerm.Backend.B3270` only in `SessionFactory.cs`;
-everything else talks to `IEmulatorSession` (see `src/LizTerm.Core/CLAUDE.md`). The csproj's engine-copy rules
-(`LizTermTargetRid`, `LizTermEngineRid`) are documented in `docs/engines.md`; read it before touching them.
+Notes for working in this project, the Avalonia UI. It names `LizTerm.Backend.B3270` only in `SessionFactory.cs`
+and `LizTerm.Backend.Mvsmf` only in `HostFileServiceFactory.cs`; everything else talks to `IEmulatorSession` and
+`IHostFileService` (see `src/LizTerm.Core/CLAUDE.md`). The csproj's engine-copy rules (`LizTermTargetRid`,
+`LizTermEngineRid`) are documented in `docs/engines.md`; read it before touching them.
 
 **Never rename the assembly.** Avalonia resource URIs are keyed on it (`avares://LizTerm.App/...` for the terminal
 font, the window icons and the licence text), and a rename breaks every one of them at run time, not build time.
@@ -535,7 +536,7 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
 
 ## The profile editor
 
-- **Three tabs** — Connection, Terminal, Organize — in Preferences' shape (a 120 px label column, labels at the top
+- **Four tabs** — Connection, Terminal, Organize, mvsMF — in Preferences' shape (a 120 px label column, labels at the top
   of each row, a fixed height set by the tallest tab, a pinned profile's Connection). `TryBuild` names the field it
   refused in `ValidationField` (`ProfileEditorField`); on a refused Save the window selects that field's tab
   (`TabOf`) and gives the field the `invalid` class, which follows `ValidationField` and so goes when the message does.
@@ -717,6 +718,93 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
 - The Host type list is TSO, ISPF (MVS), VM, CICS. ISPF (MVS) is TSO everywhere in the form (`IsTso` is
   `HostType.IsTso()`), and `CursorHint`, bound to the `CursorHintText` line under the form, says where the cursor
   must be for the chosen host type. `LocalFileNames` names an ISPF receive as it does a TSO one.
+
+## mvsMF Browser
+
+- `HostFileServiceFactory` also reads a typed URL for the profile editor (`TryNormalizeUrl`) and builds the
+  editor's one-shot `HostFileTester`, which signs in through a throwaway `CredentialHolder` and forgets the sign-in
+  afterwards.
+- `App.OpenSession` attaches a `HostFileAccess` to a session window whose profile has a `HostFilesUrl`. The access
+  lives as long as the window and holds the session's `CredentialHolder` and the certificate trusted for the
+  session (`Pin`: the profile's REST pin, or one accepted since). A saved profile's remembered pin is written back
+  through `ProfileStore.Update`, like the 3270 pin; an ad hoc profile has nowhere to keep one, so it is not offered
+  Remember. A save that fails (`IOException`, `UnauthorizedAccessException`, `InvalidDataException`) keeps the pin
+  for the session and raises `HostFileAccess.PinSaveFailed`; the browser shows it as the `⚠` status line once the
+  operation ends, and unsubscribes when disposed. The session window closes its browser, then forgets the sign-in,
+  when it closes.
+- `CredentialHolder` is the only store of the REST password. Its prompts are serialised, so operations that start
+  or are refused together share one prompt, and a refused pair is asked about again only while it is still the
+  current one (`HostCredentialRequest.Rejected`). A cancelled prompt answers every operation that was already
+  waiting when it was cancelled (a cancellation counter), instead of each one asking in turn; an operation that
+  starts later asks afresh.
+- **File > mvsMF Browser...** (`mvsMF _Browser...`, no shortcut: the menu rule) is hidden until `AttachHostFiles`
+  shows both the classic item and the held native item. It does not need the 3270 connection. A profile URL that
+  cannot be used goes to the session's error line rather than opening a browser.
+- The browser is the app's first owned window that does not block its owner: `ModalDialogs.ShowAbove` shows it
+  owned (it closes with the session window) and makes it follow the owner's Keep on Top, subscribing only after
+  `Show` returns so a failed show leaves the owner no handler. One per session window
+  (`SessionWindow.MvsmfBrowser`); the menu item fronts an open one. It is not in the Window menu (spec §3.3).
+- Each browser window gets its own `HostFileConnection` (`HostFileAccess.Connect`), whose prompts open over the
+  browser. An operation refused for an untrusted certificate asks once and, on Connect Anyway, runs once more on a
+  service built for that certificate. The pin is set on the `HostFileAccess`, so it holds for the session (a
+  connection whose service was built for another pin rebuilds it before the next operation), and Remember also
+  stores it. Refusals in flight together share one prompt. A decline answers the refusals already in flight with
+  the declined service and then replaces the service, so a later operation is asked again. A refusal of the
+  certificate the pin in force already trusts (an expired one, say) fails without asking, since trusting it again
+  cannot help. When Remember is on offer but the certificate cannot be pinned, the prompt says why in a full
+  sentence. A replaced service is disposed only with the connection, since an operation may still be using it.
+- `MvsmfBrowserViewModel` runs one operation at a time (`RunExclusiveAsync`, which ignores a second); only a
+  download batch runs two transfers at once (`ParallelDownloads`). Results are set after `await` on the UI
+  context; progress goes through `dispatch`, and a closed `RowProgress` drops late reports. Questions are an inline
+  `ConfirmationRequest` strip, awaited by the operation that asked; a disposed browser shows none and answers
+  Cancel.
+- **Connection failures** (`IsConnectionFailure`: cannot reach, sign-in, certificate) are the red banner with
+  Retry; everything else is the status line or a row's status. They stop the whole operation. A download batch
+  cancels its other transfers through a linked token and rethrows the first failure once; its rows say
+  `– Stopped`, told apart from the user's `– Cancelled` by the outer token. An upload stops at its row, and a
+  delete stops at its member and refreshes the list first. `RunExclusiveAsync` takes an optional `describe` for
+  the banner's words: uploads use `HostFileMessages.DescribeUploadFailure`, which adds that the member (with
+  `dataset: true`, for a sequential dataset, the dataset) may be partly written only for a failure that can happen
+  mid-write (unreachable, server error); a PDS upload uses it for the banner only when the failure came during a
+  write. A delete's Retry asks again about the members the failure left. Changing the dataset clears a pending
+  retry, so Retry never acts on another dataset, and so does closing an upload review, which also clears the
+  banner; Start does nothing once its review is closed.
+- **Uploads.** A PDS upload opens a review (`Uploads`, `UploadRow`) in place of the member list. While it is open
+  the dataset list and List are off, and a dataset change closes it unless an upload is running. Start snapshots
+  Mode, Expand tabs and Verify, rechecks the files with them, and reloads the member list from the host before
+  asking about existing members, since the list on screen can be empty or stale. A row that reached the host is
+  marked `Sent`, so a retry of the same review skips it, and the window makes its member-name box read-only. A
+  row the user cancels once its transfer was handed to the service says `– Cancelled: the member may be partly
+  written` (the hand-over includes any sign-in prompt, so this errs on the side of the warning); rows not yet
+  started say `– Cancelled`. The summary is `⚠` when a file was not sent or any row's read-back differed
+  (`UploadRow.HostCopyDiffers`), `✓` only when every file went and matched. A sequential dataset has no review:
+  one file, checked first (a text file that fails its check is `✗ Not sent` with no question), then a question
+  before its contents are replaced that names the check's warnings.
+- **Delete** asks once, naming up to five members. A delete cancelled part-way refreshes the list and says how
+  many members went, because a delete cannot be undone and the interrupted request may have deleted its member.
+- The window pushes the member selection through `SetSelectedMembers`, and only rows the member filter still
+  shows, so a transfer or a delete never acts on a member the user cannot see. In the member list, Enter downloads,
+  and Delete or Backspace (the key Apple labels "delete") deletes. A question moves focus to its
+  Cancel button, posted at `Loaded` priority because a control that is still hidden refuses focus. Escape cancels
+  a question, else the running operation, else an open upload review, else closes the window.
+- **Focus survives an operation.** In Avalonia 12.1.2, disabling a list whose row has the focus drops the focus,
+  and enabling it again does not give it back, so arrowing onto a PDS (a member load) or pressing Enter or Delete
+  used to strand the keyboard. When `IsBusy` turns on (its notification comes before `IsIdle` and
+  `CanChooseDataset`, which disable the controls), the window remembers whether the filter box, the dataset list or
+  the member list had the focus, and for a list the focused row and its index. When `IsBusy` turns off with no
+  question showing, or a question closes, it posts a restore at `Loaded` priority, so a refilled list has its rows:
+  the same row if it is still listed, else the selected row, else the row now at the old index (a deleted member's
+  neighbour). A `ListBox` itself does not take the focus. The restore does nothing when the focus is already on a
+  visible, enabled control, since the user may have moved it on.
+- The window never refuses to close: closing cancels and disposes the view model, which disposes the connection.
+- Every status that reports an outcome, a warning or progress starts with a mark and words (`✓ ✗ ⚠ ⟳ –`), per
+  the colour rule; plain counts (the dataset count, the member header) carry none.
+- The profile editor's mvsMF tab has its own result line (`MvsmfTestResult`), never `ValidationMessage`. A change
+  to the URL or userid, or Forget on the REST pin, drops the result, and a Test still running then drops its own
+  when it finishes (`_testGeneration`). The REST pin follows the URL as the 3270 pin follows host and port,
+  comparing both URLs as they would be saved (`TryNormalizeUrl`, else the trimmed text) through Core's
+  `PinMerge.SameUrl`, so `http://h:8080` keeps a pin taken for `http://h:8080/zosmf`;
+  `PinMerge.Apply` resolves both at every editor save, with `ProfileEdit.HostFilesPinCleared` carrying Forget.
 
 ## Everything else
 

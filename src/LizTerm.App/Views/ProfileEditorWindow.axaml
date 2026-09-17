@@ -11,7 +11,7 @@
         x:DataType="vm:ProfileEditorViewModel"
         Title="Session Profile" Width="520" Height="540" CanResize="False"
         WindowStartupLocation="CenterOwner">
-  <!-- Preferences' shape: three tabs of rows, each row its own two-column grid (a 120 px label column, labels at
+  <!-- Preferences' shape: four tabs of rows, each row its own two-column grid (a 120 px label column, labels at
        the top of the row), hints in grey under the control they explain, and the buttons under the tabs. The
        height is fixed for the reason Preferences gives: only the selected tab is measured, so a window sized to
        its content would change height on every tab switch. The Connection tab of a pinned profile is the tallest
@@ -271,6 +271,55 @@
               <TextBox x:Name="NoteBox" Text="{Binding Note}" AcceptsReturn="False" MaxLength="120"
                        PlaceholderText="optional" />
               <TextBlock Classes="hint" Text="One line, shown under the host in the list." />
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+      </TabItem>
+      <!-- Last, because it is a preview and most profiles leave it empty. Its own tab rather than rows on
+           Connection, which already sets the window's height. -->
+      <TabItem x:Name="MvsmfTab" Header="mvsMF">
+        <StackPanel Spacing="12">
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="URL" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <TextBox x:Name="MvsmfUrlBox" Text="{Binding MvsmfUrl}" PlaceholderText="http://host:8080 (optional)" />
+              <TextBlock Classes="hint"
+                         Text="The z/OSMF REST address for File &gt; mvsMF Browser (a feature preview). /zosmf is added when the path is empty; use https:// through a TLS proxy." />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Userid" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <TextBox x:Name="MvsmfUseridBox" Text="{Binding MvsmfUserid}" Width="120" MaxLength="8"
+                       HorizontalAlignment="Left" PlaceholderText="optional" />
+              <TextBlock Classes="hint" Text="Fills in the sign-in; the password is never saved." />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*" IsVisible="{Binding HasMvsmfPin}">
+            <TextBlock Text="Certificate" />
+            <!-- The Connection tab's pin block, for the certificate a TLS proxy in front of mvsMF presented. -->
+            <Border x:Name="MvsmfPinPanel" Grid.Column="1" Padding="10,8"
+                    BorderBrush="#40FFFFFF" BorderThickness="1" CornerRadius="4">
+              <StackPanel Spacing="4">
+                <DockPanel>
+                  <Button x:Name="MvsmfForgetButton" DockPanel.Dock="Right" Content="Forget" VerticalAlignment="Center"
+                          Command="{Binding ForgetMvsmfPinCommand}" />
+                  <StackPanel>
+                    <TextBlock Text="Pinned certificate" />
+                    <TextBlock x:Name="MvsmfPinSubject" Classes="hint" Text="{Binding MvsmfPinnedSubject}" />
+                  </StackPanel>
+                </DockPanel>
+                <TextBlock x:Name="MvsmfPinFingerprint" Text="{Binding MvsmfPinnedFingerprint, StringFormat='SHA-256 {0}'}"
+                           FontFamily="Menlo, Consolas, DejaVu Sans Mono, monospace" FontSize="11"
+                           Foreground="#C0C0C0" />
+              </StackPanel>
+            </Border>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Connection" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <Button x:Name="MvsmfTestButton" Content="Test" Command="{Binding TestMvsmfCommand}" />
+              <TextBlock x:Name="MvsmfTestResultText" Text="{Binding MvsmfTestResult}" TextWrapping="Wrap" />
             </StackPanel>
           </Grid>
         </StackPanel>

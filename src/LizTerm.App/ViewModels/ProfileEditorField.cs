@@ -15,4 +15,6 @@ public enum ProfileEditorField
     ScreenSize,
     CodePage,
     Tags,
+    MvsmfUrl,
+    MvsmfUserid,
 }

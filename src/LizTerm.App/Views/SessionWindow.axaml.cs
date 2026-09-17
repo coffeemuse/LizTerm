@@ -11,6 +11,7 @@ using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
+using LizTerm.App.HostFiles;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
 using LizTerm.App.ViewModels;
@@ -44,6 +45,7 @@ public partial class SessionWindow : Window, ISessionHost
         _nativeMinimizeSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().First();
         _nativeKeepOnTop = MenuLookup.Item(_nativeWindowMenu, "_Keep on Top")!;
         _nativeSessionsSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().Last();
+        _nativeMvsmfBrowser = MenuLookup.Item(NativeMenu.GetMenu(this), "_File", "mvsMF _Browser...")!;
         RebuildSessionRows();
         // The screen's events call the view model's methods, not its commands: each method carries its own guard,
         // and a keystroke must never be dropped for arriving while the previous one's round trip is still open.
@@ -127,6 +129,10 @@ public partial class SessionWindow : Window, ISessionHost
     private readonly NativeMenuItemSeparator _nativeMinimizeSeparator;
     private readonly NativeMenuItem _nativeKeepOnTop;
     private readonly NativeMenuItemSeparator _nativeSessionsSeparator;
+
+    /// <summary>Held, like Minimize, so AttachHostFiles can show it whether or not the native menu is exported.</summary>
+    private readonly NativeMenuItem _nativeMvsmfBrowser;
+    private HostFileAccess? _hostFiles;
 
     /// <summary>The generated session rows, both renderers' items with the session each stands for.</summary>
     private readonly List<(NativeMenuItem Native, MenuItem Classic, SessionEntry Entry)> _sessionRows = [];
@@ -759,6 +765,10 @@ public partial class SessionWindow : Window, ISessionHost
             _sessions.Changed -= OnSessionsChanged;
             _sessions.Remove(_ownEntry);
         }
+        // The browser is owned and would close with the window anyway; closing it here first means its connection
+        // is released before the sign-in it uses is forgotten.
+        MvsmfBrowser?.Close();
+        _hostFiles?.Forget();
         base.OnClosed(e);
     }
 
@@ -798,6 +808,57 @@ public partial class SessionWindow : Window, ISessionHost
             vm.ErrorMessage = "Could not open About: " + ex.Message;
         }
         Screen.Focus();
+    }
+
+    /// <summary>The open mvsMF Browser, if any; one per session window.</summary>
+    internal MvsmfBrowserWindow? MvsmfBrowser { get; private set; }
+
+    /// <summary>App calls this for a profile with a REST URL (spec §3.3): the item appears in both menus and the
+    /// window holds the session's sign-in until it closes.</summary>
+    internal void AttachHostFiles(HostFileAccess access)
+    {
+        _hostFiles = access;
+        _nativeMvsmfBrowser.IsVisible = true;
+        MvsmfBrowserMenuItem.IsVisible = true;
+    }
+
+    private void OnMvsmfBrowserClick(object? sender, RoutedEventArgs e) => ShowMvsmfBrowser();
+    private void OnMvsmfBrowserClickNative(object? sender, EventArgs e) => ShowMvsmfBrowser();
+
+    /// <summary>Fronts the open browser, or opens one owned by this window without blocking it. The 3270
+    /// connection is not needed. The prompts and pickers belong to the browser, so they open over it.</summary>
+    private void ShowMvsmfBrowser()
+    {
+        if (MvsmfBrowser is { } open)
+        {
+            open.Activate();
+            return;
+        }
+        if (_hostFiles is not { } access || ViewModel is not { } vm) return;
+        if (access.Url is null)
+        {
+            vm.ErrorMessage = $"The profile's mvsMF URL cannot be used: {access.UrlError}";
+            return;
+        }
+        HostFileConnection? connection = null;
+        try
+        {
+            var browser = new MvsmfBrowserWindow();
+            connection = access.Connect(new AvaloniaCredentialPrompt(browser), new AvaloniaCertificatePrompt(browser));
+            browser.DataContext = vm.CreateMvsmfBrowser(access, connection, new AvaloniaFilePicker(browser));
+            browser.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(MvsmfBrowser, browser)) MvsmfBrowser = null;
+            };
+            MvsmfBrowser = browser;
+            browser.ShowAbove(this);
+        }
+        catch (Exception ex)
+        {
+            connection?.Dispose();
+            MvsmfBrowser = null;
+            vm.ErrorMessage = "Could not open the mvsMF Browser: " + ex.Message;
+        }
     }
 
     /// <summary>Opens the File Transfer dialog modally over this window. The dialog's own picker parents the OS

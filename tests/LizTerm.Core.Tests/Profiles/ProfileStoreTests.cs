@@ -419,5 +419,43 @@ public class ProfileStoreTests : IDisposable
         File.Move(Path.Combine(staging.Directory, ProfileStore.FileNameFor(profile.Name)), Path.Combine(_dir, file));
     }
 
+    [Fact]
+    public void The_host_files_fields_round_trip_and_default_to_null()
+    {
+        var store = new ProfileStore(_dir);
+        var pin = new CertificatePin("AA:BB", "CN=proxy", "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----\n");
+        var full = new SessionProfile { Name = "rest", Host = "mvs", HostFilesUrl = "https://proxy/zosmf", HostFilesUserid = "IBMUSER", HostFilesPinnedCertificate = pin };
+        var plain = new SessionProfile { Name = "plain", Host = "mvs" };
+        store.Save(full);
+        store.Save(plain);
+
+        Assert.Equal(full, store.Load("rest"));
+        Assert.Equal(plain, store.Load("plain"));
+        var text = File.ReadAllText(Directory.GetFiles(_dir).Single(f => File.ReadAllText(f).Contains("\"plain\"")));
+        Assert.Contains("\"hostFilesUrl\": null", text);
+        Assert.Contains("\"hostFilesPinnedCertificate\": null", text);
+    }
+
+    [Fact]
+    public void A_file_without_host_files_fields_reads_them_as_null()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "old.json"), """{"name":"old","host":"h"}""");
+        var loaded = new ProfileStore(_dir).Load("old")!;
+        Assert.Null(loaded.HostFilesUrl);
+        Assert.Null(loaded.HostFilesUserid);
+        Assert.Null(loaded.HostFilesPinnedCertificate);
+    }
+
+    [Fact]
+    public void A_host_files_pin_missing_its_pem_or_fingerprint_is_dropped_on_load()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "bad.json"), """{"name":"bad","host":"h","hostFilesUrl":"http://h/zosmf","hostFilesPinnedCertificate":{"sha256":"AA","subject":"CN=x","pem":""}}""");
+        var loaded = new ProfileStore(_dir).Load("bad")!;
+        Assert.Null(loaded.HostFilesPinnedCertificate);
+        Assert.Equal("http://h/zosmf", loaded.HostFilesUrl);
+    }
+
     private IEnumerable<string?> FileNames() => Directory.GetFiles(_dir).Select(Path.GetFileName).Order();
 }

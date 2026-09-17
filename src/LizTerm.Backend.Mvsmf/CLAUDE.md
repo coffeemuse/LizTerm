@@ -6,8 +6,8 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
 - `MvsmfFileService` implements `IHostFileService` (Core) over one `HttpClient`. It stores no credentials: it asks
   the `HostCredentialProvider` before every request (`IsRetry: false`), and once more after a 401
   (`IsRetry: true`, `Rejected` = the instance just refused, so a holder serving parallel requests prompts only once)
-  before repeating the request once. The App's credential holder (next PR) will be the only
-  store. Never put the userid's password in a message, a log or a `ToString()`.
+  before repeating the request once. The App's `CredentialHolder` is the only store. Never put the userid's password
+  in a message, a log or a `ToString()`.
 - **Every workaround carries `// mvsMF-compat: <tag>`** matching an entry in `docs/mvsmf-compatibility.md`, and a
   test named after the tag pins it. Add all three together, and read that log before changing any behaviour that
   looks odd: it is probably deliberate.
@@ -29,14 +29,18 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
   reads its source into memory first.
 - **TLS:** `MvsmfCertificateCheck` trusts exactly the pinned leaf while it is in date (`NotBefore`..`NotAfter`),
   whatever the system store and the host name say, or, without a pin, the system's verdict. Unlike the 3270 pin (a
-  PEM trust store verified by OpenSSL), a pin holding a chain does not extend trust to other leaves. `TakeRejected()` returns the certificate refused since the last call and clears the slot (one slot: a
-  service talks to one host), so each refusal is reported once and an accepted handshake clears it; the service
-  raises `CertificateRejected` with the `PresentedCertificate`. It uses Core's
-  `SslStreamCertificateFetcher.SelectPresented`, so a pin covers exactly what was on the wire.
+  PEM trust store verified by OpenSSL), a pin holding a chain does not extend trust to other leaves.
+  `TakeRejected()` returns the certificate refused since the last call and clears the slot (one slot: a service
+  talks to one host), so each refusal is reported once and an accepted handshake clears it; the service raises
+  `CertificateRejected` with the `PresentedCertificate`. It uses Core's `SslStreamCertificateFetcher.SelectPresented`,
+  so a pin covers exactly what was on the wire.
 - Names are escaped by `EscapeName`: `#` and `%` only. Everything else a validated `HostPath` or filter can hold goes
   as it is, as curl sends it.
 - `MvsmfOptions.TryNormalizeBaseUrl` refuses a URL carrying a userid or password ("Leave the userid and password out
-  of the URL."), since credentials belong to the credential provider, never to the stored base URL.
+  of the URL."), since credentials belong to the credential provider, never to the stored base URL. It also refuses
+  a query or a fragment. `MvsmfOptions`' constructor refuses the same URLs with an `ArgumentException`, as
+  `TryNormalizeBaseUrl` does, through one shared check (`CheckBaseUrl`), so no service is built on a URL the editor
+  would have refused.
 
 ## Tests
 

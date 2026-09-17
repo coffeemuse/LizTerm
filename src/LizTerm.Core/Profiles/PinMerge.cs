@@ -32,4 +32,27 @@ public static class PinMerge
                         && edited.Port == onDisk.Port;
         return samePlace ? stored : null;
     }
+
+    /// <summary>The REST pin's twin of <see cref="Resolve"/>: the same three cases, keyed on the REST URL instead of
+    /// the host and port. URLs compare ignoring case and a trailing slash, the two differences the editor's own
+    /// normalisation can leave.</summary>
+    public static CertificatePin? ResolveHostFiles(SessionProfile edited, SessionProfile? onDisk, bool pinCleared)
+    {
+        if (pinCleared) return null;
+        if (onDisk?.HostFilesPinnedCertificate is not { } stored) return edited.HostFilesPinnedCertificate;
+        return SameUrl(edited.HostFilesUrl, onDisk.HostFilesUrl) ? stored : null;
+    }
+
+    /// <summary>Both merges applied to what the editor produced: the one call every editor save site makes.</summary>
+    public static SessionProfile Apply(SessionProfile edited, SessionProfile? onDisk, bool pinCleared, bool hostFilesPinCleared) =>
+        edited with
+        {
+            PinnedCertificate = Resolve(edited, onDisk, pinCleared),
+            HostFilesPinnedCertificate = ResolveHostFiles(edited, onDisk, hostFilesPinCleared),
+        };
+
+    /// <summary>The one rule for "the same REST URL": ignoring case, surrounding blanks and a trailing slash. The
+    /// profile editor normalises both URLs first and then asks this.</summary>
+    public static bool SameUrl(string? first, string? second) =>
+        string.Equals(first?.Trim().TrimEnd('/'), second?.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 }

@@ -111,6 +111,56 @@ public class ModalDialogsTests
             + Environment.NewLine + string.Join(Environment.NewLine, offenders));
     }
 
+    [AvaloniaFact]
+    public void An_owned_window_takes_and_follows_its_owners_keep_on_top_until_it_closes()
+    {
+        var owner = new Window { Topmost = true };
+        owner.Show();
+        var child = new Window();
+
+        child.ShowAbove(owner);
+
+        Assert.Same(owner, child.Owner);
+        Assert.Contains(child, owner.OwnedWindows);
+        Assert.True(child.Topmost);
+        owner.Topmost = false;
+        Assert.False(child.Topmost);
+
+        child.Close();
+        owner.Topmost = true;
+        Assert.False(child.Topmost);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public void A_window_that_could_not_be_shown_does_not_follow_the_owner()
+    {
+        var owner = new Window();
+        owner.Show();
+        owner.Close();
+        var child = new Window();
+
+        Assert.ThrowsAny<Exception>(() => child.ShowAbove(owner));
+
+        owner.Topmost = true;
+        Assert.False(child.Topmost);
+    }
+
+    [AvaloniaFact]
+    public void An_owned_window_closes_with_its_owner()
+    {
+        var owner = new Window();
+        owner.Show();
+        var child = new Window();
+        var closed = false;
+        child.Closed += (_, _) => closed = true;
+        child.ShowAbove(owner);
+
+        owner.Close();
+
+        Assert.True(closed);
+    }
+
     /// <summary>The repository, found from this file's compile-time path as OiaGlyphsTests does.</summary>
     private static string RepositoryRoot([CallerFilePath] string path = "")
     {

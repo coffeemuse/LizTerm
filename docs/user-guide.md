@@ -39,8 +39,9 @@ first. **FAVORITE** is fixed: it can't be renamed, recoloured or deleted.
 
 ### Profile settings
 
-The editor puts its settings on three tabs: **Connection** (name, host, port, TLS, keep-alive, reconnect),
-**Terminal** (model, screen size, code page, LU name, keyboard) and **Organize** (FAVORITE, tags, note). If
+The editor puts its settings on four tabs: **Connection** (name, host, port, TLS, keep-alive, reconnect),
+**Terminal** (model, screen size, code page, LU name, keyboard), **Organize** (FAVORITE, tags, note) and
+**mvsMF** (the address and userid for the mvsMF Browser, a feature preview). If
 **Save** can't accept something, the editor shows the tab it's on, outlines the setting, and says what to fix beside
 the buttons.
 
