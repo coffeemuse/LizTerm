@@ -55,7 +55,7 @@ public class B3270SessionTransferTests
         var reports = new Reports();
         var transfer = session.TransferAsync(Request, reports, TestContext.Current.CancellationToken);
         var line = await TransferLineAsync(fake);
-        Assert.Contains("\"action\":\"Transfer\",\"args\":[\"direction=send\",\"hostfile=A.B\",\"localfile=/nonexistent/a.txt\",\"host=tso\",\"mode=ascii\",\"cr=remove\",\"remap=yes\"]", line);
+        Assert.Contains("\"action\":\"Transfer\",\"args\":[\"direction=send\",\"hostfile=A.B\",\"localfile=/nonexistent/a.txt\",\"host=tso\",\"mode=ascii\",\"cr=remove\",\"remap=yes\",\"buffersize=2500\"]", line);
         Assert.True(session.IsTransferInProgress);
 
         fake.Emit("""{"ft":{"state":"awaiting","cause":"ui"}}""");

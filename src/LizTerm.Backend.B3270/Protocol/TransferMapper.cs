@@ -9,7 +9,7 @@ namespace LizTerm.Backend.B3270.Protocol;
 /// <summary>Turns a Core request into b3270's Transfer(keyword=value,...) action. Keywords b3270 would reject for
 /// the direction, mode, or host type are omitted rather than passed through, and keywords its IND$FILE command
 /// builder would ignore (LRECL and BLKSIZE without a RECFM, SPACE without units) are omitted so the wire log
-/// stays honest. Values are raw strings; RunOperation quotes them as JSON, so spaces need no escaping. ISPF is TSO
+/// stays honest. The buffer size is always sent (see FileTransferRequest.DefaultBufferSize). Values are raw strings; RunOperation quotes them as JSON, so spaces need no escaping. ISPF is TSO
 /// with <c>commandprefix=TSO</c>, a keyword only LizTerm's patched engine knows (native/patches).</summary>
 public static class TransferMapper
 {
@@ -60,7 +60,8 @@ public static class TransferMapper
             }
         }
 
-        if (request.BufferSize is { } buffer) args.Add("buffersize=" + buffer);
+        // Always sent, so the engine's larger default never reaches a host that cannot take it (#137).
+        args.Add("buffersize=" + (request.BufferSize ?? FileTransferRequest.DefaultBufferSize));
         if (!string.IsNullOrWhiteSpace(request.ExtraOptions)) args.Add("otheroptions=" + request.ExtraOptions.Trim());
 
         return new B3270Action("Transfer", args.ToArray());

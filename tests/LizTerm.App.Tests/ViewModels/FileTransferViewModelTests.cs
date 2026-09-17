@@ -39,6 +39,7 @@ public class FileTransferViewModelTests
         Assert.Equal("", vm.LocalPath);
         Assert.Equal("", vm.HostFile);
         Assert.Equal("", vm.LreclText);
+        Assert.Equal("2500", vm.BufferSizeText);
         Assert.Equal("", vm.ExtraOptions);
         Assert.Null(vm.ValidationMessage);
         Assert.Equal([TransferHostType.Tso, TransferHostType.Ispf, TransferHostType.Vm, TransferHostType.Cics], vm.HostTypes);

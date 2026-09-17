@@ -262,6 +262,10 @@ cursor at a TSO `READY` prompt or a command line, or use the ISPF (MVS) host typ
   over a local file you did not pick with the Browse dialog.
 - When sending, **Advanced** sets up the new host file: record format and LRECL (TSO and VM), BLKSIZE and space
   allocation (TSO only), plus a buffer size and extra options appended to the IND$FILE command.
+- **Buffer size** is how much data travels in each piece of the transfer. It starts at 2500, and a blank field means
+  2500 too. Some hosts, MVS/CE among them, cannot take much larger pieces: the transfer stops at the end, the TSO
+  logon screen appears, and the TSO user stays logged on until an operator cancels it. If a transfer ends that way,
+  try a smaller buffer size.
 
 The dialog shows progress while the transfer runs. **Cancel**, or closing the dialog, asks the host to stop. The
 host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
