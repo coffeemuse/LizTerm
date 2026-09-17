@@ -18,6 +18,10 @@ public sealed record TagChip(string Text, IBrush Background)
     public static IReadOnlyList<TagChip> For(TagSet tags, TagRegistry registry) =>
         [.. tags.Names.Where(name => !TagRegistry.IsReserved(name))
                       .Select(name => new TagChip(name.ToUpperInvariant(), TagPalette.Brush(registry.ColorOf(name))))];
+
+    /// <summary>The text alone: the profile editor's tag box lists chips as suggestions and puts a chosen one's
+    /// string into the box, which would otherwise be the record's "TagChip { Text = ... }".</summary>
+    public override string ToString() => Text;
 }
 
 /// <summary>One row of the session list. The ListBox binds these rather than <see cref="SessionProfile"/>

@@ -73,7 +73,7 @@ public class ProfileViewModelsTests : IDisposable
         bool? openedFromStore = null;
         var quit = false;
         SessionProfile? toReturn = new SessionProfile { Name = "c", Host = "c.host" };
-        var vm = new ProfilePickerViewModel(_store, (p, s) => { opened = p; openedFromStore = s; }, _ => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
+        var vm = new ProfilePickerViewModel(_store, (p, s) => { opened = p; openedFromStore = s; }, (_, _) => Task.FromResult<ProfileEdit?>(new ProfileEdit(toReturn, PinCleared: false)), () => quit = true);
 
         Assert.Equal(["a", "b"], vm.Profiles.Select(p => p.Name));
         Assert.False(vm.ConnectCommand.CanExecute(null));
@@ -106,7 +106,7 @@ public class ProfileViewModelsTests : IDisposable
     [Fact]
     public async Task Cancelled_editor_changes_nothing()
     {
-        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { });
         await vm.NewCommand.ExecuteAsync(null);
         Assert.Empty(vm.Profiles);
     }
@@ -121,7 +121,7 @@ public class ProfileViewModelsTests : IDisposable
         var pin = new CertificatePin("AA:BB", "CN=mvs", "pem");
 
         var picker = new ProfilePickerViewModel(_store, (_, _) => { },
-            existing =>
+            (existing, _) =>
             {
                 // Stands in for the session window pinning a certificate while the editor is open.
                 _store.Update(existing!, p => p with { PinnedCertificate = pin });
@@ -142,7 +142,7 @@ public class ProfileViewModelsTests : IDisposable
         var pin = new CertificatePin("CC:DD", "CN=proxy", "pem");
 
         var picker = new ProfilePickerViewModel(_store, (_, _) => { },
-            existing =>
+            (existing, _) =>
             {
                 // Stands in for a browser window remembering a certificate while the editor is open.
                 _store.Update(existing!, p => p with { HostFilesPinnedCertificate = pin });
@@ -162,7 +162,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", HostFilesUrl = "http://mvs/zosmf", HostFilesPinnedCertificate = new CertificatePin("CC:DD", "CN=proxy", "pem") });
 
         var picker = new ProfilePickerViewModel(_store, (_, _) => { },
-            existing => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { HostFilesPinnedCertificate = null }, PinCleared: false, HostFilesPinCleared: true)),
+            (existing, _) => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { HostFilesPinnedCertificate = null }, PinCleared: false, HostFilesPinCleared: true)),
             () => { });
 
         picker.SelectedRow = picker.VisibleRows.Single();
@@ -177,7 +177,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = new CertificatePin("AA:BB", "CN=mvs", "pem") });
 
         var picker = new ProfilePickerViewModel(_store, (_, _) => { },
-            existing => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { PinnedCertificate = null }, PinCleared: true)),
+            (existing, _) => Task.FromResult<ProfileEdit?>(new ProfileEdit(existing! with { PinnedCertificate = null }, PinCleared: true)),
             () => { });
 
         picker.SelectedRow = picker.VisibleRows.Single();
@@ -195,7 +195,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "MVS", Host = "mvs", Port = 3270, PinnedCertificate = pin });
 
         var picker = new ProfilePickerViewModel(_store, (_, _) => { },
-            existing => Task.FromResult<ProfileEdit?>(
+            (existing, _) => Task.FromResult<ProfileEdit?>(
                 new ProfileEdit(existing! with { Name = "MVS-CE", PinnedCertificate = null }, PinCleared: false)),
             () => { });
 
@@ -212,7 +212,8 @@ public class ProfileViewModelsTests : IDisposable
         var pin = new CertificatePin("8C:13:6A:01", "CN=gw", "pem");
         var vm = new ProfileEditorViewModel(new SessionProfile { Name = "gw", Host = "gw", UseTls = true, PinnedCertificate = pin });
         Assert.True(vm.HasPinnedCertificate);
-        Assert.Equal("Pinned certificate: SHA-256 8C:13:6A:01 (CN=gw)", vm.PinnedCertificateText);
+        Assert.Equal("CN=gw", vm.PinnedSubject);
+        Assert.Equal("8C:13:6A:01", vm.PinnedFingerprint);
         Assert.Same(pin, vm.TryBuild()!.PinnedCertificate);
 
         var changes = new List<string?>();
@@ -221,10 +222,23 @@ public class ProfileViewModelsTests : IDisposable
         vm.ForgetPinCommand.Execute(null);
         Assert.True(vm.PinCleared);
         Assert.False(vm.HasPinnedCertificate);
-        Assert.Null(vm.PinnedCertificateText);
+        Assert.Null(vm.PinnedSubject);
+        Assert.Null(vm.PinnedFingerprint);
         Assert.Null(vm.TryBuild()!.PinnedCertificate);
         Assert.Contains(nameof(vm.HasPinnedCertificate), changes);
-        Assert.Contains(nameof(vm.PinnedCertificateText), changes);
+        Assert.Contains(nameof(vm.PinnedSubject), changes);
+        Assert.Contains(nameof(vm.PinnedFingerprint), changes);
+    }
+
+    /// <summary>A full SHA-256 is 95 characters with no space; left to wrap it breaks mid-byte.</summary>
+    [Fact]
+    public void A_full_fingerprint_shows_on_two_lines_broken_between_bytes()
+    {
+        var bytes = Enumerable.Range(0, 32).Select(i => i.ToString("X2")).ToArray();
+        var pin = new CertificatePin(string.Join(':', bytes), "CN=gw", "pem");
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "gw", Host = "gw", UseTls = true, PinnedCertificate = pin });
+
+        Assert.Equal(string.Join(':', bytes[..16]) + ":\n" + string.Join(':', bytes[16..]), vm.PinnedFingerprint);
     }
 
     /// <summary>A pin was taken from one host and port; a profile pointed somewhere else must not carry it, and the
@@ -287,7 +301,7 @@ public class ProfileViewModelsTests : IDisposable
     {
         var vm = new ProfileEditorViewModel(null);
         Assert.False(vm.HasPinnedCertificate);
-        Assert.Null(vm.PinnedCertificateText);
+        Assert.Null(vm.PinnedFingerprint);
         Assert.Null(vm.TryBuild()?.PinnedCertificate);
     }
 
@@ -295,13 +309,16 @@ public class ProfileViewModelsTests : IDisposable
     public void Editor_offers_models_with_their_geometry()
     {
         var vm = new ProfileEditorViewModel(null);
-        Assert.Equal(4, vm.TerminalModels.Count);
-        Assert.Equal("3 — 32x80", vm.TerminalModels.Single(m => m.Number == 3).ToString());
-        Assert.Equal(2, vm.SelectedModel.Number);
+        Assert.Equal(5, vm.ModelChoices.Count);
+        Assert.Equal("3 — 32x80", vm.ModelChoices.Single(c => c.Model?.Number == 3).ToString());
+        Assert.Same(ModelChoice.Other, vm.ModelChoices[^1]);
+        Assert.Equal("Other (custom size)", ModelChoice.Other.ToString());
+        Assert.Equal(2, vm.SelectedModelChoice.Model!.Number);
+        Assert.False(vm.IsCustomSize);
 
         vm.Name = "n";
         vm.Host = "h";
-        vm.SelectedModel = vm.TerminalModels.Single(m => m.Number == 5);
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 5);
         Assert.Equal(5, vm.Model);
         Assert.Equal(5, vm.TryBuild()!.Model);
     }
@@ -326,9 +343,9 @@ public class ProfileViewModelsTests : IDisposable
         var odd = new SessionProfile { Name = "odd", Host = "h", Model = 9, CodePage = "cp9999" };
         var vm = new ProfileEditorViewModel(odd);
 
-        Assert.Equal(9, vm.SelectedModel.Number);
+        Assert.Equal(9, vm.SelectedModelChoice.Model!.Number);
         Assert.Equal("cp9999", vm.SelectedCodePage.Name);
-        Assert.Contains(vm.TerminalModels, m => m.Number == 9);
+        Assert.Contains(vm.ModelChoices, c => c.Model?.Number == 9);
         Assert.Contains(vm.CodePages, p => p.Name == "cp9999");
 
         var built = vm.TryBuild()!;
@@ -397,126 +414,262 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal("Keep-alive must be a whole number of seconds, 0 to 86400 (0 turns it off).", vm.ValidationMessage);
     }
 
+    /// <summary>A profile with an oversize opens on Other, with the geometry split into the two boxes, and saves
+    /// back to the same text.</summary>
     [Fact]
-    public void The_editor_round_trips_an_oversize_geometry()
+    public void An_oversize_profile_opens_on_other_and_round_trips()
     {
         var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Oversize = "132x43" });
-        Assert.Equal("132x43", vm.Oversize);
+
+        Assert.True(vm.IsCustomSize);
+        Assert.Same(ModelChoice.Other, vm.SelectedModelChoice);
+        Assert.Equal("132", vm.ColumnsText);
+        Assert.Equal("43", vm.RowsText);
+        var built = vm.TryBuild()!;
+        Assert.Equal("132x43", built.Oversize);
+        Assert.Equal(2, built.Model);
+    }
+
+    /// <summary>With an oversize b3270 sends IBM-DYNAMIC and starts on 24x80 whatever the model, so the model's
+    /// only remaining effect is the floor. Model 2 has the lowest, so Other always saves it — including for a
+    /// profile that used to pair an oversize with another model.</summary>
+    [Fact]
+    public void Other_saves_model_2_whatever_the_profile_had()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Model = 5, Oversize = "140x30" });
+
+        var built = vm.TryBuild()!;
+        Assert.Equal(2, built.Model);
+        Assert.Equal("140x30", built.Oversize);
+    }
+
+    [Fact]
+    public void Choosing_other_enables_the_boxes_and_saves_what_is_typed()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 5);
+        Assert.False(vm.IsCustomSize);
+
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "100";
+        vm.RowsDisplay = "30";
+
+        Assert.True(vm.IsCustomSize);
+        var built = vm.TryBuild()!;
+        Assert.Equal(2, built.Model);
+        Assert.Equal("100x30", built.Oversize);
+    }
+
+    /// <summary>Other starts from the size on screen, so the spinners have a number to count from; numbers already
+    /// typed win.</summary>
+    [Fact]
+    public void Choosing_other_starts_from_the_models_size()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 4);
+
+        vm.SelectedModelChoice = ModelChoice.Other;
+
+        Assert.Equal("80", vm.ColumnsDisplay);
+        Assert.Equal("43", vm.RowsDisplay);
+        Assert.Equal("80x43", vm.TryBuild()!.Oversize);
+
+        vm.ColumnsDisplay = "100";
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 5);
+        vm.SelectedModelChoice = ModelChoice.Other;
+        Assert.Equal("100", vm.ColumnsDisplay);
+        Assert.Equal("43", vm.RowsDisplay);
+    }
+
+    /// <summary>Outside Other the boxes are read-only and show the chosen model's own size, so they always say
+    /// what the screen will be.</summary>
+    [Fact]
+    public void Outside_other_the_boxes_show_the_models_own_size_and_ignore_writes()
+    {
+        var vm = new ProfileEditorViewModel(null);
+        Assert.Equal("80", vm.ColumnsDisplay);
+        Assert.Equal("24", vm.RowsDisplay);
+
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 5);
+
+        Assert.Equal("132", vm.ColumnsDisplay);
+        Assert.Equal("27", vm.RowsDisplay);
+        Assert.Contains(nameof(vm.ColumnsDisplay), changed);
+        Assert.Contains(nameof(vm.RowsDisplay), changed);
+
+        vm.ColumnsDisplay = "999";
+        Assert.Equal("132", vm.ColumnsDisplay);
+        Assert.Equal("", vm.ColumnsText);
+    }
+
+    /// <summary>Leaving Other drops the custom size from the profile, but the typed numbers come back if the user
+    /// returns to Other before closing the editor.</summary>
+    [Fact]
+    public void Leaving_other_saves_no_oversize_and_returning_restores_the_numbers()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Oversize = "132x43" });
+
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 4);
+        Assert.Equal("80", vm.ColumnsDisplay);
+        var built = vm.TryBuild()!;
+        Assert.Null(built.Oversize);
+        Assert.Equal(4, built.Model);
+
+        vm.SelectedModelChoice = ModelChoice.Other;
+        Assert.Equal("132", vm.ColumnsDisplay);
+        Assert.Equal("43", vm.RowsDisplay);
         Assert.Equal("132x43", vm.TryBuild()!.Oversize);
     }
 
-    /// <summary>Blank means the model's own geometry, and must save as null rather than "": the argv check is
-    /// IsNullOrWhiteSpace, but a "" in the file would still be a lie about what the user chose.</summary>
-    [Fact]
-    public void A_blank_oversize_saves_as_null()
+    [Theory]
+    [InlineData("", "43")]
+    [InlineData("132", "")]
+    [InlineData("  ", "  ")]
+    public void Other_with_an_empty_box_blocks_save(string columns, string rows)
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "   " };
-        Assert.Null(vm.TryBuild()!.Oversize);
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = columns;
+        vm.RowsDisplay = rows;
+
+        Assert.Null(vm.TryBuild());
+        Assert.Equal("Enter both a column count and a row count for the custom size.", vm.ValidationMessage);
     }
 
-    [Fact]
-    public void An_illegal_oversize_blocks_save_with_the_rules_own_message()
+    [Theory]
+    [InlineData("abc", "43", "Columns must be a whole number.")]
+    [InlineData("-132", "43", "Columns must be a whole number.")]
+    [InlineData("132", "4 3", "Rows must be a whole number.")]
+    [InlineData("20000", "30", "Columns must be at most 16,383.")]
+    [InlineData("132", "99999999999", "Rows must be at most 16,383.")]
+    [InlineData("79", "43", "A custom size must be at least 80 columns and 24 rows.")]
+    [InlineData("132", "23", "A custom size must be at least 80 columns and 24 rows.")]
+    [InlineData("0", "0", "A custom size must be at least 80 columns and 24 rows.")]
+    public void Other_with_a_bad_number_blocks_save(string columns, string rows, string message)
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = columns;
+        vm.RowsDisplay = rows;
+
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(message, vm.ValidationMessage);
+    }
+
+    /// <summary>Stray spaces are forgiven the way the port's are.</summary>
+    [Fact]
+    public void Other_trims_the_boxes()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = " 132 ";
+        vm.RowsDisplay = "43 ";
+
+        Assert.Equal("132x43", vm.TryBuild()!.Oversize);
+    }
+
+    /// <summary>The engine's area limit stays OversizeGeometry's, message and all.</summary>
+    [Fact]
+    public void An_oversize_past_the_area_limit_blocks_save_with_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "200";
+        vm.RowsDisplay = "200";
+
         Assert.Null(vm.TryBuild());
         Assert.StartsWith("200 columns by 200 rows is 40,000 cells", vm.ValidationMessage);
     }
 
-    /// <summary>100x30 clears model 2's floor (80 columns, 24 rows) but falls short of model 5's floor (132
-    /// columns, 27 rows) on the column count, so switching the model has to re-run the check — otherwise the
-    /// editor shows a stale verdict about the geometry in the box.
-    ///
-    /// Note: Oversize is columns x rows. A geometry that clears one model's floor may fail another's. So this
-    /// test exercises the re-validation path by switching models after setting an oversize that is valid for
-    /// model 2 but fails model 5's column floor.</summary>
+    /// <summary>b3270's own spelling of "no oversize", which a hand-edited profile can carry, is not Other.</summary>
     [Fact]
-    public void Changing_the_model_re_validates_the_oversize()
+    public void A_zero_by_zero_oversize_opens_on_the_profiles_model()
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "100x30" };
-        Assert.NotNull(vm.TryBuild());
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "p", Host = "h", Model = 3, Oversize = "0x0" });
 
-        vm.SelectedModel = TerminalModel.Find(5)!;
-        Assert.Equal("Oversize must be at least 132 columns and 27 rows for model 5.", vm.ValidationMessage);
+        Assert.False(vm.IsCustomSize);
+        Assert.Equal(3, vm.SelectedModelChoice.Model!.Number);
+        Assert.Null(vm.TryBuild()!.Oversize);
+    }
+
+    /// <summary>A hand-edited oversize that is not two numbers still opens on Other, so it is not silently
+    /// dropped; Save then says what is wrong with it rather than passing it through.</summary>
+    [Fact]
+    public void A_garbled_oversize_opens_on_other_and_blocks_save()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "p", Host = "h", Oversize = "132x4x3" });
+
+        Assert.True(vm.IsCustomSize);
         Assert.Null(vm.TryBuild());
+        Assert.NotNull(vm.ValidationMessage);
+    }
 
-        vm.SelectedModel = TerminalModel.Find(2)!;
+    /// <summary>A verdict the user has since typed their way out of is a red line under numbers that are no longer
+    /// there — the same rule the picker's Quick Connect box follows.</summary>
+    [Fact]
+    public void Correcting_a_box_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "200";
+        vm.RowsDisplay = "200";
+        Assert.Null(vm.TryBuild());
+        Assert.NotNull(vm.ValidationMessage);
+
+        vm.RowsDisplay = "43";
+
         Assert.Null(vm.ValidationMessage);
         Assert.NotNull(vm.TryBuild());
     }
 
-    /// <summary>Only the oversize verdict moves with the model. A blank box has nothing to say about it, and
-    /// clearing an unrelated message would be a second, invisible behaviour.</summary>
+    /// <summary>Emptying a box mid-edit is not yet a mistake, so it withdraws the verdict rather than replacing it
+    /// with "enter both"; Save still refuses it.</summary>
     [Fact]
-    public void Changing_the_model_leaves_an_unrelated_message_alone()
+    public void Emptying_a_box_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "200";
+        vm.RowsDisplay = "200";
+        Assert.Null(vm.TryBuild());
+
+        vm.RowsDisplay = "";
+
+        Assert.Null(vm.ValidationMessage);
+    }
+
+    [Fact]
+    public void Leaving_other_withdraws_the_rules_own_message()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "";
+        Assert.Null(vm.TryBuild());
+        Assert.NotNull(vm.ValidationMessage);
+
+        vm.SelectedModelChoice = vm.ModelChoices[0];
+
+        Assert.Null(vm.ValidationMessage);
+    }
+
+    /// <summary>The size rule has no claim on a message another rule owns: "Give the profile a name." stays put
+    /// whatever happens to the size, because Save will still refuse on it first.</summary>
+    [Fact]
+    public void Size_edits_leave_an_unrelated_message_alone()
     {
         var vm = new ProfileEditorViewModel(null) { Host = "h" };
         Assert.Null(vm.TryBuild());
         Assert.Equal("Give the profile a name.", vm.ValidationMessage);
 
-        vm.SelectedModel = TerminalModel.Find(4)!;
-        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
-    }
-
-    /// <summary>The test above only covers a *blank* box, which the rule returns early on — so it passed while
-    /// the hook still wiped anything in the message box whenever the oversize happened to be legal. With a
-    /// non-blank oversize that is valid under both models, a model change used to clear "Give the profile a
-    /// name." as a side effect. The rule now withdraws only the message it put there itself.</summary>
-    [Fact]
-    public void Changing_the_model_leaves_an_unrelated_message_alone_with_a_valid_oversize_in_the_box()
-    {
-        var vm = new ProfileEditorViewModel(null) { Host = "h", Oversize = "132x43" };
-        Assert.Null(vm.TryBuild());
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "200";
+        vm.RowsDisplay = "200";
         Assert.Equal("Give the profile a name.", vm.ValidationMessage);
 
-        // 132x43 clears both model 2's floor and model 4's, so the oversize rule has nothing to say here.
-        vm.SelectedModel = TerminalModel.Find(4)!;
+        vm.SelectedModelChoice = vm.ModelChoices[1];
         Assert.Equal("Give the profile a name.", vm.ValidationMessage);
-    }
-
-    /// <summary>And the harder half, which the two above cannot see: when the model change makes the geometry
-    /// ILLEGAL, the rule still has no claim on a box another rule owns. It used to overwrite it, so a user with a
-    /// blank name was sent to fix the oversize while Save went on refusing the name.</summary>
-    [Fact]
-    public void Changing_the_model_leaves_an_unrelated_message_alone_even_when_the_oversize_turns_illegal()
-    {
-        var vm = new ProfileEditorViewModel(null) { Host = "h", Oversize = "100x30" };
-        Assert.Null(vm.TryBuild());
-        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
-
-        // 100x30 clears model 2's floor and falls short of model 5's, so the rule does have a verdict here.
-        vm.SelectedModel = TerminalModel.Find(5)!;
-
-        Assert.Equal("Give the profile a name.", vm.ValidationMessage);
-    }
-
-    /// <summary>The model is not the only thing that can make the verdict stale: typing in the box does too, and
-    /// a red line under text the user has since corrected complains about numbers that are no longer there. Same
-    /// rule the picker's Quick Connect box follows.</summary>
-    [Fact]
-    public void Correcting_the_oversize_withdraws_the_rules_own_message()
-    {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
-        Assert.Null(vm.TryBuild());
-        Assert.StartsWith("200 columns by 200 rows", vm.ValidationMessage);
-
-        vm.Oversize = "132x43";
-
-        Assert.Null(vm.ValidationMessage);
-        Assert.NotNull(vm.TryBuild());
-    }
-
-    /// <summary>Emptying the box is a correction like any other: blank is a legal oversize, so the message goes
-    /// with it rather than needing a special case.</summary>
-    [Fact]
-    public void Emptying_the_oversize_withdraws_the_rules_own_message()
-    {
-        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h", Oversize = "200x200" };
-        Assert.Null(vm.TryBuild());
-        Assert.NotNull(vm.ValidationMessage);
-
-        vm.Oversize = "";
-
-        Assert.Null(vm.ValidationMessage);
     }
 
     /// <summary>The box inherits the command line's tie-break rule by calling the same Parse and Resolve, so
@@ -631,13 +784,13 @@ public class ProfileViewModelsTests : IDisposable
     }
 
     private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession) =>
-        new(_store, openSession, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+        new(_store, openSession, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { });
 
     /// <summary>In a subdirectory, so the profile store's directory read never meets it.</summary>
     private RecentHostsStore RecentStore() => new(Path.Combine(_dir, "config", "recent-hosts.json"));
 
     private ProfilePickerViewModel NewPicker(Action<SessionProfile, bool> openSession, RecentHostsStore recent) =>
-        new(_store, openSession, _ => Task.FromResult<ProfileEdit?>(null), () => { }, recentHosts: recent);
+        new(_store, openSession, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { }, recentHosts: recent);
 
     [Fact]
     public void Quick_connect_remembers_ad_hoc_hosts_as_typed_newest_first()
@@ -697,6 +850,29 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(["a.example", "c.example"], recent.Load().Entries);
     }
 
+    /// <summary>The editor draws its chips against the registry the picker just reconciled, so a tag's color in
+    /// the editor is the one the list shows.</summary>
+    [Fact]
+    public async Task The_picker_hands_the_editor_its_registry()
+    {
+        var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
+        tags.Save(new TagRegistry([new("PROD", TagColor.Teal)]));
+        _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD", "MVS"]) });
+        var seen = new List<TagRegistry>();
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { },
+            (_, registry) => { seen.Add(registry); return Task.FromResult<ProfileEdit?>(null); }, () => { }, tags);
+
+        await vm.NewCommand.ExecuteAsync(null);
+        await vm.EditCommand.ExecuteAsync(vm.VisibleRows.Single());
+
+        Assert.Equal(2, seen.Count);
+        Assert.All(seen, registry =>
+        {
+            Assert.Equal(TagColor.Teal, registry.ColorOf("PROD"));
+            Assert.True(registry.Contains("MVS"));
+        });
+    }
+
     [Fact]
     public void Editor_round_trips_tags_and_a_note()
     {
@@ -706,9 +882,10 @@ public class ProfileViewModelsTests : IDisposable
         };
         var vm = new ProfileEditorViewModel(existing);
 
-        // FAVORITE belongs to the checkbox, so it must not also appear in the box the user edits.
+        // FAVORITE belongs to the checkbox, so it must not also appear as a chip.
         Assert.True(vm.IsFavorite);
-        Assert.Equal("PROD, MVS", vm.TagsText);
+        Assert.Equal(["PROD", "MVS"], vm.TagNames);
+        Assert.Equal(["PROD", "MVS"], vm.TagChips.Select(c => c.Text));
         Assert.Equal("no live data", vm.Note);
 
         var built = vm.TryBuild()!;
@@ -721,51 +898,200 @@ public class ProfileViewModelsTests : IDisposable
     {
         var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
         Assert.False(vm.IsFavorite);
-        Assert.Equal("", vm.TagsText);
+        Assert.Empty(vm.TagChips);
+        Assert.Equal("", vm.TagEntry);
         var built = vm.TryBuild()!;
         Assert.True(built.Tags.IsEmpty);
         Assert.Null(built.Note);
     }
 
+    /// <summary>A comma ends a tag whether it is typed or pasted; what follows the last one stays in the box.</summary>
     [Fact]
-    public void Editor_normalises_the_tag_box_and_puts_the_checkbox_first()
+    public void A_comma_turns_the_text_before_it_into_chips()
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", IsFavorite = true, TagsText = " #prod , mvs ,, prod " };
-        var built = vm.TryBuild()!;
-        Assert.Equal(["FAVORITE", "prod", "mvs"], built.Tags.Names);
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+
+        vm.TagEntry = "prod,";
+        Assert.Equal(["prod"], vm.TagNames);
+        Assert.Equal("", vm.TagEntry);
+
+        vm.TagEntry = " #mvs ,, prod , te";
+        Assert.Equal(["prod", "mvs"], vm.TagNames);
+        Assert.Equal("te", vm.TagEntry);
+        Assert.Null(vm.TagMessage);
     }
 
-    /// <summary>The checkbox owns the reserved tag, so typing it is forgiven rather than refused: the box drops
-    /// it and the checkbox visibly turns on, which explains itself without a validation message.</summary>
     [Fact]
-    public void Typing_the_reserved_tag_turns_the_checkbox_on_and_drops_it_from_the_box()
+    public void Commit_adds_the_box_and_puts_the_checkbox_first_on_save()
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", TagsText = "favorite, PROD" };
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", IsFavorite = true };
+        vm.TagEntry = " #prod ";
+        Assert.True(vm.CommitTagEntry());
+        Assert.Equal("", vm.TagEntry);
+
+        // A name still in the box when Save is pressed is added, not dropped.
+        vm.TagEntry = "mvs";
+        var built = vm.TryBuild()!;
+        Assert.Equal(["FAVORITE", "prod", "mvs"], built.Tags.Names);
+        Assert.Equal("", vm.TagEntry);
+    }
+
+    /// <summary>Chips are drawn uppercase in the registry's color, and a name the registry does not know yet in the
+    /// color the picker's reconciliation will give it — the least used one.</summary>
+    [Fact]
+    public void Chips_preview_the_color_a_new_tag_will_get()
+    {
+        var registry = new TagRegistry([new("PROD", TagColor.Blue)]);
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(["prod"]) }, registry);
+        vm.TagEntry = "mvs,";
+
+        var expected = registry.Register(["prod", "mvs"]).Registry;
+        Assert.Equal(["PROD", "MVS"], vm.TagChips.Select(c => c.Text));
+        Assert.Equal(TagPalette.Brush(TagColor.Blue), vm.TagChips[0].Background);
+        Assert.Equal(TagPalette.Brush(expected.ColorOf("MVS")), vm.TagChips[1].Background);
+        Assert.NotEqual(TagColor.Blue, expected.ColorOf("MVS"));
+    }
+
+    /// <summary>The drop-down offers the known tags the profile does not carry, in the registry's order.</summary>
+    [Fact]
+    public void Suggestions_are_the_known_tags_not_yet_on_the_profile()
+    {
+        var registry = new TagRegistry([new("VM", TagColor.Red), new("PROD", TagColor.Blue), new("MVS", TagColor.Green)]);
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "n", Host = "h", Tags = TagSet.From(["prod"]) }, registry);
+        Assert.Equal(["MVS", "VM"], vm.TagSuggestions.Select(c => c.Text));
+        Assert.Equal(TagPalette.Brush(TagColor.Green), vm.TagSuggestions[0].Background);
+
+        vm.TagEntry = "vm,";
+        Assert.Equal(["MVS"], vm.TagSuggestions.Select(c => c.Text));
+
+        vm.RemoveTagCommand.Execute(vm.TagChips[0]);
+        Assert.Equal(["vm"], vm.TagNames);
+        Assert.Equal(["MVS", "PROD"], vm.TagSuggestions.Select(c => c.Text));
+    }
+
+    [Fact]
+    public void Remove_last_and_repeats_leave_the_rest_alone()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = "a, b, A,";
+        Assert.Equal(["a", "b"], vm.TagNames);
+        Assert.Null(vm.TagMessage);
+
+        vm.RemoveLastTag();
+        Assert.Equal(["a"], vm.TagNames);
+        vm.RemoveLastTag();
+        vm.RemoveLastTag();
+        Assert.Empty(vm.TagNames);
+    }
+
+    /// <summary>The checkbox owns the reserved tag, so typing it is forgiven rather than refused: it becomes no chip
+    /// and the checkbox visibly turns on, which explains itself without a message.</summary>
+    [Fact]
+    public void Typing_the_reserved_tag_turns_the_checkbox_on_instead_of_adding_a_chip()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = "favorite, PROD,";
         Assert.True(vm.IsFavorite);
-        Assert.Equal("PROD", vm.TagsText);
+        Assert.Equal(["PROD"], vm.TagNames);
+        Assert.Null(vm.TagMessage);
         Assert.Equal(["FAVORITE", "PROD"], vm.TryBuild()!.Tags.Names);
     }
 
+    /// <summary>An over-long name stays in the box with the reason under it, and the names after it wait there too,
+    /// so nothing typed is lost.</summary>
     [Fact]
-    public void Editor_refuses_an_over_long_tag_name()
+    public void An_over_long_name_stays_in_the_box_with_the_reason()
     {
-        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", TagsText = new string('x', 17) };
-        Assert.Null(vm.TryBuild());
-        Assert.Contains("16", vm.ValidationMessage);
+        var tooLong = new string('x', TagSet.MaxNameLength + 1);
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = $"ok, {tooLong}, after,";
+
+        Assert.Equal(["ok"], vm.TagNames);
+        Assert.Equal($"{tooLong}, after", vm.TagEntry);
+        Assert.Contains($"{TagSet.MaxNameLength}", vm.TagMessage);
+
+        // The next keystroke clears the reason.
+        vm.TagEntry = "short";
+        Assert.Null(vm.TagMessage);
     }
 
-    /// <summary>Counted before TagSet.From runs. Afterwards From has already discarded the surplus, so the
-    /// check could never fire and nine tags would silently become eight.</summary>
+    [Fact]
+    public void Save_refuses_an_over_long_name_left_in_the_box()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = new string('x', TagSet.MaxNameLength + 1);
+        Assert.Null(vm.TryBuild());
+        Assert.Contains($"{TagSet.MaxNameLength}", vm.ValidationMessage);
+        Assert.Equal(ProfileEditorField.Tags, vm.ValidationField);
+    }
+
+    /// <summary>The box refuses a chip past the cap as it is typed, FAVORITE counted, and Save refuses the one way
+    /// left to pass it: turning FAVORITE on beside a full set.</summary>
     [Fact]
     public void Editor_refuses_more_tags_than_the_cap_including_the_reserved_one()
     {
-        var eight = string.Join(",", Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}"));
-        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h", TagsText = eight };
+        var vm = new ProfileEditorViewModel(null) { Name = "n", Host = "h" };
+        vm.TagEntry = string.Join(",", Enumerable.Range(0, TagSet.MaxTags).Select(i => $"T{i}")) + ",";
+        Assert.Equal(TagSet.MaxTags, vm.TagNames.Count);
+        Assert.False(vm.CanAddTag);
+        Assert.Equal($"{TagSet.MaxTags} tags at most", vm.TagPlaceholder);
         Assert.NotNull(vm.TryBuild());
 
+        vm.TagEntry = "extra,";
+        Assert.Equal(TagSet.MaxTags, vm.TagNames.Count);
+        Assert.Contains($"{TagSet.MaxTags}", vm.TagMessage);
+
+        vm.TagEntry = "";
         vm.IsFavorite = true;
         Assert.Null(vm.TryBuild());
         Assert.Contains($"{TagSet.MaxTags}", vm.ValidationMessage);
+        Assert.Equal(ProfileEditorField.Tags, vm.ValidationField);
+
+        vm.RemoveLastTag();
+        Assert.NotNull(vm.TryBuild());
+        Assert.Null(vm.ValidationField);
+    }
+
+    /// <summary>Each refusal names its field, which is how the window picks the tab to show.</summary>
+    [Fact]
+    public void Each_refusal_names_its_field()
+    {
+        var vm = new ProfileEditorViewModel(null);
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.Name, vm.ValidationField);
+
+        vm.Name = "n";
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.Host, vm.ValidationField);
+
+        vm.Host = "h";
+        vm.PortText = "0";
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.Port, vm.ValidationField);
+
+        vm.PortText = "23";
+        vm.KeepAliveText = "x";
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.KeepAlive, vm.ValidationField);
+
+        vm.KeepAliveText = "60";
+        vm.SelectedModelChoice = ModelChoice.Other;
+        vm.ColumnsDisplay = "10";
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.ScreenSize, vm.ValidationField);
+
+        vm.ColumnsDisplay = "80";
+        Assert.NotNull(vm.TryBuild());
+        Assert.Null(vm.ValidationMessage);
+        Assert.Null(vm.ValidationField);
+    }
+
+    [Fact]
+    public void A_blank_code_page_names_its_field()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "p", Host = "h", CodePage = " " });
+        Assert.Null(vm.TryBuild());
+        Assert.Equal(ProfileEditorField.CodePage, vm.ValidationField);
     }
 
     [Fact]
@@ -778,7 +1104,7 @@ public class ProfileViewModelsTests : IDisposable
     }
 
     private ProfilePickerViewModel Picker(TagRegistryStore? tags = null) =>
-        new(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, tags);
+        new(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { }, tags);
 
     [Fact]
     public void Picker_shows_every_profile_until_something_narrows_it()
@@ -862,7 +1188,7 @@ public class ProfileViewModelsTests : IDisposable
     {
         _store.Save(new SessionProfile { Name = "tk5", Host = "tk5.local", Port = 3270 });
         SessionProfile? opened = null;
-        var vm = new ProfilePickerViewModel(_store, (p, _) => opened = p, _ => Task.FromResult<ProfileEdit?>(null), () => { });
+        var vm = new ProfilePickerViewModel(_store, (p, _) => opened = p, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { });
 
         vm.FilterText = "zzz";
         Assert.Empty(vm.VisibleRows);
@@ -1192,7 +1518,7 @@ public class ProfileViewModelsTests : IDisposable
         Directory.CreateDirectory(tagFile + ".tmp");
         var tags = new TagRegistryStore(tagFile);
 
-        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { },
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { },
             tags, () => Task.CompletedTask);
         vm.Reload();
         await vm.ManageTagsCommand.ExecuteAsync(null);
@@ -1205,7 +1531,7 @@ public class ProfileViewModelsTests : IDisposable
     {
         _store.Save(new SessionProfile { Name = "a", Host = "h" });
         var opened = 0;
-        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, null,
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { }, null,
             () =>
             {
                 opened++;
@@ -1227,7 +1553,7 @@ public class ProfileViewModelsTests : IDisposable
         _store.Save(new SessionProfile { Name = "a", Host = "h", Tags = TagSet.From(["PROD"]) });
         var tags = new TagRegistryStore(Path.Combine(_dir, "tags.json"));
         tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Red)]));
-        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, _ => Task.FromResult<ProfileEdit?>(null), () => { }, tags,
+        var vm = new ProfilePickerViewModel(_store, (_, _) => { }, (_, _) => Task.FromResult<ProfileEdit?>(null), () => { }, tags,
             () =>
             {
                 tags.Save(new TagRegistry([new TagDefinition("PROD", TagColor.Green)]));

@@ -39,7 +39,8 @@ public class ProfileEditorMvsmfTests
         Assert.Equal("http://mvs:8080/zosmf", vm.MvsmfUrl);
         Assert.Equal("MVSCE02", vm.MvsmfUserid);
         Assert.True(vm.HasMvsmfPin);
-        Assert.Equal("Pinned certificate: SHA-256 AA:BB (CN=proxy)", vm.MvsmfPinText);
+        Assert.Equal("CN=proxy", vm.MvsmfPinnedSubject);
+        Assert.Equal("AA:BB", vm.MvsmfPinnedFingerprint);
         Assert.Equal(original, vm.TryBuild());
     }
 
@@ -126,7 +127,7 @@ public class ProfileEditorMvsmfTests
     public async Task Test_reports_what_the_host_is()
     {
         var tester = new Tester();
-        var vm = new ProfileEditorViewModel(Rest(url: null, pin: null), tester.TestAsync) { MvsmfUrl = "http://mvs:8080", MvsmfUserid = "mvsce02" };
+        var vm = new ProfileEditorViewModel(Rest(url: null, pin: null), tester: tester.TestAsync) { MvsmfUrl = "http://mvs:8080", MvsmfUserid = "mvsce02" };
 
         await vm.TestMvsmfCommand.ExecuteAsync(null);
 
@@ -140,7 +141,7 @@ public class ProfileEditorMvsmfTests
     public async Task Test_uses_the_rest_pin_the_editor_shows()
     {
         var tester = new Tester();
-        var vm = new ProfileEditorViewModel(Rest(pin: Pin), tester.TestAsync);
+        var vm = new ProfileEditorViewModel(Rest(pin: Pin), tester: tester.TestAsync);
 
         await vm.TestMvsmfCommand.ExecuteAsync(null);
 
@@ -151,7 +152,7 @@ public class ProfileEditorMvsmfTests
     public async Task Test_without_a_url_or_with_a_bad_one_says_so_without_asking()
     {
         var tester = new Tester();
-        var vm = new ProfileEditorViewModel(Rest(url: null), tester.TestAsync);
+        var vm = new ProfileEditorViewModel(Rest(url: null), tester: tester.TestAsync);
 
         await vm.TestMvsmfCommand.ExecuteAsync(null);
         Assert.Equal("✗ Enter the mvsMF URL first.", vm.MvsmfTestResult);
@@ -170,7 +171,7 @@ public class ProfileEditorMvsmfTests
     public async Task Test_failures_are_reported_in_words(HostFileErrorKind kind, string message, string expected)
     {
         var tester = new Tester { Failure = new HostFileException(kind, message) };
-        var vm = new ProfileEditorViewModel(Rest(), tester.TestAsync);
+        var vm = new ProfileEditorViewModel(Rest(), tester: tester.TestAsync);
 
         await vm.TestMvsmfCommand.ExecuteAsync(null);
 
@@ -182,7 +183,7 @@ public class ProfileEditorMvsmfTests
     public async Task Test_is_busy_while_it_runs_and_editing_the_url_clears_the_result()
     {
         var tester = new Tester { Gate = new TaskCompletionSource() };
-        var vm = new ProfileEditorViewModel(Rest(), tester.TestAsync);
+        var vm = new ProfileEditorViewModel(Rest(), tester: tester.TestAsync);
 
         var testing = vm.TestMvsmfCommand.ExecuteAsync(null);
         Assert.True(vm.IsTestingMvsmf);
@@ -200,7 +201,7 @@ public class ProfileEditorMvsmfTests
     public async Task A_url_edit_during_a_test_discards_its_result()
     {
         var tester = new Tester { Gate = new TaskCompletionSource() };
-        var vm = new ProfileEditorViewModel(Rest(), tester.TestAsync);
+        var vm = new ProfileEditorViewModel(Rest(), tester: tester.TestAsync);
 
         var testing = vm.TestMvsmfCommand.ExecuteAsync(null);
         vm.MvsmfUrl = "http://other";
@@ -215,7 +216,7 @@ public class ProfileEditorMvsmfTests
     public async Task A_userid_edit_or_forget_clears_the_result()
     {
         var tester = new Tester();
-        var vm = new ProfileEditorViewModel(Rest(pin: Pin), tester.TestAsync);
+        var vm = new ProfileEditorViewModel(Rest(pin: Pin), tester: tester.TestAsync);
 
         await vm.TestMvsmfCommand.ExecuteAsync(null);
         Assert.NotNull(vm.MvsmfTestResult);

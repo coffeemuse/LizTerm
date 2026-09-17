@@ -69,6 +69,11 @@ colour, or delete it: each change applies at once to every profile carrying the 
 shows which those are. Renaming a tag to one that already exists merges the two, and both a merge and a delete ask
 first. <strong>FAVORITE</strong> is fixed: it can't be renamed, recoloured or deleted.</p>
 <h3 id="profile-settings">Profile settings</h3>
+<p>The editor puts its settings on four tabs: <strong>Connection</strong> (name, host, port, TLS, keep-alive, reconnect),
+<strong>Terminal</strong> (model, screen size, code page, LU name, keyboard), <strong>Organize</strong> (FAVORITE, tags, note) and
+<strong>mvsMF</strong> (the address and userid for the mvsMF Browser, a feature preview). If
+<strong>Save</strong> can't accept something, the editor shows the tab it's on, outlines the setting, and says what to fix beside
+the buttons.</p>
 <table>
 <thead>
 <tr><th>Setting</th><th>Meaning</th></tr>
@@ -80,14 +85,14 @@ first. <strong>FAVORITE</strong> is fixed: it can't be renamed, recoloured or de
 <tr><td>Verify host certificate</td><td>Check the host's certificate (on by default). See <a href="#tls-and-certificates">TLS and certificates</a>.</td></tr>
 <tr><td>Keep-alive every <em>n</em> seconds</td><td>Keeps the network connection open through firewalls and routers that drop idle connections. <code>0</code> turns it off. It does not stop the host logging you off for being idle.</td></tr>
 <tr><td>Reconnect automatically</td><td>Reconnect if the host drops the session.</td></tr>
-<tr><td>Model</td><td>The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132).</td></tr>
+<tr><td>Model</td><td>The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132), or <strong>Other (custom size)</strong> for a size of your own, for hosts that support one.</td></tr>
 <tr><td>Extended data stream</td><td>Colours and extended attributes (on by default).</td></tr>
-<tr><td>Oversize</td><td>A custom screen size, written as columns x rows (for example <code>132x43</code>), for hosts that support one. Leave it blank for the model's own size.</td></tr>
+<tr><td>Screen size</td><td>Columns and rows. They show the model's own size, and you can change them, by typing or with the arrows, only when Model is <strong>Other</strong>, which starts from the size already shown. A custom size must be at least 80 columns and 24 rows, and columns times rows can be at most 16,383 (at 160 columns, 102 rows at most).</td></tr>
 <tr><td>Code page</td><td>The host's character set. The default is <code>cp037</code> (US/Canada); TK4- and TK5 users may want <code>bracket</code>, which maps the 3270 bracket characters.</td></tr>
 <tr><td>LU name</td><td>Request a specific logical unit from the host. Optional.</td></tr>
 <tr><td>Backspace erases</td><td>On by default: Backspace erases the previous character. Off: Backspace only moves the cursor left.</td></tr>
 <tr><td>Mark as FAVORITE</td><td>Adds the reserved <code>FAVORITE</code> tag, shown as a gold star in the list.</td></tr>
-<tr><td>Tags</td><td>Short labels, separated by commas (<code>PROD, MVS</code>), drawn as uppercase colour chips. A tag's colour is picked automatically the first time you use it, and is the same everywhere that tag appears; <strong>Tags...</strong> in the Sessions list changes it. At most 8 per profile, 16 characters each.</td></tr>
+<tr><td>Tags</td><td>Short labels, drawn as uppercase color chips. Type a tag and press Enter or type a comma to add it; the list under the box offers the tags you already use. Select a chip's <strong>×</strong> to remove it, or press Backspace in the empty box to remove the last one. A new tag's chip already shows the color it will get, and a tag's color is the same everywhere it appears; <strong>Tags...</strong> in the Sessions list changes it. At most 8 per profile, FAVORITE included, 16 characters each.</td></tr>
 <tr><td>Note</td><td>One short line — "no live data", "LAN only" — shown under the host in the list, and inside the session: see <a href="#the-session-window">The session window</a>.</td></tr>
 </tbody>
 </table>

@@ -39,6 +39,12 @@ first. **FAVORITE** is fixed: it can't be renamed, recoloured or deleted.
 
 ### Profile settings
 
+The editor puts its settings on four tabs: **Connection** (name, host, port, TLS, keep-alive, reconnect),
+**Terminal** (model, screen size, code page, LU name, keyboard), **Organize** (FAVORITE, tags, note) and
+**mvsMF** (the address and userid for the mvsMF Browser, a feature preview). If
+**Save** can't accept something, the editor shows the tab it's on, outlines the setting, and says what to fix beside
+the buttons.
+
 | Setting | Meaning |
 |---|---|
 | Name | How the profile appears in the list, and what you type on the command line to open it. |
@@ -47,14 +53,14 @@ first. **FAVORITE** is fixed: it can't be renamed, recoloured or deleted.
 | Verify host certificate | Check the host's certificate (on by default). See [TLS and certificates](#tls-and-certificates). |
 | Keep-alive every *n* seconds | Keeps the network connection open through firewalls and routers that drop idle connections. `0` turns it off. It does not stop the host logging you off for being idle. |
 | Reconnect automatically | Reconnect if the host drops the session. |
-| Model | The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132). |
+| Model | The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132), or **Other (custom size)** for a size of your own, for hosts that support one. |
 | Extended data stream | Colours and extended attributes (on by default). |
-| Oversize | A custom screen size, written as columns x rows (for example `132x43`), for hosts that support one. Leave it blank for the model's own size. |
+| Screen size | Columns and rows. They show the model's own size, and you can change them, by typing or with the arrows, only when Model is **Other**, which starts from the size already shown. A custom size must be at least 80 columns and 24 rows, and columns times rows can be at most 16,383 (at 160 columns, 102 rows at most). |
 | Code page | The host's character set. The default is `cp037` (US/Canada); TK4- and TK5 users may want `bracket`, which maps the 3270 bracket characters. |
 | LU name | Request a specific logical unit from the host. Optional. |
 | Backspace erases | On by default: Backspace erases the previous character. Off: Backspace only moves the cursor left. |
 | Mark as FAVORITE | Adds the reserved `FAVORITE` tag, shown as a gold star in the list. |
-| Tags | Short labels, separated by commas (`PROD, MVS`), drawn as uppercase colour chips. A tag's colour is picked automatically the first time you use it, and is the same everywhere that tag appears; **Tags...** in the Sessions list changes it. At most 8 per profile, 16 characters each. |
+| Tags | Short labels, drawn as uppercase color chips. Type a tag and press Enter or type a comma to add it; the list under the box offers the tags you already use. Select a chip's **×** to remove it, or press Backspace in the empty box to remove the last one. A new tag's chip already shows the color it will get, and a tag's color is the same everywhere it appears; **Tags...** in the Sessions list changes it. At most 8 per profile, FAVORITE included, 16 characters each. |
 | Note | One short line — "no live data", "LAN only" — shown under the host in the list, and inside the session: see [The session window](#the-session-window). |
 
 ### Quick Connect and the command line

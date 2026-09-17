@@ -6,103 +6,324 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LizTerm.App.ViewModels"
+        xmlns:render="using:LizTerm.App.Rendering"
         x:Class="LizTerm.App.Views.ProfileEditorWindow"
         x:DataType="vm:ProfileEditorViewModel"
-        Title="Session Profile" Width="480" SizeToContent="Height" CanResize="False"
+        Title="Session Profile" Width="520" Height="540" CanResize="False"
         WindowStartupLocation="CenterOwner">
-  <StackPanel Margin="16" Spacing="10">
-    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" >
-      <TextBlock Grid.Row="0" Text="Name" VerticalAlignment="Center" />
-      <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name}" />
-      <TextBlock Grid.Row="1" Text="Host" VerticalAlignment="Center" />
-      <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Host}" PlaceholderText="mvs.example or 192.168.1.10" />
-      <TextBlock Grid.Row="2" Text="Port" VerticalAlignment="Center" />
-      <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding PortText}" Width="100" HorizontalAlignment="Left" />
-      <TextBlock Grid.Row="3" Text="Security" VerticalAlignment="Center" />
-      <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4">
-        <CheckBox Content="Use TLS" IsChecked="{Binding UseTls}" />
-        <CheckBox Content="Verify host certificate" IsChecked="{Binding VerifyCertificate}" IsEnabled="{Binding UseTls}" />
-        <StackPanel x:Name="PinPanel" Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasPinnedCertificate}">
-          <TextBlock x:Name="PinText" Text="{Binding PinnedCertificateText}" VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" MaxWidth="260" />
-          <Button x:Name="ForgetButton" Content="Forget" Command="{Binding ForgetPinCommand}" />
-        </StackPanel>
+  <!-- Preferences' shape: four tabs of rows, each row its own two-column grid (a 120 px label column, labels at
+       the top of the row), hints in grey under the control they explain, and the buttons under the tabs. The
+       height is fixed for the reason Preferences gives: only the selected tab is measured, so a window sized to
+       its content would change height on every tab switch. The Connection tab of a pinned profile is the tallest
+       and sets the height. Name and Host are on the first tab, so a quick new profile never leaves it. -->
+  <Window.Styles>
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Padding" Value="12,0" />
+    </Style>
+    <Style Selector="Grid.row > TextBlock">
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,6,0,0" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#A0A0A0" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="NumericUpDown.number">
+      <Setter Property="Width" Value="120" />
+      <Setter Property="Minimum" Value="0" />
+      <Setter Property="Increment" Value="1" />
+      <Setter Property="FormatString" Value="0" />
+      <Setter Property="ParsingNumberStyle" Value="Integer" />
+    </Style>
+    <!-- The tag box sits inside the drawn field, so it draws no field of its own: Fluent's AutoCompleteBox hands
+         its own border and background to the text box inside, in every state. -->
+    <Style Selector="AutoCompleteBox#TagBox">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="MinHeight" Value="26" />
+    </Style>
+    <Style Selector="AutoCompleteBox#TagBox /template/ TextBox#PART_TextBox">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="4,3" />
+    </Style>
+    <!-- The field Save refused. The window style outranks the theme's hover and focus brushes, so the outline
+         stays while the field is being fixed; the message beside the buttons says what is wrong. -->
+    <Style Selector="TextBox.invalid /template/ Border#PART_BorderElement, ComboBox.invalid /template/ Border#Background, Border.invalid">
+      <Setter Property="BorderBrush" Value="#FF8080" />
+    </Style>
+    <Style Selector="NumericUpDown.invalid /template/ ButtonSpinner">
+      <Setter Property="BorderBrush" Value="#FF8080" />
+    </Style>
+    <!-- A chip's remove button keeps the chip's own color under the pointer and while pressed, the Manage Tags
+         swatch fix: Fluent's Button theme would otherwise paint a grey square inside the chip. -->
+    <Style Selector="Button.chipRemove">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="3,0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Foreground" Value="{x:Static render:TagPalette.ChipText}" />
+      <Setter Property="IsTabStop" Value="False" />
+    </Style>
+    <Style Selector="Button.chipRemove:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.chipRemove:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{x:Static render:TagPalette.ChipText}" />
+    </Style>
+  </Window.Styles>
+  <DockPanel Margin="16">
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+        <Button x:Name="CancelButton" Content="Cancel" MinWidth="80" HorizontalContentAlignment="Center" Click="OnCancelClick" />
+        <Button x:Name="SaveButton" Content="Save" MinWidth="80" HorizontalContentAlignment="Center" Classes="accent"
+                IsDefault="True" Click="OnSaveClick" />
       </StackPanel>
-      <TextBlock Grid.Row="4" Text="Connection" VerticalAlignment="Center" />
-      <StackPanel Grid.Row="4" Grid.Column="1" Spacing="4">
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <TextBlock Text="Keep-alive every" VerticalAlignment="Center" />
-          <TextBox x:Name="KeepAliveBox" Text="{Binding KeepAliveText}" Width="60" />
-          <TextBlock Text="seconds (0 = off)" VerticalAlignment="Center" />
+      <!-- Preferences' save-error place. Save also shows the tab the message is about. -->
+      <TextBlock x:Name="ValidationText" Text="{Binding ValidationMessage}" Foreground="#FF8080" TextWrapping="Wrap"
+                 VerticalAlignment="Center" Margin="0,0,12,0" />
+    </DockPanel>
+    <TabControl x:Name="Tabs" Padding="0,12,0,0">
+      <TabItem x:Name="ConnectionTab" Header="Connection">
+        <StackPanel Spacing="12">
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Name" />
+            <TextBox x:Name="NameBox" Grid.Column="1" Text="{Binding Name}" />
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Host" />
+            <TextBox x:Name="HostBox" Grid.Column="1" Text="{Binding Host}" PlaceholderText="mvs.example or 192.168.1.10" />
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Port" />
+            <!-- A plain box, unlike the screen size: nobody steps through port numbers. -->
+            <TextBox x:Name="PortBox" Grid.Column="1" Text="{Binding PortText}" Width="80" HorizontalAlignment="Left" />
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Security" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <CheckBox Content="Use TLS" IsChecked="{Binding UseTls}" />
+              <CheckBox Content="Verify host certificate" IsChecked="{Binding VerifyCertificate}" IsEnabled="{Binding UseTls}" />
+              <!-- Its own framed block, so the fingerprint reads as one thing with its Forget button, and on two
+                   even lines broken between bytes (PinnedFingerprint) rather than wherever the width ran out. -->
+              <Border x:Name="PinPanel" IsVisible="{Binding HasPinnedCertificate}" Margin="0,2,0,0" Padding="10,8"
+                      BorderBrush="#40FFFFFF" BorderThickness="1" CornerRadius="4">
+                <StackPanel Spacing="4">
+                  <DockPanel>
+                    <Button x:Name="ForgetButton" DockPanel.Dock="Right" Content="Forget" VerticalAlignment="Center"
+                            Command="{Binding ForgetPinCommand}" />
+                    <StackPanel>
+                      <TextBlock Text="Pinned certificate" />
+                      <TextBlock x:Name="PinSubject" Classes="hint" Text="{Binding PinnedSubject}" />
+                    </StackPanel>
+                  </DockPanel>
+                  <TextBlock x:Name="PinFingerprint" Text="{Binding PinnedFingerprint, StringFormat='SHA-256 {0}'}"
+                             FontFamily="Menlo, Consolas, DejaVu Sans Mono, monospace" FontSize="11"
+                             Foreground="#C0C0C0" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Keep-alive" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Every" VerticalAlignment="Center" />
+                <TextBox x:Name="KeepAliveBox" Text="{Binding KeepAliveText}" Width="80" />
+                <TextBlock Text="seconds (0 = off)" VerticalAlignment="Center" />
+              </StackPanel>
+              <!-- The caveat sits under the box because "keep-alive" is otherwise read as "stops the host timing
+                   me out". A NOP is not 3270 data, so TSO's own idle timer never sees it (spec 5.1). -->
+              <TextBlock Classes="hint" Text="Keeps the network connection open; does not prevent a host idle logoff." />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Reconnect" />
+            <CheckBox x:Name="AutoReconnectBox" Grid.Column="1" Content="If the host drops the session"
+                      IsChecked="{Binding AutoReconnect}" />
+          </Grid>
         </StackPanel>
-        <!-- The caveat is inline in the row, the way the Keyboard row explains itself, because "keep-alive"
-             is otherwise read as "stops the host timing me out". A NOP is not 3270 data, so TSO's own idle
-             timer never sees it (spec 5.1). -->
-        <TextBlock Text="Keeps the network connection open; does not prevent a host idle logoff."
-                   Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap" />
-        <CheckBox x:Name="AutoReconnectBox" Content="Reconnect automatically if the host drops the session"
-                  IsChecked="{Binding AutoReconnect}" />
-      </StackPanel>
-      <TextBlock Grid.Row="5" Text="Model" VerticalAlignment="Center" />
-      <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Spacing="12">
-        <ComboBox x:Name="ModelBox" ItemsSource="{Binding TerminalModels}" SelectedItem="{Binding SelectedModel}" Width="160" />
-        <CheckBox Content="Extended data stream" IsChecked="{Binding Extended}" />
-      </StackPanel>
-      <TextBlock Grid.Row="6" Text="Oversize" VerticalAlignment="Center" />
-      <!-- Columns first, which is b3270's order for -oversize and the opposite of the Model drop-down's
-           "2 — 24x80". Deliberately left disagreeing: 24x80 is the conventional way to name a model and is
-           asserted exactly by CatalogueTests, while cols x rows is what every x3270 document a user might copy
-           from uses. The placeholder is what resolves it (spec 4.3). -->
-      <!-- 280 to match the Code page drop-down directly below, and because 200 clipped the placeholder to
-           "columns x rows, e.g. 132x4" (seen on a real macOS window). A truncated example is worse than none
-           here: the placeholder is the whole mechanism, so it has to survive rendering. -->
-      <TextBox x:Name="OversizeBox" Grid.Row="6" Grid.Column="1" Text="{Binding Oversize}" Width="280"
-               HorizontalAlignment="Left" PlaceholderText="columns x rows, e.g. 132x43" />
-      <TextBlock Grid.Row="7" Text="Code page" VerticalAlignment="Center" />
-      <ComboBox x:Name="CodePageBox" Grid.Row="7" Grid.Column="1" ItemsSource="{Binding CodePages}" SelectedItem="{Binding SelectedCodePage}" Width="280" HorizontalAlignment="Left" />
-      <TextBlock Grid.Row="8" Text="LU name" VerticalAlignment="Center" />
-      <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding LuName}" Width="140" HorizontalAlignment="Left" PlaceholderText="optional" />
-      <TextBlock Grid.Row="9" Text="Keyboard" VerticalAlignment="Center" />
-      <CheckBox x:Name="BackspaceBox" Grid.Row="9" Grid.Column="1" Content="Backspace erases the previous character (off: Backspace only moves the cursor left)" IsChecked="{Binding DestructiveBackspace}" />
-      <TextBlock Grid.Row="10" Text="Tags" VerticalAlignment="Center" />
-      <StackPanel Grid.Row="10" Grid.Column="1" Spacing="4">
-        <!-- The checkbox owns FAVORITE rather than the box below: it is the one tag name with a fixed meaning,
-             and a typo would otherwise turn it into an ordinary tag that merely looks the same. The label names
-             the tag instead of spelling "favourite" in prose, which also keeps the reserved name visible. -->
-        <CheckBox x:Name="FavoriteBox" Content="Mark as FAVORITE" IsChecked="{Binding IsFavorite}" />
-        <TextBox x:Name="TagsBox" Text="{Binding TagsText}" PlaceholderText="PROD, MVS" />
-        <TextBlock Text="Separate with commas; shown as uppercase chips in the session list."
-                   Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap" />
-      </StackPanel>
-      <TextBlock Grid.Row="11" Text="Note" VerticalAlignment="Center" />
-      <!-- AcceptsReturn false and a cap, because this line is drawn in the session list: a pasted paragraph
-           would make every row tall and the visible list short. -->
-      <TextBox x:Name="NoteBox" Grid.Row="11" Grid.Column="1" Text="{Binding Note}" AcceptsReturn="False"
-               MaxLength="120" PlaceholderText="optional — shown under the host in the list" />
-      <TextBlock Grid.Row="12" Grid.Column="0" Text="mvsMF (Preview)" VerticalAlignment="Top" Margin="0,6,0,0" TextWrapping="Wrap" />
-      <StackPanel Grid.Row="12" Grid.Column="1" Spacing="4">
-        <TextBox x:Name="MvsmfUrlBox" Text="{Binding MvsmfUrl}" PlaceholderText="http://host:8080 (optional)" />
-        <TextBlock Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap"
-                   Text="The z/OSMF REST address for File &gt; mvsMF Browser. /zosmf is added when the path is empty; use https:// through a TLS proxy." />
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <TextBlock Text="Userid" VerticalAlignment="Center" />
-          <TextBox x:Name="MvsmfUseridBox" Text="{Binding MvsmfUserid}" Width="120" MaxLength="8" PlaceholderText="optional" />
-          <TextBlock Text="prefills the sign-in" Foreground="#A0A0A0" FontSize="12" VerticalAlignment="Center" />
+      </TabItem>
+
+      <TabItem x:Name="TerminalTab" Header="Terminal">
+        <StackPanel Spacing="12">
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Model" />
+            <!-- 280 matches the Code page drop-down. -->
+            <StackPanel Grid.Column="1" Spacing="4">
+              <ComboBox x:Name="ModelBox" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding SelectedModelChoice}" Width="280" />
+              <CheckBox Content="Extended data stream" IsChecked="{Binding Extended}" />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Screen size" />
+            <!-- Always shown, so the row always says what the screen will be: greyed out with the model's own size,
+                 open only under Other. Two labelled boxes instead of one "132x43" field, so columns and rows cannot
+                 be swapped: the Model drop-down names a model rows first ("2 — 24x80"), while b3270's -oversize
+                 takes columns first.
+
+                 Spinners, but with no Maximum and a Minimum of 0 only, bound to Text rather than Value. With a range
+                 in force, NumericUpDown either snaps a typed number into it (ClipValueToMinMax) or empties the box
+                 when focus leaves, both in silence; the engine's real limit is an area (columns * rows), which only
+                 the view model's message can explain. Text that is not a whole number is still emptied on leaving,
+                 and Save then asks for both numbers. -->
+            <StackPanel Grid.Column="1" Spacing="4">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Columns" VerticalAlignment="Center" />
+                <NumericUpDown x:Name="ColumnsBox" Classes="number" Text="{Binding ColumnsDisplay}"
+                               IsEnabled="{Binding IsCustomSize}" />
+                <TextBlock Text="Rows" VerticalAlignment="Center" />
+                <NumericUpDown x:Name="RowsBox" Classes="number" Text="{Binding RowsDisplay}"
+                               IsEnabled="{Binding IsCustomSize}" />
+              </StackPanel>
+              <TextBlock x:Name="SizeHint" Classes="hint" Text="Choose Other in Model to set your own size."
+                         IsVisible="{Binding !IsCustomSize}" />
+              <TextBlock Classes="hint" Text="At least 80 x 24; columns times rows at most 16,383."
+                         IsVisible="{Binding IsCustomSize}" />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Code page" />
+            <ComboBox x:Name="CodePageBox" Grid.Column="1" ItemsSource="{Binding CodePages}" SelectedItem="{Binding SelectedCodePage}"
+                      Width="280" HorizontalAlignment="Left" />
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="LU name" />
+            <TextBox Grid.Column="1" Text="{Binding LuName}" Width="120" HorizontalAlignment="Left" PlaceholderText="optional" />
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Keyboard" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <CheckBox x:Name="BackspaceBox" Content="Backspace erases the previous character" IsChecked="{Binding DestructiveBackspace}" />
+              <TextBlock Classes="hint" Text="Off: Backspace only moves the cursor left." />
+            </StackPanel>
+          </Grid>
         </StackPanel>
-        <StackPanel x:Name="MvsmfPinPanel" Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasMvsmfPin}">
-          <TextBlock x:Name="MvsmfPinText" Text="{Binding MvsmfPinText}" FontSize="12" TextWrapping="Wrap" MaxWidth="260" />
-          <Button x:Name="MvsmfForgetButton" Content="Forget" Command="{Binding ForgetMvsmfPinCommand}" />
+      </TabItem>
+
+      <TabItem x:Name="OrganizeTab" Header="Organize">
+        <StackPanel Spacing="12">
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Favorite" />
+            <!-- The checkbox owns FAVORITE rather than the tag box: it is the one tag name with a fixed meaning, and
+                 a typo would otherwise turn it into an ordinary tag that merely looks the same. The label names the
+                 tag, which keeps the reserved name visible. -->
+            <CheckBox x:Name="FavoriteBox" Grid.Column="1" Content="Mark as FAVORITE" IsChecked="{Binding IsFavorite}" />
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Tags" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <!-- A drawn field holding the chips and the entry box. The chips' ItemsControl and the box share one
+                   WrapPanel, so the box follows the chips on their line while there is room. The chips look like
+                   App.axaml's TagChipTemplate, plus a remove button; the suggestions use that template itself. -->
+              <Border x:Name="TagField" BorderBrush="#66FFFFFF" BorderThickness="1" CornerRadius="4" Padding="4,2"
+                      Background="Transparent" PointerPressed="OnTagFieldPressed">
+                <WrapPanel>
+                  <ItemsControl x:Name="TagChipList" ItemsSource="{Binding TagChips}" VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel ItemSpacing="4" LineSpacing="4" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:TagChip">
+                        <Border Background="{Binding Background}" CornerRadius="3" Padding="5,0,0,0">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Text}" Foreground="{x:Static render:TagPalette.ChipText}"
+                                       FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                            <!-- Backspace in the empty box is the keyboard's way to remove, so this is no tab stop. -->
+                            <Button Classes="chipRemove" Content="×" FontSize="12"
+                                    AutomationProperties.Name="{Binding Text, StringFormat='Remove {0}'}"
+                                    ToolTip.Tip="{Binding Text, StringFormat='Remove {0}'}"
+                                    Command="{Binding $parent[Window].((vm:ProfileEditorViewModel)DataContext).RemoveTagCommand}"
+                                    CommandParameter="{Binding}" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <AutoCompleteBox x:Name="TagBox" Text="{Binding TagEntry}" ItemsSource="{Binding TagSuggestions}"
+                                   PlaceholderText="{Binding TagPlaceholder}" IsEnabled="{Binding CanAddTag}"
+                                   FilterMode="StartsWith" MinimumPrefixLength="0" MinWidth="140" MaxLength="40">
+                    <!-- App.axaml's chip, left-aligned: the list would otherwise stretch it across the drop-down. -->
+                    <AutoCompleteBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:TagChip">
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TagChipTemplate}"
+                                        HorizontalAlignment="Left" />
+                      </DataTemplate>
+                    </AutoCompleteBox.ItemTemplate>
+                  </AutoCompleteBox>
+                </WrapPanel>
+              </Border>
+              <TextBlock x:Name="TagHint" Classes="hint" IsVisible="{Binding !HasTagMessage}"
+                         Text="Enter or a comma adds a tag; Backspace removes the last one." />
+              <TextBlock x:Name="TagMessageText" Text="{Binding TagMessage}" Foreground="#FF8080" FontSize="12"
+                         TextWrapping="Wrap" IsVisible="{Binding HasTagMessage}" />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Note" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <!-- AcceptsReturn false and a cap, because this line is drawn in the session list: a pasted paragraph
+                   would make every row tall and the visible list short. -->
+              <TextBox x:Name="NoteBox" Text="{Binding Note}" AcceptsReturn="False" MaxLength="120"
+                       PlaceholderText="optional" />
+              <TextBlock Classes="hint" Text="One line, shown under the host in the list." />
+            </StackPanel>
+          </Grid>
         </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <Button x:Name="MvsmfTestButton" Content="Test" Command="{Binding TestMvsmfCommand}" />
-          <TextBlock x:Name="MvsmfTestResultText" Text="{Binding MvsmfTestResult}" TextWrapping="Wrap" MaxWidth="260"
-                     VerticalAlignment="Center" />
+      </TabItem>
+      <!-- Last, because it is a preview and most profiles leave it empty. Its own tab rather than rows on
+           Connection, which already sets the window's height. -->
+      <TabItem x:Name="MvsmfTab" Header="mvsMF">
+        <StackPanel Spacing="12">
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="URL" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <TextBox x:Name="MvsmfUrlBox" Text="{Binding MvsmfUrl}" PlaceholderText="http://host:8080 (optional)" />
+              <TextBlock Classes="hint"
+                         Text="The z/OSMF REST address for File &gt; mvsMF Browser (a feature preview). /zosmf is added when the path is empty; use https:// through a TLS proxy." />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Userid" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <TextBox x:Name="MvsmfUseridBox" Text="{Binding MvsmfUserid}" Width="120" MaxLength="8"
+                       HorizontalAlignment="Left" PlaceholderText="optional" />
+              <TextBlock Classes="hint" Text="Fills in the sign-in; the password is never saved." />
+            </StackPanel>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*" IsVisible="{Binding HasMvsmfPin}">
+            <TextBlock Text="Certificate" />
+            <!-- The Connection tab's pin block, for the certificate a TLS proxy in front of mvsMF presented. -->
+            <Border x:Name="MvsmfPinPanel" Grid.Column="1" Padding="10,8"
+                    BorderBrush="#40FFFFFF" BorderThickness="1" CornerRadius="4">
+              <StackPanel Spacing="4">
+                <DockPanel>
+                  <Button x:Name="MvsmfForgetButton" DockPanel.Dock="Right" Content="Forget" VerticalAlignment="Center"
+                          Command="{Binding ForgetMvsmfPinCommand}" />
+                  <StackPanel>
+                    <TextBlock Text="Pinned certificate" />
+                    <TextBlock x:Name="MvsmfPinSubject" Classes="hint" Text="{Binding MvsmfPinnedSubject}" />
+                  </StackPanel>
+                </DockPanel>
+                <TextBlock x:Name="MvsmfPinFingerprint" Text="{Binding MvsmfPinnedFingerprint, StringFormat='SHA-256 {0}'}"
+                           FontFamily="Menlo, Consolas, DejaVu Sans Mono, monospace" FontSize="11"
+                           Foreground="#C0C0C0" />
+              </StackPanel>
+            </Border>
+          </Grid>
+          <Grid Classes="row" ColumnDefinitions="120,*">
+            <TextBlock Text="Connection" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <Button x:Name="MvsmfTestButton" Content="Test" Command="{Binding TestMvsmfCommand}" />
+              <TextBlock x:Name="MvsmfTestResultText" Text="{Binding MvsmfTestResult}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Grid>
         </StackPanel>
-      </StackPanel>
-    </Grid>
-    <TextBlock Text="{Binding ValidationMessage}" Foreground="#FF8080" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Click="OnCancelClick" />
-      <Button Content="Save" Click="OnSaveClick" IsDefault="True" />
-    </StackPanel>
-  </StackPanel>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
 </Window>

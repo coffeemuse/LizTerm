@@ -25,7 +25,8 @@ public static class HostFileTransfer
 {
     private static readonly UTF8Encoding Utf8NoMark = new(encoderShouldEmitUTF8Identifier: false);
 
-    /// <summary>Writes to a dot-prefixed <c>.part</c> file (hidden on macOS and Linux) beside
+    /// <summary>Writes to a dot-prefixed <c>.part</c> file (hidden on macOS and Linux; its name does not embed the
+    /// destination's, so any name the file system allows can be downloaded to) beside
     /// <paramref name="destinationFile"/> and renames it into place only on success, so a failed or cancelled download
     /// never leaves a partial file under the real name and never damages the file it would have replaced.</summary>
     /// <returns>The bytes written locally.</returns>
@@ -36,7 +37,7 @@ public static class HostFileTransfer
         DownloadOptions options, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
     {
         var full = Path.GetFullPath(destinationFile);
-        var temporary = Path.Combine(Path.GetDirectoryName(full)!, $".{Path.GetFileName(full)}.{Guid.NewGuid():N}.part");
+        var temporary = Path.Combine(Path.GetDirectoryName(full)!, $".lizterm-{Guid.NewGuid():N}.part");
         try
         {
             long written;

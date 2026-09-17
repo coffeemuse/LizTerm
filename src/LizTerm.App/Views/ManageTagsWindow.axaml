@@ -72,7 +72,7 @@
         <TextBlock x:Name="EmptyHint" IsVisible="{Binding !HasSelection}" HorizontalAlignment="Center"
                    VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Foreground="#8F8F8F"
                    FontStyle="Italic" FontSize="12"
-                   Text="Select a tag to rename, recolour or delete it.&#10;Tags are added to a profile in its editor." />
+                   Text="Select a tag to rename, recolor, or delete it.&#10;Tags are added to a profile in its editor." />
         <DockPanel x:Name="TagPanel" IsVisible="{Binding HasSelection}">
           <Button x:Name="DeleteButton" DockPanel.Dock="Bottom" Content="Delete..." HorizontalAlignment="Right"
                   Command="{Binding DeleteCommand}" IsVisible="{Binding ShowDeleteButton}" />
@@ -103,7 +103,7 @@
                        IsVisible="{Binding IsReservedSelected}" />
               <TextBlock x:Name="ValidationText" Text="{Binding ValidationMessage}" Foreground="#FF8080" FontSize="12"
                          TextWrapping="Wrap" IsVisible="{Binding ValidationMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
-              <TextBlock Text="Colour" Foreground="#A0A0A0" FontSize="12" Margin="0,8,0,0" />
+              <TextBlock Text="Color" Foreground="#A0A0A0" FontSize="12" Margin="0,8,0,0" />
               <ItemsControl x:Name="SwatchList" ItemsSource="{Binding Swatches}" IsVisible="{Binding IsTagSelected}">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>

@@ -171,7 +171,8 @@ public partial class App : Application
         var store = _store ??= new ProfileStore(AppPaths.ProfilesDirectory());
         // One snapshot of the tag colours for both the window's chips and its row in the switcher, so the two agree.
         // Load never throws (an unreadable file is an empty registry, and every chip draws grey).
-        var tags = (_tags ??= new TagRegistryStore(TagRegistryStore.DefaultFile())).Load();
+        var tagStore = _tags ??= new TagRegistryStore(TagRegistryStore.DefaultFile());
+        var tags = tagStore.Load();
         var viewModel = new SessionViewModel(
             SessionFactory.Create(profile),
             action => Dispatcher.UIThread.Post(action),
@@ -184,7 +185,10 @@ public partial class App : Application
             {
                 // The existing editor, pre-filled: it already carries every row, validates them, and knows the
                 // model and code-page catalogues. Saving by name overwrites, exactly as the picker's New does.
-                if (await new ProfileEditorWindow(profile).ShowDialogAbove<ProfileEdit?>(window) is not { } edit) return;
+                // The registry is read again rather than taken from the window's snapshot: Manage Tags may have
+                // changed a color since this window opened, and the editor's chips should match the picker's.
+                var editorTags = tagStore.Load();
+                if (await new ProfileEditorWindow(profile, editorTags).ShowDialogAbove<ProfileEdit?>(window) is not { } edit) return;
                 // The same read-back ProfilePickerViewModel.EditAsync does, for the same reason: this window's
                 // profile was fixed at construction, so the file under that name can already hold a pin written
                 // since — by the picker, or by another session window's WritePinBack. Overwriting the rest is

@@ -24,6 +24,12 @@ public class TextUploadCheckTests
         Assert.Empty(result.Warnings);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-4)]
+    public void A_tab_width_below_one_is_refused(int width) =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => Run("A\tB\n", options: new TextUploadOptions(TabWidth: width)));
+
     [Fact]
     public void A_utf8_byte_order_mark_is_dropped()
     {
