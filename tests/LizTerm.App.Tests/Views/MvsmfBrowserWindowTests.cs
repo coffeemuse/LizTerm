@@ -7,6 +7,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.LogicalTree;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LizTerm.App.Tests.ViewModels;
@@ -42,6 +43,19 @@ public class MvsmfBrowserWindowTests
         Assert.Equal(4, Named<ListBox>(window, "DatasetList").ItemCount);
         Assert.True(Named<TextBlock>(window, "ChooseHint").IsVisible);
         Assert.True(window.CanResize);
+    }
+
+    /// <summary>The strip reads as a caution banner: dark text, the guide link included, on yellow.</summary>
+    [AvaloniaFact]
+    public void The_preview_strip_is_dark_on_yellow()
+    {
+        var (window, _) = Show(userid: null);
+        var strip = Named<Border>(window, "PreviewStrip");
+
+        Assert.Equal(Color.Parse("#F5C542"), ((ISolidColorBrush)strip.Background!).Color);
+        Assert.All(strip.GetLogicalDescendants().OfType<TextBlock>(),
+            text => Assert.Equal(Color.Parse("#1A1A1A"), ((ISolidColorBrush)text.Foreground!).Color));
+        Assert.Equal(Color.Parse("#1A1A1A"), ((ISolidColorBrush)Named<Button>(window, "GuideLink").Foreground!).Color);
     }
 
     [AvaloniaFact]

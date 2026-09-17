@@ -26,14 +26,27 @@
       <Setter Property="Padding" Value="0" />
       <Setter Property="Foreground" Value="#80B0FF" />
     </Style>
+    <!-- The preview strip is a caution banner: dark text on yellow, so it stands out from the dark window. Its link
+         is dark too, since the blue link colour does not read on yellow, and keeps that colour under the pointer
+         and while pressed, where Fluent's Button theme would otherwise paint its own. -->
+    <Style Selector="Border#PreviewStrip TextBlock">
+      <Setter Property="Foreground" Value="#1A1A1A" />
+    </Style>
+    <Style Selector="Border#PreviewStrip Button.link">
+      <Setter Property="Foreground" Value="#1A1A1A" />
+    </Style>
+    <Style Selector="Border#PreviewStrip Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter, Border#PreviewStrip Button.link:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#1A1A1A" />
+    </Style>
   </Window.Styles>
 
   <DockPanel>
-    <Border x:Name="PreviewStrip" DockPanel.Dock="Top" Background="#3A3320" Padding="12,5">
+    <Border x:Name="PreviewStrip" DockPanel.Dock="Top" Background="#F5C542" Padding="12,5">
       <StackPanel Orientation="Horizontal" Spacing="6">
         <TextBlock Text="⚠ Feature preview. mvsMF access is new and still being refined." VerticalAlignment="Center" />
         <Button x:Name="GuideLink" Classes="link" Command="{Binding OpenGuideCommand}">
-          <TextBlock Text="What to expect…" TextDecorations="Underline" />
+          <TextBlock Text="What to expect…" TextDecorations="Underline" FontWeight="SemiBold" />
         </Button>
       </StackPanel>
     </Border>
