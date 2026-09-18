@@ -780,9 +780,11 @@ public partial class SessionWindow : Window, ISessionHost
             _sessions.Remove(_ownEntry);
         }
         // The browser is owned and would close with the window anyway; closing it here first means its connection
-        // is released before the sign-in it uses is forgotten.
+        // is released before the sign-in it uses is ended.
         MvsmfBrowser?.Close();
-        _hostFiles?.Forget();
+        // Best effort: drop the token now, end the session on the host without blocking the close.
+        if (_hostFiles is { } hostFiles)
+            _ = hostFiles.SignOutAsync().WaitAsync(TimeSpan.FromSeconds(5)).ContinueWith(_ => { }, TaskScheduler.Default);
         base.OnClosed(e);
     }
 

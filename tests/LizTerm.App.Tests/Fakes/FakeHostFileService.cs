@@ -8,8 +8,8 @@ namespace LizTerm.App.Tests.Fakes;
 
 /// <summary>An in-memory mvsMF for the App tests. Every call is logged as "op:target" — list:&lt;pattern&gt;,
 /// members:&lt;dsn&gt;, readtext:&lt;path&gt;, readbinary:&lt;path&gt;, writetext:&lt;path&gt;:&lt;lines&gt;,
-/// writebinary:&lt;path&gt;, delete:&lt;path&gt;, info — and a <see cref="Failures"/> entry under the same key (without
-/// the line count) makes that call throw.</summary>
+/// writebinary:&lt;path&gt;, delete:&lt;path&gt;, info, signout — and a <see cref="Failures"/> entry under the same key
+/// (without the line count) makes that call throw.</summary>
 public sealed class FakeHostFileService : IHostFileService
 {
     private readonly object _lock = new();
@@ -41,6 +41,12 @@ public sealed class FakeHostFileService : IHostFileService
     public string[] CallsSnapshot()
     {
         lock (_lock) return [.. Calls];
+    }
+
+    public Task SignOutAsync(HostSessionToken token, CancellationToken cancellationToken = default)
+    {
+        lock (_lock) Calls.Add("signout");
+        return Task.CompletedTask;
     }
 
     public async Task<HostServerInfo> GetServerInfoAsync(CancellationToken cancellationToken = default)

@@ -10,17 +10,23 @@ using LizTerm.Core.HostFiles;
 namespace LizTerm.App.Views;
 
 /// <summary>The REST sign-in (spec §3.2). Cancel and the title bar both answer null. The password lives only in the
-/// text box and the <see cref="HostCredentials"/> this returns.</summary>
+/// text box and the <see cref="HostCredentials"/> this returns, which the backend trades for a session token.</summary>
 public partial class SignInWindow : Window
 {
     /// <summary>Design-time only.</summary>
-    public SignInWindow() : this(new CredentialPromptRequest("MVS/CE", "http://mvs.example:8080/zosmf", "MVSCE02", true)) { }
+    public SignInWindow() : this(new CredentialPromptRequest("MVS/CE", "http://mvs.example:8080/zosmf", "MVSCE02", SignInReason.Expired)) { }
 
     public SignInWindow(CredentialPromptRequest request)
     {
         InitializeComponent();
         HostText.Text = $"{request.ProfileName} · {request.Url}";
-        RetryText.IsVisible = request.IsRetry;
+        ReasonText.Text = request.Reason switch
+        {
+            SignInReason.Rejected => "✗ The userid or password was not accepted. Try again.",
+            SignInReason.Expired => "Your mvsMF session has expired. Sign in again.",
+            _ => "",
+        };
+        ReasonText.IsVisible = request.Reason != SignInReason.First;
         UseridBox.Text = request.Userid ?? "";
         // The first box the user has to type in takes the keyboard.
         Opened += (_, _) => (string.IsNullOrEmpty(UseridBox.Text) ? UseridBox : PasswordBox).Focus();

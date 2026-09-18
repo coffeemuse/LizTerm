@@ -19,7 +19,7 @@ public sealed class HostFileConnection : IDisposable
 
     private readonly HostFileAccess _access;
     private readonly Uri _url;
-    private readonly HostCredentialProvider _credentials;
+    private readonly HostTokenProvider _tokens;
     private readonly ICertificatePrompt? _certificates;
     private readonly SemaphoreSlim _trust = new(1, 1);
     private readonly object _lock = new();
@@ -31,14 +31,14 @@ public sealed class HostFileConnection : IDisposable
     private IHostFileService? _declined;
     private bool _disposed;
 
-    internal HostFileConnection(HostFileAccess access, Uri url, HostCredentialProvider credentials, ICertificatePrompt? certificates)
+    internal HostFileConnection(HostFileAccess access, Uri url, HostTokenProvider tokens, ICertificatePrompt? certificates)
     {
         _access = access;
         _url = url;
-        _credentials = credentials;
+        _tokens = tokens;
         _certificates = certificates;
         _servicePin = access.Pin;
-        _service = access.CreateService(url, _servicePin, credentials);
+        _service = access.CreateService(url, _servicePin, tokens);
         _made.Add(_service);
     }
 
@@ -91,7 +91,7 @@ public sealed class HostFileConnection : IDisposable
     private void Replace(CertificatePin? pin)
     {
         _servicePin = pin;
-        _service = _access.CreateService(_url, pin, _credentials);
+        _service = _access.CreateService(_url, pin, _tokens);
         _made.Add(_service);
     }
 

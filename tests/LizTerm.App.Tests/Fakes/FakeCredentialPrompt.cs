@@ -15,7 +15,7 @@ public sealed class FakeCredentialPrompt : ICredentialPrompt
     /// <summary>Answers in order; when empty, <see cref="Answer"/>. A null answer plays Cancel.</summary>
     public Queue<HostCredentials?> Answers { get; } = new();
     public HostCredentials? Answer { get; set; } = new("MVSCE02", "pw");
-    /// <summary>"ask:&lt;userid&gt;:&lt;IsRetry&gt;" per call.</summary>
+    /// <summary>"ask:&lt;userid&gt;:&lt;Reason&gt;" per call.</summary>
     public List<string> Calls { get; } = [];
     public CredentialPromptRequest? LastRequest { get; private set; }
     /// <summary>When set, every ask waits for it: a test holds a prompt open to see what else happens meanwhile.</summary>
@@ -27,7 +27,7 @@ public sealed class FakeCredentialPrompt : ICredentialPrompt
         Interlocked.Increment(ref _askCount);
         lock (_lock)
         {
-            Calls.Add($"ask:{request.Userid}:{request.IsRetry}");
+            Calls.Add($"ask:{request.Userid}:{request.Reason}");
             LastRequest = request;
         }
         if (Gate is { } gate) await gate.Task;

@@ -126,10 +126,12 @@ public class SessionWindowMvsmfTests
     }
 
     [AvaloniaFact]
-    public async Task Closing_the_session_window_closes_the_browser_and_forgets_the_sign_in()
+    public async Task Closing_the_session_window_closes_the_browser_and_signs_out()
     {
         var shown = Show();
-        await shown.Access!.Credentials.ProviderFor(new FakeCredentialPrompt())(new HostCredentialRequest(false), CancellationToken.None);
+        await shown.Access!.SignIn.ProviderFor(new FakeCredentialPrompt())(
+            new HostTokenRequest(null), (c, _) => Task.FromResult(new HostSessionToken($"tok:{c.Userid}")), CancellationToken.None);
+        Assert.True(shown.Access.SignIn.IsSignedIn);
         Click(Classic(shown.Window));
         var browser = shown.Window.MvsmfBrowser!;
         var closed = false;
@@ -138,7 +140,7 @@ public class SessionWindowMvsmfTests
         shown.Window.Close();
 
         Assert.True(closed);
-        Assert.False(shown.Access.Credentials.HasCredentials);
+        Assert.False(shown.Access.SignIn.IsSignedIn);
     }
 
     [AvaloniaFact]

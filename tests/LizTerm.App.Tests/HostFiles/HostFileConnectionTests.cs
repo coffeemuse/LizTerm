@@ -20,13 +20,13 @@ public class HostFileConnectionTests
     {
         public List<(CertificatePin? Pin, FakeHostFileService Service)> Created { get; } = [];
         public List<CertificatePin> Saved { get; } = [];
-        public HostCredentialProvider? Provider { get; private set; }
+        public HostTokenProvider? Provider { get; private set; }
         public TaskCompletionSource? FirstGate { get; set; }
         /// <summary>Services made with a pin refuse too, as for a certificate the pin check can never accept.</summary>
         public bool AlwaysRefuse { get; init; }
 
         /// <summary>A service made without a pin refuses the certificate; one made with a pin answers.</summary>
-        public IHostFileService Create(Uri url, CertificatePin? pin, HostCredentialProvider provider)
+        public IHostFileService Create(Uri url, CertificatePin? pin, HostTokenProvider provider)
         {
             Provider = provider;
             var service = new FakeHostFileService();
@@ -287,10 +287,11 @@ public class HostFileConnectionTests
         var credentials = new FakeCredentialPrompt();
         using var connection = access.Connect(credentials, null);
 
-        var answer = await host.Provider!(new HostCredentialRequest(false), CancellationToken.None);
+        var answer = await host.Provider!(new HostTokenRequest(null),
+            (c, _) => Task.FromResult(new HostSessionToken($"tok:{c.Userid}")), CancellationToken.None);
 
-        Assert.Equal("MVSCE02", answer!.Userid);
-        Assert.True(access.Credentials.HasCredentials);
+        Assert.Equal("tok:MVSCE02", answer!.Value);
+        Assert.True(access.SignIn.IsSignedIn);
         Assert.Equal("MVS", credentials.LastRequest!.ProfileName);
     }
 

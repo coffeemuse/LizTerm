@@ -4,6 +4,7 @@
 
 using LizTerm.App.HostFiles;
 using LizTerm.App.Tests.Fakes;
+using LizTerm.Core.HostFiles;
 using LizTerm.Core.Session;
 
 namespace LizTerm.App.Tests.HostFiles;
@@ -40,15 +41,31 @@ public class HostFileAccessTests
     }
 
     [Fact]
-    public async Task Forget_drops_the_sign_in()
+    public async Task Signing_out_ends_the_session_and_drops_the_token()
     {
+        var services = new List<FakeHostFileService>();
         var access = new HostFileAccess(new SessionProfile { Name = "x", Host = "h", HostFilesUrl = "http://h" },
-            (_, _, _) => new FakeHostFileService(), savePin: null);
-        await access.Credentials.ProviderFor(new FakeCredentialPrompt())(new(false), CancellationToken.None);
-        Assert.True(access.Credentials.HasCredentials);
+            (_, _, _) => { var service = new FakeHostFileService(); services.Add(service); return service; }, savePin: null);
+        await access.SignIn.ProviderFor(new FakeCredentialPrompt())(
+            new HostTokenRequest(null), (c, _) => Task.FromResult(new HostSessionToken($"tok:{c.Userid}")), CancellationToken.None);
+        Assert.True(access.SignIn.IsSignedIn);
 
-        access.Forget();
+        await access.SignOutAsync();
 
-        Assert.False(access.Credentials.HasCredentials);
+        Assert.False(access.SignIn.IsSignedIn);
+        Assert.Equal(["signout"], services.Single().CallsSnapshot());
+        Assert.True(services.Single().Disposed);
+    }
+
+    [Fact]
+    public async Task Signing_out_with_no_token_builds_no_service()
+    {
+        var built = 0;
+        var access = new HostFileAccess(new SessionProfile { Name = "x", Host = "h", HostFilesUrl = "http://h" },
+            (_, _, _) => { built++; return new FakeHostFileService(); }, savePin: null);
+
+        await access.SignOutAsync();
+
+        Assert.Equal(0, built);
     }
 }

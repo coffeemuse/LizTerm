@@ -10,7 +10,7 @@ namespace LizTerm.App.HostFiles;
 
 /// <summary>Builds the service for one URL and pin. <see cref="HostFileServiceFactory.Create"/> in the app; a fake in
 /// tests.</summary>
-public delegate IHostFileService HostFileServiceCreator(Uri baseUrl, CertificatePin? pin, HostCredentialProvider credentials);
+public delegate IHostFileService HostFileServiceCreator(Uri baseUrl, CertificatePin? pin, HostTokenProvider tokens);
 
 /// <summary>A session window's REST side (spec §3.3): the URL from its profile, the sign-in, and the certificate the
 /// user trusts for it. Lives as long as the session window; each browser window connects through it.</summary>
@@ -31,7 +31,7 @@ public sealed class HostFileAccess
         if (HostFileServiceFactory.TryNormalizeUrl(profile.HostFilesUrl, out var url, out var error)) Url = url;
         else UrlError = error;
         _pin = profile.HostFilesPinnedCertificate;
-        Credentials = new CredentialHolder(profile.Name, Url?.ToString() ?? profile.HostFilesUrl ?? "", profile.HostFilesUserid);
+        SignIn = new SignInHolder(profile.Name, Url?.ToString() ?? profile.HostFilesUrl ?? "", profile.HostFilesUserid);
     }
 
     public string ProfileName { get; }
@@ -39,7 +39,7 @@ public sealed class HostFileAccess
     /// <summary>Null when the profile's URL is not usable; <see cref="UrlError"/> says why.</summary>
     public Uri? Url { get; }
     public string? UrlError { get; }
-    public CredentialHolder Credentials { get; }
+    public SignInHolder SignIn { get; }
     public bool CanRememberPin => _savePin is not null;
 
     /// <summary>Remember was chosen but the profile file could not be written; the pin still holds for the
@@ -56,13 +56,19 @@ public sealed class HostFileAccess
     /// <exception cref="InvalidOperationException">The profile's URL is not usable.</exception>
     public HostFileConnection Connect(ICredentialPrompt credentials, ICertificatePrompt? certificates) =>
         Url is { } url
-            ? new HostFileConnection(this, url, Credentials.ProviderFor(credentials), certificates)
+            ? new HostFileConnection(this, url, SignIn.ProviderFor(credentials), certificates)
             : throw new InvalidOperationException(UrlError);
 
-    public void Forget() => Credentials.Forget();
+    /// <summary>Ends the session, through a service built for the URL, and drops the token. Best effort.</summary>
+    public async Task SignOutAsync()
+    {
+        if (Url is not { } url || !SignIn.IsSignedIn) return;
+        using var service = CreateService(url, Pin, SignIn.ProviderFor(NullPrompt.Instance));
+        await SignIn.SignOutAsync(service);
+    }
 
-    internal IHostFileService CreateService(Uri url, CertificatePin? pin, HostCredentialProvider credentials) =>
-        _create(url, pin, credentials);
+    internal IHostFileService CreateService(Uri url, CertificatePin? pin, HostTokenProvider tokens) =>
+        _create(url, pin, tokens);
 
     internal void AcceptPin(CertificatePin pin, bool remember)
     {
