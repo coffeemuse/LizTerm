@@ -33,7 +33,8 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
 - **Timeouts:** 10 s to connect (`SocketsHttpHandler.ConnectTimeout`), 30 s without data (`IdleTimeout`, reset on
   every chunk), and no `HttpClient.Timeout`, so a long download is never cut off while bytes arrive.
   `HttpCompletionOption.ResponseHeadersRead` everywhere, so bodies stream. `SendAsync` calls `IdleTimeout.Pause()`
-  before every credential ask, so a user taking their time at the prompt is not host silence; `SendOnceAsync`
+  before every token ask (which usually returns the held token without a prompt), so a user taking their time at a
+  sign-in prompt is not host silence; `SendOnceAsync`
   re-arms the clock (`Reset()`) once the request actually goes out. A
   `SocketsHttpHandler` connect timeout — a `TaskCanceledException` with an inner `TimeoutException` — is mapped to
   `HostFileErrorKind.Unreachable`, "cannot reach the host (no answer within 10 s)".
@@ -49,9 +50,10 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
 - Names are escaped by `EscapeName`: `#` and `%` only. Everything else a validated `HostPath` or filter can hold goes
   as it is, as curl sends it.
 - `MvsmfOptions.TryNormalizeBaseUrl` refuses a URL carrying a userid or password ("Leave the userid and password out
-  of the URL."), since credentials belong to the credential provider, never to the stored base URL. It also refuses
-  a query or a fragment. `MvsmfOptions`' constructor refuses the same URLs with an `ArgumentException`, as
-  `TryNormalizeBaseUrl` does, through one shared check (`CheckBaseUrl`), so no service is built on a URL the editor
+  of the URL."), since the userid and password belong to the sign-in prompt and the backend's `SignInAsync`, never
+  to the stored base URL. It also refuses a query or a fragment. `MvsmfOptions`' constructor refuses the same URLs
+  with an `ArgumentException`, as `TryNormalizeBaseUrl` does, through one shared check (`CheckBaseUrl`), so no
+  service is built on a URL the editor
   would have refused.
 
 ## Tests

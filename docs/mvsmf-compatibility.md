@@ -12,6 +12,7 @@ against disagree, and what LizTerm does about each. When a newer mvsMF is availa
 | Host | MVS/CE, HTTPD, probed 2026-09-18 |
 | Source read alongside | mvsMF at commit `cf4d6d5` (1.1.1-dev, after the 1.1.0 release of 2026-09-14), `src/`, `docs/endpoints/`, `samplib/` and `CHANGELOG.md` |
 | Previous baseline | `1.0.0-dev`, probed 2026-09-16; the entries it needed are under *Resolved on 1.1.0* |
+| Minimum supported | 1.1.0 — see the user guide's "Signing in" |
 
 ## How to re-check a new build
 

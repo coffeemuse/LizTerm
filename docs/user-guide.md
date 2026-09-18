@@ -275,8 +275,8 @@ the transfer ends. The dialog remembers your last transfer for that window.
 ## mvsMF Browser (preview)
 
 **This is a feature preview.** It works, but it is new and still being refined, and it has been tested against one
-build of mvsMF (1.1.0). It follows that build's behaviour and needs mvsMF 1.1.0 or later; see
-[Signing in](#signing-in). Please report what you find
+build of mvsMF (1.1.0). It follows that build's behaviour; older builds are not supported (see
+[Signing in](#signing-in)). Please report what you find
 ([Help > Report an Issue...](https://github.com/coffeemuse/LizTerm/issues/new/choose)).
 
 [mvsMF](https://github.com/mvslovers/mvsmf) is a z/OSMF-style REST server for MVS 3.8j. The **mvsMF Browser** uses
@@ -521,6 +521,7 @@ empties the drop-down.
   underlying x3270 engine does not send a server name ([#12](https://github.com/coffeemuse/LizTerm/issues/12)).
 - **No keymap editing yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)).
 - **No printer sessions or scripting.**
-- **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). It needs mvsMF 1.1.0
-  or later; see [Signing in](#signing-in). Very long dataset or member lists arrive in one piece, with no paging. It
+- **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). Older mvsMF builds
+  are not supported (see [Signing in](#signing-in)). Very long dataset or member lists arrive in one piece, with no
+  paging. It
   can't create, rename or delete datasets, submit jobs, or browse the z/OS UNIX file system.
