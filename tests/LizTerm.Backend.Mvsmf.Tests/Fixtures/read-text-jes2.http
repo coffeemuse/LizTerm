@@ -1,10 +1,13 @@
 HTTP/1.1 200 OK
 Server: HTTPD Server
+X-Powered-By: MVSLOVERS
 Connection: keep-alive
 Cache-Control: no-store
-Content-Type: text/plain
 Pragma: no-cache
-Access-Control-Allow-Origin: *
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
+Content-Type: text/plain
 Transfer-Encoding: chunked
 
 //JES2     PROC M=JES2PM00,                                             00000010

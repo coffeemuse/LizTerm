@@ -1,9 +1,13 @@
 HTTP/1.1 400 Bad Request
 Server: HTTPD Server
+X-Powered-By: MVSLOVERS
 Connection: keep-alive
 Content-Type: application/json
 Content-Length: 140
 Cache-Control: no-store
-Access-Control-Allow-Origin: *
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
 
 {"rc":8,"category":6,"reason":1,"message":"Dataset is a partitioned dataset (PDS). Use /ds/{dataset-name}({member-name}) to access members"}

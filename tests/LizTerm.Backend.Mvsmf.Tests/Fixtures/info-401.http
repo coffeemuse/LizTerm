@@ -1,7 +1,11 @@
 HTTP/1.1 401 Unauthorized
 Server: HTTPD Server
+X-Powered-By: MVSLOVERS
 Connection: keep-alive
+Content-Length: 0
+WWW-Authenticate: Basic realm="MVSC"
 Cache-Control: no-store
-Access-Control-Allow-Origin: *
-Transfer-Encoding: chunked
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+Content-Language: en
 

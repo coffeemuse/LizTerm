@@ -1,13 +1,13 @@
-HTTP/1.1 404 Not Found
+HTTP/1.1 500 Internal Server Error
 Server: HTTPD Server
 X-Powered-By: MVSLOVERS
-Connection: keep-alive
+Connection: close
 Content-Type: application/json
-Content-Length: 65
+Content-Length: 98
 Cache-Control: no-store
 Pragma: no-cache
 X-Content-Type-Options: nosniff
 Content-Language: en
 Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
 
-{"rc":8,"category":6,"reason":5,"message":"PDS member not found"}
+{"rc":8,"category":6,"reason":3,"message":"Record truncated to the record length of the data set"}
