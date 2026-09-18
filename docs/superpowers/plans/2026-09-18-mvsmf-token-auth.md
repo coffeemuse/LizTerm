@@ -59,7 +59,6 @@ Token lifetime is httpd's sliding idle `SESSION_TIMEOUT`, default 30 minutes, re
 | `src/LizTerm.Core/HostFiles/HostFileException.cs` | `HostFileErrorKind.Unsupported` |
 | `src/LizTerm.Core/HostFiles/IHostFileService.cs` | `SignOutAsync` (default interface method) |
 | `src/LizTerm.Backend.Mvsmf/MvsmfFileService.cs` | `SignInAsync`, `ProbeAsync`, token-carrying `SendAsync`, `SignOutAsync`, ctor takes `HostTokenProvider` |
-| `src/LizTerm.Backend.Mvsmf/MvsmfJson.cs` | `MvsmfLogin` result record |
 | `src/LizTerm.Backend.Mvsmf/CLAUDE.md` | cookie-not-Bearer, password only in `SignInAsync` |
 | `src/LizTerm.App/HostFiles/SignInHolder.cs` | **Renamed** from `CredentialHolder.cs`; holds the token, implements `HostTokenProvider` |
 | `src/LizTerm.App/HostFiles/HostFileAccess.cs` | `SignOutAsync` replaces `Forget` |
