@@ -77,12 +77,12 @@ public class MvsmfReadTests
     }
 
     [Fact]
-    public async Task A_missing_member_cannot_be_opened()
+    public async Task A_missing_member_is_not_found()
     {
         using var service = Service(new RecordedHandler().Then("read-missing-member"));
         var ex = await Assert.ThrowsAsync<HostFileException>(() =>
             service.ReadTextAsync(HostPath.ForMember("SYS1.PROCLIB", "NOSUCHMB"), cancellationToken: TestContext.Current.CancellationToken));
-        Assert.Equal(HostFileErrorKind.CannotOpen, ex.Kind);
+        Assert.Equal(HostFileErrorKind.NotFound, ex.Kind);
     }
 
     [Fact(Timeout = 30000)]

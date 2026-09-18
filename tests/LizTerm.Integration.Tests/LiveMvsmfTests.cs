@@ -81,7 +81,7 @@ public class LiveMvsmfTests
 
             await service.DeleteAsync(path, ct);
             var gone = await Assert.ThrowsAsync<HostFileException>(() => service.ReadTextAsync(path, cancellationToken: ct));
-            Assert.Contains(gone.Kind, new[] { HostFileErrorKind.NotFound, HostFileErrorKind.CannotOpen });
+            Assert.Equal(HostFileErrorKind.NotFound, gone.Kind);
         }
         finally
         {

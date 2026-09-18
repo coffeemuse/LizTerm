@@ -8,8 +8,9 @@ using LizTerm.Core.HostFiles;
 
 namespace LizTerm.Backend.Mvsmf;
 
-/// <summary>Turns an mvsMF failure into a <see cref="HostFileException"/>. The JSON body's category and reason
-/// decide before the HTTP status does, because mvsMF uses 500 for outcomes that are not server faults.</summary>
+/// <summary>Turns an mvsMF failure into a <see cref="HostFileException"/>. mvsMF uses 500 for a refused open and
+/// for a truncated write, so the JSON body's category and reason decide before the HTTP status does, and a server
+/// error repeats the host's message.</summary>
 internal static class MvsmfErrors
 {
     private const int DatasetCategory = 6;
@@ -26,9 +27,6 @@ internal static class MvsmfErrors
     {
         if (status == HttpStatusCode.Unauthorized) return HostFileErrorKind.Unauthenticated;
         if (category == DatasetCategory && reason is 4 or 5) return HostFileErrorKind.NotFound;
-        // mvsMF-compat: missing-read-is-500 — a missing member or dataset on read answers 500, reason 3, and the
-        // same reason covers a dataset that exists but cannot be opened, so the two cannot be told apart.
-        if (category == DatasetCategory && reason == 3) return HostFileErrorKind.CannotOpen;
         if (status == HttpStatusCode.NotFound) return HostFileErrorKind.NotFound;
         // mvsMF-compat: authorization-is-500 — a refused open is 500, category 4, rc 8, reason 0 ("LMOPEN error").
         if (category == SecurityCategory && rc == 8 && reason == 0) return HostFileErrorKind.NotAuthorized;
@@ -41,12 +39,15 @@ internal static class MvsmfErrors
     {
         HostFileErrorKind.Unauthenticated => "The host rejected the userid or password.",
         HostFileErrorKind.NotFound => $"{what}: not found.",
-        HostFileErrorKind.CannotOpen => $"{what}: not found, not authorized, or cannot be opened.",
         HostFileErrorKind.NotAuthorized => $"{what}: not authorized.",
         HostFileErrorKind.InvalidRequest => $"{what}: the host refused the request ({error?.Message ?? "bad request"}).",
-        _ => error?.Reason is { } reason
-            ? $"{what}: server error (reason {reason})."
-            : $"{what}: server error (HTTP {(int)status}).",
+        _ => error switch
+        {
+            { Reason: { } reason, Message: { } message } when !string.IsNullOrWhiteSpace(message)
+                => $"{what}: {message.Trim().TrimEnd('.')} (reason {reason}).",
+            { Reason: { } reason } => $"{what}: server error (reason {reason}).",
+            _ => $"{what}: server error (HTTP {(int)status}).",
+        },
     };
 
     private static MvsmfError? TryParse(byte[] body)
