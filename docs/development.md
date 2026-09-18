@@ -60,9 +60,10 @@ dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "
   repository at all.
 - The version lives in both `Directory.Build.props` and `LizTerm.parcel`'s `GeneralSettings.Version`; the release
   workflow fails if they, and on a real release the tag, disagree.
-- A change a user would notice adds a line under `## Unreleased` in `CHANGELOG.md`, in the same PR. The version
-  bump renames that heading to `## <version>`, which a tagged release requires (see
-  [CI and release](ci-and-release.md#the-version-job)).
+- A change a user would notice adds a line under `## Unreleased` in `CHANGELOG.md`, in the same PR. Keep it to a
+  headline and a sentence or two, linking the user guide or the issue for detail — the release notes are this text
+  verbatim, and a reader scans them. The version bump renames that heading to `## <version>`, which a tagged release
+  requires (see [CI and release](ci-and-release.md#the-version-job)).
 
 ### Licence headers
 
