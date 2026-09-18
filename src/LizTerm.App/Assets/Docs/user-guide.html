@@ -281,7 +281,8 @@ host only answers on its next turn, so if it has stalled, closing the dialog aga
 the transfer ends. The dialog remembers your last transfer for that window.</p>
 <h2 id="mvsmf-browser-preview">mvsMF Browser (preview)</h2>
 <p><strong>This is a feature preview.</strong> It works, but it is new and still being refined, and it has been tested against one
-pre-release build of mvsMF. Please report what you find
+build of mvsMF (1.1.0). It follows that build's behaviour; older mvsMF builds are not supported. Please report what
+you find
 (<a href="https://github.com/coffeemuse/LizTerm/issues/new/choose">Help &gt; Report an Issue...</a>).</p>
 <p><a href="https://github.com/mvslovers/mvsmf">mvsMF</a> is a z/OSMF-style REST server for MVS 3.8j. The <strong>mvsMF Browser</strong> uses
 it to list datasets and members, download and upload them, and delete members, without typing anything on the
@@ -294,7 +295,7 @@ session to be logged on, or even connected.</p>
 LizTerm adds <code>/zosmf</code>. Only <code>http://</code> and <code>https://</code> addresses are accepted.</li>
 <li><strong>Userid</strong> is optional. It fills in the sign-in window, and the browser starts by listing <code>USERID.**</code>.</li>
 <li><strong>Test</strong> signs in and asks the server what it is, then shows the answer (for example
-<strong>✓ Connected: mvsMF 1.0.0-dev on MVS 3.8j</strong>) or what went wrong. A sign-in made for <strong>Test</strong> is forgotten right
+<strong>✓ Connected: mvsMF 1.1.0 on MVS 3.8j</strong>) or what went wrong. A sign-in made for <strong>Test</strong> is forgotten right
 after.</li>
 </ul>
 <p>Once a profile has a URL, its session window has <strong>File &gt; mvsMF Browser...</strong>. The item has no keyboard shortcut, so
@@ -346,11 +347,10 @@ checks each text file against the dataset:</p>
 <li><strong>Characters</strong>: the file must be UTF-8 text, and every character must exist in the host code page (the Latin-1
 range). The review lists the first few that don't; send such a file in <strong>Binary</strong> instead.</li>
 <li><strong>Line length</strong>: no line may be longer than a record holds (LRECL, less 4 for variable-length datasets). mvsMF
-would cut a long line short without an error, so LizTerm refuses the file instead.</li>
+would cut a long line short and still write the rest, so LizTerm refuses the file instead.</li>
 <li><strong>Tabs</strong>: <strong>Expand tabs (every 8 columns)</strong> (on by default) turns them into spaces. Left off, each tab reaches the
 host as a tab character.</li>
-<li><strong>Empty lines</strong> are sent as a single space, which the host keeps as a blank record; mvsMF would otherwise drop
-them.</li>
+<li><strong>Empty lines</strong> become blank records on the host.</li>
 </ul>
 <p>Choose <strong>Upload</strong> to start. Before replacing a member that already exists, the browser asks <strong>Replace</strong> or
 <strong>Skip</strong>. With <strong>Verify after upload</strong> on (the default), each text member is read back and compared with what was
@@ -492,7 +492,7 @@ underlying x3270 engine does not send a server name (<a href="https://github.com
 <li><strong>No keymap editing yet</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/18">#18</a>).</li>
 <li><strong>No printer sessions or scripting.</strong></li>
 <li><strong>The mvsMF Browser is a preview</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/17">#17</a>). It has been tested
-against one pre-release build of mvsMF. Very long dataset or member lists arrive in one piece, with no paging. It
+against one build of mvsMF (1.1.0). Very long dataset or member lists arrive in one piece, with no paging. It
 can't create, rename or delete datasets, submit jobs, or browse the z/OS UNIX file system.</li>
 </ul>
 </body>

@@ -1,16 +1,18 @@
 HTTP/1.1 200 OK
 Server: HTTPD Server
+X-Powered-By: MVSLOVERS
 Connection: keep-alive
 Cache-Control: no-store
-Content-Type: application/json
 Pragma: no-cache
-Access-Control-Allow-Origin: *
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
+Content-Type: application/json
 Transfer-Encoding: chunked
 
 {
   "items": [
   ],
   "returnedRows": 0,
-  "moreRows": false,
   "JSONversion": 1
 } 

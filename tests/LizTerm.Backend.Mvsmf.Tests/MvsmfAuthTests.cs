@@ -34,12 +34,28 @@ public class MvsmfAuthTests
 
         var info = await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(new HostServerInfo("mvsMF", "1.0.0-dev", "MVS 3.8j"), info);
+        Assert.Equal(new HostServerInfo("mvsMF", "1.1.0", "MVS 3.8j"), info);
         var request = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Get, request.Method);
         Assert.Equal("http://mvs.test:8080/zosmf/info", request.Uri.ToString());
         Assert.Equal(Basic("MVSCE02", "pw"), request.Authorization);
         Assert.Equal(new[] { new HostCredentialRequest(false) }, asked);
+    }
+
+    [Theory]
+    [InlineData("""{"zosmf_version":"1","zosmf_full_version":"1.1.0","zos_version":"MVS 3.8j"}""", "1.1.0")]
+    [InlineData("""{"zosmf_version":"1.0.0-dev","zos_version":"MVS 3.8j"}""", "1.0.0-dev")]
+    [InlineData("""{"zosmf_version":"1","zosmf_full_version":"  ","zos_version":"MVS 3.8j"}""", "1")]
+    [InlineData("""{"zos_version":"MVS 3.8j"}""", "unknown")]
+    public async Task Info_version_fields_prefer_the_full_version(string body, string expected)
+    {
+        using var service = new MvsmfFileService(new RecordedHandler().Then(System.Net.HttpStatusCode.OK, body), Base,
+            Answering([], new HostCredentials("MVSCE02", "pw")));
+
+        var info = await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, info.ProductVersion);
+        Assert.Equal("MVS 3.8j", info.SystemVersion);
     }
 
     [Fact]
@@ -65,7 +81,7 @@ public class MvsmfAuthTests
 
         var info = await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal("1.0.0-dev", info.ProductVersion);
+        Assert.Equal("1.1.0", info.ProductVersion);
         Assert.Equal(new[] { false, true }, asked.Select(r => r.IsRetry));
         Assert.Null(asked[0].Rejected);
         Assert.Same(wrong, asked[1].Rejected);
@@ -151,7 +167,7 @@ public class MvsmfAuthTests
 
         var info = await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal("1.0.0-dev", info.ProductVersion);
+        Assert.Equal("1.1.0", info.ProductVersion);
     }
 
     [Fact]
@@ -167,7 +183,7 @@ public class MvsmfAuthTests
 
         var info = await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal("1.0.0-dev", info.ProductVersion);
+        Assert.Equal("1.1.0", info.ProductVersion);
     }
 
     [Fact]

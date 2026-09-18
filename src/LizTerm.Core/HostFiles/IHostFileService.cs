@@ -16,8 +16,8 @@ public interface IHostFileService : IDisposable
     /// in the host's order.</summary>
     Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default);
 
-    /// <summary>The members of a partitioned dataset. Some hosts answer an empty list for a dataset that does not
-    /// exist or is not partitioned, so confirm the dataset from <see cref="ListDatasetsAsync"/>.</summary>
+    /// <summary>The members of a partitioned dataset. A dataset that does not exist is <see cref="HostFileErrorKind.NotFound"/>;
+    /// one that is not partitioned is <see cref="HostFileErrorKind.InvalidRequest"/>.</summary>
     Task<IReadOnlyList<HostFileEntry>> ListMembersAsync(HostPath dataset, CancellationToken cancellationToken = default);
 
     /// <summary>The records as lines, trailing blanks as the host sent them. <paramref name="progress"/> reports

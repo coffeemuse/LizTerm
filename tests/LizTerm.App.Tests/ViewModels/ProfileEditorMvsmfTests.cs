@@ -26,7 +26,7 @@ public class ProfileEditorMvsmfTests
             Calls.Add((name, url, userid, pin));
             if (Gate is { } gate) await gate.Task;
             if (Failure is not null) throw Failure;
-            return new HostServerInfo("mvsMF", "1.0.0-dev", "MVS 3.8j");
+            return new HostServerInfo("mvsMF", "1.1.0", "MVS 3.8j");
         }
     }
 
@@ -131,7 +131,7 @@ public class ProfileEditorMvsmfTests
 
         await vm.TestMvsmfCommand.ExecuteAsync(null);
 
-        Assert.Equal("✓ Connected: mvsMF 1.0.0-dev on MVS 3.8j", vm.MvsmfTestResult);
+        Assert.Equal("✓ Connected: mvsMF 1.1.0 on MVS 3.8j", vm.MvsmfTestResult);
         var call = Assert.Single(tester.Calls);
         Assert.Equal(("MVS/CE", "http://mvs:8080/zosmf", "MVSCE02"), (call.Name, call.Url.ToString(), call.Userid));
         Assert.Null(vm.ValidationMessage);

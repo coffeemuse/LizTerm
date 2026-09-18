@@ -8,9 +8,10 @@ against disagree, and what LizTerm does about each. When a newer mvsMF is availa
 
 | | |
 |---|---|
-| Reported version | `zosmf_version: 1.0.0-dev` (a pre-release) |
-| Host | MVS/CE, HTTPD `STC 99`, probed 2026-09-16 |
-| Source read alongside | mvsMF v1.1.0 (2026-09-14), `src/` and `docs/endpoints/` |
+| Reported version | `zosmf_full_version: 1.1.0` (`zosmf_version: 1`) |
+| Host | MVS/CE, HTTPD, probed 2026-09-18 |
+| Source read alongside | mvsMF at commit `cf4d6d5` (1.1.1-dev, after the 1.1.0 release of 2026-09-14), `src/`, `docs/endpoints/`, `samplib/` and `CHANGELOG.md` |
+| Previous baseline | `1.0.0-dev`, probed 2026-09-16; the entries it needed are under *Resolved on 1.1.0* |
 
 ## How to re-check a new build
 
@@ -20,7 +21,8 @@ against disagree, and what LizTerm does about each. When a newer mvsMF is availa
    is named after the entry below whose behaviour changed.
 3. Run the live tests: `dotnet test tests/LizTerm.Integration.Tests --filter "FullyQualifiedName~LiveMvsmfTests"`.
 4. For each entry, probe the behaviour by hand where no test covers it, then update the entry. When a workaround is
-   no longer needed, remove the code at its tag (`grep -rn "mvsMF-compat: <tag>" src`), its test, and the entry.
+   no longer needed, remove the code at its tag (`grep -rn "mvsMF-compat: <tag>" src`), its test, and the entry,
+   and add one line under *Resolved*.
 
 Each entry's tag appears in the backend code as `// mvsMF-compat: <tag>` and in the name of the test that pins it.
 Entries marked *log only* change nothing in the code.
@@ -30,77 +32,68 @@ Entries marked *log only* change nothing in the code.
 ### `basic-auth-every-request`
 
 - **Docs and source:** any Basic-authenticated request is answered with `Set-Cookie: LtpaToken2=…`, and a client
-  holding the cookie need not resend credentials.
-- **Observed:** no `Set-Cookie` at all.
-- **LizTerm:** keeps no cookies (`UseCookies = false`) and sends Basic credentials on every request. Once the cookie
-  works, sessions could use it instead; nothing depends on it now.
+  holding the cookie need not resend credentials; `POST /zosmf/services/authenticate` issues one and `DELETE`
+  invalidates it.
+- **Observed:** 1.1.0 does all of that (1.0.0-dev set no cookie).
+- **LizTerm:** this release still keeps no cookies (`UseCookies = false`) and sends Basic credentials on every
+  request. Token sign-in is the next phase of #17. Fixtures record the cookie line with its value replaced by
+  `<token>`.
 
 ### `info-requires-auth`
 
-- **Docs:** `GET /zosmf/info` needs no authentication.
-- **Observed, and in the source:** 401 without credentials.
-- **LizTerm:** `/info` goes through the same authenticated path as everything else.
+- **Docs:** `docs/endpoints/info.md` says `GET /zosmf/info` needs no authentication.
+- **Source and observed:** 401 without credentials, with `WWW-Authenticate: Basic realm="<SMF ID>"`. This is by
+  design: `samplib/mvsmfprm` says `/info` has been authenticated like every other route since mvsMF #324 and that
+  the anonymous liveness probe never existed. The doc is stale.
+- **LizTerm:** `/info` goes through the same authenticated path as everything else. An unauthenticated 401 still
+  proves the URL reaches an mvsMF, which the next phase uses.
 
-### `no-www-authenticate` (log only)
+### `info-version-fields`
 
-- **Source:** a 401 carries `WWW-Authenticate: Basic realm="<SMF ID>"` unless the client sends `X-MVSMF-Client`.
-- **Observed:** no `WWW-Authenticate` header.
-- **LizTerm:** sends credentials up front and never waits for a challenge, so either behaviour works. It does not
-  send `X-MVSMF-Client`, which is meant for browser pages only.
+- **Docs:** `zosmf_version` is the API level and `zosmf_full_version` the release, as in z/OSMF.
+- **Observed:** 1.0.0-dev put `1.0.0-dev` in both `zosmf_version` and `zosmf_full_version`; 1.1.0 answers
+  `zosmf_version: "1"` and `zosmf_full_version: "1.1.0"`.
+- **LizTerm:** reads `zosmf_full_version` first and falls back to `zosmf_version`, so both builds report their
+  release.
 
-### `dataset-list-ignores-start`
+### `no-paging`
 
-- **Docs and source:** `start` names the first dataset of the page, so a list can be paged with
-  `X-IBM-Max-Items`.
-- **Observed:** every `start` value — an existing name, a partial one, lower case — returns the first page.
-- **LizTerm:** never pages. It sends no `X-IBM-Max-Items` and no `start`, and takes the whole list (`SYS1.**`,
-  96 entries, arrives at once). The browser has no Load more row; the whole list is shown. If `start` works in a
-  newer build, paging can come back for very large catalogues.
-
-### `dataset-list-morerows-false`
-
-- **Source:** `moreRows` appears only when true.
-- **Observed:** `"moreRows": false` on a complete list.
-- **LizTerm:** sends no item limit, so `moreRows` should never be true; a true means the host changed behaviour and
-  returned a partial list, which LizTerm reports as a server error rather than showing.
+- **Docs and source:** `start` names the first item of a page and `X-IBM-Max-Items` its size, on the dataset list
+  and the member list; a partial page answers `returnedRows` and `moreRows: true`.
+- **Observed:** 1.1.0 honours both (5 datasets from `SYS1.PARMLIB`; 3 of `SYS1.MACLIB`'s 742 members). 1.0.0-dev
+  ignored both.
+- **LizTerm:** still asks for whole lists, with neither `start` nor `X-IBM-Max-Items` (`SYS1.**`, 97 entries,
+  arrives at once). A `moreRows: true` on either list is refused as a partial answer, since none was asked for.
+  Paging is #144.
 
 ### `dslevel-is-a-prefix` (log only)
 
 - **Observed:** `dslevel=MVSCE02` lists every `MVSCE02.*` dataset, as z/OSMF does.
 - **LizTerm:** the browser shows everything the filter matches, as z/OSMF would.
 
-### `member-list-ignores-max-items`
-
-- **Docs:** `X-IBM-Max-Items` limits the member list.
-- **Observed:** a request for 3 members of `SYS1.MACLIB` returned all 742.
-- **LizTerm:** sends no limit and expects whole lists.
-
-### `member-list-empty-for-missing-dataset`
-
-- **Source:** a missing dataset is 404; a dataset that is not partitioned is 400.
-- **Observed:** both answer 200 with an empty list.
-- **LizTerm:** passes the empty list on; callers confirm the dataset from the dataset list, whose attributes say
-  whether it is partitioned.
-
-### `missing-read-is-500`
-
-- **Source:** a missing dataset or member on read is 404 (reason 4 or 5).
-- **Observed:** 500 with category 6, reason 3, "Cannot open dataset" or "Cannot open dataset member".
-- **LizTerm:** classifies by category and reason, and reports reason 3 as "not found, not authorized, or cannot be
-  opened", because it cannot tell which.
-
 ### `authorization-is-500`
 
 - **Source:** a refused open is 500 with category 4, rc 8, reason 0 ("LMOPEN error"), never 403.
-- **Observed:** not reproduced (IBMUSER could read everything tried). MVSCE02's own libraries listed empty for
-  IBMUSER, which may be a hidden refusal; see `member-list-empty-for-missing-dataset`.
+- **Observed:** not reproduced; IBMUSER could read everything tried. (On 2026-09-16 MVSCE02's own libraries
+  listed empty for IBMUSER, which looked like a hidden refusal; on 2026-09-18 a member IBMUSER wrote into
+  `MVSCE02.CNTL` listed at once, so the PDS was simply empty.)
 - **LizTerm:** reports that shape as "not authorized".
+
+### `cannot-open-is-500`
+
+- **Source:** an open that fails before any record is read or written ("Cannot open dataset", "Cannot open
+  dataset member", "Cannot open dataset for writing") answers 500 with category 6, reason 3, the same shape as a
+  write that failed after the host had started writing; only the message differs.
+- **Observed:** not reproduced on 2026-09-18; the shape is from `dsapi.c`.
+- **LizTerm:** a reason 3 whose message starts `Cannot open` is "cannot be opened", so the browser does not warn
+  that the member may be partly written; any other reason 3 is a server error quoting the host's message.
 
 ### `text-body-is-latin1`
 
 - **Docs:** silent on the body's character set.
-- **Observed:** text bodies are ISO-8859-1 in both directions, whatever `charset` says. UTF-8 `¬` (`C2 AC`) was
-  stored as two characters, `Â¬` (`62 5F`); Latin-1 `AC` was stored as CP037 `5F`. Responses carry no charset.
+- **Observed:** text bodies are ISO-8859-1 in both directions, whatever `charset` says: a `PUT` declaring
+  `charset=UTF-8` still stores UTF-8 `¬` (`C2 AC`) as two characters, and Latin-1 `AC` round-trips as `AC`.
+  Responses say `text/plain` with no charset.
 - **LizTerm:** encodes to and decodes from Latin-1 in the backend. Local files are UTF-8; `TextUploadCheck` refuses
   characters above U+00FF.
 
@@ -111,24 +104,21 @@ Entries marked *log only* change nothing in the code.
 - **LizTerm:** the backend passes lines on as received; `HostFileTransfer` trims trailing blanks on download
   (`DownloadOptions.TrimTrailingBlanks`, on by default) and ignores them when verifying an upload.
 
-### `text-write-drops-empty-lines`
+### `text-write-truncates`
 
-- **Source:** a blank line becomes a record of blanks.
-- **Observed:** an empty line is dropped (with LF and CRLF endings alike); a line holding one space is stored as a
-  blank record.
-- **LizTerm:** the backend sends each empty line as a single space.
-
-### `text-write-truncates-silently`
-
-- **Source:** an over-long line is truncated, the rest is written, and the request answers 500 "Record truncated to
-  the record length of the data set".
-- **Observed:** a 100-character line to an LRECL 80 member was truncated to 80 and answered **204**.
-- **LizTerm:** `TextUploadCheck` refuses any line longer than the record allows (LRECL for F, LRECL−4 for V,
-  BLKSIZE for U) before anything is sent; pinned by `TextUploadCheckTests`, since Core does not name mvsMF.
+- **Source and observed:** an over-long line is truncated, the rest is written, and the request answers 500
+  `{"category":6,"reason":3,"message":"Record truncated to the record length of the data set"}`. (1.0.0-dev
+  truncated the same way and answered 204.)
+- **LizTerm:** the write is partial either way, so `TextUploadCheck` refuses any line longer than the record allows
+  (LRECL for F, LRECL−4 for V, BLKSIZE for U) before anything is sent, when the listing gives it that length; a
+  listing without one (unknown RECFM, no LRECL) leaves the line to the host. The refusal is pinned by
+  `TextUploadCheckTests`, since Core does not name mvsMF; the 500, reported as a server error with the host's
+  message, by `Text_write_truncates…` in `MvsmfErrorsTests`.
 
 ### `put-json-is-rename`
 
-- **Source:** a `PUT` with `Content-Type: application/json` is a rename request, not a write.
+- **Source and docs:** a `PUT` with `Content-Type: application/json` and `"request":"rename"` is a rename
+  (`docs/endpoints/datasets/authorization.md`), not a write.
 - **LizTerm:** writes send only `text/plain` or `application/octet-stream`.
 
 ### `binary-fixed-padding` (log only)
@@ -138,26 +128,16 @@ Entries marked *log only* change nothing in the code.
 
 ### `record-write-broken` (log only)
 
-- **Source:** record-mode writes are broken (mvsMF issue #245); record-mode reads prefix each record with a 4-byte
-  length.
+- **Source:** the 1.1.0 changelog's known limitations: `X-IBM-Data-Type: record` is wrong on RECFM=V for reads and
+  unimplemented for writes (mvsMF #361, #245), and the binary write path mis-frames V records (#244).
 - **LizTerm:** offers Text and Binary only.
 
-### `no-etag` (log only)
+### `etag-unused` (log only)
 
-- **Source:** `X-IBM-Return-Etag`, `If-Match` and `If-None-Match` are supported.
-- **Observed:** no `ETag` header is returned.
-- **LizTerm:** no conflict detection in the preview.
-
-### `host-date-unreliable` (log only)
-
-- **Observed:** the `Date` header said `Sat, 15 Sep 2096`: it is the MVS clock.
-- **LizTerm:** never uses host dates for anything that matters.
-
-### `docs-omit-routes` (log only)
-
-- **Docs:** the endpoint table lists no dataset `POST` or `DELETE` and no member `DELETE`.
-- **Source and observed:** member `DELETE` works (204, then 404 reason 5); the source also routes dataset create and
-  delete, which the preview does not use.
+- **Source and observed:** `X-IBM-Return-Etag: true` returns an `ETag` (none is sent without the header), and a
+  wrong `If-Match` answers 412 `{"category":6,"reason":10,"message":"The resource was modified since the supplied
+  ETag was created"}`. (1.0.0-dev returned no ETag.)
+- **LizTerm:** no conflict detection in the preview; the header is not requested.
 
 ### `hash-in-names-untested` (log only)
 
@@ -169,3 +149,22 @@ Entries marked *log only* change nothing in the code.
 
 - **Source:** USS files are limited to 64 KB, use IBM-1047, and USS create answers 400 for an existing file.
 - **LizTerm:** no USS support yet.
+
+## Resolved on 1.1.0
+
+Entries the 1.0.0-dev baseline needed and 1.1.0 does not. Each code entry was removed with its code and test on
+2026-09-18; the log-only ones were simply struck.
+
+- `no-www-authenticate`: a 401 now carries `WWW-Authenticate`.
+- `dataset-list-morerows-false`: `moreRows` is now absent on a complete list, as the source says. The refusal of a
+  `moreRows: true` stays as plain code under `no-paging`.
+- `member-list-ignores-max-items` and `dataset-list-ignores-start`: merged into `no-paging`, since the host honours
+  both now.
+- `member-list-empty-for-missing-dataset`: a missing dataset answers 404 reason 4 and a sequential one 400 reason 1,
+  as the source says; LizTerm reports not found and an invalid request.
+- `missing-read-is-500`: a missing member or dataset on read answers 404 reason 5 or 4; the reason-3 special case
+  is gone.
+- `text-write-drops-empty-lines`: an empty line is now stored as a blank record; LizTerm sends it as it is.
+- `host-date-unreliable`: the `Date` header was correct on 2026-09-18. It is the MVS clock, which was wrong before;
+  LizTerm never used it.
+- `docs-omit-routes`: `docs/endpoints/datasets/` now documents dataset create and delete and member delete.

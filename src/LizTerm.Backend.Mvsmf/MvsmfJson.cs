@@ -9,6 +9,7 @@ namespace LizTerm.Backend.Mvsmf;
 
 internal sealed record MvsmfInfo(
     [property: JsonPropertyName("zosmf_version")] string? ZosmfVersion,
+    [property: JsonPropertyName("zosmf_full_version")] string? ZosmfFullVersion,
     [property: JsonPropertyName("zos_version")] string? ZosVersion);
 
 /// <summary>mvsMF sends every attribute as a string ("lrecl":"80"); z/OSMF may send numbers, so attribute fields
@@ -27,7 +28,9 @@ internal sealed record MvsmfDatasetList(
 
 internal sealed record MvsmfMember([property: JsonPropertyName("member")] string? Member);
 
-internal sealed record MvsmfMemberList([property: JsonPropertyName("items")] List<MvsmfMember>? Items);
+internal sealed record MvsmfMemberList(
+    [property: JsonPropertyName("items")] List<MvsmfMember>? Items,
+    [property: JsonPropertyName("moreRows")] bool? MoreRows);
 
 internal sealed record MvsmfError(
     [property: JsonPropertyName("rc")] int? Rc,

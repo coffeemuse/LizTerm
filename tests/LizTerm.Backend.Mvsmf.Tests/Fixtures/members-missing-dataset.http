@@ -1,15 +1,13 @@
-HTTP/1.1 200 OK
+HTTP/1.1 404 Not Found
 Server: HTTPD Server
+X-Powered-By: MVSLOVERS
 Connection: keep-alive
-Cache-Control: no-store
 Content-Type: application/json
+Content-Length: 62
+Cache-Control: no-store
 Pragma: no-cache
-Access-Control-Allow-Origin: *
-Transfer-Encoding: chunked
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
 
-{
-  "items": [
-  ],
-  "returnedRows": 0,
-  "JSONversion": 1
-} 
+{"rc":8,"category":6,"reason":4,"message":"Dataset not found"}

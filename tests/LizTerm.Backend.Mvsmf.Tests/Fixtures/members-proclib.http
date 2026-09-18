@@ -1,34 +1,37 @@
 HTTP/1.1 200 OK
 Server: HTTPD Server
+X-Powered-By: MVSLOVERS
 Connection: keep-alive
 Cache-Control: no-store
-Content-Type: application/json
 Pragma: no-cache
-Access-Control-Allow-Origin: *
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
+Content-Type: application/json
 Transfer-Encoding: chunked
 
 {
   "items": [
     {
-      "member": "ASMFC   "
+      "member": "ASMFC"
     }
    ,{
-      "member": "ASMFCG  "
+      "member": "ASMFCG"
     }
    ,{
-      "member": "ASMFCL  "
+      "member": "ASMFCL"
     }
    ,{
-      "member": "ASMFCLG "
+      "member": "ASMFCLG"
     }
    ,{
-      "member": "ASMS    "
+      "member": "ASMS"
     }
    ,{
-      "member": "DEALLOC "
+      "member": "DEALLOC"
     }
    ,{
-      "member": "DLBACC  "
+      "member": "DLBACC"
     }
    ,{
       "member": "DLBALLOC"
@@ -40,22 +43,22 @@ Transfer-Encoding: chunked
       "member": "DLBDELT2"
     }
    ,{
-      "member": "DLBPROC "
+      "member": "DLBPROC"
     }
    ,{
-      "member": "DLBREC  "
+      "member": "DLBREC"
     }
    ,{
-      "member": "DLBREJ  "
+      "member": "DLBREJ"
     }
    ,{
-      "member": "DLBUCL  "
+      "member": "DLBUCL"
     }
    ,{
-      "member": "GTF     "
+      "member": "GTF"
     }
    ,{
-      "member": "HASPASM "
+      "member": "HASPASM"
     }
    ,{
       "member": "IEEVMPCR"
@@ -64,19 +67,19 @@ Transfer-Encoding: chunked
       "member": "IKJACCNT"
     }
    ,{
-      "member": "INIT    "
+      "member": "INIT"
     }
    ,{
-      "member": "JES2    "
+      "member": "JES2"
     }
    ,{
-      "member": "JES2BLD "
+      "member": "JES2BLD"
     }
    ,{
-      "member": "JES2JOB "
+      "member": "JES2JOB"
     }
    ,{
-      "member": "JES2LNK "
+      "member": "JES2LNK"
     }
    ,{
       "member": "JES20098"
@@ -85,40 +88,40 @@ Transfer-Encoding: chunked
       "member": "JES20099"
     }
    ,{
-      "member": "LINKS   "
+      "member": "LINKS"
     }
    ,{
-      "member": "LIST    "
+      "member": "LIST"
     }
    ,{
-      "member": "LKED    "
+      "member": "LKED"
     }
    ,{
-      "member": "LKEDG   "
+      "member": "LKEDG"
     }
    ,{
-      "member": "MF1     "
+      "member": "MF1"
     }
    ,{
-      "member": "MOD     "
+      "member": "MOD"
     }
    ,{
-      "member": "NET     "
+      "member": "NET"
     }
    ,{
-      "member": "OFFLOAD "
+      "member": "OFFLOAD"
     }
    ,{
-      "member": "PRDMP   "
+      "member": "PRDMP"
     }
    ,{
-      "member": "PTFLE   "
+      "member": "PTFLE"
     }
    ,{
-      "member": "RACIND  "
+      "member": "RACIND"
     }
    ,{
-      "member": "RAKF    "
+      "member": "RAKF"
     }
    ,{
       "member": "RAKFPROF"
@@ -130,31 +133,31 @@ Transfer-Encoding: chunked
       "member": "RAKFUSER"
     }
    ,{
-      "member": "RDR     "
+      "member": "RDR"
     }
    ,{
-      "member": "RDR3200 "
+      "member": "RDR3200"
     }
    ,{
-      "member": "RDR400  "
+      "member": "RDR400"
     }
    ,{
-      "member": "RMTGEN  "
+      "member": "RMTGEN"
     }
    ,{
-      "member": "SMFDUMP "
+      "member": "SMFDUMP"
     }
    ,{
-      "member": "SMPIO   "
+      "member": "SMPIO"
     }
    ,{
-      "member": "SMPNUC  "
+      "member": "SMPNUC"
     }
    ,{
-      "member": "TSO     "
+      "member": "TSO"
     }
    ,{
-      "member": "XWTR    "
+      "member": "XWTR"
     }
   ],
   "returnedRows": 49,

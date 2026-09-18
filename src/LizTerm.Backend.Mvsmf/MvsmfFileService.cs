@@ -56,8 +56,8 @@ public sealed class MvsmfFileService : IHostFileService
     internal static SocketsHttpHandler CreateHandler(MvsmfCertificateCheck certificates) => new()
     {
         ConnectTimeout = ConnectTimeout,
-        // mvsMF-compat: basic-auth-every-request — this build sets no session cookie, so none is kept and every
-        // request carries Basic credentials.
+        // mvsMF-compat: basic-auth-every-request — the host sets an LtpaToken2 cookie since 1.1.0, but this release
+        // still sends Basic credentials on every request and keeps no cookie; token sign-in is the next phase of #17.
         UseCookies = false,
         AllowAutoRedirect = false,
         SslOptions = new SslClientAuthenticationOptions
@@ -71,11 +71,14 @@ public sealed class MvsmfFileService : IHostFileService
     {
         const string what = "Server information";
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        // mvsMF-compat: info-requires-auth — the docs say /info needs no credentials; this build demands them, so it
-        // goes through the same authenticated path as everything else.
+        // mvsMF-compat: info-requires-auth — the docs say /info needs no credentials; the host demands them by design
+        // (mvsMF #324), so it goes through the same authenticated path as everything else.
         using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get, Url("info")), what, idle, cancellationToken);
         var info = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfInfo, what, idle, cancellationToken);
-        return new HostServerInfo("mvsMF", info.ZosmfVersion ?? "unknown", info.ZosVersion ?? "unknown");
+        // mvsMF-compat: info-version-fields — 1.0.0-dev put the whole version in both fields; 1.1.0 puts the major in
+        // zosmf_version and the release in zosmf_full_version, as z/OSMF does, so the full one is read first.
+        var version = Blank(info.ZosmfFullVersion) ?? Blank(info.ZosmfVersion) ?? "unknown";
+        return new HostServerInfo("mvsMF", version, Blank(info.ZosVersion) ?? "unknown");
     }
 
     public async Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default)
@@ -84,15 +87,12 @@ public sealed class MvsmfFileService : IHostFileService
         const string what = "Dataset list";
         var filter = pattern.Trim().ToUpperInvariant();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        // mvsMF-compat: dataset-list-ignores-start — this build ignores start, so a list cannot be paged; the whole
-        // list is asked for, with no X-IBM-Max-Items.
+        // mvsMF-compat: no-paging — start and X-IBM-Max-Items work since mvsMF 1.1.0, but LizTerm asks for the whole
+        // list with neither (paging is #144).
         using var response = await SendAsync(
             () => new HttpRequestMessage(HttpMethod.Get, Url($"restfiles/ds?dslevel={EscapeName(filter)}")), what, idle, cancellationToken);
         var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfDatasetList, what, idle, cancellationToken);
-        // mvsMF-compat: dataset-list-morerows-false — moreRows arrives as false rather than absent. No item limit is
-        // ever sent, so a true means the host changed behaviour and the list is partial: refuse it.
-        if (list.MoreRows == true)
-            throw new HostFileException(HostFileErrorKind.ServerError, $"{what}: the host returned only part of the list.");
+        RequireComplete(list.MoreRows, what);
         return [.. (list.Items ?? Enumerable.Empty<MvsmfDataset>()).Where(d => !string.IsNullOrWhiteSpace(d.Dsname)).Select(ToEntry)];
     }
 
@@ -101,13 +101,11 @@ public sealed class MvsmfFileService : IHostFileService
         if (dataset.Kind != HostPathKind.Dataset) throw new ArgumentException("Only a dataset has members.", nameof(dataset));
         var what = dataset.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        // mvsMF-compat: member-list-ignores-max-items — the host returns every member whatever limit is asked, so
-        // none is sent.
+        // mvsMF-compat: no-paging — as for datasets: whole list, no X-IBM-Max-Items (paging is #144).
         using var response = await SendAsync(
             () => new HttpRequestMessage(HttpMethod.Get, Url(DatasetPath(dataset) + "/member")), what, idle, cancellationToken);
         var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfMemberList, what, idle, cancellationToken);
-        // mvsMF-compat: member-list-empty-for-missing-dataset — a missing or sequential dataset answers 200 with no
-        // items, so an empty list is passed on as it is; IHostFileService tells callers to confirm the dataset.
+        RequireComplete(list.MoreRows, what);
         return [.. (list.Items ?? Enumerable.Empty<MvsmfMember>())
             .Where(m => !string.IsNullOrWhiteSpace(m.Member))
             .Select(m => new HostFileEntry(m.Member!.Trim(), HostFileEntryKind.Member))];
@@ -117,6 +115,14 @@ public sealed class MvsmfFileService : IHostFileService
         dataset.Dsname!.Trim(),
         HostFileEntryKind.Dataset,
         new DatasetAttributes(Blank(dataset.Dsorg), Blank(dataset.Recfm), Number(dataset.Lrecl), Number(dataset.Blksz), Blank(dataset.Vol)));
+
+    /// <summary>No item limit is ever sent (<c>no-paging</c>), so a true <c>moreRows</c> means the host returned only
+    /// part of the list: refuse it.</summary>
+    private static void RequireComplete(bool? moreRows, string what)
+    {
+        if (moreRows == true)
+            throw new HostFileException(HostFileErrorKind.ServerError, $"{what}: the host returned only part of the list.");
+    }
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -205,13 +211,12 @@ public sealed class MvsmfFileService : IHostFileService
                 throw new ArgumentException("A line cannot hold a line break.", nameof(lines));
             if (line.AsSpan().IndexOfAnyExceptInRange('\0', 'ÿ') >= 0)
                 throw new ArgumentException("A line holds a character outside Latin-1; check the text with TextUploadCheck first.", nameof(lines));
-            // mvsMF-compat: text-write-drops-empty-lines — the host drops an empty line but stores a single blank as
-            // a blank record.
-            text.Append(line.Length == 0 ? " " : line).Append('\n');
+            text.Append(line).Append('\n');
         }
         // mvsMF-compat: text-body-is-latin1 — the host reads the body as ISO-8859-1 whatever charset says.
-        // mvsMF-compat: text-write-truncates-silently — an over-long line is cut to the record length and still
-        // answered 204; TextUploadCheck refuses such lines before they reach this method.
+        // mvsMF-compat: text-write-truncates — an over-long line is cut to the record length and written before the
+        // host answers 500. TextUploadCheck refuses such lines when the listing gave it a record length; when it did
+        // not (unknown RECFM, no LRECL), the line goes out and the host may truncate.
         return Encoding.Latin1.GetBytes(text.ToString());
     }
 

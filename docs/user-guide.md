@@ -275,7 +275,8 @@ the transfer ends. The dialog remembers your last transfer for that window.
 ## mvsMF Browser (preview)
 
 **This is a feature preview.** It works, but it is new and still being refined, and it has been tested against one
-pre-release build of mvsMF. Please report what you find
+build of mvsMF (1.1.0). It follows that build's behaviour; older mvsMF builds are not supported. Please report what
+you find
 ([Help > Report an Issue...](https://github.com/coffeemuse/LizTerm/issues/new/choose)).
 
 [mvsMF](https://github.com/mvslovers/mvsmf) is a z/OSMF-style REST server for MVS 3.8j. The **mvsMF Browser** uses
@@ -291,7 +292,7 @@ Open the profile in the editor and go to the **mvsMF** tab:
   LizTerm adds `/zosmf`. Only `http://` and `https://` addresses are accepted.
 - **Userid** is optional. It fills in the sign-in window, and the browser starts by listing `USERID.**`.
 - **Test** signs in and asks the server what it is, then shows the answer (for example
-  **✓ Connected: mvsMF 1.0.0-dev on MVS 3.8j**) or what went wrong. A sign-in made for **Test** is forgotten right
+  **✓ Connected: mvsMF 1.1.0 on MVS 3.8j**) or what went wrong. A sign-in made for **Test** is forgotten right
   after.
 
 Once a profile has a URL, its session window has **File > mvsMF Browser...**. The item has no keyboard shortcut, so
@@ -355,11 +356,10 @@ checks each text file against the dataset:
 - **Characters**: the file must be UTF-8 text, and every character must exist in the host code page (the Latin-1
   range). The review lists the first few that don't; send such a file in **Binary** instead.
 - **Line length**: no line may be longer than a record holds (LRECL, less 4 for variable-length datasets). mvsMF
-  would cut a long line short without an error, so LizTerm refuses the file instead.
+  would cut a long line short and still write the rest, so LizTerm refuses the file instead.
 - **Tabs**: **Expand tabs (every 8 columns)** (on by default) turns them into spaces. Left off, each tab reaches the
   host as a tab character.
-- **Empty lines** are sent as a single space, which the host keeps as a blank record; mvsMF would otherwise drop
-  them.
+- **Empty lines** become blank records on the host.
 
 Choose **Upload** to start. Before replacing a member that already exists, the browser asks **Replace** or
 **Skip**. With **Verify after upload** on (the default), each text member is read back and compared with what was
@@ -518,5 +518,5 @@ empties the drop-down.
 - **No keymap editing yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)).
 - **No printer sessions or scripting.**
 - **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). It has been tested
-  against one pre-release build of mvsMF. Very long dataset or member lists arrive in one piece, with no paging. It
+  against one build of mvsMF (1.1.0). Very long dataset or member lists arrive in one piece, with no paging. It
   can't create, rename or delete datasets, submit jobs, or browse the z/OS UNIX file system.

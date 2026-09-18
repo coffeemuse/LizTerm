@@ -32,7 +32,7 @@ public class MvsmfListTests
     }
 
     [Fact]
-    public async Task Dataset_list_ignores_start_so_the_whole_list_is_asked_for()
+    public async Task No_paging_so_the_whole_dataset_list_is_asked_for()
     {
         var handler = new RecordedHandler().Then("ds-list-sys1");
         using var service = Service(handler);
@@ -45,7 +45,7 @@ public class MvsmfListTests
     }
 
     [Fact]
-    public async Task Dataset_list_morerows_false_is_a_complete_empty_list()
+    public async Task An_empty_dataset_list_is_complete()
     {
         using var service = Service(new RecordedHandler().Then("ds-list-empty"));
         Assert.Empty(await service.ListDatasetsAsync("NOSUCH.HLQ", TestContext.Current.CancellationToken));
@@ -116,7 +116,7 @@ public class MvsmfListTests
     }
 
     [Fact]
-    public async Task Member_list_ignores_max_items_so_none_is_sent()
+    public async Task No_paging_so_the_whole_member_list_is_asked_for()
     {
         var handler = new RecordedHandler().Then("members-proclib");
         using var service = Service(handler);
@@ -127,10 +127,39 @@ public class MvsmfListTests
     }
 
     [Fact]
-    public async Task Member_list_empty_for_missing_dataset_is_not_an_error()
+    public async Task A_missing_dataset_has_no_member_list()
     {
         using var service = Service(new RecordedHandler().Then("members-missing-dataset"));
-        Assert.Empty(await service.ListMembersAsync(HostPath.ForDataset("MVSCE02.NOSUCH"), TestContext.Current.CancellationToken));
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() =>
+            service.ListMembersAsync(HostPath.ForDataset("MVSCE02.NOSUCH"), TestContext.Current.CancellationToken));
+
+        Assert.Equal(HostFileErrorKind.NotFound, ex.Kind);
+        Assert.Equal("MVSCE02.NOSUCH: not found.", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_sequential_dataset_has_no_member_list()
+    {
+        using var service = Service(new RecordedHandler().Then("members-not-partitioned"));
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() =>
+            service.ListMembersAsync(HostPath.ForDataset("MVSCE02.LIZT.SAMPLIB2.XMIT"), TestContext.Current.CancellationToken));
+
+        Assert.Equal(HostFileErrorKind.InvalidRequest, ex.Kind);
+        Assert.StartsWith("MVSCE02.LIZT.SAMPLIB2.XMIT: the host refused the request (Dataset is not partitioned", ex.Message);
+    }
+
+    [Fact]
+    public async Task Member_list_morerows_true_is_an_error()
+    {
+        using var service = Service(new RecordedHandler().Then(HttpStatusCode.OK, """{"items":[{"member":"A"}],"moreRows":true}"""));
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() =>
+            service.ListMembersAsync(HostPath.ForDataset("SYS1.MACLIB"), TestContext.Current.CancellationToken));
+
+        Assert.Equal(HostFileErrorKind.ServerError, ex.Kind);
+        Assert.Equal("SYS1.MACLIB: the host returned only part of the list.", ex.Message);
     }
 
     [Fact]

@@ -23,7 +23,8 @@ public static class HostFileMessages
             HostFileErrorKind.Unauthenticated => host.Message,
             HostFileErrorKind.CertificateRejected => "The host's certificate is not trusted.",
             HostFileErrorKind.Unreachable => host.Message,
-            _ => host.Reason is { } reason ? $"Server error (reason {reason})." : "Server error.",
+            _ => (host.ServerMessage?.Trim().TrimEnd('.') is { Length: > 0 } said ? $"Server error: {said}" : "Server error")
+                + (host.Reason is { } reason ? $" (reason {reason})." : "."),
         },
         IOException or UnauthorizedAccessException => $"Local file: {ex.Message}",
         OperationCanceledException => "Cancelled.",
