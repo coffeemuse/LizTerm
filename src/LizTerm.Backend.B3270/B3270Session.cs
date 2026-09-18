@@ -61,8 +61,18 @@ public sealed class B3270Session : IEmulatorSession
     /// here lets <see cref="OnProcessEnded"/> report why instead of a bare "exited unexpectedly" (#139).</summary>
     private volatile string? _fatalUiError;
 
+    /// <summary>What the last line written to the engine carried: its length, and a redacted account of its
+    /// actions from <see cref="RunOperation.Describe"/>. A <c>ui-error</c> is b3270 rejecting a line we wrote, and
+    /// without this the complaint reaches the user with nothing to attach it to. Cleared by the next start, and
+    /// never holds an argument value — it goes on an error banner and into bug reports (#139).</summary>
+    private volatile string? _lastOutbound;
+
     private const string FatalUiErrorMessage = "The emulator engine (b3270) reported a fatal protocol error and is stopping: ";
     private const string FaultAfterUiErrorMessage = "The emulator engine (b3270) stopped after a fatal protocol error: ";
+
+    /// <summary>A b3270 complaint with the line it is about to be blamed on, when there is one to name.</summary>
+    private string WithLastOutbound(string text) =>
+        _lastOutbound is { } sent ? $"{text} (last line sent: {sent})" : text;
 
     /// <summary>How long <see cref="DisconnectAsync"/> waits for b3270 to report the connection closed
     /// after accepting the action. Tests shorten it.</summary>
@@ -213,6 +223,7 @@ public sealed class B3270Session : IEmulatorSession
         _process = process;
         _fault = null;
         _fatalUiError = null;
+        _lastOutbound = null;
         try
         {
             process.Start(BuildArguments(Profile));
@@ -379,7 +390,8 @@ public sealed class B3270Session : IEmulatorSession
             if (process is null) return;
             try
             {
-                WriteLine(RunOperation.Serialize("quit", [new B3270Action("Quit")]));
+                B3270Action[] quit = [new B3270Action("Quit")];
+                WriteLine(RunOperation.Serialize("quit", quit), RunOperation.Describe(quit));
                 await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
             }
             catch (Exception)
@@ -437,7 +449,7 @@ public sealed class B3270Session : IEmulatorSession
         }
         try
         {
-            WriteLine(RunOperation.Serialize(tag, actions));
+            WriteLine(RunOperation.Serialize(tag, actions), RunOperation.Describe(actions));
         }
         catch
         {
@@ -465,11 +477,14 @@ public sealed class B3270Session : IEmulatorSession
         return result;
     }
 
-    private void WriteLine(string line)
+    private void WriteLine(string line, string summary)
     {
         var process = RequireProcess();
         lock (_writeLock)
         {
+            // Recorded before the write, for the same reason the wire log is: a line that then fails part-way
+            // through is exactly the one a ui-error is about to complain about.
+            _lastOutbound = $"{line.Length} characters, {summary}";
             // Logged before the bytes go out, not after: stdin auto-flushes, so b3270 can answer the moment the
             // newline lands, and the reader thread logs inbound lines under the log's own lock rather than this
             // one. Logging afterwards let a run-result be written ahead of the run that provoked it, which is the
@@ -548,13 +563,13 @@ public sealed class B3270Session : IEmulatorSession
                 break;
             case UiErrorIndication { Fatal: true } error:
                 // b3270 does not carry on after one of these: it writes the ui-error and exits. Recording the
-                // text lets the fault that follows say why (OnProcessEnded), and the message here says the
+                // reason lets the fault that follows say why (OnProcessEnded), and the message here says the
                 // session is going rather than leaving it to disappear under a bare "Protocol error" (#139).
-                _fatalUiError = error.Text;
-                HostMessage?.Invoke(this, FatalUiErrorMessage + error.Text);
+                _fatalUiError = WithLastOutbound(error.Text);
+                HostMessage?.Invoke(this, FatalUiErrorMessage + _fatalUiError);
                 break;
             case UiErrorIndication error:
-                HostMessage?.Invoke(this, "Protocol error: " + error.Text);
+                HostMessage?.Invoke(this, "Protocol error: " + WithLastOutbound(error.Text));
                 break;
             default:
                 HandleStateIndication(indication);

@@ -175,6 +175,27 @@ public class B3270SessionLifecycleTests
         Assert.DoesNotContain("exited unexpectedly", fault.Message);
     }
 
+    /// <summary>The fault is the message the user is most likely left looking at once the session has gone, so it
+    /// carries the line the engine was complaining about too — redacted, because it goes into bug reports.</summary>
+    [Fact]
+    public async Task The_fault_after_a_fatal_ui_error_names_the_last_line_sent()
+    {
+        var fake = new FakeB3270Process();
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(CancellationToken.None);
+        var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, f) => faulted.TrySetResult(f);
+        await session.TypeTextAsync("SECRETPASSWORD");
+
+        fake.Emit("""{"ui-error":{"fatal":true,"text":"JSON parse error: line 1, column 7","operation":"run"}}""");
+        fake.Exit(1);
+
+        var fault = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Contains("last line sent", fault.Message);
+        Assert.Contains("String(14 chars)", fault.Message);
+        Assert.DoesNotContain("SECRETPASSWORD", fault.Message);
+    }
+
     /// <summary>A non-fatal ui-error is the engine rejecting one action, not a death sentence: it must not be
     /// hung on the next exit as its cause.</summary>
     [Fact]

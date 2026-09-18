@@ -167,6 +167,61 @@ public class B3270SessionStateTests
         await Wait.UntilAsync(() => Volatile.Read(ref message) == "Protocol error: Element 0: Not an object", "ui-error");
     }
 
+    /// <summary>A ui-error is b3270 rejecting a line we wrote, so the message is worth little without some account
+    /// of what that line was (#139). The account may never quote an argument: the String() action here is exactly
+    /// the shape that carries a password when the user is at a logon screen.</summary>
+    [Fact]
+    public async Task Ui_error_names_the_last_line_sent_without_what_was_typed()
+    {
+        var (session, fake) = await StartAsync();
+        string? message = null;
+        // The reader thread writes this; Volatile pairs the release with the test thread's acquire read below.
+        session.HostMessage += (_, m) => Volatile.Write(ref message, m);
+        await session.TypeTextAsync("SECRETPASSWORD");
+        fake.Emit("""{"ui-error":{"fatal":false,"text":"Element 0: Not an object","operation":"run"}}""");
+        await Wait.UntilAsync(() => Volatile.Read(ref message) is not null, "ui-error");
+        var text = Volatile.Read(ref message)!;
+        Assert.Contains("Element 0: Not an object", text);
+        Assert.Contains("last line sent", text);
+        Assert.Contains("String(14 chars)", text);
+        Assert.DoesNotContain("SECRETPASSWORD", text);
+    }
+
+    /// <summary>The length of the line matters on its own: a parse error whose column sits past the end of what we
+    /// wrote is the signature of a truncated write, which is one of the open hypotheses in #139.</summary>
+    [Fact]
+    public async Task Ui_error_reports_the_length_of_the_last_line_sent()
+    {
+        var (session, fake) = await StartAsync();
+        string? message = null;
+        // The reader thread writes this; Volatile pairs the release with the test thread's acquire read below.
+        session.HostMessage += (_, m) => Volatile.Write(ref message, m);
+        var sent = await SentLineAsync(session, fake);
+        fake.Emit("""{"ui-error":{"fatal":false,"text":"JSON parse error: line 1, column 7","operation":"run"}}""");
+        await Wait.UntilAsync(() => Volatile.Read(ref message) is not null, "ui-error");
+        Assert.Contains($"{sent.Length} characters", Volatile.Read(ref message)!);
+    }
+
+    /// <summary>Nothing written yet means nothing to report; the message must not invent an empty line.</summary>
+    [Fact]
+    public async Task Ui_error_before_anything_is_sent_reports_no_line()
+    {
+        var (session, fake) = await StartAsync();
+        string? message = null;
+        // The reader thread writes this; Volatile pairs the release with the test thread's acquire read below.
+        session.HostMessage += (_, m) => Volatile.Write(ref message, m);
+        fake.Emit("""{"ui-error":{"fatal":false,"text":"Element 0: Not an object","operation":"run"}}""");
+        await Wait.UntilAsync(() => Volatile.Read(ref message) is not null, "ui-error");
+        Assert.Equal("Protocol error: Element 0: Not an object", Volatile.Read(ref message));
+    }
+
+    /// <summary>Types one action and returns the line the session actually wrote for it.</summary>
+    private static async Task<string> SentLineAsync(B3270Session session, FakeB3270Process fake)
+    {
+        await session.TypeTextAsync("COBOL");
+        return await fake.WaitForInputAsync(l => l.Contains("\"String\""));
+    }
+
     /// <summary>b3270 exits after a fatal ui-error, so the message that announces one has to say so. Reporting it
     /// as a bare "Protocol error" left the session vanishing underneath a line of text that never mentioned the
     /// engine (#139): whether the user then saw this or the fault that follows was down to which landed last.</summary>

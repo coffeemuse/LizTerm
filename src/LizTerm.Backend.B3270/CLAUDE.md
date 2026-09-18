@@ -49,6 +49,13 @@ in `src/LizTerm.Core/CLAUDE.md`; how the engine binary is built and located is i
   uses it as the `BackendFault` message in place of the generic "exited unexpectedly". The field is cleared by
   each `StartProcessAsync`, so a fresh engine never inherits the dead one's excuse. Without that, the `ui-error`
   text and the fault raced for the App's `ErrorMessage` and the user saw whichever landed last (#139).
+- Both kinds of `ui-error` name the line they are about to be blamed on: `WriteLine` records `_lastOutbound` — the
+  line's length and `RunOperation.Describe`'s account of its actions — before the bytes go out, for the same reason
+  the wire log is written first. `Describe` prints action names and the **size** of their arguments, never their
+  values, and no action is exempted for having harmless-looking arguments today: this text goes on an error banner
+  and into bug reports, and a `String` action at a logon screen holds a password. The exact bytes are the wire
+  log's job. Note the limit: it keeps the *last* line, and x3270 buffers incomplete JSON rather than rejecting it
+  (`Common/stdinscript.c`), so a desync makes the guilty line an earlier one than the one named.
 - Rows and columns arrive one-based and are converted to zero-based only in `ApplyScreen`. b3270's `MoveCursor`
   action is already zero-origin, so `MoveCursorAsync` passes coordinates through unchanged.
 - Outbound, `RunOperation.Serialize(tag, actions)` writes a `{"run":{"r-tag":..,"actions":[..]}}` line under a write
