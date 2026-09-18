@@ -1,0 +1,6 @@
+HTTP/1.1 404 Not Found
+Server: HTTPD Server
+Content-Type: text/html
+Content-Language: en
+
+<html><body>404 Not Found</body></html>

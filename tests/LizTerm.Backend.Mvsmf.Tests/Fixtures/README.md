@@ -13,6 +13,9 @@ build: a changed fixture is a changed behaviour.
 |---|---|
 | `info-200` | `GET info` |
 | `info-401` | `GET info` with a wrong password |
+| `login-200` | `POST services/authenticate` — 200 with `Set-Cookie: LtpaToken2` |
+| `login-401` | the same with a wrong password — 401, `reasonCode 1` |
+| `login-404` | a host with no authenticate route — 404 (hand-written; no pre-1.1.0 host was available) |
 | `ds-list-sys1` | `GET restfiles/ds?dslevel=SYS1.**` |
 | `ds-list-empty` | `GET restfiles/ds?dslevel=NOSUCH.HLQ` |
 | `members-proclib` | `GET restfiles/ds/SYS1.PROCLIB/member` |
