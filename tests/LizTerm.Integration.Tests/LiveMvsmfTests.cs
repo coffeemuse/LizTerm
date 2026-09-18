@@ -8,7 +8,9 @@ using LizTerm.Core.HostFiles;
 namespace LizTerm.Integration.Tests;
 
 /// <summary>Runs only when LIZTERM_MVSMF_URL, LIZTERM_MVSMF_USER, LIZTERM_MVSMF_PASSWORD and
-/// LIZTERM_MVSMF_SCRATCH_PDS are all set. Writes, verifies and deletes the member LIZITEST in the scratch PDS.</summary>
+/// LIZTERM_MVSMF_SCRATCH_PDS are all set. Writes, verifies and deletes the member LIZITEST in the scratch PDS. The
+/// two <see cref="Connect"/> tests leave their one session to the host's idle timeout, as the browser does when the
+/// app is killed.</summary>
 public class LiveMvsmfTests
 {
     private const int LiveTimeout = 120_000;
@@ -28,8 +30,22 @@ public class LiveMvsmfTests
         return new Live(baseUrl!, new HostCredentials(user!, password!), scratch!);
     }
 
-    private static MvsmfFileService Connect(Live live) =>
-        new(new MvsmfOptions(live.Url), (_, _) => ValueTask.FromResult<HostCredentials?>(live.Credentials));
+    /// <summary>Signs in once and keeps the token, signing in again only when the host refuses the one it holds:
+    /// the App holder's contract, without a prompt. <see cref="Asked"/> records each request's Rejected token.</summary>
+    private sealed class Holding(HostCredentials credentials)
+    {
+        public HostSessionToken? Held { get; private set; }
+        public List<HostSessionToken?> Asked { get; } = [];
+
+        public HostTokenProvider Provider => async (request, signIn, ct) =>
+        {
+            Asked.Add(request.Rejected);
+            if (Held is not null && !ReferenceEquals(request.Rejected, Held)) return Held;
+            return Held = await signIn(credentials, ct);
+        };
+    }
+
+    private static MvsmfFileService Connect(Live live) => new(new MvsmfOptions(live.Url), new Holding(live.Credentials).Provider);
 
     [Fact(Timeout = LiveTimeout)]
     public async Task Reports_the_server_and_lists_the_scratch_pds()
@@ -98,19 +114,46 @@ public class LiveMvsmfTests
     }
 
     [Fact(Timeout = LiveTimeout)]
-    public async Task A_rejected_password_is_asked_for_again_then_fails()
+    public async Task A_rejected_password_fails_as_unauthenticated()
     {
         var live = Require();
-        var asked = new List<bool>();
-        using var service = new MvsmfFileService(new MvsmfOptions(live.Url), (request, _) =>
-        {
-            asked.Add(request.IsRetry);
-            return ValueTask.FromResult<HostCredentials?>(new HostCredentials(live.Credentials.Userid, "not-the-password"));
-        });
+        using var service = new MvsmfFileService(new MvsmfOptions(live.Url),
+            new Holding(new HostCredentials(live.Credentials.Userid, "not-the-password")).Provider);
 
         var ex = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(HostFileErrorKind.Unauthenticated, ex.Kind);
-        Assert.Equal(new[] { false, true }, asked);
+    }
+
+    [Fact(Timeout = LiveTimeout)]
+    public async Task Signs_in_lists_signs_out_and_the_dead_token_is_refused()
+    {
+        var live = Require();
+        var ct = TestContext.Current.CancellationToken;
+        var holding = new Holding(live.Credentials);
+        using var service = new MvsmfFileService(new MvsmfOptions(live.Url), holding.Provider);
+
+        await service.ListDatasetsAsync(live.ScratchPds, ct);
+        var first = holding.Held!;
+        await service.SignOutAsync(first, ct); // 204
+        await service.SignOutAsync(first, ct); // 401 for a token the host has forgotten: still fine
+
+        await service.GetServerInfoAsync(ct);  // 401 on the dead token, then a fresh sign-in
+
+        Assert.Equal(new HostSessionToken?[] { null, first }, holding.Asked);
+        Assert.NotSame(first, holding.Held);
+        await service.SignOutAsync(holding.Held!, ct);
+    }
+
+    [Fact(Timeout = LiveTimeout)]
+    public async Task Probe_reports_the_host_needs_sign_in()
+    {
+        var live = Require();
+        using var service = new MvsmfFileService(new MvsmfOptions(live.Url),
+            (_, _, _) => ValueTask.FromResult<HostSessionToken?>(null));
+
+        var info = await service.ProbeAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(info); // /zosmf/info needs auth on this build (compat: info-requires-auth)
     }
 }

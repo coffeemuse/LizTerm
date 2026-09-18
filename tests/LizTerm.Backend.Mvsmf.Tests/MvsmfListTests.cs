@@ -10,12 +10,12 @@ namespace LizTerm.Backend.Mvsmf.Tests;
 public class MvsmfListTests
 {
     private static MvsmfFileService Service(RecordedHandler handler) =>
-        new(handler, MvsmfAuthTests.Base, MvsmfAuthTests.Answering([], new HostCredentials("MVSCE02", "pw")));
+        new(handler, MvsmfAuthTests.Base, MvsmfAuthTests.Providing([], new HostCredentials("MVSCE02", "pw")));
 
     [Fact]
     public async Task Dataset_list_reads_names_and_attributes()
     {
-        var handler = new RecordedHandler().Then("ds-list-sys1");
+        var handler = new RecordedHandler().Then("login-200").Then("ds-list-sys1");
         using var service = Service(handler);
 
         var entries = await service.ListDatasetsAsync("sys1.**", TestContext.Current.CancellationToken);
@@ -28,18 +28,18 @@ public class MvsmfListTests
         Assert.Equal("FB", proclib.Recfm);
         Assert.Equal(80, proclib.Lrecl);
         Assert.True(proclib.IsPartitioned);
-        Assert.Equal("/zosmf/restfiles/ds?dslevel=SYS1.**", handler.Requests[0].Uri.PathAndQuery);
+        Assert.Equal("/zosmf/restfiles/ds?dslevel=SYS1.**", handler.Requests[1].Uri.PathAndQuery);
     }
 
     [Fact]
     public async Task No_paging_so_the_whole_dataset_list_is_asked_for()
     {
-        var handler = new RecordedHandler().Then("ds-list-sys1");
+        var handler = new RecordedHandler().Then("login-200").Then("ds-list-sys1");
         using var service = Service(handler);
 
         await service.ListDatasetsAsync("SYS1.**", TestContext.Current.CancellationToken);
 
-        var request = Assert.Single(handler.Requests);
+        var request = Assert.Single(handler.Requests, r => r.Method == HttpMethod.Get);
         Assert.DoesNotContain("X-IBM-Max-Items", request.HeaderNames, StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain("start=", request.Uri.Query);
     }
@@ -47,14 +47,14 @@ public class MvsmfListTests
     [Fact]
     public async Task An_empty_dataset_list_is_complete()
     {
-        using var service = Service(new RecordedHandler().Then("ds-list-empty"));
+        using var service = Service(new RecordedHandler().Then("login-200").Then("ds-list-empty"));
         Assert.Empty(await service.ListDatasetsAsync("NOSUCH.HLQ", TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task Dataset_list_morerows_true_is_an_error()
     {
-        using var service = Service(new RecordedHandler().Then(HttpStatusCode.OK, """{"items":[{"dsname":"A.B"}],"moreRows":true}"""));
+        using var service = Service(new RecordedHandler().Then("login-200").Then(HttpStatusCode.OK, """{"items":[{"dsname":"A.B"}],"moreRows":true}"""));
 
         var ex = await Assert.ThrowsAsync<HostFileException>(() => service.ListDatasetsAsync("A.**", TestContext.Current.CancellationToken));
 
@@ -65,12 +65,12 @@ public class MvsmfListTests
     [Fact]
     public async Task The_filter_is_folded_and_its_hash_and_percent_are_escaped()
     {
-        var handler = new RecordedHandler().Then(HttpStatusCode.OK, """{"items":[],"moreRows":false}""");
+        var handler = new RecordedHandler().Then("login-200").Then(HttpStatusCode.OK, """{"items":[],"moreRows":false}""");
         using var service = Service(handler);
 
         await service.ListDatasetsAsync(" sys1.#a% ", TestContext.Current.CancellationToken);
 
-        Assert.Equal("/zosmf/restfiles/ds?dslevel=SYS1.%23A%25", handler.Requests[0].Uri.PathAndQuery);
+        Assert.Equal("/zosmf/restfiles/ds?dslevel=SYS1.%23A%25", handler.Requests[1].Uri.PathAndQuery);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class MvsmfListTests
     [Fact]
     public async Task Numeric_attributes_and_nameless_items_are_tolerated()
     {
-        var handler = new RecordedHandler().Then(HttpStatusCode.OK,
+        var handler = new RecordedHandler().Then("login-200").Then(HttpStatusCode.OK,
             """{"items":[{"dsname":"A.B","dsorg":"PS","recfm":"VB","lrecl":255,"blksz":6233,"vol":"V1"},{"dsorg":"PO"},{"dsname":"C.D","lrecl":"","dsorg":""}]}""");
         using var service = Service(handler);
 
@@ -103,7 +103,7 @@ public class MvsmfListTests
     [Fact]
     public async Task Member_list_reads_every_name()
     {
-        var handler = new RecordedHandler().Then("members-proclib");
+        var handler = new RecordedHandler().Then("login-200").Then("members-proclib");
         using var service = Service(handler);
 
         var members = await service.ListMembersAsync(HostPath.ForDataset("SYS1.PROCLIB"), TestContext.Current.CancellationToken);
@@ -112,24 +112,24 @@ public class MvsmfListTests
         Assert.Contains(members, m => m.Name == "JES2");
         Assert.All(members, m => Assert.Equal(HostFileEntryKind.Member, m.Kind));
         Assert.All(members, m => Assert.Null(m.Attributes));
-        Assert.Equal("/zosmf/restfiles/ds/SYS1.PROCLIB/member", handler.Requests[0].Uri.PathAndQuery);
+        Assert.Equal("/zosmf/restfiles/ds/SYS1.PROCLIB/member", handler.Requests[1].Uri.PathAndQuery);
     }
 
     [Fact]
     public async Task No_paging_so_the_whole_member_list_is_asked_for()
     {
-        var handler = new RecordedHandler().Then("members-proclib");
+        var handler = new RecordedHandler().Then("login-200").Then("members-proclib");
         using var service = Service(handler);
 
         await service.ListMembersAsync(HostPath.ForDataset("SYS1.PROCLIB"), TestContext.Current.CancellationToken);
 
-        Assert.DoesNotContain("X-IBM-Max-Items", handler.Requests[0].HeaderNames, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("X-IBM-Max-Items", handler.Requests[1].HeaderNames, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
     public async Task A_missing_dataset_has_no_member_list()
     {
-        using var service = Service(new RecordedHandler().Then("members-missing-dataset"));
+        using var service = Service(new RecordedHandler().Then("login-200").Then("members-missing-dataset"));
 
         var ex = await Assert.ThrowsAsync<HostFileException>(() =>
             service.ListMembersAsync(HostPath.ForDataset("MVSCE02.NOSUCH"), TestContext.Current.CancellationToken));
@@ -141,7 +141,7 @@ public class MvsmfListTests
     [Fact]
     public async Task A_sequential_dataset_has_no_member_list()
     {
-        using var service = Service(new RecordedHandler().Then("members-not-partitioned"));
+        using var service = Service(new RecordedHandler().Then("login-200").Then("members-not-partitioned"));
 
         var ex = await Assert.ThrowsAsync<HostFileException>(() =>
             service.ListMembersAsync(HostPath.ForDataset("MVSCE02.LIZT.SAMPLIB2.XMIT"), TestContext.Current.CancellationToken));
@@ -153,7 +153,7 @@ public class MvsmfListTests
     [Fact]
     public async Task Member_list_morerows_true_is_an_error()
     {
-        using var service = Service(new RecordedHandler().Then(HttpStatusCode.OK, """{"items":[{"member":"A"}],"moreRows":true}"""));
+        using var service = Service(new RecordedHandler().Then("login-200").Then(HttpStatusCode.OK, """{"items":[{"member":"A"}],"moreRows":true}"""));
 
         var ex = await Assert.ThrowsAsync<HostFileException>(() =>
             service.ListMembersAsync(HostPath.ForDataset("SYS1.MACLIB"), TestContext.Current.CancellationToken));

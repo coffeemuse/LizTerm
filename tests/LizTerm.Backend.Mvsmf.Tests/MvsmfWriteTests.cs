@@ -13,18 +13,17 @@ public class MvsmfWriteTests
     private static readonly HostPath NewMember = HostPath.ForMember("MVSCE02.CNTL", "NEWMEM");
 
     private static MvsmfFileService Service(RecordedHandler handler) =>
-        new(handler, MvsmfAuthTests.Base, MvsmfAuthTests.Answering([], new HostCredentials("MVSCE02", "pw")));
+        new(handler, MvsmfAuthTests.Base, MvsmfAuthTests.Providing([], new HostCredentials("MVSCE02", "pw")));
 
     [Fact]
     public async Task A_text_write_puts_latin1_records_ending_in_lf()
     {
-        var handler = new RecordedHandler().Then("write-204");
+        var handler = new RecordedHandler().Then("login-200").Then("write-204");
         using var service = Service(handler);
 
         await service.WriteTextAsync(NewMember, ["//A JOB", "¬¢"], TestContext.Current.CancellationToken);
 
-        var request = Assert.Single(handler.Requests);
-        Assert.Equal(HttpMethod.Put, request.Method);
+        var request = Assert.Single(handler.Requests, r => r.Method == HttpMethod.Put);
         Assert.Equal("/zosmf/restfiles/ds/MVSCE02.CNTL(NEWMEM)", request.Uri.PathAndQuery);
         Assert.Equal("text", request.DataType);
         Assert.Equal("text/plain", request.ContentType);
@@ -34,18 +33,18 @@ public class MvsmfWriteTests
     [Fact]
     public async Task An_empty_line_is_sent_as_an_empty_record()
     {
-        var handler = new RecordedHandler().Then("write-204");
+        var handler = new RecordedHandler().Then("login-200").Then("write-204");
         using var service = Service(handler);
 
         await service.WriteTextAsync(NewMember, ["A", "", "B"], TestContext.Current.CancellationToken);
 
-        Assert.Equal("A\n\nB\n", handler.Requests[0].BodyText);
+        Assert.Equal("A\n\nB\n", handler.Requests[1].BodyText);
     }
 
     [Fact]
     public async Task Put_json_is_rename_so_no_write_ever_sends_json()
     {
-        var handler = new RecordedHandler().Then("write-204").Then("write-204");
+        var handler = new RecordedHandler().Then("login-200").Then("write-204").Then("write-204");
         using var service = Service(handler);
 
         await service.WriteTextAsync(NewMember, ["A"], TestContext.Current.CancellationToken);
@@ -57,12 +56,12 @@ public class MvsmfWriteTests
     [Fact]
     public async Task No_lines_send_an_empty_body()
     {
-        var handler = new RecordedHandler().Then("write-204");
+        var handler = new RecordedHandler().Then("login-200").Then("write-204");
         using var service = Service(handler);
 
         await service.WriteTextAsync(NewMember, [], TestContext.Current.CancellationToken);
 
-        Assert.Empty(handler.Requests[0].Body!);
+        Assert.Empty(handler.Requests[1].Body!);
     }
 
     [Theory]
@@ -82,12 +81,12 @@ public class MvsmfWriteTests
     [Fact]
     public async Task A_binary_write_puts_the_bytes_as_an_octet_stream()
     {
-        var handler = new RecordedHandler().Then("write-204");
+        var handler = new RecordedHandler().Then("login-200").Then("write-204");
         using var service = Service(handler);
 
         await service.WriteBinaryAsync(NewMember, new MemoryStream([0x61, 0x61, 0x00, 0xFF]), TestContext.Current.CancellationToken);
 
-        var request = handler.Requests[0];
+        var request = handler.Requests[1];
         Assert.Equal("binary", request.DataType);
         Assert.Equal("application/octet-stream", request.ContentType);
         Assert.Equal(new byte[] { 0x61, 0x61, 0x00, 0xFF }, request.Body);
@@ -96,35 +95,38 @@ public class MvsmfWriteTests
     [Fact]
     public async Task The_repeat_after_a_401_sends_the_same_body()
     {
-        var handler = new RecordedHandler().Then(HttpStatusCode.Unauthorized).Then("write-204")
-            .Then(HttpStatusCode.Unauthorized).Then("write-204");
+        // Each 401 sends the provider back for a fresh token, so a login sits before every repeated PUT.
+        var handler = new RecordedHandler()
+            .Then("login-200").Then(HttpStatusCode.Unauthorized).Then("login-200").Then("write-204")
+            .Then(HttpStatusCode.Unauthorized).Then("login-200").Then("write-204");
         using var service = Service(handler);
 
         await service.WriteTextAsync(NewMember, ["A", "B"], TestContext.Current.CancellationToken);
         await service.WriteBinaryAsync(NewMember, new MemoryStream([9, 8, 7]), TestContext.Current.CancellationToken);
 
-        Assert.Equal(handler.Requests[0].Body, handler.Requests[1].Body);
-        Assert.Equal(handler.Requests[2].Body, handler.Requests[3].Body);
-        Assert.Equal(new byte[] { 9, 8, 7 }, handler.Requests[3].Body);
+        var puts = handler.Requests.Where(r => r.Method == HttpMethod.Put).ToList();
+        Assert.Equal(4, puts.Count);
+        Assert.Equal(puts[0].Body, puts[1].Body);
+        Assert.Equal(puts[2].Body, puts[3].Body);
+        Assert.Equal(new byte[] { 9, 8, 7 }, puts[3].Body);
     }
 
     [Fact]
     public async Task A_member_is_deleted()
     {
-        var handler = new RecordedHandler().Then("delete-204");
+        var handler = new RecordedHandler().Then("login-200").Then("delete-204");
         using var service = Service(handler);
 
         await service.DeleteAsync(NewMember, TestContext.Current.CancellationToken);
 
-        var request = Assert.Single(handler.Requests);
-        Assert.Equal(HttpMethod.Delete, request.Method);
+        var request = Assert.Single(handler.Requests, r => r.Method == HttpMethod.Delete);
         Assert.Equal("/zosmf/restfiles/ds/MVSCE02.CNTL(NEWMEM)", request.Uri.PathAndQuery);
     }
 
     [Fact]
     public async Task Deleting_a_missing_member_is_not_found()
     {
-        using var service = Service(new RecordedHandler().Then("delete-missing"));
+        using var service = Service(new RecordedHandler().Then("login-200").Then("delete-missing"));
 
         var ex = await Assert.ThrowsAsync<HostFileException>(() => service.DeleteAsync(NewMember, TestContext.Current.CancellationToken));
 

@@ -12,18 +12,19 @@ public class MvsmfReadTests
     private static readonly HostPath Jes2 = HostPath.ForMember("SYS1.PROCLIB", "JES2");
 
     private static MvsmfFileService Service(RecordedHandler handler, TimeSpan? idle = null) =>
-        new(handler, MvsmfAuthTests.Base, MvsmfAuthTests.Answering([], new HostCredentials("MVSCE02", "pw")), idle);
+        new(handler, MvsmfAuthTests.Base, MvsmfAuthTests.Providing([], new HostCredentials("MVSCE02", "pw")), idle);
 
-    private static RecordedHandler Answering(byte[] body) => new RecordedHandler().Then((_, _) =>
+    /// <summary>A handler that answers the sign-in, then the read with <paramref name="body"/>.</summary>
+    private static RecordedHandler Answering(byte[] body) => new RecordedHandler().Then("login-200").Then((_, _) =>
         Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) }));
 
-    private static RecordedHandler Answering(Stream body) => new RecordedHandler().Then((_, _) =>
+    private static RecordedHandler Answering(Stream body) => new RecordedHandler().Then("login-200").Then((_, _) =>
         Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(body) }));
 
     [Fact]
     public async Task A_text_read_returns_one_line_per_record()
     {
-        var handler = new RecordedHandler().Then("read-text-jes2");
+        var handler = new RecordedHandler().Then("login-200").Then("read-text-jes2");
         using var service = Service(handler);
 
         var lines = await service.ReadTextAsync(Jes2, cancellationToken: TestContext.Current.CancellationToken);
@@ -32,7 +33,7 @@ public class MvsmfReadTests
         Assert.StartsWith("//JES2     PROC M=JES2PM00,", lines[0]);
         Assert.Equal(80, lines[0].Length);
         Assert.EndsWith("00000010", lines[0]);
-        var request = Assert.Single(handler.Requests);
+        var request = Assert.Single(handler.Requests, r => r.Method == HttpMethod.Get);
         Assert.Equal("text", request.DataType);
         Assert.Equal("/zosmf/restfiles/ds/SYS1.PROCLIB(JES2)", request.Uri.PathAndQuery);
     }
@@ -62,7 +63,7 @@ public class MvsmfReadTests
     [Fact]
     public async Task A_binary_read_copies_every_byte_and_reports_progress()
     {
-        var handler = new RecordedHandler().Then("read-binary-jes2");
+        var handler = new RecordedHandler().Then("login-200").Then("read-binary-jes2");
         using var service = Service(handler);
         using var destination = new MemoryStream();
         var progress = new ListProgress();
@@ -73,13 +74,13 @@ public class MvsmfReadTests
         Assert.Equal(expected, destination.ToArray());
         Assert.Equal(expected.Length, count);
         Assert.Equal(expected.Length, progress.Values[^1]);
-        Assert.Equal("binary", handler.Requests[0].DataType);
+        Assert.Equal("binary", handler.Requests[1].DataType);
     }
 
     [Fact]
     public async Task A_missing_member_is_not_found()
     {
-        using var service = Service(new RecordedHandler().Then("read-missing-member"));
+        using var service = Service(new RecordedHandler().Then("login-200").Then("read-missing-member"));
         var ex = await Assert.ThrowsAsync<HostFileException>(() =>
             service.ReadTextAsync(HostPath.ForMember("SYS1.PROCLIB", "NOSUCHMB"), cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal(HostFileErrorKind.NotFound, ex.Kind);
