@@ -20,7 +20,7 @@
 - **mvsMF 1.1.0 is the minimum supported version** (§7). Its one home is the user guide; the README, changelog and compat log point there. A host without the login route is reported as unsupported.
 - Fixtures are recorded exchanges, binary-exact; only `tools/record-mvsmf-fixture.sh` writes them, and every `Set-Cookie: LtpaToken2=` line reads `…=<token>;` (PR 1's recorder redaction and `FixtureTests` pin this).
 - Zero warnings: `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "` prints `0`.
-- Commits end with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- Commits end with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 
 ## Decisions recorded in this plan
 
@@ -208,7 +208,7 @@ A held token, a request that names a rejected one, the backend's own
 sign-in, and the provider that trades a password for a token. Sign-out
 is a default interface method, so nothing else changes yet.
 
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
 
 ---
@@ -311,7 +311,7 @@ login-200 and login-401 from the 1.1.0 host, login-404 hand-written
 for a host with no authenticate route. The fixture guard now reads the
 header block only, since the host's login-failed body says "password".
 
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
 
 ---
@@ -512,6 +512,34 @@ Then the tests (replace the existing auth tests, keeping the timeout/unreachable
         Assert.Null(request.Cookie);
         Assert.Equal("http://mvs.test:8080/zosmf/info", request.Uri.ToString());
     }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, "<html>404</html>", "text/html")]
+    [InlineData(HttpStatusCode.OK, "<html>Welcome</html>", "text/html")]
+    public async Task Probe_reports_a_url_that_is_not_mvsmf(HttpStatusCode status, string body, string contentType)
+    {
+        var handler = new RecordedHandler().Then(status, body, contentType);
+        using var service = new MvsmfFileService(handler, Base, Providing([], new HostCredentials("MVSCE02", "pw")));
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() => service.ProbeAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(HostFileErrorKind.Unsupported, ex.Kind);
+        Assert.Equal("Nothing at this URL answers as mvsMF.", ex.Message);
+    }
+
+    /// <summary>Named after the compat tag, as the log's rule requires: /info needs a sign-in, so server info goes
+    /// through the token path like everything else.</summary>
+    [Fact]
+    public async Task Info_requires_auth_so_server_info_signs_in_first()
+    {
+        var handler = new RecordedHandler().Then("login-200").Then("info-200");
+        using var service = new MvsmfFileService(handler, Base, Providing([], new HostCredentials("MVSCE02", "pw")));
+
+        var info = await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(new HostServerInfo("mvsMF", "1.1.0", "MVS 3.8j"), info);
+        Assert.Equal(new[] { "/zosmf/services/authenticate", "/zosmf/info" }, handler.Requests.Select(r => r.Uri.AbsolutePath));
+    }
 ```
 
 Keep the existing `Info_version_fields_prefer_the_full_version`, `The_production_client_never_times_out_a_whole_transfer`, `A_refused_connection_is_unreachable`, `An_unreadable_answer_is_a_server_error`, `A_connect_timeout_is_unreachable`, `A_slow_sign_in_is_not_a_host_timeout`, `A_slow_retry_prompt_is_not_a_host_timeout`, and `The_production_handler_connects_within_ten_seconds_and_keeps_no_cookies` tests, but change each construction from `Answering(...)` / `HostCredentialProvider` to `Providing(...)` / a `HostTokenProvider`, and prepend a `.Then("login-200")` to every handler whose service reaches the host (the slow-sign-in and version tests replay `info-200`, so they now need a preceding `login-200`; the connect-timeout and refused-connection tests fail before login, so they do not). For `A_slow_sign_in_is_not_a_host_timeout`, the slow step is the provider; wrap the delay in the `HostTokenProvider` body and have it call `signIn`.
@@ -691,12 +719,24 @@ Rewrite `SendAsync`, `AskAsync`, and `SendOnceAsync`, and add `SignInAsync`, `Pr
         using (response)
         {
             if (response.StatusCode == HttpStatusCode.Unauthorized) return null;
-            if (!response.IsSuccessStatusCode)
-                throw new HostFileException(HostFileErrorKind.Unsupported, $"{what}: this URL does not answer as mvsMF.");
-            var info = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfInfo, what, idle, cancellationToken);
+            if (!response.IsSuccessStatusCode) throw NotMvsmf();
+            MvsmfInfo info;
+            try
+            {
+                info = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfInfo, what, idle, cancellationToken);
+            }
+            catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.ServerError)
+            {
+                // A 200 that is not mvsMF's info (a web server's home page, say) is the same answer as a 404.
+                throw NotMvsmf(ex);
+            }
             return new HostServerInfo("mvsMF", Blank(info.ZosmfFullVersion) ?? Blank(info.ZosmfVersion) ?? "unknown", Blank(info.ZosVersion) ?? "unknown");
         }
     }
+
+    /// <summary>The Test button's line for a URL that is reachable but is not an mvsMF (spec §4.5).</summary>
+    private static HostFileException NotMvsmf(Exception? inner = null) =>
+        new(HostFileErrorKind.Unsupported, "Nothing at this URL answers as mvsMF.", inner: inner);
 
     public async Task SignOutAsync(HostSessionToken token, CancellationToken cancellationToken = default)
     {
@@ -773,14 +813,31 @@ Expected: `Passed!`. If any list/read/write test fails on a request index, it is
 
 - [ ] **Step 6: Update the live tests so Integration.Tests compiles**
 
-In `tests/LizTerm.Integration.Tests/LiveMvsmfTests.cs`, `Connect` builds the service with a `HostCredentialProvider`. Change it to a `HostTokenProvider` that signs in with the live credentials:
+In `tests/LizTerm.Integration.Tests/LiveMvsmfTests.cs`, `Connect` builds the service with a `HostCredentialProvider`.
+Replace it with a provider that keeps the token, so a test opens one host session rather than one per request (the
+App holder's contract, without a prompt):
 
 ```csharp
-    private static MvsmfFileService Connect(Live live) =>
-        new(new MvsmfOptions(live.Url), async (request, signIn, ct) => await signIn(live.Credentials, ct));
+    /// <summary>Signs in once and keeps the token, signing in again only when the host refuses the one it holds:
+    /// the App holder's contract, without a prompt. <see cref="Asked"/> records each request's Rejected token.</summary>
+    private sealed class Holding(HostCredentials credentials)
+    {
+        public HostSessionToken? Held { get; private set; }
+        public List<HostSessionToken?> Asked { get; } = [];
+
+        public HostTokenProvider Provider => async (request, signIn, ct) =>
+        {
+            Asked.Add(request.Rejected);
+            if (Held is not null && !ReferenceEquals(request.Rejected, Held)) return Held;
+            return Held = await signIn(credentials, ct);
+        };
+    }
+
+    private static MvsmfFileService Connect(Live live) => new(new MvsmfOptions(live.Url), new Holding(live.Credentials).Provider);
 ```
 
-and change `A_rejected_password_is_asked_for_again_then_fails` to drive the token provider with a wrong password and assert it never succeeds:
+Change `A_rejected_password_is_asked_for_again_then_fails` to drive the provider with a wrong password and assert it
+never succeeds (the backend no longer re-asks; that is the holder's business):
 
 ```csharp
     [Fact(Timeout = LiveTimeout)]
@@ -788,7 +845,7 @@ and change `A_rejected_password_is_asked_for_again_then_fails` to drive the toke
     {
         var live = Require();
         using var service = new MvsmfFileService(new MvsmfOptions(live.Url),
-            async (request, signIn, ct) => await signIn(new HostCredentials(live.Credentials.Userid, "not-the-password"), ct));
+            new Holding(new HostCredentials(live.Credentials.Userid, "not-the-password")).Provider);
 
         var ex = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
 
@@ -796,24 +853,29 @@ and change `A_rejected_password_is_asked_for_again_then_fails` to drive the toke
     }
 ```
 
-Add one live sign-out test:
+Add the spec's live check (§8): sign in, list, sign out, and the signed-out token refused. The provider still holds
+the dead token after the sign-out, so the next operation is answered 401, the provider is asked once more with that
+token as `Rejected`, and the operation succeeds on a fresh sign-in:
 
 ```csharp
     [Fact(Timeout = LiveTimeout)]
-    public async Task Signs_in_lists_and_signs_out()
+    public async Task Signs_in_lists_signs_out_and_the_dead_token_is_refused()
     {
         var live = Require();
         var ct = TestContext.Current.CancellationToken;
-        HostSessionToken? captured = null;
-        using var service = new MvsmfFileService(new MvsmfOptions(live.Url), async (request, signIn, c) =>
-        {
-            captured = await signIn(live.Credentials, c);
-            return captured;
-        });
+        var holding = new Holding(live.Credentials);
+        using var service = new MvsmfFileService(new MvsmfOptions(live.Url), holding.Provider);
 
         await service.ListDatasetsAsync(live.ScratchPds, ct);
-        Assert.NotNull(captured);
-        await service.SignOutAsync(captured!, ct); // 204; a second call would be 401, still fine
+        var first = holding.Held!;
+        await service.SignOutAsync(first, ct); // 204
+        await service.SignOutAsync(first, ct); // 401 for a token the host has forgotten: still fine
+
+        await service.GetServerInfoAsync(ct);  // 401 on the dead token, then a fresh sign-in
+
+        Assert.Equal(new HostSessionToken?[] { null, first }, holding.Asked);
+        Assert.NotSame(first, holding.Held);
+        await service.SignOutAsync(holding.Held!, ct);
     }
 ```
 
@@ -833,6 +895,9 @@ Add one live sign-out test:
     }
 ```
 
+The two `Connect` tests leave their one session to the host's idle timeout, as the browser does when the app is
+killed; that is the behaviour under test elsewhere, not a leak worth a teardown here.
+
 - [ ] **Step 7: Build Integration.Tests (App is still red — that is expected)**
 
 Run: `dotnet build tests/LizTerm.Integration.Tests 2>&1 | grep -c " warning "`
@@ -851,7 +916,7 @@ button. A host with no authenticate route is Unsupported. LizTerm.App
 does not compile until the next commit migrates it to the token
 provider.
 
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
 
 ---
@@ -919,6 +984,10 @@ The holder tests in Step 2 expect `ask:MVSCE02:First`, `:Expired` and `:Rejected
 ```xml
     <TextBlock x:Name="ReasonText" Foreground="#FF8080" TextWrapping="Wrap" IsVisible="False" />
 ```
+
+and change the grey footer line's `Text` from `Kept in memory until this session window closes. Never saved to disk.`
+to `Used once to sign in, then discarded. Only the session token is kept, until this session window closes. Never saved to disk.`,
+since the old sentence describes exactly what this PR stops doing.
 
 In `SignInWindow.axaml.cs`, set it from the reason, and update the design-time ctor:
 
@@ -1235,9 +1304,14 @@ and rewrite `CreateTester` to probe first, then sign in through the prompt, read
         using var service = new MvsmfFileService(new MvsmfOptions(url, pin), holder.ProviderFor(prompt));
         var probed = await service.ProbeAsync(token);
         if (probed is not null) return probed;              // the host answers /info without a sign-in
-        var info = await service.GetServerInfoAsync(token); // signs in through the prompt, then reads /info
-        await holder.SignOutAsync(service);
-        return info;
+        try
+        {
+            return await service.GetServerInfoAsync(token); // signs in through the prompt, then reads /info
+        }
+        finally
+        {
+            await holder.SignOutAsync(service);             // also after a failed read, so no session is left behind
+        }
     };
 ```
 
@@ -1295,7 +1369,7 @@ signs out when the session window closes. The sign-in window says
 when the session expired. The Test button probes /info before it asks
 for a password. The credential provider is gone from Core.
 
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1330,11 +1404,14 @@ In `tests/LizTerm.App.Tests/ViewModels/ProfileEditorMvsmfTests.cs`, the `Tester`
     }
 ```
 
-Add an `Info` property to the test `Tester` (defaulting to the 1.1.0 value it returns today) and an `Unsupported` row:
+Add an `Info` property to the test `Tester` (defaulting to the 1.1.0 value it returns today) and two `Unsupported` rows:
 
 ```csharp
     [InlineData(HostFileErrorKind.Unsupported, "This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.", "✗ This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.")]
+    [InlineData(HostFileErrorKind.Unsupported, "Nothing at this URL answers as mvsMF.", "✗ Nothing at this URL answers as mvsMF.")]
 ```
+
+(The second row is the probe's line from spec §4.5; both reach the editor through the backend's own message.)
 
 In `src/LizTerm.App/ViewModels/ProfileEditorViewModel.cs`, after a successful `_tester` call, compare the version before reporting success:
 
@@ -1382,7 +1459,7 @@ git commit -m "Refuse mvsMF below 1.1.0 from the Test button
 The Test button reports a host below 1.1.0 or with no sign-in service
 as unsupported.
 
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1491,12 +1568,15 @@ In `README.md`, the mvsMF bullet — add the sign-in-once clause and the version
   list, download, upload and delete dataset members without touching the 3270 screen.
 ```
 
-In `CHANGELOG.md`, under `## Unreleased`, add a line (newest first, near the other mvsMF entry):
+In `CHANGELOG.md`, under `## Unreleased`, amend the existing **mvsMF Browser (feature preview)** bullet rather than
+adding one: the browser has not shipped, so token sign-in is not a change any release's reader has seen, and the
+entries were trimmed to headlines in #143. Replace that bullet with:
 
 ```markdown
-- **mvsMF sign-in is now token-based.** LizTerm signs in to mvsMF once per session window and holds a session token
-  instead of resending your password on every request; it asks again when the session expires, and needs mvsMF
-  1.1.0 or later.
+- **mvsMF Browser (feature preview).** On MVS 3.8j hosts running [mvsMF](https://github.com/mvslovers/mvsmf) 1.1.0
+  or later, a second way to move files beside IND$FILE: sign in once per session window, then list, download,
+  upload and delete. It is not yet complete and there are likely bugs. See the user guide's
+  [mvsMF Browser section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-browser-preview).
 ```
 
 - [ ] **Step 6: Regenerate the bundled guide**
@@ -1515,7 +1595,7 @@ The compat log retires basic-auth-every-request and records the idle
 timeout; the guide, README, changelog and privacy note say LizTerm
 signs in once for a token and needs mvsMF 1.1.0 or later.
 
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1533,7 +1613,7 @@ Run: `dotnet test LizTerm.slnx 2>&1 | grep -E "Passed!|Failed!"` (expect every p
 
 In the shell with the four variables:
 Run: `dotnet test tests/LizTerm.Integration.Tests --filter "FullyQualifiedName~LiveMvsmfTests"`
-Expected: all pass, 0 skipped. The sign-in/list/sign-out, the probe-needs-sign-in, and the rejected-password tests all run.
+Expected: all pass, 0 skipped. The sign-in/list/sign-out/dead-token, the probe-needs-sign-in, and the rejected-password tests all run.
 
 - [ ] **Step 3: Dependency and header checks**
 
@@ -1559,4 +1639,6 @@ Report the PR URL. The status comment on #17 is posted after Robert merges (spec
 - Deviation from spec, recorded: the spec put the bad-password re-prompt in the backend's `SendAsync`; because `SignInAsync` catches the 401, the re-prompt loop moved into the holder (Task 4), which is where the *Rejected* reason is chosen. Same user-visible behaviour.
 - Reviewed 2026-09-18 (Fable 5.1): Task 4 now carries the prompt reason its holder needs and deletes `HostCredentialRequest`/`HostCredentialProvider` (spec §4.1); Task 3 moves the TLS tests and loopback server to the login-first flow; Task 2 loosens the fixture guard to the header block, because the host's login-failed body says "password".
 - Decision recorded: the double password prompt on an untrusted `https` host's first connection ("Decisions recorded in this plan"; App notes in Task 4).
+- Second pass, same day: the probe's line is the spec's ("Nothing at this URL answers as mvsMF."), and a 200 that is not mvsMF's info maps to it too (Task 3); `info-requires-auth` keeps a test named after it (Task 3); the live lane's provider caches the token and the dead-token refusal is checked (Task 3, Task 7); the changelog amends the existing bullet as spec §6 says (Task 6); the sign-in window's footer no longer claims the password is kept (Task 4); the tester signs out in a `finally` (Task 4); commit trailers name Fable 5.1.
+- Deviations from spec, recorded: `HostFileAccess.SignOutAsync` builds a fresh service rather than using "any live connection's current service", because the session window closes its browser (and so every connection) before it signs out. The backend's `SignOutAsync` swallows transport failures itself, where §4.2 has the caller ignore them, so the Test button never reports a failed sign-out after a successful connect. `FakeHostFileService` grows only `SignOutAsync`; `ProbeAsync` stays on the concrete backend (the factory is the one place App names it) and is covered by the recorded backend tests and the factory's socket test, not by an App fake.
 - Not in this PR: jobs, USS, console, dataset create/delete/rename, paging (#144), Bearer, remembering the token across windows or on disk, real z/OSMF testing.
