@@ -17,10 +17,11 @@
                  Foreground="#101010" FontWeight="SemiBold" TextWrapping="Wrap" />
     </Border>
     <StackPanel Spacing="6">
-      <TextBlock TextWrapping="Wrap" Text="• Everything you type, including passwords — and a password typed as part of a longer command, such as LOGON USER/SECRET, is recorded in full." />
-      <TextBlock TextWrapping="Wrap" Text="• Every screen the host sends, so whatever data this session displays." />
+      <TextBlock TextWrapping="Wrap" Text="Please read carefully." />
+      <TextBlock TextWrapping="Wrap" Text="• Everything you type, including passwords, is recorded in full." />
+      <TextBlock TextWrapping="Wrap" Text="• Every screen the host sends." />
     </StackPanel>
-    <TextBlock TextWrapping="Wrap" Text="Nothing removes the file and nothing edits it for you. Read it before you send it to anyone." />
+    <TextBlock TextWrapping="Wrap" Text="There are no automatic redactions. Review the log before you share it with anyone or post to GitHub. The LizTerm team is not responsible for any sensitive information that may be exposed." />
     <StackPanel Spacing="4">
       <TextBlock Text="The log will be written to:" Foreground="#A0A0A0" FontSize="12" />
       <TextBlock x:Name="PathText" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" TextWrapping="Wrap" />
