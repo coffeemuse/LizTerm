@@ -434,6 +434,27 @@ public class SessionWindowTests
         }
     }
 
+    /// <summary>The same stale check mark as a decline, by the other door: with no prompt to show, the command
+    /// returns without changing anything, so the item's self-ticked check mark needs the same correction
+    /// (#140 review). Not reachable from App today, which always passes a prompt, but the parameter is optional.</summary>
+    [AvaloniaFact]
+    public void With_no_prompt_to_show_the_menu_is_left_unchecked()
+    {
+        var session = new FakeEmulatorSession();
+        var vm = new SessionViewModel(session, a => Dispatcher.UIThread.Post(a), new FakeTextClipboard());
+        var window = new SessionWindow { DataContext = vm };
+        window.Show();
+        var item = window.FindControl<MenuItem>("WireLogMenuItem")!;
+
+        item.IsChecked = true;
+        item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(vm.IsWireLogging);
+        Assert.False(item.IsChecked);
+        Assert.Empty(session.Calls);
+    }
+
     /// <summary>The menu item ticks its own check mark before the handler runs, and a declined warning changes
     /// nothing in the view model for a OneWay binding to follow — so without the re-notify in ToggleWireLogAsync
     /// the item would keep a check mark for a log the user just refused (#139).</summary>

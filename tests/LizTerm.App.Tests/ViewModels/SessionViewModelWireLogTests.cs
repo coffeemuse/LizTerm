@@ -94,6 +94,22 @@ public class SessionViewModelWireLogTests : IDisposable
         Assert.Empty(session.Calls);
     }
 
+    /// <summary>Show Wire Logs... is at least as likely to run first as starting a log — someone looking for
+    /// logs they have not recorded yet — and EnsureDirectory leaves an existing directory's mode alone, so a
+    /// folder created here at 0755 would keep it forever. The listing carries profile names and session times
+    /// (#139/#140 review).</summary>
+    [Fact]
+    public async Task Show_wire_logs_creates_the_directory_owner_only()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix file modes do not apply on Windows.");
+        var (vm, _, _) = Create();
+        await vm.ShowWireLogsCommand.ExecuteAsync(null);
+        Assert.True(Directory.Exists(_dir));
+        // CA1416 cannot see the SkipWhen above, and CI builds with -warnaserror.
+        if (!OperatingSystem.IsWindows())
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(_dir));
+    }
+
     [Fact]
     public void File_name_comes_from_the_profile_and_the_clock()
     {
