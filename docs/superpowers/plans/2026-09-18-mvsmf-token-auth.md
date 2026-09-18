@@ -22,6 +22,16 @@
 - Zero warnings: `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "` prints `0`.
 - Commits end with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 
+## Decisions recorded in this plan
+
+- **An untrusted `https` host asks for the password twice on its first connection, and that is accepted.** Today
+  the credentials are cached before the first send, so a certificate refusal, Connect Anyway, and the retried
+  operation reuse them. Under this plan the refusal happens inside `SignInAsync` (the login is the first request on
+  the new service), the typed password is gone by design, and after Connect Anyway the retried operation prompts
+  again. Holding the password across the certificate prompt is exactly what this PR removes, and the case is one
+  extra prompt per unpinned host (per session, when Connect Anyway is chosen without Remember). Task 4 records it in
+  the App notes so QA does not read it as a bug.
+
 ## Prerequisites
 
 - Work on the branch `claude/mvsmf-token-auth`, already created from `origin/main` at `c1eb66f` (this worktree is on it). The spec and this plan are committed to it.
@@ -74,7 +84,7 @@ Token lifetime is httpd's sliding idle `SESSION_TIMEOUT`, default 30 minutes, re
 
 ## Task graph and the one red boundary
 
-Tasks 1, 2 keep every project green. **Task 3 changes `MvsmfFileService`'s constructor, which leaves `LizTerm.App` and `LizTerm.App.Tests` unable to compile** (they still pass a `HostCredentialProvider`); Task 4 restores them. This is the plan's one deliberate red boundary, stated in Task 3's commit. Tasks 5 and 6 keep green.
+Tasks 1, 2 keep every project green. **Task 3 changes `MvsmfFileService`'s constructor, which leaves `LizTerm.App` and `LizTerm.App.Tests` unable to compile** (they still pass a `HostCredentialProvider`); Task 4 restores them (and carries the prompt-reason change, which its holder needs to compile). This is the plan's one deliberate red boundary, stated in Task 3's commit. Tasks 5 and 6 keep green.
 
 ---
 
@@ -210,6 +220,7 @@ The backend tests in Task 3 need the login exchanges. Two are recorded from the 
 **Files:**
 - Create: `tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/{login-200,login-401,login-404}.http`
 - Modify: `tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md`
+- Modify: `tests/LizTerm.Backend.Mvsmf.Tests/FixtureTests.cs` (the guard reads the header block only)
 
 **Interfaces:**
 - Produces: fixtures `login-200` (200 + `Set-Cookie: LtpaToken2=<token>` + success body), `login-401` (401 + z/OSMF login-failed body), `login-404` (404, synthetic, a host with no authenticate route).
@@ -237,7 +248,32 @@ tail -c 120 tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/login-401.http; echo
 
 Expected: `login-200` has exactly `Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict`, and its body ends `{"returnCode":0,"reasonCode":0,"message":"Success."}`; `login-401` ends with a body whose `"reasonCode":1` and a `"Login failed` message. If `login-401` carries a `Set-Cookie`, that is fine (the redaction already handled it). If either body differs in shape from this, stop and report it, since Task 3's parser depends on it.
 
-- [ ] **Step 3: Write the synthetic pre-1.1.0 fixture**
+- [ ] **Step 3: Make the fixture guard read the header block only**
+
+`FixtureTests.No_fixture_holds_credentials_or_a_session_token` rejects any fixture containing the word "password",
+and the host's login-failed body says "Check whether the user ID and password you use…", so `login-401` would fail
+it as recorded. Anything LizTerm sent or was given (a credential, a token) can only be in the header block, so the
+guard reads that block alone. In `tests/LizTerm.Backend.Mvsmf.Tests/FixtureTests.cs`, replace the body of that test
+with:
+
+```csharp
+        foreach (var file in Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Fixtures"), "*.http"))
+        {
+            var text = File.ReadAllText(file);
+            // The body is the host's own words, and a failed login says "password"; anything LizTerm sent or was
+            // given (a credential, a token) could only be in the header block.
+            var head = text[..text.IndexOf("\n\n", StringComparison.Ordinal)];
+            Assert.DoesNotContain("Authorization", head, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("password", head, StringComparison.OrdinalIgnoreCase);
+            foreach (var line in head.Split('\n').Where(l => l.StartsWith("Set-Cookie:", StringComparison.OrdinalIgnoreCase)))
+                Assert.StartsWith("Set-Cookie: LtpaToken2=<token>;", line, StringComparison.OrdinalIgnoreCase);
+        }
+```
+
+Run: `dotnet test tests/LizTerm.Backend.Mvsmf.Tests --filter "FullyQualifiedName~FixtureTests"`
+Expected: PASS (the existing fixtures have no "password" anywhere, so the loosened guard still holds them).
+
+- [ ] **Step 4: Write the synthetic pre-1.1.0 fixture**
 
 No pre-1.1.0 host is available, so write `login-404` by hand. Create `tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/login-404.http` with exactly these bytes (a Unix-newline file, a blank line after the headers, then the body):
 
@@ -250,7 +286,7 @@ Content-Language: en
 <html><body>404 Not Found</body></html>
 ```
 
-- [ ] **Step 4: Update the fixtures README**
+- [ ] **Step 5: Update the fixtures README**
 
 In `tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md`, add rows after `info-401` (keep the table's order):
 
@@ -260,19 +296,20 @@ In `tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md`, add rows after `info-
 | `login-404` | a host with no authenticate route — 404 (hand-written; no pre-1.1.0 host was available) |
 ```
 
-- [ ] **Step 5: Confirm the suite still builds and passes (no code references the new fixtures yet)**
+- [ ] **Step 6: Confirm the suite still builds and passes (no code references the new fixtures yet)**
 
 Run: `dotnet test tests/LizTerm.Backend.Mvsmf.Tests 2>&1 | grep -E "Passed!|Failed!"`
-Expected: `Passed!`. `FixtureTests` scans every `.http`; the three new files must pass its no-token/no-credentials check.
+Expected: `Passed!`. `FixtureTests` scans every `.http`; the three new files pass the header-block guard from Step 3 (`login-401`'s body says "password", which is why the guard reads the headers alone).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add tests/LizTerm.Backend.Mvsmf.Tests/Fixtures
+git add tests/LizTerm.Backend.Mvsmf.Tests/Fixtures tests/LizTerm.Backend.Mvsmf.Tests/FixtureTests.cs
 git commit -m "Record the mvsMF login fixtures
 
 login-200 and login-401 from the 1.1.0 host, login-404 hand-written
-for a host with no authenticate route.
+for a host with no authenticate route. The fixture guard now reads the
+header block only, since the host's login-failed body says "password".
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -288,6 +325,8 @@ The backend logs in with Basic to get the cookie, then sends the cookie on every
 - Modify: `tests/LizTerm.Backend.Mvsmf.Tests/MvsmfAuthTests.cs`
 - Modify: `tests/LizTerm.Backend.Mvsmf.Tests/RecordedHandler.cs` (record the `Cookie` header)
 - Modify: `tests/LizTerm.Backend.Mvsmf.Tests/{MvsmfListTests,MvsmfReadTests,MvsmfWriteTests,MvsmfErrorsTests}.cs` (the shared `Answering` helper moves to a token provider)
+- Modify: `tests/LizTerm.Backend.Mvsmf.Tests/MvsmfTlsTests.cs` (construction; the refusal now happens at sign-in)
+- Modify: `tests/LizTerm.Backend.Mvsmf.Tests/LoopbackHttpsServer.cs` (answers the login with a cookie)
 - Modify: `tests/LizTerm.Integration.Tests/LiveMvsmfTests.cs`
 
 **Interfaces:**
@@ -478,6 +517,38 @@ Then the tests (replace the existing auth tests, keeping the timeout/unreachable
 Keep the existing `Info_version_fields_prefer_the_full_version`, `The_production_client_never_times_out_a_whole_transfer`, `A_refused_connection_is_unreachable`, `An_unreadable_answer_is_a_server_error`, `A_connect_timeout_is_unreachable`, `A_slow_sign_in_is_not_a_host_timeout`, `A_slow_retry_prompt_is_not_a_host_timeout`, and `The_production_handler_connects_within_ten_seconds_and_keeps_no_cookies` tests, but change each construction from `Answering(...)` / `HostCredentialProvider` to `Providing(...)` / a `HostTokenProvider`, and prepend a `.Then("login-200")` to every handler whose service reaches the host (the slow-sign-in and version tests replay `info-200`, so they now need a preceding `login-200`; the connect-timeout and refused-connection tests fail before login, so they do not). For `A_slow_sign_in_is_not_a_host_timeout`, the slow step is the provider; wrap the delay in the `HostTokenProvider` body and have it call `signIn`.
 
 Also update every other backend test file's shared service builder. In `MvsmfListTests`, `MvsmfReadTests`, `MvsmfWriteTests`, the `Service(handler)` helper currently calls `MvsmfAuthTests.Answering([], new HostCredentials(...))`; change it to `MvsmfAuthTests.Providing([], new HostCredentials("MVSCE02", "pw"))` and prepend `.Then("login-200")` to each handler chain those tests build (each operation now signs in first). Where a test asserts on `handler.Requests[0]` for the operation, change the index to account for the leading login (`Requests[1]`), or filter by method/path. `MvsmfErrorsTests` operates on `MvsmfErrors` directly and does not build a service, so it is unchanged except any `Answering` reference (there is none).
+
+`MvsmfTlsTests` builds its services with `Answering` too, and its loopback server answers every request with the one
+info body, which the login would read as "the host set no session cookie". Two changes:
+
+In `tests/LizTerm.Backend.Mvsmf.Tests/LoopbackHttpsServer.cs`, `AnswerAsync` answers a `POST` to
+`/zosmf/services/authenticate` with a login and everything else with the body it was given. Replace from
+`var body = Encoding.UTF8.GetBytes(json);` through `await tls.WriteAsync(body);` with:
+
+```csharp
+                var requestLine = Encoding.ASCII.GetString(seen.ToArray()).Split("\r\n")[0];
+                var isLogin = requestLine.StartsWith("POST ", StringComparison.Ordinal)
+                    && requestLine.Contains("/services/authenticate", StringComparison.Ordinal);
+                var body = Encoding.UTF8.GetBytes(isLogin ? """{"returnCode":0,"reasonCode":0,"message":"Success."}""" : json);
+                var cookie = isLogin ? "Set-Cookie: LtpaToken2=loopback; Path=/\r\n" : "";
+                var head = Encoding.ASCII.GetBytes(
+                    $"HTTP/1.1 200 OK\r\n{cookie}Content-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
+                await tls.WriteAsync(head);
+                await tls.WriteAsync(body);
+```
+
+and change the class summary to "answers a login with a cookie and every other request with one JSON body". The
+`Connection: close` after the login means the info request opens a second TLS connection, which the pin check
+validates again, so the pinned test still exercises the pin.
+
+In `tests/LizTerm.Backend.Mvsmf.Tests/MvsmfTlsTests.cs`, change `Service(int port, CertificatePin? pin)` and the
+construction in `A_later_handshake_failure_is_not_blamed_on_an_old_certificate` from
+`MvsmfAuthTests.Answering([], new HostCredentials("U", "p"))` to `MvsmfAuthTests.Providing([], new HostCredentials("U", "p"))`.
+The first request on a service is now the login, so a certificate refusal is raised from `SignInAsync`: in
+`An_untrusted_certificate_is_rejected_and_described`, the expected message becomes
+`"Sign-in: the host's certificate is not trusted."` (the user never sees that prefix; `HostFileMessages.Describe`
+maps `CertificateRejected` to a fixed sentence). `A_pinned_certificate_is_trusted` passes once the loopback answers
+the login; `A_pin_for_another_certificate_is_rejected` asserts the kind only and needs no other change.
 
 - [ ] **Step 3: Run the auth tests; they fail (no token path yet)**
 
@@ -787,13 +858,18 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ### Task 4: App — the sign-in holder, access, factory and window
 
-Migrate the App from credentials to a token, restoring the build. The holder is renamed and now trades a password for a token through the backend's `signIn`; the window signs out on close.
+Migrate the App from credentials to a token, restoring the build. The holder is renamed and now trades a password for a token through the backend's `signIn`; the window signs out on close. The prompt request's `IsRetry` becomes a `SignInReason` here, because the holder passes one and the sign-in window shows it, and the old credential provider leaves Core with its last use.
 
 **Files:**
 - Rename + rewrite: `src/LizTerm.App/HostFiles/CredentialHolder.cs` → `src/LizTerm.App/HostFiles/SignInHolder.cs`
 - Modify: `src/LizTerm.App/HostFiles/HostFileAccess.cs`
 - Modify: `src/LizTerm.App/HostFileServiceFactory.cs`
 - Modify: `src/LizTerm.App/Views/SessionWindow.axaml.cs`
+- Modify: `src/LizTerm.App/Dialogs/ICredentialPrompt.cs` (`Reason` replaces `IsRetry`)
+- Modify: `src/LizTerm.App/Views/SignInWindow.axaml`, `SignInWindow.axaml.cs` (the expired-session line)
+- Modify: `src/LizTerm.Core/HostFiles/HostCredentials.cs` (delete `HostCredentialRequest` and `HostCredentialProvider`)
+- Modify: `tests/LizTerm.App.Tests/Fakes/FakeCredentialPrompt.cs` (record the reason)
+- Modify: `tests/CLAUDE.md` (the `FakeCredentialPrompt` note)
 - Modify: `tests/LizTerm.App.Tests/Fakes/FakeHostFileService.cs` (record `SignOutAsync`)
 - Rename + rewrite: `tests/LizTerm.App.Tests/HostFiles/CredentialHolderTests.cs` → `SignInHolderTests.cs`
 - Modify: `tests/LizTerm.App.Tests/HostFiles/{HostFileAccessTests,HostFileConnectionTests}.cs`, `tests/LizTerm.App.Tests/HostFileServiceFactoryTests.cs`, `tests/LizTerm.App.Tests/Views/SessionWindowMvsmfTests.cs`
@@ -801,9 +877,71 @@ Migrate the App from credentials to a token, restoring the build. The holder is 
 
 **Interfaces:**
 - Consumes: Task 1's types; Task 3's `MvsmfFileService(MvsmfOptions, HostTokenProvider)`, `ProbeAsync`, `SignInAsync`, `SignOutAsync`.
-- Produces: `SignInHolder(string profileName, string url, string? userid)` with `IsSignedIn`, `ProviderFor(ICredentialPrompt) : HostTokenProvider`, `Task SignOutAsync(IHostFileService service)`; `HostFileAccess.SignOutAsync()`; `HostFileServiceFactory.Create(Uri, CertificatePin?, HostTokenProvider)`.
+- Produces: `SignInHolder(string profileName, string url, string? userid)` with `IsSignedIn`, `ProviderFor(ICredentialPrompt) : HostTokenProvider`, `Task SignOutAsync(IHostFileService service)`; `HostFileAccess.SignOutAsync()`; `HostFileServiceFactory.Create(Uri, CertificatePin?, HostTokenProvider)`; `enum SignInReason { First, Rejected, Expired }`; `CredentialPromptRequest(string ProfileName, string Url, string? Userid, SignInReason Reason)`.
 
-- [ ] **Step 1: Rewrite the holder tests (they fail to compile)**
+- [ ] **Step 1: Change the prompt request, the fake prompt and the sign-in window**
+
+The holder written in Step 4 passes a `SignInReason`, and the sign-in window reads `IsRetry` today, so all three
+change together, before the holder.
+
+In `src/LizTerm.App/Dialogs/ICredentialPrompt.cs`, replace the `IsRetry` parameter:
+
+```csharp
+/// <summary>Why the sign-in window is open.</summary>
+public enum SignInReason
+{
+    First,
+    Rejected,
+    Expired,
+}
+
+/// <param name="ProfileName">Whose sign-in this is.</param>
+/// <param name="Url">The REST base URL, shown so the user knows which host is asking.</param>
+/// <param name="Userid">The userid to start with, or null.</param>
+/// <param name="Reason">First need, a refused password, or an expired session.</param>
+public sealed record CredentialPromptRequest(string ProfileName, string Url, string? Userid, SignInReason Reason);
+```
+
+**The fake and its note.**
+
+In `tests/LizTerm.App.Tests/Fakes/FakeCredentialPrompt.cs`, change the `Calls.Add` line to record the reason:
+
+```csharp
+            Calls.Add($"ask:{request.Userid}:{request.Reason}");
+```
+
+The holder tests in Step 2 expect `ask:MVSCE02:First`, `:Expired` and `:Rejected`. In `tests/CLAUDE.md`, change the `FakeCredentialPrompt` note's `ask:<userid>:<IsRetry>` to `ask:<userid>:<Reason>`.
+
+**The sign-in window.**
+
+`SignInWindow` is a view; it has no unit test today, so verify by construction. In `src/LizTerm.App/Views/SignInWindow.axaml`, replace the fixed `RetryText` block with two lines bound by reason, or one line whose text is set in code. Simplest: keep one `TextBlock x:Name="ReasonText"` and set its text and visibility in code:
+
+```xml
+    <TextBlock x:Name="ReasonText" Foreground="#FF8080" TextWrapping="Wrap" IsVisible="False" />
+```
+
+In `SignInWindow.axaml.cs`, set it from the reason, and update the design-time ctor:
+
+```csharp
+    public SignInWindow() : this(new CredentialPromptRequest("MVS/CE", "http://mvs.example:8080/zosmf", "MVSCE02", SignInReason.Expired)) { }
+
+    public SignInWindow(CredentialPromptRequest request)
+    {
+        InitializeComponent();
+        HostText.Text = $"{request.ProfileName} · {request.Url}";
+        ReasonText.Text = request.Reason switch
+        {
+            SignInReason.Rejected => "✗ The userid or password was not accepted. Try again.",
+            SignInReason.Expired => "Your mvsMF session has expired. Sign in again.",
+            _ => "",
+        };
+        ReasonText.IsVisible = request.Reason != SignInReason.First;
+        UseridBox.Text = request.Userid ?? "";
+        Opened += (_, _) => (string.IsNullOrEmpty(UseridBox.Text) ? UseridBox : PasswordBox).Focus();
+    }
+```
+
+- [ ] **Step 2: Rewrite the holder tests (they fail to compile)**
 
 Rename `tests/LizTerm.App.Tests/HostFiles/CredentialHolderTests.cs` to `SignInHolderTests.cs` and rewrite it against the token provider. The holder is handed a `signIn` by the backend; in tests, pass a fake `signIn` that returns a token from the credentials. Keep the behaviours the old tests pinned: one prompt shared by concurrent first requests; a rejected-token retry re-prompts; a rejected token that is no longer current answers the newer one; cancel shared; prefill; sign-out drops the token.
 
@@ -910,12 +1048,12 @@ public class SignInHolderTests
 
 Keep the remaining old holder tests (concurrent first requests share one prompt; concurrent refusals prompt once; operations waiting on a cancelled prompt fail with it; the userid typed last prefills; a cancelled wait throws before asking), adapting each to `provider(request, signer.SignIn, token)` and `SignInReason`.
 
-- [ ] **Step 2: Run; fails to compile**
+- [ ] **Step 3: Run; fails to compile**
 
 Run: `dotnet test tests/LizTerm.App.Tests --filter "FullyQualifiedName~SignInHolderTests"`
-Expected: build error (`SignInHolder`, `SignInReason`, `IsSignedIn` not defined).
+Expected: build error (`SignInHolder`, `IsSignedIn` not defined).
 
-- [ ] **Step 3: Rewrite the holder**
+- [ ] **Step 4: Rewrite the holder**
 
 Rename the file, then replace `src/LizTerm.App/HostFiles/CredentialHolder.cs`'s contents (new path `SignInHolder.cs`):
 
@@ -1032,7 +1170,7 @@ public sealed class SignInHolder(string profileName, string url, string? userid)
 
 > Note on the retry: the backend's `SendAsync` no longer distinguishes a bad password from an expired token (a bad password is caught inside `SignInAsync`), so the holder owns the "refused password, ask again" loop. This keeps the prompt's *Rejected* reason meaningful and matches spec §4.3 ("`Unauthenticated` prompts again with reason *rejected*").
 
-- [ ] **Step 4: Migrate access, factory, window and fake**
+- [ ] **Step 5: Migrate access, factory, window and fake**
 
 In `src/LizTerm.App/HostFiles/HostFileAccess.cs`: rename the property type and calls from `CredentialHolder` to `SignInHolder`, rename `Credentials` to `SignIn` (or keep the property name `Credentials` — pick `SignIn` for clarity and update call sites), and replace `Forget`:
 
@@ -1123,7 +1261,12 @@ In `src/LizTerm.App/Views/SessionWindow.axaml.cs`, change the close handler from
 
 (The token is cleared under the lock at the top of `SignInHolder.SignOutAsync`, so `IsSignedIn` is false immediately; the awaited part is only the network DELETE.)
 
-- [ ] **Step 5: Update the other App tests**
+Finally, delete `HostCredentialRequest` and the `HostCredentialProvider` delegate from
+`src/LizTerm.Core/HostFiles/HostCredentials.cs`, keeping `HostCredentials` (the login's input). Spec §4.1 retires
+them with their last use, and this task removes it; the Core test project references neither. Task 7's grep for the
+old names depends on this.
+
+- [ ] **Step 6: Update the other App tests**
 
 - `HostFileAccessTests.Forget_drops_the_sign_in` → drive `SignIn.ProviderFor` with a token provider and assert `SignIn.IsSignedIn`, then `await access.SignOutAsync()` and assert `!SignIn.IsSignedIn`. Use a fake `signIn` as in the holder tests.
 - `HostFileConnectionTests`: its `Host.Create` signature becomes `(Uri, CertificatePin?, HostTokenProvider)`; the field `Provider` becomes `HostTokenProvider?`; assertions on `HasCredentials` become `IsSignedIn`.
@@ -1131,107 +1274,46 @@ In `src/LizTerm.App/Views/SessionWindow.axaml.cs`, change the close handler from
 - `SessionWindowMvsmfTests.Closing_the_session_window_closes_the_browser_and_forgets_the_sign_in`: drive `shown.Access.SignIn.ProviderFor(...)` with a token provider, assert `IsSignedIn`, and after close assert `!IsSignedIn`.
 - Anywhere else that references `CredentialHolder`, `.Credentials`, `.Forget()` or `HasCredentials`, update to `SignInHolder`, `.SignIn`, `.SignOutAsync()`, `IsSignedIn`.
 
-- [ ] **Step 6: Build and run the App tests**
+- [ ] **Step 7: Build and run the App tests**
 
 Run: `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "` (expect `0`).
 Run: `dotnet test tests/LizTerm.App.Tests 2>&1 | grep -E "Passed!|Failed!"` (expect `Passed!`).
 
-- [ ] **Step 7: Update the App notes**
+- [ ] **Step 8: Update the App notes**
 
-In `src/LizTerm.App/CLAUDE.md`, change the `CredentialHolder` bullet(s) to `SignInHolder`: it holds a session token, not a password; the password lives only inside the prompt and the backend's `SignInAsync`; `SignOutAsync` on window close ends the session; the editor's tester probes `/info` before prompting.
+In `src/LizTerm.App/CLAUDE.md`, change the `CredentialHolder` bullet(s) to `SignInHolder`: it holds a session token, not a password; the password lives only inside the prompt and the backend's `SignInAsync`; `SignOutAsync` on window close ends the session; the editor's tester probes `/info` before prompting. Add the accepted double prompt ("Decisions recorded in this plan"): an `https` host whose certificate is not yet trusted refuses inside the sign-in, so after Connect Anyway the retried operation asks for the password again; the password is not held across the certificate prompt by design.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/LizTerm.App tests/LizTerm.App.Tests
+git add src/LizTerm.App src/LizTerm.Core/HostFiles/HostCredentials.cs tests/LizTerm.App.Tests tests/CLAUDE.md
 git commit -m "Trade the mvsMF password for a session token in the App
 
 SignInHolder (was CredentialHolder) holds a token, signs in through
 the backend once, re-prompts on an expired or rejected token, and
-signs out when the session window closes. The Test button probes /info
-before it asks for a password.
+signs out when the session window closes. The sign-in window says
+when the session expired. The Test button probes /info before it asks
+for a password. The credential provider is gone from Core.
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 5: App — the prompt reason and the Test button messages
+### Task 5: App — the Test button messages
 
-The sign-in window shows an "expired" line; the Test button reports the version floor and the unsupported host.
+The Test button reports the version floor and the unsupported host. (The prompt reason and the expired-session line are in Task 4, whose holder needs them to compile.)
 
 **Files:**
-- Modify: `src/LizTerm.App/Dialogs/ICredentialPrompt.cs`
-- Modify: `src/LizTerm.App/Views/SignInWindow.axaml`, `SignInWindow.axaml.cs`
 - Modify: `src/LizTerm.App/ViewModels/ProfileEditorViewModel.cs`
-- Modify: `tests/LizTerm.App.Tests/Fakes/FakeCredentialPrompt.cs` (record the reason)
+- Modify: `src/LizTerm.App/HostFiles/HostFileMessages.cs` (the `Unsupported` arm)
 - Modify: `tests/LizTerm.App.Tests/ViewModels/ProfileEditorMvsmfTests.cs`
-- Modify: `tests/CLAUDE.md` (the `FakeCredentialPrompt` note)
 
 **Interfaces:**
-- Consumes: Task 4's holder, which already passes `SignInReason`.
-- Produces: `enum SignInReason { First, Rejected, Expired }`; `CredentialPromptRequest(string ProfileName, string Url, string? Userid, SignInReason Reason)`.
+- Consumes: `HostFileErrorKind.Unsupported` (Task 1); the tester from Task 4.
+- Produces: `ProfileEditorViewModel.IsSupportedVersion`; the `Unsupported` arm of `HostFileMessages.Describe`.
 
-- [ ] **Step 1: Change the request and add the enum**
-
-In `src/LizTerm.App/Dialogs/ICredentialPrompt.cs`, replace the `IsRetry` parameter:
-
-```csharp
-/// <summary>Why the sign-in window is open.</summary>
-public enum SignInReason
-{
-    First,
-    Rejected,
-    Expired,
-}
-
-/// <param name="ProfileName">Whose sign-in this is.</param>
-/// <param name="Url">The REST base URL, shown so the user knows which host is asking.</param>
-/// <param name="Userid">The userid to start with, or null.</param>
-/// <param name="Reason">First need, a refused password, or an expired session.</param>
-public sealed record CredentialPromptRequest(string ProfileName, string Url, string? Userid, SignInReason Reason);
-```
-
-- [ ] **Step 2: Update the fake to record the reason, and the tests that read it**
-
-In `tests/LizTerm.App.Tests/Fakes/FakeCredentialPrompt.cs`, change the `Calls.Add` line to record the reason:
-
-```csharp
-            Calls.Add($"ask:{request.Userid}:{request.Reason}");
-```
-
-The holder tests in Task 4 already expect `ask:MVSCE02:First` and `:Expired` and `:Rejected`. In `tests/CLAUDE.md`, change the `FakeCredentialPrompt` note's `ask:<userid>:<IsRetry>` to `ask:<userid>:<Reason>`.
-
-- [ ] **Step 3: Write the SignInWindow test expectation, then wire the line**
-
-`SignInWindow` is a view; it has no unit test today, so verify by construction. In `src/LizTerm.App/Views/SignInWindow.axaml`, replace the fixed `RetryText` block with two lines bound by reason, or one line whose text is set in code. Simplest: keep one `TextBlock x:Name="ReasonText"` and set its text and visibility in code:
-
-```xml
-    <TextBlock x:Name="ReasonText" Foreground="#FF8080" TextWrapping="Wrap" IsVisible="False" />
-```
-
-In `SignInWindow.axaml.cs`, set it from the reason, and update the design-time ctor:
-
-```csharp
-    public SignInWindow() : this(new CredentialPromptRequest("MVS/CE", "http://mvs.example:8080/zosmf", "MVSCE02", SignInReason.Expired)) { }
-
-    public SignInWindow(CredentialPromptRequest request)
-    {
-        InitializeComponent();
-        HostText.Text = $"{request.ProfileName} · {request.Url}";
-        ReasonText.Text = request.Reason switch
-        {
-            SignInReason.Rejected => "✗ The userid or password was not accepted. Try again.",
-            SignInReason.Expired => "Your mvsMF session has expired. Sign in again.",
-            _ => "",
-        };
-        ReasonText.IsVisible = request.Reason != SignInReason.First;
-        UseridBox.Text = request.Userid ?? "";
-        Opened += (_, _) => (string.IsNullOrEmpty(UseridBox.Text) ? UseridBox : PasswordBox).Focus();
-    }
-```
-
-- [ ] **Step 4: The Test button messages**
+- [ ] **Step 1: The Test button messages**
 
 In `tests/LizTerm.App.Tests/ViewModels/ProfileEditorMvsmfTests.cs`, the `Tester` fake returns a `HostServerInfo`. Add tests for the two new messages. The version check lives in the view model, so make the tester return a `HostServerInfo` with a low version and assert the message; and add an `Unsupported` failure row to `Test_failures_are_reported_in_words`:
 
@@ -1286,19 +1368,19 @@ In `src/LizTerm.App/HostFiles/HostFileMessages.cs`, add to the `host.Kind switch
 
 (The backend already sets that message to "This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.")
 
-- [ ] **Step 5: Run the App tests and the full suite**
+- [ ] **Step 2: Run the App tests and the full suite**
 
 Run: `dotnet test tests/LizTerm.App.Tests --filter "FullyQualifiedName~ProfileEditorMvsmfTests|FullyQualifiedName~SignInHolderTests"` (expect PASS).
 Run: `dotnet build LizTerm.slnx --no-incremental 2>&1 | grep -c " warning "` (expect `0`).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/LizTerm.App tests/LizTerm.App.Tests tests/CLAUDE.md
-git commit -m "Say the session expired, and refuse mvsMF below 1.1.0
+git add src/LizTerm.App tests/LizTerm.App.Tests
+git commit -m "Refuse mvsMF below 1.1.0 from the Test button
 
-The sign-in window shows an expired-session line, and the Test button
-reports a host below 1.1.0 or with no sign-in service as unsupported.
+The Test button reports a host below 1.1.0 or with no sign-in service
+as unsupported.
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -1457,7 +1539,7 @@ Expected: all pass, 0 skipped. The sign-in/list/sign-out, the probe-needs-sign-i
 
 Run: `grep -rn "mvsMF\|Mvsmf\|LtpaToken2\|Bearer" src/LizTerm.Core --include='*.cs'` (expect no output — Core never names mvsMF or the token transport).
 Run: `dotnet test tests/LizTerm.Core.Tests --filter "FullyQualifiedName~RepositoryHeadersTests"` (expect PASS).
-Run: `git grep -n "CredentialHolder\|HasCredentials\|\.Forget()\|IsRetry" src tests` (expect no output — the old names are gone).
+Run: `git grep -n "CredentialHolder\|HasCredentials\|\.Forget()\|IsRetry\|HostCredentialProvider\|HostCredentialRequest" src tests` (expect no output — the old names are gone).
 
 - [ ] **Step 4: Push and open the PR**
 
@@ -1469,10 +1551,12 @@ Report the PR URL. The status comment on #17 is posted after Robert merges (spec
 
 ## Self-review notes
 
-- Spec §3 (decisions): password dropped after login (Task 3/4), two-PR split (this is PR 2), cookie-not-Bearer (Task 3, Task 6), no new UI beyond the expired line and Test messages (Task 5), minimum 1.1.0 (Task 5 enforce, Task 6 document).
-- Spec §4.1 Core contract (Task 1); §4.2 backend (Task 3); §4.3 holder (Task 4); §4.4 prompt reason (Task 5); §4.5 Test button (Task 4 tester + Task 5 messages); §4.6 expired-token walk-through is exercised by `An_expired_token_signs_in_again…` (Task 3) and the holder's `A_rejected_token_signs_in_again_as_expired` (Task 4).
+- Spec §3 (decisions): password dropped after login (Task 3/4), two-PR split (this is PR 2), cookie-not-Bearer (Task 3, Task 6), no new UI beyond the expired line and Test messages (Tasks 4, 5), minimum 1.1.0 (Task 5 enforce, Task 6 document).
+- Spec §4.1 Core contract (Task 1); §4.2 backend (Task 3); §4.3 holder (Task 4); §4.4 prompt reason (Task 4); §4.5 Test button (Task 4 tester + Task 5 messages); §4.6 expired-token walk-through is exercised by `An_expired_token_signs_in_again…` (Task 3) and the holder's `A_rejected_token_signs_in_again_as_expired` (Task 4).
 - Spec §6 fixtures: login-200/401/404 as files (Task 2); logout, stale-token and anonymous-probe as inline responses (Task 3, a deviation from the spec's fixture list, recorded here because they carry no body worth a fixture); compat log and docs (Task 6).
 - Spec §7 minimum version: enforced in the login (`Unsupported`, Task 3), the Test button version compare (Task 5), documented in the guide with README/changelog/log pointing there (Task 6).
 - Spec §8 testing: backend recorded (Task 3), App fake (Task 4/5), live (Task 3 added, Task 7 runs).
 - Deviation from spec, recorded: the spec put the bad-password re-prompt in the backend's `SendAsync`; because `SignInAsync` catches the 401, the re-prompt loop moved into the holder (Task 4), which is where the *Rejected* reason is chosen. Same user-visible behaviour.
+- Reviewed 2026-09-18 (Fable 5.1): Task 4 now carries the prompt reason its holder needs and deletes `HostCredentialRequest`/`HostCredentialProvider` (spec §4.1); Task 3 moves the TLS tests and loopback server to the login-first flow; Task 2 loosens the fixture guard to the header block, because the host's login-failed body says "password".
+- Decision recorded: the double password prompt on an untrusted `https` host's first connection ("Decisions recorded in this plan"; App notes in Task 4).
 - Not in this PR: jobs, USS, console, dataset create/delete/rename, paging (#144), Bearer, remembering the token across windows or on disk, real z/OSMF testing.
