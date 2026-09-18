@@ -206,13 +206,11 @@ public sealed class MvsmfFileService : IHostFileService
                 throw new ArgumentException("A line cannot hold a line break.", nameof(lines));
             if (line.AsSpan().IndexOfAnyExceptInRange('\0', 'ÿ') >= 0)
                 throw new ArgumentException("A line holds a character outside Latin-1; check the text with TextUploadCheck first.", nameof(lines));
-            // mvsMF-compat: text-write-drops-empty-lines — the host drops an empty line but stores a single blank as
-            // a blank record.
-            text.Append(line.Length == 0 ? " " : line).Append('\n');
+            text.Append(line).Append('\n');
         }
         // mvsMF-compat: text-body-is-latin1 — the host reads the body as ISO-8859-1 whatever charset says.
-        // mvsMF-compat: text-write-truncates-silently — an over-long line is cut to the record length and still
-        // answered 204; TextUploadCheck refuses such lines before they reach this method.
+        // mvsMF-compat: text-write-truncates — an over-long line is cut to the record length and written before the
+        // host answers 500, so TextUploadCheck refuses such lines and nothing is ever partly written.
         return Encoding.Latin1.GetBytes(text.ToString());
     }
 

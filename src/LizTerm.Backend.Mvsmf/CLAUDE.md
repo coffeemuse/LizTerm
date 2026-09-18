@@ -12,12 +12,15 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
   test named after the tag pins it. Add all three together, and read that log before changing any behaviour that
   looks odd: it is probably deliberate.
 - **Never send `Content-Type: application/json` on a `PUT`.** mvsMF treats it as a rename.
-- **Text is ISO-8859-1 on the wire** in both directions. Empty lines go out as one space, because the host drops
-  empty ones. `EncodeText` throws for a line break or a character above U+00FF; `TextUploadCheck` (Core) should have
-  refused those first.
-- **Classify errors by the JSON `category`/`reason`, then the status.** mvsMF answers 500 for a missing member and
-  for a refused open. `MvsmfErrors` is the one place that mapping lives.
-- **No paging.** This build ignores `start` and, for members, `X-IBM-Max-Items`; lists are fetched whole.
+- **Text is ISO-8859-1 on the wire** in both directions, whatever `charset` says. Lines go out as they are, LF
+  ended; an empty line is stored as a blank record. `EncodeText` throws for a line break or a character above
+  U+00FF; `TextUploadCheck` (Core) should have refused those first, and it also refuses over-long lines, because
+  the host truncates them, writes the rest, and only then answers 500.
+- **Classify errors by the JSON `category`/`reason`, then the status.** A missing dataset or member is 404 with
+  reason 4 or 5; a refused open is 500 in category 4; a truncated write is 500 in category 6, reason 3, and reaches
+  the caller as a server error carrying the host's message. `MvsmfErrors` is the one place that mapping lives.
+- **No paging.** mvsMF 1.1.0 honours `start` and `X-IBM-Max-Items`, but lists are still fetched whole (`no-paging`,
+  #144); a `moreRows: true` on either list is refused as a partial answer.
 - **Timeouts:** 10 s to connect (`SocketsHttpHandler.ConnectTimeout`), 30 s without data (`IdleTimeout`, reset on
   every chunk), and no `HttpClient.Timeout`, so a long download is never cut off while bytes arrive.
   `HttpCompletionOption.ResponseHeadersRead` everywhere, so bodies stream. `SendAsync` calls `IdleTimeout.Pause()`

@@ -32,14 +32,14 @@ public class MvsmfWriteTests
     }
 
     [Fact]
-    public async Task Text_write_drops_empty_lines_so_each_is_sent_as_one_blank()
+    public async Task An_empty_line_is_sent_as_an_empty_record()
     {
         var handler = new RecordedHandler().Then("write-204");
         using var service = Service(handler);
 
         await service.WriteTextAsync(NewMember, ["A", "", "B"], TestContext.Current.CancellationToken);
 
-        Assert.Equal("A\n \nB\n", handler.Requests[0].BodyText);
+        Assert.Equal("A\n\nB\n", handler.Requests[0].BodyText);
     }
 
     [Fact]
