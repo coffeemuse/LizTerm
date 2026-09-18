@@ -24,6 +24,7 @@ Each fact has one home. When a change makes a documented statement untrue, fix i
 | mvsMF: where its docs, source and the tested build disagree, and LizTerm's workarounds | `docs/mvsmf-compatibility.md` |
 | Workflows, check names, caches, release, packaging, signing | `docs/ci-and-release.md` |
 | Architecture overview for humans | `docs/architecture.md` |
+| What LizTerm records, who may read it, and what that forbids | `docs/privacy.md` |
 | Implementation notes and pitfalls per project | `src/<Project>/CLAUDE.md`, `tests/CLAUDE.md` |
 | Design history | `docs/superpowers/` — a record; do not rewrite old specs to match the code |
 

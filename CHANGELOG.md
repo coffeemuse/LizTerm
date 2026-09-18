@@ -20,6 +20,16 @@ What changed in each LizTerm release, newest first. Downloads are on the
   commit it was built from. You can select the version in About and copy it, so a bug report can say exactly which
   build it was filed against. A release shows its plain version, as before
   ([#141](https://github.com/coffeemuse/LizTerm/issues/141)).
+- **Starting a wire log now asks first.** A wire log records the whole session — everything you type, passwords
+  included, and every screen the host sends — so **Help > Wire Log** explains that and asks before it starts one.
+- **Wire logs are readable only by your account** on macOS and Linux. They were being written with default
+  permissions, which left them readable by every other account on the machine
+  ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
+- **A clearer message when the emulation engine stops.** The engine reports some problems as fatal and then exits.
+  LizTerm used to show the problem alone, and the session would vanish a moment later with nothing connecting the
+  two. It now says that the engine stopped, repeats the engine's explanation, and adds the size and shape of the
+  last instruction LizTerm sent — never what you typed, which stays in the wire log
+  ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
 - **Binary uploads to MVS/CE work.** File transfers now use a 2500-byte buffer unless you set another size under
   **Advanced**. With the larger size used before, MVS/CE dropped binary uploads at the end, showed its logon screen and
   left the TSO user logged on ([#137](https://github.com/coffeemuse/LizTerm/issues/137)).

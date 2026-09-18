@@ -407,9 +407,22 @@ public partial class SessionWindow : Window, ISessionHost
         }
     }
 
-    /// <summary>The native Wire Log item needs this handler for two independent reasons, and the classic item
-    /// needs it for neither — which is why it is the one place the two menus' bindings differ (OneWay here,
-    /// TwoWay there).
+    /// <summary>The classic item, Click-driven for the same reason the native one is: starting a log asks first
+    /// (#139), so the request has to reach ToggleWireLogCommand rather than writing IsWireLogging through a
+    /// two-way binding. Both menus are now the same shape — ToggleType, a OneWay check mark and a Click handler —
+    /// which is also what keeps NativeMenuTests' command-parity guard happy, a null Command on both sides being
+    /// what a Click-driven item looks like.
+    ///
+    /// DefaultMenuInteractionHandler.Click still ticks this item's own IsChecked before the handler runs. On a
+    /// start or a stop the view model's own change puts it right; on a declined warning nothing would change, so
+    /// ToggleWireLogAsync re-notifies IsWireLogging to push the binding's value back over it.</summary>
+    private void OnWireLogClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } vm) _ = vm.ToggleWireLogCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>The native item goes through the command for the confirmation, as the classic one does, and needs
+    /// a handler for two further reasons of its own.
     ///
     /// First, it is what makes the item usable at all on macOS. Avalonia's exporter gives every NSMenuItem the
     /// validation predicate <c>(Command != null || HasClickHandlers) &amp;&amp; IsEnabled</c>
@@ -420,14 +433,15 @@ public partial class SessionWindow : Window, ISessionHost
     /// thing that flips, and the OneWay binding carries the new state back to the check mark — including the
     /// correction to false that SessionViewModel.OnIsWireLoggingChanged marshals when the log will not open.
     ///
-    /// The classic item is the other way round because <c>DefaultMenuInteractionHandler.Click</c> toggles a
-    /// MenuItem's IsChecked *before* raising Click, and its TwoWay binding carries that to the view model. The
-    /// in-window NativeMenuBar fallback runs that same handler over a MenuItem bound TwoWay to this
-    /// NativeMenuItem, so it toggles too and then calls RaiseClicked: OneWay here is what stops that path
-    /// toggling twice and ending where it started.</summary>
+    /// OneWay is required here rather than tidy: the in-window NativeMenuBar fallback runs
+    /// <c>DefaultMenuInteractionHandler.Click</c> over a MenuItem bound TwoWay to this NativeMenuItem, so that
+    /// path toggles the native item as well and then calls RaiseClicked. A TwoWay binding to the view model
+    /// would make that two toggles, ending where it started.
+    ///
+    /// Fire and forget, as a menu click must be.</summary>
     private void OnWireLogClickNative(object? sender, EventArgs e)
     {
-        if (ViewModel is { } vm) vm.IsWireLogging = !vm.IsWireLogging;
+        if (ViewModel is { } vm) _ = vm.ToggleWireLogCommand.ExecuteAsync(null);
     }
 
     /// <summary>Keys > Insert's check mark is the host's insert mode (#111), not the menu's. Both renderers write

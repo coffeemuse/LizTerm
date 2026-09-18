@@ -93,9 +93,21 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   and names gain `-2`, `-3` when two starts land in the same second (`UniquePath`). `StatusFormatter`'s fault text
   points users at Help > Wire Log. When `IsWireLogging` cannot start a log, it marshals its own correction back to false
   through `dispatch` rather than assigning inline: a value corrected from inside its own change notification is
-  invisible to the menu item's two-way binding, which is still writing target to source, so the item would keep a
-  check mark for a log that never started and swallow the next click. `ShowWireLogsCommand` opens the folder through
+  invisible to a binding that is mid-write, so the item would keep a check mark for a log that never started and
+  swallow the next click. That was the two-way binding both menus used to carry; the marshalling stays because the
+  correction still has to land after the change that provoked it. `ShowWireLogsCommand` opens the folder through
   `IFolderOpener`.
+- **The menus ask before a log starts, and the property is the answer rather than the request** (#139). Both items
+  invoke `ToggleWireLogCommand`; only it writes `IsWireLogging`. Starting shows `WireLogWindow` through
+  `IWireLogPrompt` (`Dialogs/`, injected like `ICertificatePrompt`, and a null one declines), saying what a log
+  records and where it lands; stopping asks nothing. Every start asks: `AppSettings.WarnBeforeWireLog` is the way
+  out for someone recording fixtures all day, and it is deliberately hidden — no Preferences row binds it — so the
+  reminder is not one checkbox from being silenced forever. Both the decline and the no-prompt paths re-notify
+  `IsWireLogging`, because the classic item ticks its own check mark before the handler runs and a OneWay binding
+  refreshes only when the source notifies. `docs/privacy.md` holds why any of this is so.
+- Both directories a log needs go through `AppPaths.EnsureDirectory` (0700 on Unix), from `ShowWireLogsCommand` as
+  well as from the start: it leaves an existing directory's mode alone, so whichever command runs first on a fresh
+  install decides it for good.
 - `App.ShowAboutAsync` is the one route to About, for a session's Help item and the macOS application menu alike. It
   holds one dialog at a time in `_about`; a second request activates it instead of stacking, because the macOS menu
   bar stays live over a modal dialog and a second About would be owned by the first.
@@ -413,14 +425,16 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   `[RelayCommand]` can reach. Either way both menus read one property and cannot drift. It matters because on macOS
   these items are key equivalents, and an enabled one is an offer the app cannot honour. Binding it is safe:
   `NativeMenuItem` overwrites `IsEnabled` only when its `Command` changes, and these carry none.
-- **Wire Log is the one item whose two menus differ on purpose.** A `NativeMenuItem` never toggles itself
-  (`RaiseClicked` raises Click and executes Command, and never touches `IsChecked`), so the native item is
-  `Mode=OneWay` plus `OnWireLogClickNative`, which flips `IsWireLogging` and lets the binding carry the new state back
-  to the check mark — including a correction to false. The classic item stays `TwoWay` with no handler, because
-  `DefaultMenuInteractionHandler.Click` toggles a `MenuItem`'s `IsChecked` *before* raising Click. That ordering is
-  also why OneWay is required rather than tidy: the in-window fallback runs the same handler over a `MenuItem` bound
-  two-way to the `NativeMenuItem`, so with a TwoWay binding to the view model there would be two toggles and the
-  click would do nothing.
+- **Wire Log is a check box whose mark the view model owns**, like Keys > Insert and unlike it: here the view model
+  can flip the state itself, and it does so only after the confirmation (#139). Both menus are the same shape —
+  `ToggleType`, `Mode=OneWay` and a Click handler running `ToggleWireLogCommand` — so neither writes `IsWireLogging`
+  through a binding and the prompt always happens before any state changes. The native item needs its handler twice
+  over: a `NativeMenuItem` carrying only a binding fails the macOS validation predicate and is greyed out, and
+  `RaiseClicked` never touches `IsChecked`, so nothing but the view model can move its mark. OneWay is required
+  there rather than tidy, because the in-window fallback runs `DefaultMenuInteractionHandler.Click` over a
+  `MenuItem` bound two-way to the `NativeMenuItem` and would otherwise toggle twice. On the classic item that same
+  handler ticks `IsChecked` before the click arrives, which is why `ToggleWireLogAsync` re-notifies
+  `IsWireLogging` on the paths that change nothing.
 - **Keys > Insert is a check box whose mark belongs to the host** (#111): `IsInsertMode`, set from the keyboard status
   beside `InsertText`, so it moves with Ctrl+I, the Insert key and the keypad too. Both menus bind it one-way, keep
   `SendKeyCommand`, and add a Click handler that puts the mark back to `IsInsertMode`, because
@@ -435,7 +449,7 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
 - View > Keypad is a **submenu** on *both* menus, the Crosshair's structure: a `Show the Keypad` check box
   (`ToggleKeypad`, flipping `Settings.Keypad`), a separator, then `At the Bottom` and `On the Right` radios over
   `KeypadDockConverter` (`SetKeypadDock`, writing `Settings.KeypadDock`). Every one is a one-way `IsChecked` plus a
-  Click handler, so Wire Log stays the only item whose two menus differ. What it cannot copy from the Crosshair is
+  Click handler, which is now every check box and radio in both menus. What it cannot copy from the Crosshair is
   the single radio group: these are two settings and not one enum (keypad spec §2.1 — a `Hidden` member would
   forget the dock every time the keypad was hidden), and the separator is that seam rather than decoration. The
   menu writes the same `SettingsViewModel` properties Preferences does, so the dock is saved to `settings.json`

@@ -23,4 +23,8 @@ public sealed record AppSettings(
     bool KeypadPfKeys = true,
     bool CheckForUpdatesAutomatically = true,
     string? SkippedUpdateVersion = null,
-    bool ShowSplashOnLaunch = true);
+    bool ShowSplashOnLaunch = true,
+    // Hidden on purpose: no Preferences row writes this one. A wire log records every keystroke and every screen
+    // the host painted, and LizTerm cannot tell a hobbyist's MVS 3.8 from a production z/OS, so the warning is
+    // not one checkbox away from being silenced forever. Someone recording fixtures all day can set it by hand.
+    bool WarnBeforeWireLog = true);

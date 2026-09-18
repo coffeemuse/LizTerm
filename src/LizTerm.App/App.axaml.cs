@@ -199,7 +199,8 @@ public partial class App : Application
             bellRinger: _bellRinger,
             uriOpener: new AvaloniaUriOpener(window),
             // A snapshot, like the profile: a Manage Tags recolour reaches the next window rather than this one.
-            tags: tags);
+            tags: tags,
+            wireLogPrompt: new AvaloniaWireLogPrompt(window));
         window.DataContext = viewModel;
         var entry = new SessionEntry(viewModel, new ProfileRow(profile, tags, isSaved: fromStore), fromStore, window);
         _sessions.Add(entry);

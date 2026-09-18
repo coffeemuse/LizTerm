@@ -56,6 +56,24 @@ public sealed class B3270Session : IEmulatorSession
     /// so an action sent to a dead engine reports the fault rather than a session that was never started.</summary>
     private volatile BackendFault? _fault;
 
+    /// <summary>The text of the last fatal <c>ui-error</c>, if one has arrived; cleared by the next start. b3270
+    /// exits after a fatal ui-error, so this is the reason for the exit that is about to follow, and holding it
+    /// here lets <see cref="OnProcessEnded"/> report why instead of a bare "exited unexpectedly" (#139).</summary>
+    private volatile string? _fatalUiError;
+
+    /// <summary>What the last line written to the engine carried: its length, and a redacted account of its
+    /// actions from <see cref="RunOperation.Describe"/>. A <c>ui-error</c> is b3270 rejecting a line we wrote, and
+    /// without this the complaint reaches the user with nothing to attach it to. Cleared by the next start, and
+    /// never holds an argument value — it goes on an error banner and into bug reports (#139).</summary>
+    private volatile string? _lastOutbound;
+
+    private const string FatalUiErrorMessage = "The emulator engine (b3270) reported a fatal protocol error and is stopping: ";
+    private const string FaultAfterUiErrorMessage = "The emulator engine (b3270) stopped after a fatal protocol error: ";
+
+    /// <summary>A b3270 complaint with the line it is about to be blamed on, when there is one to name.</summary>
+    private string WithLastOutbound(string text) =>
+        _lastOutbound is { } sent ? $"{text} (last line sent: {sent})" : text;
+
     /// <summary>How long <see cref="DisconnectAsync"/> waits for b3270 to report the connection closed
     /// after accepting the action. Tests shorten it.</summary>
     internal TimeSpan DisconnectTimeout { get; set; } = TimeSpan.FromSeconds(5);
@@ -204,6 +222,8 @@ public sealed class B3270Session : IEmulatorSession
         _hello = helloSource;
         _process = process;
         _fault = null;
+        _fatalUiError = null;
+        _lastOutbound = null;
         try
         {
             process.Start(BuildArguments(Profile));
@@ -263,7 +283,7 @@ public sealed class B3270Session : IEmulatorSession
             {
                 Volatile.Read(ref _wireLog)?.Inbound(line);
                 if (!IndicationParser.TryParse(line, out var indication)) continue;
-                try { Handle(indication); }
+                try { Handle(indication, process); }
                 catch (Exception ex) { HostMessage?.Invoke(this, "Internal error handling emulator output: " + ex.Message); }
             }
         }
@@ -300,7 +320,10 @@ public sealed class B3270Session : IEmulatorSession
 
         try
         {
-            var fault = new BackendFault("The emulator engine (b3270) exited unexpectedly.", process.StderrTail, exitCode);
+            var fault = new BackendFault(
+                _fatalUiError is { } reason ? FaultAfterUiErrorMessage + reason : "The emulator engine (b3270) exited unexpectedly.",
+                process.StderrTail,
+                exitCode);
             _hello?.TrySetException(new BackendUnavailableException(fault.Message + " stderr: " + string.Join(" | ", process.StderrTail)));
 
             SetConnectionState(ConnectionState.Disconnected);
@@ -367,7 +390,8 @@ public sealed class B3270Session : IEmulatorSession
             if (process is null) return;
             try
             {
-                WriteLine(RunOperation.Serialize("quit", [new B3270Action("Quit")]));
+                B3270Action[] quit = [new B3270Action("Quit")];
+                WriteLine(RunOperation.Serialize("quit", quit), RunOperation.Describe(quit));
                 await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
             }
             catch (Exception)
@@ -425,7 +449,7 @@ public sealed class B3270Session : IEmulatorSession
         }
         try
         {
-            WriteLine(RunOperation.Serialize(tag, actions));
+            WriteLine(RunOperation.Serialize(tag, actions), RunOperation.Describe(actions));
         }
         catch
         {
@@ -453,11 +477,14 @@ public sealed class B3270Session : IEmulatorSession
         return result;
     }
 
-    private void WriteLine(string line)
+    private void WriteLine(string line, string summary)
     {
         var process = RequireProcess();
         lock (_writeLock)
         {
+            // Recorded before the write, for the same reason the wire log is: a line that then fails part-way
+            // through is exactly the one a ui-error is about to complain about.
+            _lastOutbound = $"{line.Length} characters, {summary}";
             // Logged before the bytes go out, not after: stdin auto-flushes, so b3270 can answer the moment the
             // newline lands, and the reader thread logs inbound lines under the log's own lock rather than this
             // one. Logging afterwards let a run-result be written ahead of the run that provoked it, which is the
@@ -481,7 +508,9 @@ public sealed class B3270Session : IEmulatorSession
 
     // ---- indications ----
 
-    private void Handle(Indication indication)
+    /// <param name="process">The process whose reader thread read this line, for the cases that write state its
+    /// successor would otherwise inherit. See the fatal <c>ui-error</c> case.</param>
+    private void Handle(Indication indication, IB3270Process process)
     {
         switch (indication)
         {
@@ -513,7 +542,7 @@ public sealed class B3270Session : IEmulatorSession
                     foreach (var item in init.Items)
                     {
                         if (item is HelloIndication h) hello = h;
-                        else Handle(item);
+                        else Handle(item, process);
                     }
                 }
                 finally
@@ -534,8 +563,22 @@ public sealed class B3270Session : IEmulatorSession
             case RunResultIndication result when result.Tag is not null && _pending.TryRemove(result.Tag, out var tcs):
                 tcs.TrySetResult(result);
                 break;
+            case UiErrorIndication { Fatal: true } error:
+                // b3270 does not carry on after one of these: it writes the ui-error and exits. Recording the
+                // reason lets the fault that follows say why (OnProcessEnded), and the message here says the
+                // session is going rather than leaving it to disappear under a bare "Protocol error" (#139).
+                //
+                // Recorded only while this reader still owns the slot, the guard OnProcessEnded carries for the
+                // same reason: a torn-down engine's reader can still be draining lines it had buffered while its
+                // replacement is already running, and _fatalUiError is the one thing here that would outlive this
+                // process and be read as its successor's cause of death. The message itself is not guarded, since
+                // every other case says something about the process it came from too.
+                var text = WithLastOutbound(error.Text);
+                if (ReferenceEquals(process, _process)) _fatalUiError = text;
+                HostMessage?.Invoke(this, FatalUiErrorMessage + text);
+                break;
             case UiErrorIndication error:
-                HostMessage?.Invoke(this, "Protocol error: " + error.Text);
+                HostMessage?.Invoke(this, "Protocol error: " + WithLastOutbound(error.Text));
                 break;
             default:
                 HandleStateIndication(indication);

@@ -396,11 +396,17 @@ copied, so a bug report can say exactly which build it was filed against.
 A wire log records every message between LizTerm and its emulation engine. It is the most useful thing to attach
 to a bug report.
 
-- **Help > Wire Log** starts and stops a log for the current session.
+- **Help > Wire Log** starts and stops a log for the current session. Starting one asks first, and says what a
+  log records — every start asks, because it is easy to forget what is in the file by the time you send it.
 - **Help > Show Wire Logs...** opens the folder they are saved in.
 
-**A wire log contains everything you type, including passwords.** Read it before you share it, or record only
-the part of the session after you have logged on.
+**A wire log records the whole session, in both directions**: everything you type, including passwords — and a
+password typed as part of a longer command, such as `LOGON JOHN/SECRET`, is recorded in full — and every screen
+the host sends, so whatever data the session displays. Read it before you share it, or record only the part of
+the session you need.
+
+On macOS and Linux the file is readable only by your account. Nothing prunes the folder, so old logs stay until
+you delete them.
 
 ## Menus
 

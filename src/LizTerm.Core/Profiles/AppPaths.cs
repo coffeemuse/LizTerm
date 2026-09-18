@@ -21,6 +21,20 @@ public static class AppPaths
         return Path.Combine(root, "LizTerm");
     }
 
+    /// <summary>Creates a directory owner-only on Unix, and does nothing when it is already there. Wire logs live
+    /// in one of these: they hold every keystroke and every screen the host painted, and their file names carry
+    /// profile names, so neither the contents nor the listing is other accounts' business (#139). Stub-created by
+    /// .NET as 0755 otherwise. An existing directory keeps whatever mode it has — that one is the user's to set.
+    /// Windows has no Unix mode and inherits the parent's ACL, which is what it did before.</summary>
+    public static void EnsureDirectory(string path)
+    {
+        if (Directory.Exists(path)) return;
+        if (OperatingSystem.IsWindows())
+            Directory.CreateDirectory(path);
+        else
+            Directory.CreateDirectory(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+
     public static string ProfilesDirectory() => Path.Combine(ConfigRoot(), "profiles");
 
     public static string LogsDirectory() => Path.Combine(ConfigRoot(), "logs");
