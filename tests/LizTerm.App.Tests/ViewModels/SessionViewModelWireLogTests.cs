@@ -25,6 +25,75 @@ public class SessionViewModelWireLogTests : IDisposable
         return (vm, session, opener);
     }
 
+    private (SessionViewModel Vm, FakeEmulatorSession Session, FakeWireLogPrompt Prompt) CreateWithPrompt(bool confirm)
+    {
+        var session = new FakeEmulatorSession();
+        var prompt = new FakeWireLogPrompt { Confirm = confirm };
+        var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard(), wireLogPrompt: prompt) { WireLogDirectory = _dir };
+        return (vm, session, prompt);
+    }
+
+    /// <summary>A wire log records every keystroke and every screen the host painted, and LizTerm cannot tell a
+    /// hobbyist's MVS 3.8 from a production z/OS. Starting one is a deliberate act, so the menu asks every time
+    /// rather than leaving the warning to documentation nobody reads (#139).</summary>
+    [Fact]
+    public async Task Toggling_on_asks_before_starting_anything()
+    {
+        var (vm, session, prompt) = CreateWithPrompt(confirm: true);
+        await vm.ToggleWireLogCommand.ExecuteAsync(null);
+        Assert.Equal(["confirm:Fake"], prompt.Calls);
+        Assert.True(vm.IsWireLogging);
+        Assert.Contains(session.Calls, c => c.StartsWith("wirelog:start:"));
+        Assert.Equal(_dir, prompt.LastRequest!.Directory);
+    }
+
+    [Fact]
+    public async Task Declining_the_warning_writes_nothing_and_leaves_the_log_off()
+    {
+        var (vm, session, prompt) = CreateWithPrompt(confirm: false);
+        await vm.ToggleWireLogCommand.ExecuteAsync(null);
+        Assert.Single(prompt.Calls);
+        Assert.False(vm.IsWireLogging);
+        Assert.Empty(session.Calls);
+        Assert.False(Directory.Exists(_dir));
+    }
+
+    /// <summary>Stopping a log gives nothing away, so it is not worth a dialog.</summary>
+    [Fact]
+    public async Task Toggling_off_does_not_ask()
+    {
+        var (vm, _, prompt) = CreateWithPrompt(confirm: true);
+        await vm.ToggleWireLogCommand.ExecuteAsync(null);
+        await vm.ToggleWireLogCommand.ExecuteAsync(null);
+        Assert.Single(prompt.Calls);
+        Assert.False(vm.IsWireLogging);
+    }
+
+    /// <summary>The escape hatch for someone recording fixtures all day: a key in settings.json with no
+    /// Preferences row behind it. Hidden on purpose — the reminder should not be one checkbox away.</summary>
+    [Fact]
+    public async Task The_hidden_setting_silences_the_warning()
+    {
+        var (vm, session, prompt) = CreateWithPrompt(confirm: false);
+        vm.Settings.WarnBeforeWireLog = false;
+        await vm.ToggleWireLogCommand.ExecuteAsync(null);
+        Assert.Empty(prompt.Calls);
+        Assert.True(vm.IsWireLogging);
+        Assert.Contains(session.Calls, c => c.StartsWith("wirelog:start:"));
+    }
+
+    /// <summary>No way to show the warning is not a reason to record the session anyway. Matches
+    /// ICertificatePrompt, where a null prompt declines.</summary>
+    [Fact]
+    public async Task Without_a_prompt_the_menu_starts_nothing()
+    {
+        var session = new FakeEmulatorSession();
+        var vm = new SessionViewModel(session, a => a(), new FakeTextClipboard()) { WireLogDirectory = _dir };
+        await vm.ToggleWireLogCommand.ExecuteAsync(null);
+        Assert.False(vm.IsWireLogging);
+        Assert.Empty(session.Calls);
+    }
+
     [Fact]
     public void File_name_comes_from_the_profile_and_the_clock()
     {

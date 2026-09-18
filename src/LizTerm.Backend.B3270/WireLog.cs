@@ -15,8 +15,20 @@ public sealed class WireLog(TextWriter writer, string? path = null) : IDisposabl
 
     /// <summary>Opens <paramref name="path"/> for appending. Throws <see cref="IOException"/> (a missing
     /// directory included) or <see cref="UnauthorizedAccessException"/> when it cannot.</summary>
-    public WireLog(string path) : this(new StreamWriter(path, append: true), path)
+    public WireLog(string path) : this(Open(path), path)
     {
+    }
+
+    /// <summary>Owner-only on Unix. This file holds every keystroke and every screen the host painted — the most
+    /// sensitive thing LizTerm writes — and the default 0644 left it readable by every other account on the
+    /// machine, while the CA file, which holds nothing but public certificates, was already owner-only (#139).
+    /// The mode applies when the file is created; appending to one that already exists leaves its mode alone,
+    /// which is correct — that is the user's file to chmod. Windows inherits the directory's ACL as before.</summary>
+    private static StreamWriter Open(string path)
+    {
+        var options = new FileStreamOptions { Mode = FileMode.Append, Access = FileAccess.Write };
+        if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        return new StreamWriter(path, options);
     }
 
     /// <summary>The file being written, when known.</summary>

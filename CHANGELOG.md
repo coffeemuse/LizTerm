@@ -5,6 +5,11 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **Starting a wire log now asks first.** A wire log records the whole session — everything you type, passwords
+  included, and every screen the host sends — so **Help > Wire Log** explains that and asks before it starts one.
+- **Wire logs are readable only by your account** on macOS and Linux. They were being written with default
+  permissions, which left them readable by every other account on the machine
+  ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
 - **A clearer message when the emulation engine stops.** The engine reports some problems as fatal and then exits.
   LizTerm used to show the problem alone, and the session would vanish a moment later with nothing connecting the
   two. It now says that the engine stopped, repeats the engine's explanation, and adds the size and shape of the

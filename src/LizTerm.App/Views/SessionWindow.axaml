@@ -286,7 +286,8 @@
                   CommandParameter="{x:Static app:ProjectLinks.Releases}" />
         <MenuItem Header="_Check for Updates..." Click="OnCheckForUpdatesClick" />
         <Separator />
-        <MenuItem x:Name="WireLogMenuItem" Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=TwoWay}" />
+        <MenuItem x:Name="WireLogMenuItem" Header="_Wire Log" ToggleType="CheckBox" IsChecked="{Binding IsWireLogging, Mode=OneWay}"
+                  Click="OnWireLogClick" />
         <MenuItem Header="Show Wire _Logs..." Command="{Binding ShowWireLogsCommand}" />
         <!-- Shown with its separator on every platform and in every style, as Preferences is (#103). -->
         <Separator x:Name="AboutSeparator" />

@@ -434,14 +434,40 @@ public class SessionWindowTests
         }
     }
 
-    /// <summary>Regression: correcting IsWireLogging from inside its own change notification is invisible to the
-    /// two-way binding, which is mid-write, so the menu kept a check mark for a log that never started and the
-    /// next click was swallowed as a no-op. Uses the real dispatcher, as the app does.</summary>
+    /// <summary>The menu item ticks its own check mark before the handler runs, and a declined warning changes
+    /// nothing in the view model for a OneWay binding to follow — so without the re-notify in ToggleWireLogAsync
+    /// the item would keep a check mark for a log the user just refused (#139).</summary>
+    [AvaloniaFact]
+    public void Declining_the_wire_log_warning_leaves_the_menu_unchecked()
+    {
+        var session = new FakeEmulatorSession();
+        var vm = new SessionViewModel(session, a => Dispatcher.UIThread.Post(a), new FakeTextClipboard(),
+            wireLogPrompt: new FakeWireLogPrompt { Confirm = false });
+        var window = new SessionWindow { DataContext = vm };
+        window.Show();
+        var item = window.FindControl<MenuItem>("WireLogMenuItem")!;
+
+        item.IsChecked = true;
+        item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(vm.IsWireLogging);
+        Assert.False(item.IsChecked);
+        Assert.Empty(session.Calls);
+    }
+
+    /// <summary>Regression: correcting IsWireLogging from inside its own change notification was invisible to the
+    /// two-way binding this item used to carry, which is mid-write, so the menu kept a check mark for a log that
+    /// never started and the next click was swallowed as a no-op. The item is Click-driven and OneWay now (#139),
+    /// which removes that shape, but the behaviour it guards is the same and still worth pinning. Replays the real
+    /// renderer's order — DefaultMenuInteractionHandler ticks IsChecked, then raises Click — and uses the real
+    /// dispatcher, as the app does.</summary>
     [AvaloniaFact]
     public void A_wire_log_that_fails_to_start_leaves_the_menu_unchecked_and_retryable()
     {
         var session = new FakeEmulatorSession { WireLogException = new IOException("disk on fire") };
-        var vm = new SessionViewModel(session, a => Dispatcher.UIThread.Post(a), new FakeTextClipboard());
+        var vm = new SessionViewModel(session, a => Dispatcher.UIThread.Post(a), new FakeTextClipboard(),
+            wireLogPrompt: new FakeWireLogPrompt { Confirm = true });
         var directory = Path.Combine(Path.GetTempPath(), "lizterm-menu-" + Guid.NewGuid().ToString("N"));
         vm.WireLogDirectory = directory;
         var window = new SessionWindow { DataContext = vm };
@@ -449,8 +475,9 @@ public class SessionWindowTests
         var item = window.FindControl<MenuItem>("WireLogMenuItem")!;
         try
         {
-            // The user ticks the item: the binding writes true into the view model, and the start fails.
+            // The user ticks the item: the handler runs the command, the warning is accepted, the start fails.
             item.IsChecked = true;
+            item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             Assert.False(vm.IsWireLogging);
             Assert.False(item.IsChecked);
@@ -460,6 +487,7 @@ public class SessionWindowTests
             // The next tick must try again rather than being swallowed as a no-op.
             session.WireLogException = null;
             item.IsChecked = true;
+            item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             Assert.True(vm.IsWireLogging);
             Assert.True(item.IsChecked);

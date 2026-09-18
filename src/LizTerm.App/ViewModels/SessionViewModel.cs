@@ -28,6 +28,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     private readonly Action<Action> _dispatch;
     private readonly ITextClipboard _clipboard;
     private readonly ICertificatePrompt? _certificatePrompt;
+    private readonly IWireLogPrompt? _wireLogPrompt;
     private readonly Action<SessionProfile>? _saveProfile;
     private readonly IFolderOpener? _folderOpener;
     private readonly IUriOpener? _uriOpener;
@@ -158,12 +159,13 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         IFolderOpener? folderOpener = null, ICertificateFetcher? certificateFetcher = null,
         Func<SessionProfile, Task>? saveAsProfile = null, SettingsViewModel? settings = null,
         IBellRinger? bellRinger = null, BellThrottle? bellThrottle = null, IUriOpener? uriOpener = null,
-        TagRegistry? tags = null)
+        TagRegistry? tags = null, IWireLogPrompt? wireLogPrompt = null)
     {
         _session = session;
         _dispatch = dispatch;
         _clipboard = clipboard;
         _certificatePrompt = certificatePrompt;
+        _wireLogPrompt = wireLogPrompt;
         _saveProfile = saveProfile;
         _folderOpener = folderOpener;
         _uriOpener = uriOpener;
@@ -291,6 +293,40 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    /// <summary>Help &gt; Wire Log, from both menus. Stopping is immediate and gives nothing away. Starting asks
+    /// first, every time: a wire log records every keystroke and every screen the host painted, and LizTerm has
+    /// no way to tell a hobbyist's MVS 3.8 from a production z/OS carrying real data (#139). The modal is the
+    /// reminder — documentation is read once, if ever, and never at the moment it matters.
+    ///
+    /// The menus bind <see cref="IsWireLogging"/> one-way and invoke this, rather than writing the property
+    /// two-way: the confirmation has to happen before any state changes, and a check mark that appears and then
+    /// corrects itself is the shape that caused the regression SessionWindow's WireLogMenuItem guards.</summary>
+    [RelayCommand]
+    private async Task ToggleWireLogAsync()
+    {
+        if (IsWireLogging)
+        {
+            IsWireLogging = false;
+            return;
+        }
+        if (Settings.WarnBeforeWireLog)
+        {
+            // No prompt declines, as a null ICertificatePrompt does: a warning nobody can show is not a reason
+            // to record the session anyway.
+            if (_wireLogPrompt is null) return;
+            if (!await _wireLogPrompt.ConfirmAsync(new WireLogPromptRequest(Profile.Name, WireLogDirectory)))
+            {
+                // The classic MenuItem ticks its own check mark before the command runs
+                // (DefaultMenuInteractionHandler.Click), and a OneWay binding only refreshes the target when the
+                // source changes. A decline changes nothing, so without this the item would keep a check mark for
+                // a log that never started -- the same visible symptom as the two-way bug this command replaced.
+                OnPropertyChanged(nameof(IsWireLogging));
+                return;
+            }
+        }
+        IsWireLogging = true;
+    }
+
     partial void OnIsWireLoggingChanged(bool value)
     {
         var active = _session.WireLogPath is not null;
@@ -298,7 +334,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         {
             try
             {
-                Directory.CreateDirectory(WireLogDirectory);
+                AppPaths.EnsureDirectory(WireLogDirectory);
                 _session.StartWireLog(UniquePath(WireLogDirectory, WireLogFileName(Profile.Name, DateTime.Now)));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException

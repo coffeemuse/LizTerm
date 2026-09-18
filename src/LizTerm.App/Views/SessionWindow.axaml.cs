@@ -425,9 +425,25 @@ public partial class SessionWindow : Window, ISessionHost
     /// in-window NativeMenuBar fallback runs that same handler over a MenuItem bound TwoWay to this
     /// NativeMenuItem, so it toggles too and then calls RaiseClicked: OneWay here is what stops that path
     /// toggling twice and ending where it started.</summary>
+    /// <summary>The classic item, Click-driven for the same reason the native one is: starting a log asks first
+    /// (#139), so the request has to reach ToggleWireLogCommand rather than writing IsWireLogging through a
+    /// two-way binding. Both menus are now the same shape — ToggleType, a OneWay check mark and a Click handler —
+    /// which is also what keeps NativeMenuTests' command-parity guard happy, a null Command on both sides being
+    /// what a Click-driven item looks like.
+    ///
+    /// DefaultMenuInteractionHandler.Click still ticks this item's own IsChecked before the handler runs. On a
+    /// start or a stop the view model's own change puts it right; on a declined warning nothing would change, so
+    /// ToggleWireLogAsync re-notifies IsWireLogging to push the binding's value back over it.</summary>
+    private void OnWireLogClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } vm) _ = vm.ToggleWireLogCommand.ExecuteAsync(null);
+    }
+
     private void OnWireLogClickNative(object? sender, EventArgs e)
     {
-        if (ViewModel is { } vm) vm.IsWireLogging = !vm.IsWireLogging;
+        // Goes through the command, not the property: starting a log asks first (#139), and the property is the
+        // state rather than the request. Fire and forget, as a menu click must be.
+        if (ViewModel is { } vm) _ = vm.ToggleWireLogCommand.ExecuteAsync(null);
     }
 
     /// <summary>Keys > Insert's check mark is the host's insert mode (#111), not the menu's. Both renderers write

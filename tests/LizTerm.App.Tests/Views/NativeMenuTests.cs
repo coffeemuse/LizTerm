@@ -73,7 +73,9 @@ public class NativeMenuTests
         buffer.SetText(2, 3, "hello", null, null, null);
         session.CurrentScreen = buffer.Snapshot();
         var clipboard = new FakeTextClipboard();
-        var vm = new SessionViewModel(session, action => action(), clipboard);
+        // Starting a wire log asks first (#139); these tests are about the menu plumbing, so the prompt agrees.
+        var vm = new SessionViewModel(session, action => action(), clipboard,
+            wireLogPrompt: new FakeWireLogPrompt { Confirm = true });
         var window = new SessionWindow(style, isMacOS) { DataContext = vm };
         window.Show();
         return (window, vm, session, clipboard);

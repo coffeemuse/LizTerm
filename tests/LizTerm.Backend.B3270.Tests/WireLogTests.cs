@@ -41,6 +41,29 @@ public class WireLogTests
         }
     }
 
+    /// <summary>A wire log holds every keystroke and every screen the host painted, so it is the most sensitive
+    /// file LizTerm writes and must not be readable by other accounts on a shared machine. The CA file next door
+    /// is already owner-only and holds nothing but public certificates, which is the wrong way round (#139).</summary>
+    [Fact]
+    public void Path_constructor_creates_an_owner_only_file_on_unix()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix file modes do not apply on Windows.");
+        var directory = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(directory, "wire.log");
+        try
+        {
+            using (var log = new WireLog(path)) log.Outbound("{}");
+            // The SkipWhen above already ended the test on Windows; CA1416 cannot see that, and CI builds
+            // with -warnaserror, so the platform check is spelled out where the analyzer can read it.
+            if (!OperatingSystem.IsWindows())
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void Path_constructor_appends_both_directions_with_prefixes()
     {
