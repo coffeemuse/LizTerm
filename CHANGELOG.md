@@ -6,41 +6,26 @@ What changed in each LizTerm release, newest first. Downloads are on the
 ## Unreleased
 
 - **mvsMF Browser (feature preview).** On MVS 3.8j hosts running [mvsMF](https://github.com/mvslovers/mvsmf), a
-  second way to move files beside IND$FILE. Give a profile an mvsMF address on the profile editor's new **mvsMF**
-  tab, and its session window gains **File > mvsMF Browser...**. The browser lists datasets and members,
-  downloads several members at once, uploads files as new or replacement members (checking each text file first,
-  and reading it back afterwards), and deletes members. You sign in once per session window, and the password is
-  never saved. `https` addresses use the same certificate checks and pinning as TLS sessions. It is a preview: see
-  the user guide's [mvsMF Browser section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-browser-preview) for what it does and doesn't
-  do yet.
-- **If you go back to an older LizTerm**, it drops a profile's mvsMF settings (address, userid and pinned
-  certificate) the next time it saves that profile. Your other settings are kept.
+  second way to move files beside IND$FILE. It is not yet complete and there are likely bugs. See the user guide's
+  [mvsMF Browser section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-browser-preview).
 - **A build that is not a release says so.** **About LizTerm** and the splash screen show the version as
-  `0.6.1-DEV (a1b2c3d)` when you are running a build made from source or from a pull request, where `a1b2c3d` is the
-  commit it was built from. You can select the version in About and copy it, so a bug report can say exactly which
-  build it was filed against. A release shows its plain version, as before
+  `0.6.1-DEV (a1b2c3d)`, naming the commit it was built from, and you can select and copy it for a bug report
   ([#141](https://github.com/coffeemuse/LizTerm/issues/141)).
-- **Starting a wire log now asks first.** A wire log records the whole session — everything you type, passwords
-  included, and every screen the host sends — so **Help > Wire Log** explains that and asks before it starts one.
-- **Wire logs are readable only by your account** on macOS and Linux. They were being written with default
-  permissions, which left them readable by every other account on the machine
-  ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
-- **A clearer message when the emulation engine stops.** The engine reports some problems as fatal and then exits.
-  LizTerm used to show the problem alone, and the session would vanish a moment later with nothing connecting the
-  two. It now says that the engine stopped, repeats the engine's explanation, and adds the size and shape of the
-  last instruction LizTerm sent — never what you typed, which stays in the wire log
+- **Starting a wire log now asks first.** A wire log records the whole session, everything you type and passwords
+  included, so **Help > Wire Log** says so and asks before it starts one.
+- **Wire logs are readable only by your account** on macOS and Linux. They used to be readable by every other
+  account on the machine ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
+- **A clearer message when the emulation engine stops.** LizTerm now says that the engine stopped and repeats its
+  explanation, instead of showing the problem alone a moment before the session vanishes
   ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
 - **Binary uploads to MVS/CE work.** File transfers now use a 2500-byte buffer unless you set another size under
-  **Advanced**. With the larger size used before, MVS/CE dropped binary uploads at the end, showed its logon screen and
-  left the TSO user logged on ([#137](https://github.com/coffeemuse/LizTerm/issues/137)).
-- **Custom screen sizes are easier to set.** In the profile editor, choose **Other (custom size)** at the end of the
-  Model list, then type the columns and rows in two separate boxes. The boxes show the model's own size the rest of
-  the time.
-- **A tidier profile editor.** Its settings are now on tabs, Connection, Terminal and Organize (plus the mvsMF tab
-  above), with more room between them. Tags are colored chips you add with Enter or a comma, with the tags you already use offered as you
-  type; a new tag shows the color it will get. The custom screen size has arrow buttons, and choosing **Other**
-  starts from the model's own size. When **Save** can't accept something, the editor shows that tab and outlines the
-  setting.
+  **Advanced**; the larger size used before left uploads truncated and the TSO user logged on
+  ([#137](https://github.com/coffeemuse/LizTerm/issues/137)).
+- **Custom screen sizes are easier to set.** Choose **Other (custom size)** at the end of the profile editor's Model
+  list, then type the columns and rows in two boxes.
+- **A tidier profile editor.** Its settings are now on tabs — Connection, Terminal and Organize, plus mvsMF — and
+  tags are colored chips you add with Enter or a comma, with the tags you already use offered as you type. When
+  **Save** can't accept something, the editor shows that tab and outlines the setting.
 
 ## 0.6.1
 
