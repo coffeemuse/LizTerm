@@ -60,11 +60,23 @@ public sealed class HostFileAccess
             : throw new InvalidOperationException(UrlError);
 
     /// <summary>Ends the session, through a service built for the URL, and drops the token. Best effort.</summary>
-    public async Task SignOutAsync()
+    /// <remarks>The token is dropped **here**, on the caller's thread, so <see cref="SignInHolder.IsSignedIn"/> is
+    /// false the moment the session window closes. Only the DELETE goes to the pool, and it goes there because
+    /// nothing in this codebase uses <c>ConfigureAwait(false)</c>: called from <c>OnClosed</c> on the UI thread, its
+    /// continuations would be posted to a dispatcher that stops with the last window, and the response would never
+    /// be read (<c>B3270Session.ConnectAsync</c> escapes the same trap the same way).</remarks>
+    public Task SignOutAsync()
     {
-        if (Url is not { } url || !SignIn.IsSignedIn) return;
+        if (Url is not { } url || SignIn.Take() is not { } token) return Task.CompletedTask;
+        return Task.Run(() => EndSessionAsync(url, token));
+    }
+
+    /// <summary>The network half of <see cref="SignOutAsync"/>. <see cref="NullPrompt"/> can never be reached: the
+    /// token is passed in, so the service never asks the provider for one.</summary>
+    private async Task EndSessionAsync(Uri url, HostSessionToken token)
+    {
         using var service = CreateService(url, Pin, SignIn.ProviderFor(NullPrompt.Instance));
-        await SignIn.SignOutAsync(service);
+        await service.SignOutAsync(token);
     }
 
     internal IHostFileService CreateService(Uri url, CertificatePin? pin, HostTokenProvider tokens) =>

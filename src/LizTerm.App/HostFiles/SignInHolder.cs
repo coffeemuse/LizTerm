@@ -34,9 +34,20 @@ public sealed class SignInHolder(string profileName, string url, string? userid)
     /// is the service's to swallow (best effort on window close).</summary>
     public async Task SignOutAsync(IHostFileService service)
     {
-        HostSessionToken? token;
-        lock (_lock) { token = _token; _token = null; }
-        if (token is not null) await service.SignOutAsync(token);
+        if (Take() is { } token) await service.SignOutAsync(token);
+    }
+
+    /// <summary>Drops the held token and answers it, or null when nothing is held. Its own step, so a caller that
+    /// must end the session on another thread can still clear the holder on this one: <see cref="IsSignedIn"/> is
+    /// false the moment the window closes, whatever the network does afterwards.</summary>
+    internal HostSessionToken? Take()
+    {
+        lock (_lock)
+        {
+            var token = _token;
+            _token = null;
+            return token;
+        }
     }
 
     private async ValueTask<HostSessionToken?> GetAsync(ICredentialPrompt prompt, HostTokenRequest request, HostSignIn signIn, CancellationToken token)
@@ -46,67 +57,45 @@ public sealed class SignInHolder(string profileName, string url, string? userid)
         await _gate.WaitAsync(token);
         try
         {
-            string? prefill;
             lock (_lock)
             {
                 var refusedIsCurrent = request.Rejected is not null && ReferenceEquals(_token, request.Rejected);
                 if (_token is { } current && !refusedIsCurrent) return current;
                 if (_cancellations != cancellationsSeen && _token is null) return null;
                 _token = null;
-                prefill = _lastUserid;
             }
+            // A refused password comes back from signIn, not from the caller, so the loop owns the reason: the
+            // first ask blames nothing or the expired session, and every ask after a refusal blames the password.
             var reason = request.Rejected is not null ? SignInReason.Expired : SignInReason.First;
-            var answer = await prompt.AskAsync(new CredentialPromptRequest(profileName, url, prefill, reason));
-            if (answer is null)
+            while (true)
             {
-                lock (_lock) _cancellations++;
-                return null;
+                // Safe outside the lock above: the gate is held, so nothing else is writing the userid.
+                string? prefill;
+                lock (_lock) prefill = _lastUserid;
+                var answer = await prompt.AskAsync(new CredentialPromptRequest(profileName, url, prefill, reason));
+                if (answer is null)
+                {
+                    lock (_lock) _cancellations++;
+                    return null;
+                }
+                // Remembered as soon as it is typed, not once the host takes it: a sign-in that fails for anything
+                // else (an untrusted certificate, an unreachable host) must still prefill what the user just typed.
+                lock (_lock) _lastUserid = answer.Userid;
+                try
+                {
+                    var signedIn = await signIn(answer, token);
+                    lock (_lock) _token = signedIn;
+                    return signedIn;
+                }
+                catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.Unauthenticated)
+                {
+                    reason = SignInReason.Rejected;
+                }
             }
-            HostSessionToken signedIn;
-            try
-            {
-                signedIn = await signIn(answer, token);
-            }
-            catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.Unauthenticated)
-            {
-                // The host refused the password: ask again, marked as a rejection, until it takes or the user cancels.
-                return await RetryAfterRejection(prompt, signIn, token);
-            }
-            lock (_lock)
-            {
-                _token = signedIn;
-                _lastUserid = answer.Userid;
-            }
-            return signedIn;
         }
         finally
         {
             _gate.Release();
-        }
-    }
-
-    private async ValueTask<HostSessionToken?> RetryAfterRejection(ICredentialPrompt prompt, HostSignIn signIn, CancellationToken token)
-    {
-        while (true)
-        {
-            string? prefill;
-            lock (_lock) prefill = _lastUserid;
-            var answer = await prompt.AskAsync(new CredentialPromptRequest(profileName, url, prefill, SignInReason.Rejected));
-            if (answer is null)
-            {
-                lock (_lock) _cancellations++;
-                return null;
-            }
-            try
-            {
-                var signedIn = await signIn(answer, token);
-                lock (_lock) { _token = signedIn; _lastUserid = answer.Userid; }
-                return signedIn;
-            }
-            catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.Unauthenticated)
-            {
-                // Ask again.
-            }
         }
     }
 }

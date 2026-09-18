@@ -748,10 +748,16 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   Remember. A save that fails (`IOException`, `UnauthorizedAccessException`, `InvalidDataException`) keeps the pin
   for the session and raises `HostFileAccess.PinSaveFailed`; the browser shows it as the `⚠` status line once the
   operation ends, and unsubscribes when disposed. The session window closes its browser, then signs out, when it
-  closes: `HostFileAccess.SignOutAsync` builds a service for the URL (over a `NullPrompt`, which throws, because a
-  token is held and the prompt can never be reached) and ends the session. `OnClosed` cannot await, so it
-  fire-and-forgets under a five-second cap — safe because the token is dropped **synchronously**, under the lock at
-  the top of `SignInHolder.SignOutAsync`, and only the network DELETE is awaited.
+  closes: `HostFileAccess.SignOutAsync` builds a service for the URL (over a `NullPrompt`, which throws, because the
+  token is passed in and the prompt can never be reached) and ends the session.
+- **That sign-out splits across two threads on purpose.** `SignOutAsync` takes the token out of the holder
+  *synchronously*, on the caller's thread, so `IsSignedIn` is false the moment the window closes; then it hands the
+  DELETE to `Task.Run`, and `OnClosed` fire-and-forgets the result under a five-second cap. The hand-off is not
+  tidiness: nothing in this codebase uses `ConfigureAwait(false)`, so a continuation started on the UI thread is
+  posted back to the Avalonia dispatcher — and on the **last** window `base.OnClosed` leads to `Shutdown()`, which
+  stops that dispatcher before the queued continuation runs. Left on the UI thread the response would never be read
+  and the service would never be disposed, precisely when signing out matters most.
+  `B3270Session.ConnectAsync` escapes the same trap the same way.
 - **`SignInHolder` holds a session token, never the password.** The password exists in exactly two places: the
   sign-in window's text box, and the `HostCredentials` it hands to the backend's `SignInAsync`. The holder asks
   once, trades the answer for a token through the `HostSignIn` the backend passes its provider, and drops the
@@ -763,10 +769,13 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   turn; an operation that starts later asks afresh.
 - **The holder owns the refused-password loop**, which is why `SignInReason` has three members rather than a
   boolean. The backend no longer tells a bad password from an expired token — a bad password is caught inside
-  `SignInAsync` — so a rejected *token* prompts as `Expired` ("your session has expired") while an
-  `Unauthenticated` thrown by `signIn` loops in `RetryAfterRejection` and prompts as `Rejected` ("the userid or
-  password was not accepted"), until the host takes it or the user cancels. Blaming the password for an expired
-  session, which the old single retry line did, is the bug this replaced.
+  `SignInAsync` — so the reason is the loop's own variable: the first ask is `First`, or `Expired` ("your mvsMF
+  session has expired") when the caller named a rejected token, and every ask after an `Unauthenticated` from
+  `signIn` is `Rejected` ("the userid or password was not accepted"), until the host takes it or the user cancels.
+  Blaming the password for an expired session, which the old single retry line did, is the bug this replaced.
+- `_lastUserid` is written **as soon as the prompt answers**, not once the host accepts it: a sign-in that fails for
+  anything other than the password — an untrusted certificate, an unreachable host — must still prefill the userid
+  that was just typed. It is the double-prompt flow above that makes this load-bearing.
 - **Accepted: an untrusted `https` certificate costs two password prompts.** The sign-in is an ordinary request, so
   a host whose certificate is not yet trusted refuses *inside* it, before any token exists; `HostFileConnection`
   then shows the certificate prompt and, after Connect Anyway, runs the operation again on a service built for that

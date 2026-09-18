@@ -186,6 +186,22 @@ public class SignInHolderTests
     }
 
     [Fact]
+    public async Task A_sign_in_that_fails_for_anything_else_still_prefills_the_userid_just_typed()
+    {
+        var (_, prompt, provider, signer) = Create(userid: null);
+        prompt.Answers.Enqueue(new HostCredentials("IBMUSER", "pw"));
+        HostSignIn unreachable = (_, _) => Task.FromException<HostSessionToken>(
+            new HostFileException(HostFileErrorKind.Unreachable, "Cannot reach the host."));
+
+        await Assert.ThrowsAsync<HostFileException>(() => provider(First, unreachable, CancellationToken.None).AsTask());
+        await provider(First, signer.SignIn, CancellationToken.None);
+
+        // Not only after the host takes the password: a certificate refusal or an unreachable host must not throw
+        // the typed userid away.
+        Assert.Equal(new[] { "ask::First", "ask:IBMUSER:First" }, prompt.Calls);
+    }
+
+    [Fact]
     public async Task The_userid_typed_last_prefills_the_next_prompt()
     {
         var (_, prompt, provider, signer) = Create(userid: null);
