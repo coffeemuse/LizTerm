@@ -15,7 +15,7 @@ public enum HostFileErrorKind
     InvalidRequest,
     /// <summary>The credentials were rejected, or the user cancelled the prompt.</summary>
     Unauthenticated,
-    /// <summary>The host is not an mvsMF that supports sign-in (no authenticate route); it is too old.</summary>
+    /// <summary>The host has no sign-in service; it is too old for this client.</summary>
     Unsupported,
     /// <summary>TLS: the certificate is neither trusted nor pinned. <see cref="HostFileException.Certificate"/> says
     /// what was presented.</summary>
