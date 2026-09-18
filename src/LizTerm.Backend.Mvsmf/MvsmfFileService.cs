@@ -271,20 +271,7 @@ public sealed class MvsmfFileService : IHostFileService
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
             Convert.ToBase64String(Encoding.Latin1.GetBytes($"{credentials.Userid}:{credentials.Password}")));
         AddCommonHeaders(request);
-        HttpResponseMessage response;
-        try
-        {
-            idle.Reset();
-            response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, idle.Token);
-        }
-        catch (OperationCanceledException) when (idle.Expired(cancellationToken)) { throw TimedOut(what); }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && ex.InnerException is TimeoutException)
-        {
-            throw new HostFileException(HostFileErrorKind.Unreachable,
-                $"{what}: cannot reach the host (no answer within {ConnectTimeout.TotalSeconds:0} s).", inner: ex);
-        }
-        catch (HttpRequestException ex) { throw Unreachable(what, ex); }
-        using (response)
+        using (var response = await SendRawAsync(request, what, idle, cancellationToken))
         {
             if (response.StatusCode == HttpStatusCode.Unauthorized)
                 throw new HostFileException(HostFileErrorKind.Unauthenticated, "The host rejected the userid or password.");
@@ -311,20 +298,7 @@ public sealed class MvsmfFileService : IHostFileService
         using var idle = new IdleTimeout(_idle, cancellationToken);
         using var request = new HttpRequestMessage(HttpMethod.Get, Url("info"));
         AddCommonHeaders(request);
-        HttpResponseMessage response;
-        try
-        {
-            idle.Reset();
-            response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, idle.Token);
-        }
-        catch (OperationCanceledException) when (idle.Expired(cancellationToken)) { throw TimedOut(what); }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && ex.InnerException is TimeoutException)
-        {
-            throw new HostFileException(HostFileErrorKind.Unreachable,
-                $"{what}: cannot reach the host (no answer within {ConnectTimeout.TotalSeconds:0} s).", inner: ex);
-        }
-        catch (HttpRequestException ex) { throw Unreachable(what, ex); }
-        using (response)
+        using (var response = await SendRawAsync(request, what, idle, cancellationToken))
         {
             if (response.StatusCode == HttpStatusCode.Unauthorized) return null;
             if (!response.IsSuccessStatusCode) throw NotMvsmf();
@@ -338,7 +312,12 @@ public sealed class MvsmfFileService : IHostFileService
                 // A 200 that is not mvsMF's info (a web server's home page, say) is the same answer as a 404.
                 throw NotMvsmf(ex);
             }
-            return new HostServerInfo("mvsMF", Blank(info.ZosmfFullVersion) ?? Blank(info.ZosmfVersion) ?? "unknown", Blank(info.ZosVersion) ?? "unknown");
+            // Every MvsmfInfo field is an optional string, so another product's JSON /info (or a bare {}) parses
+            // happily into all-null. An answer naming neither a product version nor a system is not an mvsMF's.
+            var version = Blank(info.ZosmfFullVersion) ?? Blank(info.ZosmfVersion);
+            var system = Blank(info.ZosVersion);
+            if (version is null && system is null) throw NotMvsmf();
+            return new HostServerInfo("mvsMF", version ?? "unknown", system ?? "unknown");
         }
     }
 
@@ -354,6 +333,8 @@ public sealed class MvsmfFileService : IHostFileService
         AddCommonHeaders(request);
         try
         {
+            // Not through SendRawAsync: its HttpRequestException arm calls MvsmfCertificateCheck.TakeRejected(),
+            // and a best-effort sign-out must not consume a refusal the next operation is meant to report.
             idle.Reset();
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, idle.Token);
             // 204 is a clean logout; 401 means the host already forgot the token. Both are success.
@@ -370,6 +351,15 @@ public sealed class MvsmfFileService : IHostFileService
         using var request = build();
         request.Headers.Add("Cookie", $"LtpaToken2={token.Value}");
         AddCommonHeaders(request);
+        return await SendRawAsync(request, what, idle, cancellationToken);
+    }
+
+    /// <summary>The one place a request goes out: re-arm the idle clock, send, and turn every transport failure
+    /// into a <see cref="HostFileException"/> naming <paramref name="what"/>. The caller owns the request and the
+    /// answer.</summary>
+    private async Task<HttpResponseMessage> SendRawAsync(HttpRequestMessage request, string what, IdleTimeout idle,
+        CancellationToken cancellationToken)
+    {
         try
         {
             idle.Reset();

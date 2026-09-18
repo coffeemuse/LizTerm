@@ -159,6 +159,8 @@ public class MvsmfAuthTests
     [Theory]
     [InlineData(HttpStatusCode.NotFound, "<html>404</html>", "text/html")]
     [InlineData(HttpStatusCode.OK, "<html>Welcome</html>", "text/html")]
+    // Valid JSON with none of mvsMF's fields — another product's /info — parses into an all-null MvsmfInfo.
+    [InlineData(HttpStatusCode.OK, "{}", "application/json")]
     public async Task Probe_reports_a_url_that_is_not_mvsmf(HttpStatusCode status, string body, string contentType)
     {
         var handler = new RecordedHandler().Then(status, body, contentType);
