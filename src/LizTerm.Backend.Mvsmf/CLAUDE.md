@@ -3,11 +3,18 @@
 Notes for working in this project. The root `CLAUDE.md` has the rules that apply everywhere. This project depends on
 Core only, is the only one that knows mvsMF exists, and never references `LizTerm.Backend.B3270`.
 
-- `MvsmfFileService` implements `IHostFileService` (Core) over one `HttpClient`. It stores no credentials: it asks
-  the `HostCredentialProvider` before every request (`IsRetry: false`), and once more after a 401
-  (`IsRetry: true`, `Rejected` = the instance just refused, so a holder serving parallel requests prompts only once)
-  before repeating the request once. The App's `CredentialHolder` is the only store. Never put the userid's password
-  in a message, a log or a `ToString()`.
+- `MvsmfFileService` implements `IHostFileService` (Core) over one `HttpClient`. It signs in once with
+  `POST /zosmf/services/authenticate` (Basic, `X-CSRF-ZOSMF-HEADER: LizTerm`), takes the `LtpaToken2` cookie, and
+  sends it (`Cookie: LtpaToken2=…`, never `Authorization`) on every later request. The `HostTokenProvider` (the
+  App's `SignInHolder`) holds the token and calls the backend's `SignInAsync` when it needs one; a 401 asks the
+  provider again with the refused token and repeats the request once. **The password may exist only inside
+  `SignInAsync` and the App's prompt** — never in a field, a message, a log or a `ToString()`. Sign-in is the first
+  request a service ever makes, so a host it cannot reach is reported with a `Sign-in:` prefix rather than the
+  operation's own name. `ProbeAsync` is the separate, anonymous `GET /info` the Test button uses before it asks for
+  a password: a 401 there proves the URL is an mvsMF without spending a sign-in.
+- **Cookie, not Bearer.** LizTerm sends the token as the `LtpaToken2` cookie because real z/OSMF accepts only the
+  cookie; `Authorization: Bearer` is an mvsMF convenience real z/OSMF does not honour. `UseCookies` stays false and
+  the cookie is sent by hand.
 - **Every workaround carries `// mvsMF-compat: <tag>`** matching an entry in `docs/mvsmf-compatibility.md`, and a
   test named after the tag pins it. Add all three together, and read that log before changing any behaviour that
   looks odd: it is probably deliberate.
@@ -50,7 +57,8 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
 ## Tests
 
 - `RecordedHandler` answers queued responses, usually `Fixture.Load(name)` from `Fixtures/`, and records each
-  request (method, URI, Authorization, `X-IBM-Data-Type`, content type, body, header names).
+  request (method, URI, `Authorization`, `Cookie`, `X-CSRF-ZOSMF-HEADER`, `X-IBM-Data-Type`, content type, body,
+  header names).
 - Fixtures are real exchanges recorded by `tools/record-mvsmf-fixture.sh`; `Fixtures/README.md` lists them. The body
   bytes are kept exactly, so never run a fixture through a CR-stripping tool.
 - `LoopbackHttpsServer` serves one JSON body over TLS with a `TestCertificates` certificate (linked from

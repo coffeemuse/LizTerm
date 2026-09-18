@@ -72,8 +72,9 @@ public sealed class MvsmfFileService : IHostFileService
     {
         const string what = "Server information";
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        // mvsMF-compat: info-requires-auth — the docs say /info needs no credentials; the host demands them by design
-        // (mvsMF #324), so it goes through the same authenticated path as everything else.
+        // mvsMF-compat: info-requires-auth — the docs say /info needs no credentials; the host authenticates it like
+        // every other route by design (mvsMF #324), so it goes through the same token-authenticated path as
+        // everything else. ProbeAsync (the Test button) sends an anonymous GET first and reads its 401 instead.
         using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get, Url("info")), what, idle, cancellationToken);
         var info = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfInfo, what, idle, cancellationToken);
         // mvsMF-compat: info-version-fields — 1.0.0-dev put the whole version in both fields; 1.1.0 puts the major in

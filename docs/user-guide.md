@@ -275,8 +275,8 @@ the transfer ends. The dialog remembers your last transfer for that window.
 ## mvsMF Browser (preview)
 
 **This is a feature preview.** It works, but it is new and still being refined, and it has been tested against one
-build of mvsMF (1.1.0). It follows that build's behaviour; older mvsMF builds are not supported. Please report what
-you find
+build of mvsMF (1.1.0). It follows that build's behaviour and needs mvsMF 1.1.0 or later; see
+[Signing in](#signing-in). Please report what you find
 ([Help > Report an Issue...](https://github.com/coffeemuse/LizTerm/issues/new/choose)).
 
 [mvsMF](https://github.com/mvslovers/mvsmf) is a z/OSMF-style REST server for MVS 3.8j. The **mvsMF Browser** uses
@@ -291,9 +291,9 @@ Open the profile in the editor and go to the **mvsMF** tab:
 - **URL** is the address of the mvsMF server, for example `http://mvs.example:8080`. When the address has no path,
   LizTerm adds `/zosmf`. Only `http://` and `https://` addresses are accepted.
 - **Userid** is optional. It fills in the sign-in window, and the browser starts by listing `USERID.**`.
-- **Test** signs in and asks the server what it is, then shows the answer (for example
-  **✓ Connected: mvsMF 1.1.0 on MVS 3.8j**) or what went wrong. A sign-in made for **Test** is forgotten right
-  after.
+- **Test** checks the server is reachable, then signs in and asks it what it is, showing the answer (for example
+  **✓ Connected: mvsMF 1.1.0 on MVS 3.8j**) or what went wrong. If the URL cannot be reached, it says so without
+  asking for a password. A sign-in made for **Test** is ended right after.
 
 Once a profile has a URL, its session window has **File > mvsMF Browser...**. The item has no keyboard shortcut, so
 it never takes a key the host needs. Choosing it again brings the open browser back to the front: each session
@@ -302,13 +302,17 @@ you open the session.
 
 ### Signing in
 
-The first time the browser reaches the host, it asks for your userid and password. The password is kept in memory only, for as
-long as the session window stays open, and is never saved to disk. Every browser operation in that session uses it,
-so you sign in once. If the host rejects it, the window asks again. LizTerm cannot guarantee the password is wiped
-from memory when the window closes, because .NET gives no way to erase a string.
+**LizTerm needs mvsMF 1.1.0 or later.** Older builds have no sign-in service, and LizTerm says so rather than
+connecting.
 
-mvsMF sends your password with every request. Over `http://` it crosses the network unencrypted, so keep plain
-`http` to a network you trust, or put mvsMF behind a TLS reverse proxy and use an `https://` URL. An `https`
+The first time the browser reaches the host, it asks for your userid and password. LizTerm uses them once to sign
+in, then keeps only a session token in memory; the password is not stored. Every browser operation in that session
+uses the token, so you sign in once. mvsMF forgets an idle session after about 30 minutes, and then LizTerm asks
+you to sign in again. Closing the session window signs you out. LizTerm cannot guarantee the password is wiped from
+memory, because .NET gives no way to erase a string.
+
+Your password crosses the network once, at sign-in. Over `http://` it is unencrypted, so keep plain `http` to a
+network you trust, or put mvsMF behind a TLS reverse proxy and use an `https://` URL. An `https`
 certificate is checked the same way as a TLS session's (see [TLS and certificates](#tls-and-certificates)): an
 untrusted one opens the **Certificate not verified** window, and **Trust this certificate** pins it to the profile.
 The mvsMF pin is kept apart from the 3270 one, and **Forget** on the **mvsMF** tab removes it. An mvsMF pin trusts
@@ -517,6 +521,6 @@ empties the drop-down.
   underlying x3270 engine does not send a server name ([#12](https://github.com/coffeemuse/LizTerm/issues/12)).
 - **No keymap editing yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)).
 - **No printer sessions or scripting.**
-- **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). It has been tested
-  against one build of mvsMF (1.1.0). Very long dataset or member lists arrive in one piece, with no paging. It
+- **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). It needs mvsMF 1.1.0
+  or later; see [Signing in](#signing-in). Very long dataset or member lists arrive in one piece, with no paging. It
   can't create, rename or delete datasets, submit jobs, or browse the z/OS UNIX file system.
