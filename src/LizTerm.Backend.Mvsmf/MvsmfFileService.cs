@@ -75,7 +75,10 @@ public sealed class MvsmfFileService : IHostFileService
         // goes through the same authenticated path as everything else.
         using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get, Url("info")), what, idle, cancellationToken);
         var info = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfInfo, what, idle, cancellationToken);
-        return new HostServerInfo("mvsMF", info.ZosmfVersion ?? "unknown", info.ZosVersion ?? "unknown");
+        // mvsMF-compat: info-version-fields — 1.0.0-dev put the whole version in zosmf_version; 1.1.0 puts the major
+        // there and the full version in zosmf_full_version, as z/OSMF does, so the full one is read first.
+        var version = Blank(info.ZosmfFullVersion) ?? Blank(info.ZosmfVersion) ?? "unknown";
+        return new HostServerInfo("mvsMF", version, Blank(info.ZosVersion) ?? "unknown");
     }
 
     public async Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default)
