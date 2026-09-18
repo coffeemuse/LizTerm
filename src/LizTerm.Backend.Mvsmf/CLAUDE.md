@@ -14,11 +14,13 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
 - **Never send `Content-Type: application/json` on a `PUT`.** mvsMF treats it as a rename.
 - **Text is ISO-8859-1 on the wire** in both directions, whatever `charset` says. Lines go out as they are, LF
   ended; an empty line is stored as a blank record. `EncodeText` throws for a line break or a character above
-  U+00FF; `TextUploadCheck` (Core) should have refused those first, and it also refuses over-long lines, because
-  the host truncates them, writes the rest, and only then answers 500.
+  U+00FF; `TextUploadCheck` (Core) should have refused those first, and it also refuses over-long lines when the
+  listing gave it a record length, because the host truncates them, writes the rest, and only then answers 500.
+  A listing with no usable record length leaves such lines to the host.
 - **Classify errors by the JSON `category`/`reason`, then the status.** A missing dataset or member is 404 with
-  reason 4 or 5; a refused open is 500 in category 4; a truncated write is 500 in category 6, reason 3, and reaches
-  the caller as a server error carrying the host's message. `MvsmfErrors` is the one place that mapping lives.
+  reason 4 or 5; a refused open is 500 in category 4; a failed open is 500 in category 6, reason 3 with a message
+  starting `Cannot open`; a truncated write is the same shape with another message and reaches the caller as a
+  server error carrying it. `MvsmfErrors` is the one place that mapping lives.
 - **No paging.** mvsMF 1.1.0 honours `start` and `X-IBM-Max-Items`, but lists are still fetched whole (`no-paging`,
   #144); a `moreRows: true` on either list is refused as a partial answer.
 - **Timeouts:** 10 s to connect (`SocketsHttpHandler.ConnectTimeout`), 30 s without data (`IdleTimeout`, reset on

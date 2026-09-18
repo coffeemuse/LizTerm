@@ -275,7 +275,8 @@ the transfer ends. The dialog remembers your last transfer for that window.
 ## mvsMF Browser (preview)
 
 **This is a feature preview.** It works, but it is new and still being refined, and it has been tested against one
-build of mvsMF (1.1.0). Please report what you find
+build of mvsMF (1.1.0). It follows that build's behaviour; older mvsMF builds are not supported. Please report what
+you find
 ([Help > Report an Issue...](https://github.com/coffeemuse/LizTerm/issues/new/choose)).
 
 [mvsMF](https://github.com/mvslovers/mvsmf) is a z/OSMF-style REST server for MVS 3.8j. The **mvsMF Browser** uses

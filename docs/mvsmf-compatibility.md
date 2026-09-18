@@ -51,7 +51,7 @@ Entries marked *log only* change nothing in the code.
 ### `info-version-fields`
 
 - **Docs:** `zosmf_version` is the API level and `zosmf_full_version` the release, as in z/OSMF.
-- **Observed:** 1.0.0-dev put `1.0.0-dev` in `zosmf_version` and had no `zosmf_full_version`; 1.1.0 answers
+- **Observed:** 1.0.0-dev put `1.0.0-dev` in both `zosmf_version` and `zosmf_full_version`; 1.1.0 answers
   `zosmf_version: "1"` and `zosmf_full_version: "1.1.0"`.
 - **LizTerm:** reads `zosmf_full_version` first and falls back to `zosmf_version`, so both builds report their
   release.
@@ -79,6 +79,15 @@ Entries marked *log only* change nothing in the code.
   `MVSCE02.CNTL` listed at once, so the PDS was simply empty.)
 - **LizTerm:** reports that shape as "not authorized".
 
+### `cannot-open-is-500`
+
+- **Source:** an open that fails before any record is read or written ("Cannot open dataset", "Cannot open
+  dataset member", "Cannot open dataset for writing") answers 500 with category 6, reason 3, the same shape as a
+  write that failed after the host had started writing; only the message differs.
+- **Observed:** not reproduced on 2026-09-18; the shape is from `dsapi.c`.
+- **LizTerm:** a reason 3 whose message starts `Cannot open` is "cannot be opened", so the browser does not warn
+  that the member may be partly written; any other reason 3 is a server error quoting the host's message.
+
 ### `text-body-is-latin1`
 
 - **Docs:** silent on the body's character set.
@@ -101,8 +110,10 @@ Entries marked *log only* change nothing in the code.
   `{"category":6,"reason":3,"message":"Record truncated to the record length of the data set"}`. (1.0.0-dev
   truncated the same way and answered 204.)
 - **LizTerm:** the write is partial either way, so `TextUploadCheck` refuses any line longer than the record allows
-  (LRECL for F, LRECL−4 for V, BLKSIZE for U) before anything is sent; pinned by `TextUploadCheckTests`, since Core
-  does not name mvsMF. Should a 500 reason 3 arrive anyway, it is reported as a server error with that message.
+  (LRECL for F, LRECL−4 for V, BLKSIZE for U) before anything is sent, when the listing gives it that length; a
+  listing without one (unknown RECFM, no LRECL) leaves the line to the host. The refusal is pinned by
+  `TextUploadCheckTests`, since Core does not name mvsMF; the 500, reported as a server error with the host's
+  message, by `Text_write_truncates…` in `MvsmfErrorsTests`.
 
 ### `put-json-is-rename`
 

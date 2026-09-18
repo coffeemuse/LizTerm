@@ -34,7 +34,7 @@ public class FixtureTests
             Assert.DoesNotContain("Authorization", text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("password", text, StringComparison.OrdinalIgnoreCase);
             foreach (var line in text.Split('\n').Where(l => l.StartsWith("Set-Cookie:", StringComparison.OrdinalIgnoreCase)))
-                Assert.StartsWith("Set-Cookie: LtpaToken2=<token>;", line);
+                Assert.StartsWith("Set-Cookie: LtpaToken2=<token>;", line, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

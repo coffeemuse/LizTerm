@@ -56,7 +56,7 @@ public class HostFileConnectionTests
 
         var info = await Info(connection);
 
-        Assert.Equal("1.0.0-dev", info.ProductVersion);
+        Assert.Equal("1.1.0", info.ProductVersion);
         Assert.Equal(new CertificatePin?[] { null, Accepted }, host.Created.Select(c => c.Pin));
         Assert.Equal(Accepted, access.Pin);
         Assert.Empty(host.Saved);

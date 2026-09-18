@@ -19,14 +19,18 @@ internal static class MvsmfErrors
     public static HostFileException FromResponse(HttpStatusCode status, byte[] body, string what)
     {
         var error = TryParse(body);
-        var kind = Classify(status, error?.Category, error?.Rc, error?.Reason);
+        var kind = Classify(status, error?.Category, error?.Rc, error?.Reason, error?.Message);
         return new HostFileException(kind, Describe(kind, status, what, error), error?.Reason, error?.Message);
     }
 
-    internal static HostFileErrorKind Classify(HttpStatusCode status, int? category, int? rc, int? reason)
+    internal static HostFileErrorKind Classify(HttpStatusCode status, int? category, int? rc, int? reason, string? message = null)
     {
         if (status == HttpStatusCode.Unauthorized) return HostFileErrorKind.Unauthenticated;
         if (category == DatasetCategory && reason is 4 or 5) return HostFileErrorKind.NotFound;
+        // mvsMF-compat: cannot-open-is-500 — an open that fails before any record is read or written is 500,
+        // category 6, reason 3, the same shape as a write that failed part way; only the message tells them apart.
+        if (category == DatasetCategory && reason == 3 && message?.StartsWith("Cannot open", StringComparison.OrdinalIgnoreCase) == true)
+            return HostFileErrorKind.CannotOpen;
         if (status == HttpStatusCode.NotFound) return HostFileErrorKind.NotFound;
         // mvsMF-compat: authorization-is-500 — a refused open is 500, category 4, rc 8, reason 0 ("LMOPEN error").
         if (category == SecurityCategory && rc == 8 && reason == 0) return HostFileErrorKind.NotAuthorized;
@@ -39,16 +43,21 @@ internal static class MvsmfErrors
     {
         HostFileErrorKind.Unauthenticated => "The host rejected the userid or password.",
         HostFileErrorKind.NotFound => $"{what}: not found.",
+        HostFileErrorKind.CannotOpen => $"{what}: {Quote(error?.Message) ?? "cannot be opened"}.",
         HostFileErrorKind.NotAuthorized => $"{what}: not authorized.",
         HostFileErrorKind.InvalidRequest => $"{what}: the host refused the request ({error?.Message ?? "bad request"}).",
-        _ => error switch
+        _ => (Quote(error?.Message), error?.Reason) switch
         {
-            { Reason: { } reason, Message: { } message } when !string.IsNullOrWhiteSpace(message)
-                => $"{what}: {message.Trim().TrimEnd('.')} (reason {reason}).",
-            { Reason: { } reason } => $"{what}: server error (reason {reason}).",
+            ({ } message, { } reason) => $"{what}: {message} (reason {reason}).",
+            ({ } message, null) => $"{what}: {message} (HTTP {(int)status}).",
+            (null, { } reason) => $"{what}: server error (reason {reason}).",
             _ => $"{what}: server error (HTTP {(int)status}).",
         },
     };
+
+    /// <summary>The host's message without surrounding blanks or a final full stop; null when it says nothing.</summary>
+    private static string? Quote(string? message) =>
+        message?.Trim().TrimEnd('.').TrimEnd() is { Length: > 0 } text ? text : null;
 
     private static MvsmfError? TryParse(byte[] body)
     {

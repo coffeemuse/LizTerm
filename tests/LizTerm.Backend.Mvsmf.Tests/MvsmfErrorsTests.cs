@@ -40,7 +40,7 @@ public class MvsmfErrorsTests
     }
 
     [Fact]
-    public async Task A_truncated_write_is_a_server_error_quoting_the_host()
+    public async Task Text_write_truncates_so_the_500_is_a_server_error_quoting_the_host()
     {
         using var response = Fixture.Load("write-truncated");
         var body = await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
@@ -78,10 +78,23 @@ public class MvsmfErrorsTests
         Assert.Equal("X.Y(Z): not found.", ex.Message);
     }
 
+    [Fact]
+    public void Cannot_open_is_500_so_the_message_tells_an_open_failure_from_a_write_failure()
+    {
+        var body = Encoding.UTF8.GetBytes("""{"rc":8,"category":6,"reason":3,"message":"Cannot open dataset for writing"}""");
+        var ex = MvsmfErrors.FromResponse(HttpStatusCode.InternalServerError, body, "MVSCE02.CNTL(X)");
+        Assert.Equal(HostFileErrorKind.CannotOpen, ex.Kind);
+        Assert.Equal(3, ex.Reason);
+        Assert.Equal("Cannot open dataset for writing", ex.ServerMessage);
+        Assert.Equal("MVSCE02.CNTL(X): Cannot open dataset for writing.", ex.Message);
+    }
+
     [Theory]
     [InlineData("", "Server information: server error (HTTP 502).")]
     [InlineData("<html>gateway</html>", "Server information: server error (HTTP 502).")]
     [InlineData("""{"rc":8,"category":9,"reason":12,"message":"odd"}""", "Server information: odd (reason 12).")]
+    [InlineData("""{"rc":8,"category":6,"message":"Error writing record."}""", "Server information: Error writing record (HTTP 502).")]
+    [InlineData("""{"rc":8,"category":6,"reason":3,"message":"..."}""", "Server information: server error (reason 3).")]
     public void A_body_that_is_not_an_mvsmf_error_still_gives_a_message(string body, string expected) =>
         Assert.Equal(expected, MvsmfErrors.FromResponse(HttpStatusCode.BadGateway, Encoding.UTF8.GetBytes(body), "Server information").Message);
 

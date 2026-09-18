@@ -25,7 +25,7 @@ public sealed class FakeHostFileService : IHostFileService
     /// <summary>When set, a text write stores what this returns for (path, lines) instead of the lines: a host that
     /// alters what it stores.</summary>
     public Func<string, IReadOnlyList<string>, List<string>>? StoreTransform { get; set; }
-    public HostServerInfo Info { get; set; } = new("mvsMF", "1.0.0-dev", "MVS 3.8j");
+    public HostServerInfo Info { get; set; } = new("mvsMF", "1.1.0", "MVS 3.8j");
     /// <summary>When set, every call waits for it (and for its token) after being logged.</summary>
     public TaskCompletionSource? Gate { get; set; }
     public List<string> Calls { get; } = [];
@@ -63,9 +63,14 @@ public sealed class FakeHostFileService : IHostFileService
         try
         {
             lock (_lock)
-                return Members.TryGetValue(dataset.Dataset, out var names)
-                    ? [.. names.Select(n => new HostFileEntry(n, HostFileEntryKind.Member))]
-                    : [];
+            {
+                if (Members.TryGetValue(dataset.Dataset, out var names))
+                    return [.. names.Select(n => new HostFileEntry(n, HostFileEntryKind.Member))];
+                throw Datasets.Any(d => d.Name == dataset.Dataset)
+                    ? new HostFileException(HostFileErrorKind.InvalidRequest,
+                        $"{dataset}: the host refused the request (Dataset is not partitioned).", 1, "Dataset is not partitioned")
+                    : Missing(dataset);
+            }
         }
         finally { Leave(); }
     }
@@ -151,8 +156,7 @@ public sealed class FakeHostFileService : IHostFileService
             names.Add(member);
     }
 
-    private static HostFileException Missing(HostPath path) =>
-        new(HostFileErrorKind.CannotOpen, $"{path}: not found, not authorized, or cannot be opened.", 3);
+    private static HostFileException Missing(HostPath path) => new(HostFileErrorKind.NotFound, $"{path}: not found.", 5);
 
     private async Task EnterAsync(string call, string failureKey, CancellationToken token)
     {

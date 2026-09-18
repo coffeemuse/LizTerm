@@ -20,6 +20,9 @@ public class HostFileMessagesTests
     [InlineData(HostFileErrorKind.Unreachable, null, null, "Dataset list: cannot reach the host (refused).", "Dataset list: cannot reach the host (refused).")]
     [InlineData(HostFileErrorKind.ServerError, 7, null, "x", "Server error (reason 7).")]
     [InlineData(HostFileErrorKind.ServerError, null, null, "x", "Server error.")]
+    [InlineData(HostFileErrorKind.ServerError, 3, "Record truncated to the record length of the data set", "x", "Server error: Record truncated to the record length of the data set (reason 3).")]
+    [InlineData(HostFileErrorKind.ServerError, null, "Error writing record.", "x", "Server error: Error writing record.")]
+    [InlineData(HostFileErrorKind.ServerError, 3, "...", "x", "Server error (reason 3).")]
     public void Describes_each_kind_in_plain_words(HostFileErrorKind kind, int? reason, string? server, string message, string expected) =>
         Assert.Equal(expected, HostFileMessages.Describe(new HostFileException(kind, message, reason, server)));
 
@@ -41,6 +44,8 @@ public class HostFileMessagesTests
             HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.Unreachable, "x: gone")));
         Assert.Equal("Not authorized.",
             HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.NotAuthorized, "x")));
+        Assert.Equal("Not found, not authorized, or cannot be opened.",
+            HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.CannotOpen, "x", 3, "Cannot open dataset for writing")));
     }
 
     [Fact]

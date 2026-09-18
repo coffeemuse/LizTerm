@@ -25,7 +25,7 @@ public class FakeHostFileServiceTests
         await host.DeleteAsync(two, token);
         Assert.Equal(new[] { "ONE" }, host.Members["A.CNTL"]);
         var ex = await Assert.ThrowsAsync<HostFileException>(() => host.ReadTextAsync(two, cancellationToken: token));
-        Assert.Equal(HostFileErrorKind.CannotOpen, ex.Kind);
+        Assert.Equal(HostFileErrorKind.NotFound, ex.Kind);
         Assert.Equal(new[] { "writetext:A.CNTL(TWO):1", "readtext:A.CNTL(TWO)", "delete:A.CNTL(TWO)", "readtext:A.CNTL(TWO)" }, host.CallsSnapshot());
     }
 
