@@ -107,7 +107,7 @@ public partial class FileTransferViewModel : ObservableObject
     [ObservableProperty] private string _primarySpaceText = "";
     [ObservableProperty] private string _secondarySpaceText = "";
     [ObservableProperty] private string _averageBlockText = "";
-    [ObservableProperty] private string _bufferSizeText = "";
+    [ObservableProperty] private string _bufferSizeText = FileTransferRequest.DefaultBufferSize.ToString();
     [ObservableProperty] private string _extraOptions = "";
     [ObservableProperty] private string? _validationMessage;
 

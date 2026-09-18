@@ -263,6 +263,10 @@ cursor at a TSO `READY` prompt or a command line, or use the ISPF (MVS) host typ
   over a local file you did not pick with the Browse dialog.
 - When sending, **Advanced** sets up the new host file: record format and LRECL (TSO and VM), BLKSIZE and space
   allocation (TSO only), plus a buffer size and extra options appended to the IND$FILE command.
+- **Buffer size** is how much data travels in each piece of the transfer. It starts at 2500, and a blank field means
+  2500 too. Some hosts, MVS/CE among them, cannot take much larger pieces: the transfer stops at the end, the TSO
+  logon screen appears, and the TSO user stays logged on until an operator cancels it. If a transfer ends that way,
+  try a smaller buffer size.
 
 The dialog shows progress while the transfer runs. **Cancel**, or closing the dialog, asks the host to stop. The
 host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
@@ -379,6 +383,13 @@ A problem with one member shows in its row or in the status line at the bottom o
 connection itself (the host can't be reached, the sign-in was refused, or the certificate isn't trusted) shows as a
 red banner with **Retry**. Every status line starts with a mark as well as words (**✓**, **✗**, **⚠**, **⟳** or
 **–**), so its meaning never depends on colour.
+## Which build you are running
+
+**Help > About LizTerm...** names the version, and so does the splash screen. A build that is not a release — one
+made from source, or from a pull request — shows it as `0.6.1-DEV (a1b2c3d)`, where `a1b2c3d` is the commit it was
+built from; a build made outside a git checkout, such as one from a downloaded source archive, says `0.6.1-DEV` with
+no commit. A release shows its plain version, with no `-DEV` and no commit. The line in About can be selected and
+copied, so a bug report can say exactly which build it was filed against.
 
 ## Wire logs
 

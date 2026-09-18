@@ -271,6 +271,10 @@ host type TSO.</li>
 over a local file you did not pick with the Browse dialog.</li>
 <li>When sending, <strong>Advanced</strong> sets up the new host file: record format and LRECL (TSO and VM), BLKSIZE and space
 allocation (TSO only), plus a buffer size and extra options appended to the IND$FILE command.</li>
+<li><strong>Buffer size</strong> is how much data travels in each piece of the transfer. It starts at 2500, and a blank field means
+2500 too. Some hosts, MVS/CE among them, cannot take much larger pieces: the transfer stops at the end, the TSO
+logon screen appears, and the TSO user stays logged on until an operator cancels it. If a transfer ends that way,
+try a smaller buffer size.</li>
 </ul>
 <p>The dialog shows progress while the transfer runs. <strong>Cancel</strong>, or closing the dialog, asks the host to stop. The
 host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
@@ -363,7 +367,13 @@ deleted. Datasets themselves can't be deleted from the browser.</p>
 <p>A problem with one member shows in its row or in the status line at the bottom of the window. A problem with the
 connection itself (the host can't be reached, the sign-in was refused, or the certificate isn't trusted) shows as a
 red banner with <strong>Retry</strong>. Every status line starts with a mark as well as words (<strong>✓</strong>, <strong>✗</strong>, <strong>⚠</strong>, <strong>⟳</strong> or
-<strong>–</strong>), so its meaning never depends on colour.</p>
+<strong>–</strong>), so its meaning never depends on colour.
+## Which build you are running</p>
+<p><strong>Help &gt; About LizTerm...</strong> names the version, and so does the splash screen. A build that is not a release — one
+made from source, or from a pull request — shows it as <code>0.6.1-DEV (a1b2c3d)</code>, where <code>a1b2c3d</code> is the commit it was
+built from; a build made outside a git checkout, such as one from a downloaded source archive, says <code>0.6.1-DEV</code> with
+no commit. A release shows its plain version, with no <code>-DEV</code> and no commit. The line in About can be selected and
+copied, so a bug report can say exactly which build it was filed against.</p>
 <h2 id="wire-logs">Wire logs</h2>
 <p>A wire log records every message between LizTerm and its emulation engine. It is the most useful thing to attach
 to a bug report.</p>

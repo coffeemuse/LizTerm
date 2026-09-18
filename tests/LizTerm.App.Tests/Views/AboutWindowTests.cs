@@ -125,6 +125,28 @@ public class AboutWindowTests
         Assert.IsType<LizWindow>(Assert.Single(window.OwnedWindows));
     }
 
+    /// <summary>The version is shown exactly as AppVersion.Display spells it, -DEV and commit included; the
+    /// window adds the label and nothing else (issue #141).</summary>
+    [AvaloniaFact]
+    public void Shows_the_version_it_was_given_verbatim()
+    {
+        var engine = new EngineInfo("b3270", "4.5.6", "/path/to/b3270", EngineSource.Bundled);
+        var window = new AboutWindow("0.3.0-DEV (a1b2c3d)", engine, "");
+        window.Show();
+        Assert.Equal("Version 0.3.0-DEV (a1b2c3d)", window.FindControl<TextBlock>("VersionText")!.Text);
+    }
+
+    /// <summary>The hash exists to be quoted in a bug report, so it has to be selectable; every other line in
+    /// About is a plain TextBlock. Out of the tab order all the same: a SelectableTextBlock is focusable where a
+    /// TextBlock is not, and this is the first control in the panel, so without IsTabStop="False" Tab would land
+    /// on a line of text before it reached the dedication link or Close.</summary>
+    [AvaloniaFact]
+    public void The_version_line_can_be_selected_but_is_not_a_tab_stop()
+    {
+        var version = Assert.IsType<SelectableTextBlock>(Shown().FindControl<TextBlock>("VersionText"));
+        Assert.False(version.IsTabStop);
+    }
+
     private static AboutWindow Shown()
     {
         var window = new AboutWindow("0.3.0", new EngineInfo("b3270", "4.5.6", "/path/to/b3270", EngineSource.Bundled), "");

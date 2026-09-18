@@ -829,6 +829,17 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   (`X11IconLoader`) decodes any stream through Skia, which takes an `.ico`'s largest entry, and caps the result at
   128 px, so that is the largest entry. Avalonia.Native's `SetIcon` is a no-op: macOS draws the bundle's `.icns`.
   The headless platform stubs icons, so tests can see that a window has the shared icon but not its pixels.
+- **A build that is not a release says so, in About and on the splash** (#141). `AppVersion.Display` is the one
+  spelling both windows show: a release is its bare version, anything else reads `Version 0.6.1-DEV (a1b2c3d)`.
+  `AppVersion.IsRelease` is an `AssemblyMetadata` attribute the release publish writes
+  (`-p:LizTermReleaseBuild=true`, `docs/ci-and-release.md`, "Release builds and test builds") — written, not
+  inferred, because the SDK's `+<commit>` stamp is also absent from a source tarball and a build that merely lacks
+  one must not pass for a release. `AppVersion.Commit` is that stamp, shortened, and only says *which* build; it is
+  null outside a git checkout, where the line is just `0.6.1-DEV`. `AppVersion.Current` stays a bare `0.6.1` —
+  `ReleaseVersion` parses it and the user guide is extracted as `lizterm-user-guide-<version>.html`, so the marker
+  is `Display`'s alone. About's version line is the one `SelectableTextBlock` there, because a hash nobody can copy
+  is not much use, and it carries `IsTabStop="False"`: a `SelectableTextBlock` is focusable where a `TextBlock` is
+  not, and it is the first control in the panel.
 - **About's dedication link** (`DedicationLink`) opens `LizWindow`, modal over About: the photo of Liz, the cat
   LizTerm is named for (`Assets/Liz/liz.jpg`, which the README shows too). It is a `Button` made to look like a link,
   not a `HyperlinkButton`, because Fluent paints that one in the platform accent, and on macOS the accent is the

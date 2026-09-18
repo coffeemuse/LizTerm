@@ -28,7 +28,11 @@
              Width="56" Height="56" Stretch="Uniform" VerticalAlignment="Center" />
       <TextBlock Text="LizTerm" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" FontSize="40" Foreground="#50FF50" VerticalAlignment="Center" />
     </StackPanel>
-    <TextBlock DockPanel.Dock="Top" x:Name="VersionText" Margin="0,4,0,0" />
+    <!-- Selectable, unlike every other line here: on a build that is not a release this carries the commit,
+         and the point of showing it is that it can be quoted in a bug report. IsTabStop="False" because a
+         SelectableTextBlock is focusable where a TextBlock is not, and this is the first control in the panel:
+         without it, Tab in About lands on a line of text before it reaches the link or Close. -->
+    <SelectableTextBlock DockPanel.Dock="Top" x:Name="VersionText" Margin="0,4,0,0" IsTabStop="False" />
     <TextBlock DockPanel.Dock="Top" x:Name="EngineText" Margin="0,12,0,0" TextWrapping="Wrap" />
     <TextBlock DockPanel.Dock="Top" x:Name="CopyrightText" Margin="0,12,0,0" TextWrapping="Wrap" />
     <!-- LizTerm is named for Liz (README, "The name"), and this opens her photo. A Button made to look like a link
