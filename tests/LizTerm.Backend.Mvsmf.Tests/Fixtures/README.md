@@ -20,7 +20,7 @@ build: a changed fixture is a changed behaviour.
 | `members-not-partitioned` | `GET restfiles/ds/<a sequential dataset>/member` — 400, reason 1 |
 | `read-text-jes2` | `GET restfiles/ds/SYS1.PROCLIB(JES2)`, text |
 | `read-binary-jes2` | the same, binary |
-| `read-missing-member` | `GET restfiles/ds/SYS1.PROCLIB(NOSUCHMB)` — 500, reason 3 |
+| `read-missing-member` | `GET restfiles/ds/SYS1.PROCLIB(NOSUCHMB)` — 404, reason 5 |
 | `read-pds-as-sequential` | `GET restfiles/ds/SYS1.PROCLIB` — 400, reason 1 |
 | `name-too-long` | `GET restfiles/ds/SYS1.PROCLIB(TOOLONGNAME)` — 400, reason 1 |
 | `write-204` | `PUT` of a scratch member |
