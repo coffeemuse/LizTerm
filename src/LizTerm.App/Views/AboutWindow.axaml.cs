@@ -14,15 +14,15 @@ public partial class AboutWindow : Window
 {
     /// <summary>Design-time only. A plausible located engine rather than a blank path calling itself bundled,
     /// which is the pairing <see cref="EngineSource.Unknown"/> exists to avoid.</summary>
-    public AboutWindow() : this(AppVersion.Current, AppVersion.Commit, new EngineInfo("b3270", "4.5.6", "/path/to/b3270", EngineSource.Bundled), "") { }
+    public AboutWindow() : this(AppVersion.Display, new EngineInfo("b3270", "4.5.6", "/path/to/b3270", EngineSource.Bundled), "") { }
 
-    /// <summary><paramref name="commit"/> is the build's commit, or null for a release build (see
-    /// <see cref="AppVersion.Commit"/>). A build that has one is not a release, so the version wears -DEV: that
-    /// marker says so on its own, and the hash after it says which build, for a bug report to quote.</summary>
-    public AboutWindow(string version, string? commit, EngineInfo engine, string overrideOrigin)
+    /// <summary><paramref name="version"/> is already spelled the way it is shown, <see cref="AppVersion.Display"/>:
+    /// a release is its bare version, and a build that is not one wears -DEV and its commit, for a bug report to
+    /// quote (issue #141).</summary>
+    public AboutWindow(string version, EngineInfo engine, string overrideOrigin)
     {
         InitializeComponent();
-        VersionText.Text = commit is null ? $"Version {version}" : $"Version {version}-DEV ({commit})";
+        VersionText.Text = "Version " + version;
         EngineText.Text = StatusFormatter.Engine(engine, overrideOrigin);
         CopyrightText.Text = AppLicense.Copyright;
         LicensesText.Text = AppLicense.All;

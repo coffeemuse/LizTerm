@@ -5,10 +5,11 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
-- **A build that is not a release says so.** **About LizTerm** shows the version as `0.6.1-DEV (dd62cc0)` when you
-  are running a build made from source or from a pull request, where `dd62cc0` is the commit it was built from. You
-  can select the line and copy it, so a bug report can say exactly which build it was filed against. A release shows
-  its plain version, as before ([#141](https://github.com/coffeemuse/LizTerm/issues/141)).
+- **A build that is not a release says so.** **About LizTerm** and the splash screen show the version as
+  `0.6.1-DEV (a1b2c3d)` when you are running a build made from source or from a pull request, where `a1b2c3d` is the
+  commit it was built from. You can select the version in About and copy it, so a bug report can say exactly which
+  build it was filed against. A release shows its plain version, as before
+  ([#141](https://github.com/coffeemuse/LizTerm/issues/141)).
 - **Binary uploads to MVS/CE work.** File transfers now use a 2500-byte buffer unless you set another size under
   **Advanced**. With the larger size used before, MVS/CE dropped binary uploads at the end, showed its logon screen and
   left the TSO user logged on ([#137](https://github.com/coffeemuse/LizTerm/issues/137)).

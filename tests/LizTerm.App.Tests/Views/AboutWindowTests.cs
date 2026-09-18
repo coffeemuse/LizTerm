@@ -18,7 +18,7 @@ public class AboutWindowTests
     public void Shows_version_engine_and_licenses()
     {
         var engine = new EngineInfo("b3270", "4.5.6 (fake)", "/opt/homebrew/bin/b3270", EngineSource.Override);
-        var window = new AboutWindow("0.3.0", null, engine, "LIZTERM_B3270_PATH");
+        var window = new AboutWindow("0.3.0", engine, "LIZTERM_B3270_PATH");
         window.Show();
         // The engine line and the copyright both wrap, above a fixed 220-high licences box, so the window
         // grows with its content instead of clipping at a fixed height.
@@ -37,7 +37,7 @@ public class AboutWindowTests
     {
         const string path = "/opt/homebrew/bin/b3270";
         var engine = new EngineInfo("b3270", "4.5.6 (fake)", path, EngineSource.Override);
-        var window = new AboutWindow("0.3.0", null, engine, "LIZTERM_B3270_PATH");
+        var window = new AboutWindow("0.3.0", engine, "LIZTERM_B3270_PATH");
         window.Show();
         var blocks = window.GetVisualDescendants().OfType<TextBlock>().ToList();
         Assert.NotEmpty(blocks); // A walk that found nothing would pass this test while showing anything at all.
@@ -125,27 +125,31 @@ public class AboutWindowTests
         Assert.IsType<LizWindow>(Assert.Single(window.OwnedWindows));
     }
 
-    /// <summary>A build that carries a commit is not a release, and a bug report filed against one needs to say
-    /// which build it was (issue #141). The -DEV marker carries that on its own, so the hash beside it is the
-    /// detail rather than the signal.</summary>
+    /// <summary>The version is shown exactly as AppVersion.Display spells it, -DEV and commit included; the
+    /// window adds the label and nothing else (issue #141).</summary>
     [AvaloniaFact]
-    public void Marks_a_build_that_carries_a_commit_as_DEV_and_shows_the_commit()
+    public void Shows_the_version_it_was_given_verbatim()
     {
         var engine = new EngineInfo("b3270", "4.5.6", "/path/to/b3270", EngineSource.Bundled);
-        var window = new AboutWindow("0.3.0", "dd62cc0", engine, "");
+        var window = new AboutWindow("0.3.0-DEV (a1b2c3d)", engine, "");
         window.Show();
-        Assert.Equal("Version 0.3.0-DEV (dd62cc0)", window.FindControl<TextBlock>("VersionText")!.Text);
+        Assert.Equal("Version 0.3.0-DEV (a1b2c3d)", window.FindControl<TextBlock>("VersionText")!.Text);
     }
 
     /// <summary>The hash exists to be quoted in a bug report, so it has to be selectable; every other line in
-    /// About is a plain TextBlock.</summary>
+    /// About is a plain TextBlock. Out of the tab order all the same: a SelectableTextBlock is focusable where a
+    /// TextBlock is not, and this is the first control in the panel, so without IsTabStop="False" Tab would land
+    /// on a line of text before it reached the dedication link or Close.</summary>
     [AvaloniaFact]
-    public void The_version_line_can_be_selected_and_copied()
-        => Assert.IsType<SelectableTextBlock>(Shown().FindControl<TextBlock>("VersionText"));
+    public void The_version_line_can_be_selected_but_is_not_a_tab_stop()
+    {
+        var version = Assert.IsType<SelectableTextBlock>(Shown().FindControl<TextBlock>("VersionText"));
+        Assert.False(version.IsTabStop);
+    }
 
     private static AboutWindow Shown()
     {
-        var window = new AboutWindow("0.3.0", null, new EngineInfo("b3270", "4.5.6", "/path/to/b3270", EngineSource.Bundled), "");
+        var window = new AboutWindow("0.3.0", new EngineInfo("b3270", "4.5.6", "/path/to/b3270", EngineSource.Bundled), "");
         window.Show();
         return window;
     }
