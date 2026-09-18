@@ -278,6 +278,11 @@ try a smaller buffer size.</li>
 <p>The dialog shows progress while the transfer runs. <strong>Cancel</strong>, or closing the dialog, asks the host to stop. The
 host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
 the transfer ends. The dialog remembers your last transfer for that window.</p>
+<h2 id="which-build-you-are-running">Which build you are running</h2>
+<p><strong>Help &gt; About LizTerm...</strong> names the version. A build that is not a release — one made from source, or from a
+pull request — shows it as <code>0.6.1-DEV (dd62cc0)</code>, where <code>dd62cc0</code> is the commit it was built from. A release shows
+its plain version, with no <code>-DEV</code> and no commit. The line can be selected and copied, so a bug report can say
+exactly which build it was filed against.</p>
 <h2 id="wire-logs">Wire logs</h2>
 <p>A wire log records every message between LizTerm and its emulation engine. It is the most useful thing to attach
 to a bug report.</p>

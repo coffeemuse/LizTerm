@@ -154,6 +154,24 @@ Parcel also treats a missing or misnamed icon as a warning, not an error, so a t
 would ship an icon-less installer with a green build. The same job asserts that every icon path `LizTerm.parcel`
 names (`Win32Settings.InstallerIcon`, `MacOsSettings.AppIcon`, `LinuxSettings.AppIcon`) exists.
 
+### Release builds and test builds
+
+About marks a build that carries a commit as `-DEV` and shows the short commit beside the version
+([#141](https://github.com/coffeemuse/LizTerm/issues/141)), so that a bug report filed against a test build can say
+which build it was. A tag is the only thing this pipeline produces that is a release, so the workflow-level
+`INCLUDE_SOURCE_REVISION` is `false` on a tag and `true` everywhere else, and every publish step passes it to
+`dotnet publish` as `IncludeSourceRevisionInInformationalVersion`. With it off the SDK stamps no `+<commit>` on
+`AssemblyInformationalVersion`, `AppVersion.Commit` reads null, and About shows the bare version; a
+`workflow_dispatch` rehearsal keeps the stamp, because a rehearsal build is a test build.
+
+The rule is proved in the `publish-linux` job, right after its `linux-x64` publish and before anything is packaged:
+a tag whose build stamped a commit fails there, rather than publishing a release whose About calls it a development
+build. That gate is the only check of the release arm — the manual pass before a release runs on rehearsal
+artifacts, which are meant to say `-DEV` — and proving it in one job proves it in all four, which hand the same
+variable to the same SDK. It reads `src/LizTerm.App/bin/Release/net10.0/linux-x64/LizTerm.App.dll`, the ordinary
+build output Parcel's `--no-build` consumes, because the `publish/` tree is single-file and keeps the assembly
+inside the host.
+
 ### Packaging with Parcel
 
 - `parcel pack` always runs its own `dotnet publish` into a randomised temp directory, `--no-build` or not. What

@@ -829,6 +829,14 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   (`X11IconLoader`) decodes any stream through Skia, which takes an `.ico`'s largest entry, and caps the result at
   128 px, so that is the largest entry. Avalonia.Native's `SetIcon` is a no-op: macOS draws the bundle's `.icns`.
   The headless platform stubs icons, so tests can see that a window has the shared icon but not its pixels.
+- **About's version line carries the commit on a build that is not a release** (#141). `AppVersion.Commit` is the
+  short commit the SDK stamped on `AssemblyInformationalVersion`, and null when nothing was stamped; the release
+  job publishes with `IncludeSourceRevisionInInformationalVersion=false`, so only a release has none
+  (`docs/ci-and-release.md`, "Release builds and test builds"). A build that has one reads `Version 0.6.1-DEV
+  (dd62cc0)`: the marker says "not a release" on its own, and the commit says which build, for a bug report to
+  quote. `AppVersion.Current` stays a bare `0.6.1` — `ReleaseVersion` parses it and the user guide is extracted as
+  `lizterm-user-guide-<version>.html`, so the marker is `AboutWindow`'s alone. The line is the one
+  `SelectableTextBlock` in About, because a hash nobody can copy is not much use.
 - **About's dedication link** (`DedicationLink`) opens `LizWindow`, modal over About: the photo of Liz, the cat
   LizTerm is named for (`Assets/Liz/liz.jpg`, which the README shows too). It is a `Button` made to look like a link,
   not a `HyperlinkButton`, because Fluent paints that one in the platform accent, and on macOS the accent is the
