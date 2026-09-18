@@ -48,6 +48,7 @@ since this release — <a href="https://github.com/coffeemuse/LizTerm/blob/main/
 <li><a href="#saving-and-copying-the-screen">Saving and copying the screen</a></li>
 <li><a href="#tls-and-certificates">TLS and certificates</a></li>
 <li><a href="#file-transfer-indfile">File transfer (IND$FILE)</a></li>
+<li><a href="#mvsmf-browser-preview">mvsMF Browser (preview)</a></li>
 <li><a href="#wire-logs">Wire logs</a></li>
 <li><a href="#menus">Menus</a></li>
 <li><a href="#where-lizterm-keeps-its-files">Where LizTerm keeps its files</a></li>
@@ -278,7 +279,96 @@ try a smaller buffer size.</li>
 <p>The dialog shows progress while the transfer runs. <strong>Cancel</strong>, or closing the dialog, asks the host to stop. The
 host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
 the transfer ends. The dialog remembers your last transfer for that window.</p>
-<h2 id="which-build-you-are-running">Which build you are running</h2>
+<h2 id="mvsmf-browser-preview">mvsMF Browser (preview)</h2>
+<p><strong>This is a feature preview.</strong> It works, but it is new and still being refined, and it has been tested against one
+pre-release build of mvsMF. Please report what you find
+(<a href="https://github.com/coffeemuse/LizTerm/issues/new/choose">Help &gt; Report an Issue...</a>).</p>
+<p><a href="https://github.com/mvslovers/mvsmf">mvsMF</a> is a z/OSMF-style REST server for MVS 3.8j. The <strong>mvsMF Browser</strong> uses
+it to list datasets and members, download and upload them, and delete members, without typing anything on the
+3270 screen. It is a second way to move files alongside <a href="#file-transfer-indfile">IND$FILE</a>, and it doesn't need the
+session to be logged on, or even connected.</p>
+<h3 id="setting-it-up">Setting it up</h3>
+<p>Open the profile in the editor and go to the <strong>mvsMF</strong> tab:</p>
+<ul>
+<li><strong>URL</strong> is the address of the mvsMF server, for example <code>http://mvs.example:8080</code>. When the address has no path,
+LizTerm adds <code>/zosmf</code>. Only <code>http://</code> and <code>https://</code> addresses are accepted.</li>
+<li><strong>Userid</strong> is optional. It fills in the sign-in window, and the browser starts by listing <code>USERID.**</code>.</li>
+<li><strong>Test</strong> signs in and asks the server what it is, then shows the answer (for example
+<strong>✓ Connected: mvsMF 1.0.0-dev on MVS 3.8j</strong>) or what went wrong. A sign-in made for <strong>Test</strong> is forgotten right
+after.</li>
+</ul>
+<p>Once a profile has a URL, its session window has <strong>File &gt; mvsMF Browser...</strong>. The item has no keyboard shortcut, so
+it never takes a key the host needs. Choosing it again brings the open browser back to the front: each session
+window has one browser, which closes when the session window does. A change to the URL takes effect the next time
+you open the session.</p>
+<h3 id="signing-in">Signing in</h3>
+<p>The first time the browser reaches the host, it asks for your userid and password. The password is kept in memory only, for as
+long as the session window stays open, and is never saved to disk. Every browser operation in that session uses it,
+so you sign in once. If the host rejects it, the window asks again. LizTerm cannot guarantee the password is wiped
+from memory when the window closes, because .NET gives no way to erase a string.</p>
+<p>mvsMF sends your password with every request. Over <code>http://</code> it crosses the network unencrypted, so keep plain
+<code>http</code> to a network you trust, or put mvsMF behind a TLS reverse proxy and use an <code>https://</code> URL. An <code>https</code>
+certificate is checked the same way as a TLS session's (see <a href="#tls-and-certificates">TLS and certificates</a>): an
+untrusted one opens the <strong>Certificate not verified</strong> window, and <strong>Trust this certificate</strong> pins it to the profile.
+The mvsMF pin is kept apart from the 3270 one, and <strong>Forget</strong> on the <strong>mvsMF</strong> tab removes it. An mvsMF pin trusts
+only the exact certificate you pinned, and only until that certificate expires.</p>
+<h3 id="browsing">Browsing</h3>
+<p>Type a dataset pattern in <strong>Filter</strong>, such as <code>MVSCE02.**</code>, and choose <strong>List</strong>. The left pane lists the matching
+datasets with their <strong>NAME</strong>, <strong>DSORG</strong>, <strong>RECFM</strong> and <strong>LRECL</strong>. VSAM and direct-access (<code>DA</code>) datasets are listed
+as <strong>(not supported)</strong>: nothing can be downloaded from or uploaded to them.</p>
+<p>Choosing a partitioned dataset (a PDS) lists its members on the right, where <strong>Filter members</strong> narrows the list as
+you type and you can select several members at once. For a sequential dataset, <strong>Download…</strong> and <strong>Upload…</strong> act on
+the dataset itself.</p>
+<p><strong>Mode</strong> chooses <strong>Text</strong>, which converts between EBCDIC and your computer's characters, or <strong>Binary</strong>, which copies
+bytes unchanged. <strong>Binary</strong> is chosen for you on an undefined-length (<code>RECFM=U</code>) dataset, such as a load library.</p>
+<p>The keyboard reaches everything. In the member list, <strong>Enter</strong> downloads the selection, and <strong>Delete</strong> or
+<strong>Backspace</strong> deletes it. <strong>Escape</strong> answers a question with Cancel, else cancels what is running, else closes an
+upload review, else closes the window.</p>
+<h3 id="downloading">Downloading</h3>
+<p>With one member (or a sequential dataset) selected, <strong>Download…</strong> asks where to save it, suggesting the member name
+with <code>.txt</code> in text mode. With several selected, it asks for a folder and downloads two at a time, showing each
+member's progress in its <strong>STATUS</strong> column. A file that already exists in that folder is not replaced without
+asking: choose <strong>Replace</strong> or <strong>Skip</strong>, and tick <strong>Apply to all</strong> to answer for the rest.</p>
+<p>A download is written to a hidden temporary file first and moved into place only when it is complete, so a
+cancelled or failed download never leaves a half-written file under the real name.</p>
+<ul>
+<li>In text mode, <strong>Trim trailing blanks</strong> (on by default) removes the spaces that pad out each fixed-length record.
+Lines end the way your system expects: LF on macOS and Linux, CRLF on Windows.</li>
+<li>In binary mode, a fixed-length dataset hands back whole records, so its last record is padded with zero bytes; a
+note in the window says so.</li>
+</ul>
+<h3 id="uploading">Uploading</h3>
+<p><strong>Upload…</strong> on a partitioned dataset asks for one or more files and opens a review in place of the member list.
+Each file becomes the member named by its file name up to the first dot, in capitals (<code>hello.jcl</code> becomes <code>HELLO</code>).
+You can edit a name, and a name MVS won't accept is marked <strong>✗</strong> until you fix it. Before anything is sent, LizTerm
+checks each text file against the dataset:</p>
+<ul>
+<li><strong>Characters</strong>: the file must be UTF-8 text, and every character must exist in the host code page (the Latin-1
+range). The review lists the first few that don't; send such a file in <strong>Binary</strong> instead.</li>
+<li><strong>Line length</strong>: no line may be longer than a record holds (LRECL, less 4 for variable-length datasets). mvsMF
+would cut a long line short without an error, so LizTerm refuses the file instead.</li>
+<li><strong>Tabs</strong>: <strong>Expand tabs (every 8 columns)</strong> (on by default) turns them into spaces. Left off, each tab reaches the
+host as a tab character.</li>
+<li><strong>Empty lines</strong> are sent as a single space, which the host keeps as a blank record; mvsMF would otherwise drop
+them.</li>
+</ul>
+<p>Choose <strong>Upload</strong> to start. Before replacing a member that already exists, the browser asks <strong>Replace</strong> or
+<strong>Skip</strong>. With <strong>Verify after upload</strong> on (the default), each text member is read back and compared with what was
+sent. A member that differs is marked <strong>⚠ Uploaded, but the host copy differs at line N</strong>.</p>
+<p>A sequential dataset takes one file at a time. After the checks, the browser asks before replacing the dataset's
+contents.</p>
+<p>mvsMF cannot undo a write. If an upload fails or is cancelled while a member is being written, the member may be
+left partly written, and its row says so.</p>
+<h3 id="deleting">Deleting</h3>
+<p><strong>Delete…</strong> deletes the selected members, after a question that names them (<strong>Delete 3 members</strong>). A deleted
+member cannot be recovered. If you cancel part-way, the browser lists the members again and says how many were
+deleted. Datasets themselves can't be deleted from the browser.</p>
+<h3 id="when-something-goes-wrong">When something goes wrong</h3>
+<p>A problem with one member shows in its row or in the status line at the bottom of the window. A problem with the
+connection itself (the host can't be reached, the sign-in was refused, or the certificate isn't trusted) shows as a
+red banner with <strong>Retry</strong>. Every status line starts with a mark as well as words (<strong>✓</strong>, <strong>✗</strong>, <strong>⚠</strong>, <strong>⟳</strong> or
+<strong>–</strong>), so its meaning never depends on colour.
+## Which build you are running</p>
 <p><strong>Help &gt; About LizTerm...</strong> names the version, and so does the splash screen. A build that is not a release — one
 made from source, or from a pull request — shows it as <code>0.6.1-DEV (a1b2c3d)</code>, where <code>a1b2c3d</code> is the commit it was
 built from; a build made outside a git checkout, such as one from a downloaded source archive, says <code>0.6.1-DEV</code> with
@@ -394,6 +484,9 @@ the pin.</li>
 underlying x3270 engine does not send a server name (<a href="https://github.com/coffeemuse/LizTerm/issues/12">#12</a>).</li>
 <li><strong>No keymap editing yet</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/18">#18</a>).</li>
 <li><strong>No printer sessions or scripting.</strong></li>
+<li><strong>The mvsMF Browser is a preview</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/17">#17</a>). It has been tested
+against one pre-release build of mvsMF. Very long dataset or member lists arrive in one piece, with no paging. It
+can't create, rename or delete datasets, submit jobs, or browse the z/OS UNIX file system.</li>
 </ul>
 </body>
 </html>

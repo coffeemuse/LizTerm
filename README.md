@@ -31,6 +31,8 @@ Her photo is in the app too, under **About LizTerm**.
 - **TLS**, with certificate verification against your system's trusted roots, and **certificate pinning** for the
   self-signed certificates most hobbyist hosts use.
 - **IND$FILE file transfer** to and from TSO (at READY or inside ISPF), VM/CMS and CICS, with progress and cancel.
+- **An mvsMF dataset browser** (feature preview) for MVS 3.8j hosts running mvsMF: list, download, upload and delete
+  dataset members without touching the 3270 screen.
 - **Models 2 to 5**, custom oversize screens, extended colour, and 41 host code pages.
 - **A Vista TN3270-style keyboard**, rectangular selection, and margin-aware paste.
 - **An on-screen keypad** for PF1–PF24, PA1–PA3, Attn, Clear, Reset and the rest, docked to the bottom or the
@@ -132,7 +134,8 @@ these notices in full under **About LizTerm** — in a session window's Help men
 
 ## Documentation
 
-- [User guide](docs/user-guide.md): keyboard, profiles, TLS, file transfer, screen capture, wire logs.
+- [User guide](docs/user-guide.md): keyboard, profiles, TLS, file transfer, the mvsMF Browser, screen capture, wire
+  logs.
 - [Changelog](CHANGELOG.md): what changed in each release.
 - [Development](docs/development.md): building from source, tests, conventions.
 - [Engines](docs/engines.md): how the bundled b3270 is built and verified.
