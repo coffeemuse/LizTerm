@@ -5,6 +5,10 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **A clearer message when the emulation engine stops.** The engine reports some problems as fatal and then exits.
+  LizTerm used to show the problem alone, and the session would vanish a moment later with nothing connecting the
+  two. It now says that the engine stopped and repeats its explanation
+  ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
 - **Binary uploads to MVS/CE work.** File transfers now use a 2500-byte buffer unless you set another size under
   **Advanced**. With the larger size used before, MVS/CE dropped binary uploads at the end, showed its logon screen and
   left the TSO user logged on ([#137](https://github.com/coffeemuse/LizTerm/issues/137)).

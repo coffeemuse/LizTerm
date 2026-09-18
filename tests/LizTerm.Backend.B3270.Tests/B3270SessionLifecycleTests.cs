@@ -153,6 +153,75 @@ public class B3270SessionLifecycleTests
         Assert.Equal(0, session.PendingCount);
     }
 
+    /// <summary>b3270 exits after a fatal ui-error, so the fault that follows should carry the engine's own
+    /// account of why rather than the generic unexplained-exit sentence. Before #139 the fatal flag was parsed
+    /// and never read, and a user editing in ISPF got a protocol error and a vanished session with nothing
+    /// tying the two together.</summary>
+    [Fact]
+    public async Task A_fatal_ui_error_becomes_the_reason_in_the_fault_that_follows()
+    {
+        var fake = new FakeB3270Process { RunResponder = _ => [] };
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(CancellationToken.None);
+        var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, f) => faulted.TrySetResult(f);
+
+        // The fake's stdout is a queue drained in order, so the reader sees the ui-error before the EOF.
+        fake.Emit("""{"ui-error":{"fatal":true,"text":"JSON parse error: line 1, column 7: unexpected character","operation":"run"}}""");
+        fake.Exit(1);
+
+        var fault = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Contains("JSON parse error: line 1, column 7: unexpected character", fault.Message);
+        Assert.DoesNotContain("exited unexpectedly", fault.Message);
+    }
+
+    /// <summary>A non-fatal ui-error is the engine rejecting one action, not a death sentence: it must not be
+    /// hung on the next exit as its cause.</summary>
+    [Fact]
+    public async Task A_non_fatal_ui_error_is_not_blamed_for_a_later_exit()
+    {
+        var fake = new FakeB3270Process { RunResponder = _ => [] };
+        var session = new B3270Session(Profile, () => fake);
+        await session.StartProcessAsync(CancellationToken.None);
+        var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, f) => faulted.TrySetResult(f);
+
+        fake.Emit("""{"ui-error":{"fatal":false,"text":"Element 0: Not an object","operation":"run"}}""");
+        fake.Exit(1);
+
+        var fault = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Contains("exited unexpectedly", fault.Message);
+        Assert.DoesNotContain("Not an object", fault.Message);
+    }
+
+    /// <summary>A fatal ui-error belongs to the process that reported it. A fresh engine that dies for its own
+    /// reasons must not inherit the dead one's excuse.</summary>
+    [Fact]
+    public async Task A_fatal_ui_error_does_not_outlive_the_process_that_reported_it()
+    {
+        var first = new FakeB3270Process { RunResponder = _ => [] };
+        var second = new FakeB3270Process { RunResponder = _ => [] };
+        var queue = new Queue<FakeB3270Process>([first, second]);
+        var session = new B3270Session(Profile, queue.Dequeue);
+        await session.StartProcessAsync(CancellationToken.None);
+        var faults = new List<BackendFault>();
+        var faultsLock = new object();
+        int FaultCount() { lock (faultsLock) return faults.Count; }
+        session.Faulted += (_, f) => { lock (faultsLock) faults.Add(f); };
+
+        first.Emit("""{"ui-error":{"fatal":true,"text":"JSON parse error: line 1, column 7: unexpected character","operation":"run"}}""");
+        first.Exit(1);
+        await Wait.UntilAsync(() => FaultCount() == 1, "first fault");
+
+        await session.StartProcessAsync(CancellationToken.None);
+        second.Exit(1);
+        await Wait.UntilAsync(() => FaultCount() == 2, "second fault");
+
+        BackendFault Second() { lock (faultsLock) return faults[1]; }
+        Assert.Contains("exited unexpectedly", Second().Message);
+        Assert.DoesNotContain("JSON parse error", Second().Message);
+    }
+
     [Fact]
     public async Task Dispose_sends_quit_and_does_not_fault()
     {

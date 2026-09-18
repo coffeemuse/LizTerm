@@ -157,6 +157,35 @@ public class B3270SessionStateTests
     }
 
     [Fact]
+    public async Task Non_fatal_ui_error_raises_host_message()
+    {
+        var (session, fake) = await StartAsync();
+        string? message = null;
+        // The reader thread writes this; Volatile pairs the release with the test thread's acquire read below.
+        session.HostMessage += (_, m) => Volatile.Write(ref message, m);
+        fake.Emit("""{"ui-error":{"fatal":false,"text":"Element 0: Not an object","operation":"run","member":"actions"}}""");
+        await Wait.UntilAsync(() => Volatile.Read(ref message) == "Protocol error: Element 0: Not an object", "ui-error");
+    }
+
+    /// <summary>b3270 exits after a fatal ui-error, so the message that announces one has to say so. Reporting it
+    /// as a bare "Protocol error" left the session vanishing underneath a line of text that never mentioned the
+    /// engine (#139): whether the user then saw this or the fault that follows was down to which landed last.</summary>
+    [Fact]
+    public async Task Fatal_ui_error_says_the_engine_is_stopping()
+    {
+        var (session, fake) = await StartAsync();
+        string? message = null;
+        // The reader thread writes this; Volatile pairs the release with the test thread's acquire read below.
+        session.HostMessage += (_, m) => Volatile.Write(ref message, m);
+        fake.Emit("""{"ui-error":{"fatal":true,"text":"JSON parse error: line 1, column 7: unexpected character","operation":"run"}}""");
+        await Wait.UntilAsync(() => Volatile.Read(ref message) is not null, "ui-error");
+        var text = Volatile.Read(ref message)!;
+        Assert.Contains("JSON parse error: line 1, column 7: unexpected character", text);
+        Assert.Contains("stopping", text);
+        Assert.DoesNotContain("Protocol error:", text);
+    }
+
+    [Fact]
     public async Task Connect_sets_verify_then_connects_with_host_string()
     {
         var (session, fake) = await StartAsync();

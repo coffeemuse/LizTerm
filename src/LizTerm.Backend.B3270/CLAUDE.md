@@ -43,6 +43,12 @@ in `src/LizTerm.Core/CLAUDE.md`; how the engine binary is built and located is i
   `UnknownIndication`. `screen-mode`, `erase` and `screen` mutate the buffer and publish a snapshot; `oia` updates
   `KeyboardStatus`; `connection` and `tls` update state; `popup` and `ui-error` surface as `HostMessage`; `bell`
   raises `BellRang`, which carries nothing.
+- A `ui-error` is b3270 rejecting something **we** wrote to its stdin, never our own parser failing on an inbound
+  line — `IndicationParser.TryParse` skips a line it cannot parse and tells nobody. A **fatal** one is also an
+  announcement that the engine is exiting, so `Handle` records its text in `_fatalUiError` and `OnProcessEnded`
+  uses it as the `BackendFault` message in place of the generic "exited unexpectedly". The field is cleared by
+  each `StartProcessAsync`, so a fresh engine never inherits the dead one's excuse. Without that, the `ui-error`
+  text and the fault raced for the App's `ErrorMessage` and the user saw whichever landed last (#139).
 - Rows and columns arrive one-based and are converted to zero-based only in `ApplyScreen`. b3270's `MoveCursor`
   action is already zero-origin, so `MoveCursorAsync` passes coordinates through unchanged.
 - Outbound, `RunOperation.Serialize(tag, actions)` writes a `{"run":{"r-tag":..,"actions":[..]}}` line under a write

@@ -56,6 +56,14 @@ public sealed class B3270Session : IEmulatorSession
     /// so an action sent to a dead engine reports the fault rather than a session that was never started.</summary>
     private volatile BackendFault? _fault;
 
+    /// <summary>The text of the last fatal <c>ui-error</c>, if one has arrived; cleared by the next start. b3270
+    /// exits after a fatal ui-error, so this is the reason for the exit that is about to follow, and holding it
+    /// here lets <see cref="OnProcessEnded"/> report why instead of a bare "exited unexpectedly" (#139).</summary>
+    private volatile string? _fatalUiError;
+
+    private const string FatalUiErrorMessage = "The emulator engine (b3270) reported a fatal protocol error and is stopping: ";
+    private const string FaultAfterUiErrorMessage = "The emulator engine (b3270) stopped after a fatal protocol error: ";
+
     /// <summary>How long <see cref="DisconnectAsync"/> waits for b3270 to report the connection closed
     /// after accepting the action. Tests shorten it.</summary>
     internal TimeSpan DisconnectTimeout { get; set; } = TimeSpan.FromSeconds(5);
@@ -204,6 +212,7 @@ public sealed class B3270Session : IEmulatorSession
         _hello = helloSource;
         _process = process;
         _fault = null;
+        _fatalUiError = null;
         try
         {
             process.Start(BuildArguments(Profile));
@@ -300,7 +309,10 @@ public sealed class B3270Session : IEmulatorSession
 
         try
         {
-            var fault = new BackendFault("The emulator engine (b3270) exited unexpectedly.", process.StderrTail, exitCode);
+            var fault = new BackendFault(
+                _fatalUiError is { } reason ? FaultAfterUiErrorMessage + reason : "The emulator engine (b3270) exited unexpectedly.",
+                process.StderrTail,
+                exitCode);
             _hello?.TrySetException(new BackendUnavailableException(fault.Message + " stderr: " + string.Join(" | ", process.StderrTail)));
 
             SetConnectionState(ConnectionState.Disconnected);
@@ -533,6 +545,13 @@ public sealed class B3270Session : IEmulatorSession
                 break;
             case RunResultIndication result when result.Tag is not null && _pending.TryRemove(result.Tag, out var tcs):
                 tcs.TrySetResult(result);
+                break;
+            case UiErrorIndication { Fatal: true } error:
+                // b3270 does not carry on after one of these: it writes the ui-error and exits. Recording the
+                // text lets the fault that follows say why (OnProcessEnded), and the message here says the
+                // session is going rather than leaving it to disappear under a bare "Protocol error" (#139).
+                _fatalUiError = error.Text;
+                HostMessage?.Invoke(this, FatalUiErrorMessage + error.Text);
                 break;
             case UiErrorIndication error:
                 HostMessage?.Invoke(this, "Protocol error: " + error.Text);
