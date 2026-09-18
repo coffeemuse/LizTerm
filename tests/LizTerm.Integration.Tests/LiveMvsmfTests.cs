@@ -140,7 +140,12 @@ public class LiveMvsmfTests
 
         await service.GetServerInfoAsync(ct);  // 401 on the dead token, then a fresh sign-in
 
-        Assert.Equal(new HostSessionToken?[] { null, first }, holding.Asked);
+        // Each of the two provider-driving calls asks once with no rejected token before it ever tries the
+        // request: ListDatasetsAsync's ask (Held is still null) signs in, and GetServerInfoAsync's own leading
+        // ask (Held is "first") is answered from the cache before the request comes back 401 and it asks again
+        // naming "first" (MvsmfAuthTests.An_expired_token_signs_in_again_and_repeats_the_request_once pins the
+        // same two-ask shape for a single call).
+        Assert.Equal(new HostSessionToken?[] { null, null, first }, holding.Asked);
         Assert.NotSame(first, holding.Held);
         await service.SignOutAsync(holding.Held!, ct);
     }
