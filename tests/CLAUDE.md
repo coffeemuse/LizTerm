@@ -58,11 +58,11 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   `Available`, what `CanRing` answers, and an optional `Exception`); `FakeReleaseChecker` (`Result`, an optional
   `Exception`, `Calls`, and a `Gate` that holds every answer back until the test completes it, for what happens
   while a request is out); and `FakeCredentialPrompt` (an `Answers` queue, then `Answer`, where null plays Cancel;
-  `Calls` as `ask:<userid>:<IsRetry>`; `LastRequest`; a `Gate` that holds every prompt open; `AskCount`).
+  `Calls` as `ask:<userid>:<Reason>`; `LastRequest`; a `Gate` that holds every prompt open; `AskCount`).
 - `FakeHostFileService` (`Fakes/`) is an in-memory mvsMF: `AddDataset` seeds `Datasets` and `Members`, and `Text`
   and `Binary` hold contents keyed by `HostPath.ToString()`. `Calls` records `list:<pattern>`, `members:<dsn>`,
-  `readtext:<path>`, `readbinary:<path>`, `writetext:<path>:<lines>`, `writebinary:<path>`, `delete:<path>` and
-  `info`; a `Failures` entry under the same key, without the line count, makes that call throw. `StoreTransform`
+  `readtext:<path>`, `readbinary:<path>`, `writetext:<path>:<lines>`, `writebinary:<path>`, `delete:<path>`,
+  `info` and `signout`; a `Failures` entry under the same key, without the line count, makes that call throw. `StoreTransform`
   ((path, lines) → what is stored) plays a host that alters what a text write keeps, for a read-back that differs.
   `Gate` holds every call after it is logged (a call still honours its token), `MaxConcurrent` is the most calls seen running at
   once, and `Disposed` says whether the service was released. The operations take a lock the test cannot: seed

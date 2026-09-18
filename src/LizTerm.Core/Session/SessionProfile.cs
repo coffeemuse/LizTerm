@@ -38,7 +38,8 @@ namespace LizTerm.Core.Session;
 /// <param name="HostFilesUrl">The z/OSMF REST base URL (normalised, e.g. <c>http://host:8080/zosmf</c>) that opens the
 /// dataset browser for this profile, or null for none.</param>
 /// <param name="HostFilesUserid">The userid the REST sign-in prompt starts with, or null. Never a password: the
-/// password is asked for once per session and held in memory only.</param>
+/// password is asked for at the prompt, used once to sign in, and dropped; only the session token it buys is held
+/// in memory, and only until the session window closes.</param>
 /// <param name="HostFilesPinnedCertificate">The certificate trusted for <paramref name="HostFilesUrl"/> when it is https,
 /// independent of <paramref name="PinnedCertificate"/>, which belongs to the 3270 host and port.</param>
 public sealed record SessionProfile(

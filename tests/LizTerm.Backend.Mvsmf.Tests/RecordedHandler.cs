@@ -7,7 +7,7 @@ using System.Text;
 
 namespace LizTerm.Backend.Mvsmf.Tests;
 
-internal sealed record RecordedRequest(HttpMethod Method, Uri Uri, string? Authorization, string? DataType, string? ContentType, byte[]? Body, IReadOnlyList<string> HeaderNames)
+internal sealed record RecordedRequest(HttpMethod Method, Uri Uri, string? Authorization, string? Cookie, string? Csrf, string? DataType, string? ContentType, byte[]? Body, IReadOnlyList<string> HeaderNames)
 {
     public string BodyText => Body is null ? "" : Encoding.Latin1.GetString(Body);
 }
@@ -40,6 +40,8 @@ internal sealed class RecordedHandler : HttpMessageHandler
             request.Method,
             request.RequestUri!,
             request.Headers.Authorization?.ToString(),
+            request.Headers.TryGetValues("Cookie", out var cookies) ? string.Join("; ", cookies) : null,
+            request.Headers.TryGetValues("X-CSRF-ZOSMF-HEADER", out var csrf) ? string.Join(",", csrf) : null,
             request.Headers.TryGetValues("X-IBM-Data-Type", out var types) ? string.Join(",", types) : null,
             request.Content?.Headers.ContentType?.ToString(),
             body,

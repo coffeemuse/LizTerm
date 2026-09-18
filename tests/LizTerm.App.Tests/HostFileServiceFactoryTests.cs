@@ -14,8 +14,8 @@ namespace LizTerm.App.Tests;
 /// thing about that backend the App owns.</summary>
 public class HostFileServiceFactoryTests
 {
-    private static ValueTask<HostCredentials?> Anyone(HostCredentialRequest request, CancellationToken token) =>
-        ValueTask.FromResult<HostCredentials?>(new HostCredentials("U", "p"));
+    private static ValueTask<HostSessionToken?> Anyone(HostTokenRequest request, HostSignIn signIn, CancellationToken token) =>
+        ValueTask.FromResult<HostSessionToken?>(new HostSessionToken("tok"));
 
     [Fact]
     public void Create_builds_the_mvsmf_service()
@@ -41,7 +41,7 @@ public class HostFileServiceFactoryTests
     }
 
     [Fact]
-    public async Task The_tester_signs_in_through_the_prompt_and_reports_a_host_it_cannot_reach()
+    public async Task The_tester_reports_a_host_it_cannot_reach_without_asking_for_a_password()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
@@ -53,8 +53,8 @@ public class HostFileServiceFactoryTests
         var ex = await Assert.ThrowsAsync<HostFileException>(() =>
             tester("MVS/CE", new Uri($"http://127.0.0.1:{port}/zosmf"), "MVSCE02", null, TestContext.Current.CancellationToken));
 
+        // The probe is the first request, and it fails before any sign-in is needed.
         Assert.Equal(HostFileErrorKind.Unreachable, ex.Kind);
-        Assert.Equal(new[] { "ask:MVSCE02:False" }, prompt.Calls);
-        Assert.Equal("MVS/CE", prompt.LastRequest!.ProfileName);
+        Assert.Empty(prompt.Calls);
     }
 }

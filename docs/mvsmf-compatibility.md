@@ -12,12 +12,14 @@ against disagree, and what LizTerm does about each. When a newer mvsMF is availa
 | Host | MVS/CE, HTTPD, probed 2026-09-18 |
 | Source read alongside | mvsMF at commit `cf4d6d5` (1.1.1-dev, after the 1.1.0 release of 2026-09-14), `src/`, `docs/endpoints/`, `samplib/` and `CHANGELOG.md` |
 | Previous baseline | `1.0.0-dev`, probed 2026-09-16; the entries it needed are under *Resolved on 1.1.0* |
+| Minimum supported | 1.1.0 — see the user guide's "Signing in" |
 
 ## How to re-check a new build
 
 1. Point `LIZTERM_MVSMF_*` at the new build (see `docs/development.md`).
-2. Re-record every fixture listed in `tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md` with
-   `tools/record-mvsmf-fixture.sh`, and run `dotnet test tests/LizTerm.Backend.Mvsmf.Tests`. A test that now fails
+2. Re-record every recorded fixture listed in `tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md` with
+   `tools/record-mvsmf-fixture.sh` (not the one the README marks hand-written), and run
+   `dotnet test tests/LizTerm.Backend.Mvsmf.Tests`. A test that now fails
    is named after the entry below whose behaviour changed.
 3. Run the live tests: `dotnet test tests/LizTerm.Integration.Tests --filter "FullyQualifiedName~LiveMvsmfTests"`.
 4. For each entry, probe the behaviour by hand where no test covers it, then update the entry. When a workaround is
@@ -29,24 +31,22 @@ Entries marked *log only* change nothing in the code.
 
 ## Entries
 
-### `basic-auth-every-request`
-
-- **Docs and source:** any Basic-authenticated request is answered with `Set-Cookie: LtpaToken2=…`, and a client
-  holding the cookie need not resend credentials; `POST /zosmf/services/authenticate` issues one and `DELETE`
-  invalidates it.
-- **Observed:** 1.1.0 does all of that (1.0.0-dev set no cookie).
-- **LizTerm:** this release still keeps no cookies (`UseCookies = false`) and sends Basic credentials on every
-  request. Token sign-in is the next phase of #17. Fixtures record the cookie line with its value replaced by
-  `<token>`.
-
 ### `info-requires-auth`
 
 - **Docs:** `docs/endpoints/info.md` says `GET /zosmf/info` needs no authentication.
 - **Source and observed:** 401 without credentials, with `WWW-Authenticate: Basic realm="<SMF ID>"`. This is by
   design: `samplib/mvsmfprm` says `/info` has been authenticated like every other route since mvsMF #324 and that
   the anonymous liveness probe never existed. The doc is stale.
-- **LizTerm:** `/info` goes through the same authenticated path as everything else. An unauthenticated 401 still
-  proves the URL reaches an mvsMF, which the next phase uses.
+- **LizTerm:** `/info` goes through the same authenticated path as everything else. The Test button first sends an
+  unauthenticated `GET /info`; a 401 proves the URL reaches an mvsMF, so it asks for a password only then.
+
+### `session-idle-timeout` (log only)
+
+- **Source:** httpd expires an idle session after `SESSION_TIMEOUT` (default 30 minutes), refreshed on every
+  request; there is no fixed maximum age yet (mvsMF/httpd #118).
+- **LizTerm:** holds the token for the session window. A 401 from an operation is treated as an expired session:
+  LizTerm signs in again with the held userid (prompting "Your mvsMF session has expired") and retries the
+  operation once.
 
 ### `info-version-fields`
 
@@ -155,6 +155,8 @@ Entries marked *log only* change nothing in the code.
 Entries the 1.0.0-dev baseline needed and 1.1.0 does not. Each code entry was removed with its code and test on
 2026-09-18; the log-only ones were simply struck.
 
+- `basic-auth-every-request`: LizTerm now signs in once with `POST /zosmf/services/authenticate`, holds the
+  `LtpaToken2` cookie, and sends it (never `Authorization`) on every request; the tag is gone from the code.
 - `no-www-authenticate`: a 401 now carries `WWW-Authenticate`.
 - `dataset-list-morerows-false`: `moreRows` is now absent on a complete list, as the source says. The refusal of a
   `moreRows: true` stays as plain code under `no-paging`.

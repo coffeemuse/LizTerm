@@ -10,7 +10,8 @@ using System.Text;
 
 namespace LizTerm.Backend.Mvsmf.Tests;
 
-/// <summary>An HTTPS server on loopback that answers every request with one JSON body.</summary>
+/// <summary>An HTTPS server on loopback that answers a login with a cookie and every other request with one JSON
+/// body.</summary>
 internal sealed class LoopbackHttpsServer : IAsyncDisposable
 {
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
@@ -59,9 +60,13 @@ internal sealed class LoopbackHttpsServer : IAsyncDisposable
                     if (read == 0) return;
                     seen.AddRange(buffer.Take(read));
                 }
-                var body = Encoding.UTF8.GetBytes(json);
+                var requestLine = Encoding.ASCII.GetString(seen.ToArray()).Split("\r\n")[0];
+                var isLogin = requestLine.StartsWith("POST ", StringComparison.Ordinal)
+                    && requestLine.Contains("/services/authenticate", StringComparison.Ordinal);
+                var body = Encoding.UTF8.GetBytes(isLogin ? """{"returnCode":0,"reasonCode":0,"message":"Success."}""" : json);
+                var cookie = isLogin ? "Set-Cookie: LtpaToken2=loopback; Path=/\r\n" : "";
                 var head = Encoding.ASCII.GetBytes(
-                    $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
+                    $"HTTP/1.1 200 OK\r\n{cookie}Content-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
                 await tls.WriteAsync(head);
                 await tls.WriteAsync(body);
                 await tls.FlushAsync();

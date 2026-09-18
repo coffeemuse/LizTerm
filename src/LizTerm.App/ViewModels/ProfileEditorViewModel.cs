@@ -530,7 +530,9 @@ public partial class ProfileEditorViewModel : ObservableObject
         {
             var name = string.IsNullOrWhiteSpace(Name) ? "This profile" : Name.Trim();
             var info = await _tester!(name, url, userid, MvsmfPinnedCertificate, CancellationToken.None);
-            result = $"✓ Connected: {info.Product} {info.ProductVersion} on {info.SystemVersion}";
+            result = IsSupportedVersion(info.ProductVersion)
+                ? $"✓ Connected: {info.Product} {info.ProductVersion} on {info.SystemVersion}"
+                : $"✗ mvsMF {info.ProductVersion} is not supported; LizTerm needs mvsMF 1.1.0 or later.";
         }
         catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.CertificateRejected)
         {
@@ -545,6 +547,17 @@ public partial class ProfileEditorViewModel : ObservableObject
             IsTestingMvsmf = false;
         }
         if (generation == _testGeneration) MvsmfTestResult = result;
+    }
+
+    /// <summary>Whether a reported version is at least 1.1.0 (spec §4.5). Host-neutral: only the major.minor head,
+    /// before any "-dev" or similar suffix, is parsed; anything that does not parse is unsupported.</summary>
+    private static bool IsSupportedVersion(string version)
+    {
+        var head = version.Split('-', 2)[0];
+        var parts = head.Split('.');
+        if (parts.Length < 2 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor))
+            return false;
+        return major > 1 || (major == 1 && minor >= 1);
     }
 
     /// <summary>The REST URL (null when blank) and userid as Save and Test read them; on a refusal, the problem and

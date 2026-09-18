@@ -281,8 +281,8 @@ host only answers on its next turn, so if it has stalled, closing the dialog aga
 the transfer ends. The dialog remembers your last transfer for that window.</p>
 <h2 id="mvsmf-browser-preview">mvsMF Browser (preview)</h2>
 <p><strong>This is a feature preview.</strong> It works, but it is new and still being refined, and it has been tested against one
-build of mvsMF (1.1.0). It follows that build's behaviour; older mvsMF builds are not supported. Please report what
-you find
+build of mvsMF (1.1.0). It follows that build's behaviour; older builds are not supported (see
+<a href="#signing-in">Signing in</a>). Please report what you find
 (<a href="https://github.com/coffeemuse/LizTerm/issues/new/choose">Help &gt; Report an Issue...</a>).</p>
 <p><a href="https://github.com/mvslovers/mvsmf">mvsMF</a> is a z/OSMF-style REST server for MVS 3.8j. The <strong>mvsMF Browser</strong> uses
 it to list datasets and members, download and upload them, and delete members, without typing anything on the
@@ -294,21 +294,24 @@ session to be logged on, or even connected.</p>
 <li><strong>URL</strong> is the address of the mvsMF server, for example <code>http://mvs.example:8080</code>. When the address has no path,
 LizTerm adds <code>/zosmf</code>. Only <code>http://</code> and <code>https://</code> addresses are accepted.</li>
 <li><strong>Userid</strong> is optional. It fills in the sign-in window, and the browser starts by listing <code>USERID.**</code>.</li>
-<li><strong>Test</strong> signs in and asks the server what it is, then shows the answer (for example
-<strong>✓ Connected: mvsMF 1.1.0 on MVS 3.8j</strong>) or what went wrong. A sign-in made for <strong>Test</strong> is forgotten right
-after.</li>
+<li><strong>Test</strong> checks the server is reachable, then signs in and asks it what it is, showing the answer (for example
+<strong>✓ Connected: mvsMF 1.1.0 on MVS 3.8j</strong>) or what went wrong. If the URL cannot be reached, it says so without
+asking for a password. A sign-in made for <strong>Test</strong> is ended right after.</li>
 </ul>
 <p>Once a profile has a URL, its session window has <strong>File &gt; mvsMF Browser...</strong>. The item has no keyboard shortcut, so
 it never takes a key the host needs. Choosing it again brings the open browser back to the front: each session
 window has one browser, which closes when the session window does. A change to the URL takes effect the next time
 you open the session.</p>
 <h3 id="signing-in">Signing in</h3>
-<p>The first time the browser reaches the host, it asks for your userid and password. The password is kept in memory only, for as
-long as the session window stays open, and is never saved to disk. Every browser operation in that session uses it,
-so you sign in once. If the host rejects it, the window asks again. LizTerm cannot guarantee the password is wiped
-from memory when the window closes, because .NET gives no way to erase a string.</p>
-<p>mvsMF sends your password with every request. Over <code>http://</code> it crosses the network unencrypted, so keep plain
-<code>http</code> to a network you trust, or put mvsMF behind a TLS reverse proxy and use an <code>https://</code> URL. An <code>https</code>
+<p><strong>LizTerm needs mvsMF 1.1.0 or later.</strong> Older builds have no sign-in service, and LizTerm says so rather than
+connecting.</p>
+<p>The first time the browser reaches the host, it asks for your userid and password. LizTerm uses them once to sign
+in, then keeps only a session token in memory; the password is not stored. Every browser operation in that session
+uses the token, so you sign in once. mvsMF forgets an idle session after about 30 minutes, and then LizTerm asks
+you to sign in again. Closing the session window signs you out. LizTerm cannot guarantee the password is wiped from
+memory, because .NET gives no way to erase a string.</p>
+<p>Your password crosses the network once, at sign-in. Over <code>http://</code> it is unencrypted, so keep plain <code>http</code> to a
+network you trust, or put mvsMF behind a TLS reverse proxy and use an <code>https://</code> URL. An <code>https</code>
 certificate is checked the same way as a TLS session's (see <a href="#tls-and-certificates">TLS and certificates</a>): an
 untrusted one opens the <strong>Certificate not verified</strong> window, and <strong>Trust this certificate</strong> pins it to the profile.
 The mvsMF pin is kept apart from the 3270 one, and <strong>Forget</strong> on the <strong>mvsMF</strong> tab removes it. An mvsMF pin trusts
@@ -491,8 +494,9 @@ the pin.</li>
 underlying x3270 engine does not send a server name (<a href="https://github.com/coffeemuse/LizTerm/issues/12">#12</a>).</li>
 <li><strong>No keymap editing yet</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/18">#18</a>).</li>
 <li><strong>No printer sessions or scripting.</strong></li>
-<li><strong>The mvsMF Browser is a preview</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/17">#17</a>). It has been tested
-against one build of mvsMF (1.1.0). Very long dataset or member lists arrive in one piece, with no paging. It
+<li><strong>The mvsMF Browser is a preview</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/17">#17</a>). Older mvsMF builds
+are not supported (see <a href="#signing-in">Signing in</a>). Very long dataset or member lists arrive in one piece, with no
+paging. It
 can't create, rename or delete datasets, submit jobs, or browse the z/OS UNIX file system.</li>
 </ul>
 </body>

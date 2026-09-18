@@ -736,21 +736,61 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
 ## mvsMF Browser
 
 - `HostFileServiceFactory` also reads a typed URL for the profile editor (`TryNormalizeUrl`) and builds the
-  editor's one-shot `HostFileTester`, which signs in through a throwaway `CredentialHolder` and forgets the sign-in
-  afterwards.
+  editor's one-shot `HostFileTester`, which **probes `/info` before it asks for anything**: a host that answers
+  anonymously is reported without a prompt at all, and only a 401 sends the tester through a throwaway
+  `SignInHolder`, which signs out again in a `finally` so a failed read leaves no session behind. It is the one
+  place App names `MvsmfFileService` directly rather than going through `Create`, because `ProbeAsync` is a backend
+  method and not on `IHostFileService`.
 - `App.OpenSession` attaches a `HostFileAccess` to a session window whose profile has a `HostFilesUrl`. The access
-  lives as long as the window and holds the session's `CredentialHolder` and the certificate trusted for the
+  lives as long as the window and holds the session's `SignInHolder` and the certificate trusted for the
   session (`Pin`: the profile's REST pin, or one accepted since). A saved profile's remembered pin is written back
   through `ProfileStore.Update`, like the 3270 pin; an ad hoc profile has nowhere to keep one, so it is not offered
   Remember. A save that fails (`IOException`, `UnauthorizedAccessException`, `InvalidDataException`) keeps the pin
   for the session and raises `HostFileAccess.PinSaveFailed`; the browser shows it as the `⚠` status line once the
-  operation ends, and unsubscribes when disposed. The session window closes its browser, then forgets the sign-in,
-  when it closes.
-- `CredentialHolder` is the only store of the REST password. Its prompts are serialised, so operations that start
-  or are refused together share one prompt, and a refused pair is asked about again only while it is still the
-  current one (`HostCredentialRequest.Rejected`). A cancelled prompt answers every operation that was already
-  waiting when it was cancelled (a cancellation counter), instead of each one asking in turn; an operation that
-  starts later asks afresh.
+  operation ends, and unsubscribes when disposed. The session window closes its browser, then signs out, when it
+  closes: `HostFileAccess.SignOutAsync` builds a service for the URL (over a `NullPrompt`, which throws, because the
+  token is passed in and the prompt can never be reached) and ends the session.
+- **That sign-out splits across two threads on purpose.** `SignOutAsync` takes the token out of the holder
+  *synchronously*, on the caller's thread, so `IsSignedIn` is false the moment the window closes; then it hands the
+  DELETE to `Task.Run`, and `OnClosed` fire-and-forgets the result. The five-second cap (`SignInHolder.SignOutCap`)
+  lives in `SignInHolder.EndAsync`, which every sign-out goes through — the window's and the Test button's — as a
+  linked `CancellationTokenSource` on the request, **not** a `WaitAsync` around the task: only cancelling the
+  request itself stops a DELETE to a host that has stopped answering, which would otherwise run on to the backend's
+  30 s idle timeout. The backend swallows transport failures and its own idle timeout; `EndAsync` swallows the cap
+  and lets the caller's own cancellation through. The hand-off is not
+  tidiness: nothing in this codebase uses `ConfigureAwait(false)`, so a continuation started on the UI thread is
+  posted back to the Avalonia dispatcher — and on the **last** window `base.OnClosed` leads to `Shutdown()`, which
+  stops that dispatcher before the queued continuation runs. Left on the UI thread the response would never be read
+  and the service would never be disposed, precisely when signing out matters most.
+  `B3270Session.ConnectAsync` escapes the same trap the same way.
+- **`SignInHolder` holds a session token, never the password.** The password exists in exactly two places: the
+  sign-in window's text box, and the `HostCredentials` it hands to the backend's `SignInAsync`. The holder asks
+  once, trades the answer for a token through the `HostSignIn` the backend passes its provider, and drops the
+  credentials; nothing else in App ever sees a password, and no log, message or `ToString()` may carry one.
+- **Known leak:** a session window closed while a login POST is still in flight stores the token that POST wins in a
+  holder nobody signs out any more, so that session lives until the host reaps it at its idle timeout — the same
+  outcome as killing the app.
+- Its prompts are serialised, so operations that start or are refused together share one prompt, and a refused
+  token is asked about again only while it is still the current one (`HostTokenRequest.Rejected`); a request naming
+  a token another operation has already replaced is answered with the newer one. A prompt that ends without a
+  token — cancelled, or its sign-in failed for anything but the password (unreachable, certificate, no sign-in
+  route) — answers every operation that was already waiting on it (a counter plus the failure), so they fail with
+  the same outcome instead of each asking in turn for a password that was just typed; an operation that starts
+  later asks afresh.
+- **The holder owns the refused-password loop**, which is why `SignInReason` has three members rather than a
+  boolean. The backend no longer tells a bad password from an expired token — a bad password is caught inside
+  `SignInAsync` — so the reason is the loop's own variable: the first ask is `First`, or `Expired` ("your mvsMF
+  session has expired") when the caller named a rejected token, and every ask after an `Unauthenticated` from
+  `signIn` is `Rejected` ("the userid or password was not accepted"), until the host takes it or the user cancels.
+  Blaming the password for an expired session, which the old single retry line did, is the bug this replaced.
+- `_lastUserid` is written **as soon as the prompt answers**, not once the host accepts it: a sign-in that fails for
+  anything other than the password — an unreachable host, a host with no sign-in route — must still prefill the
+  userid that was just typed.
+- **An untrusted `https` certificate is refused before the password is asked for.** The backend's first contact
+  with an `https` host is an anonymous `GET /info` (`MvsmfFileService.CheckTrustAsync`), so the refusal reaches
+  `HostFileConnection` while the sign-in prompt is still closed; after Connect Anyway the operation runs again on a
+  service built for that certificate and signs in once. Nothing holds the password across the certificate prompt,
+  which is the constraint that made the earlier design cost two prompts.
 - **File > mvsMF Browser...** (`mvsMF _Browser...`, no shortcut: the menu rule) is hidden until `AttachHostFiles`
   shows both the classic item and the held native item. It does not need the 3270 connection. A profile URL that
   cannot be used goes to the session's error line rather than opening a browser.
@@ -772,7 +812,7 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   context; progress goes through `dispatch`, and a closed `RowProgress` drops late reports. Questions are an inline
   `ConfirmationRequest` strip, awaited by the operation that asked; a disposed browser shows none and answers
   Cancel.
-- **Connection failures** (`IsConnectionFailure`: cannot reach, sign-in, certificate) are the red banner with
+- **Connection failures** (`IsConnectionFailure`: cannot reach, sign-in, certificate, unsupported host) are the red banner with
   Retry; everything else is the status line or a row's status. They stop the whole operation. A download batch
   cancels its other transfers through a linked token and rethrows the first failure once; its rows say
   `– Stopped`, told apart from the user's `– Cancelled` by the outer token. An upload stops at its row, and a

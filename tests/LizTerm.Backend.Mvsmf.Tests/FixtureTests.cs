@@ -31,9 +31,12 @@ public class FixtureTests
         foreach (var file in Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Fixtures"), "*.http"))
         {
             var text = File.ReadAllText(file);
-            Assert.DoesNotContain("Authorization", text, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("password", text, StringComparison.OrdinalIgnoreCase);
-            foreach (var line in text.Split('\n').Where(l => l.StartsWith("Set-Cookie:", StringComparison.OrdinalIgnoreCase)))
+            // The body is the host's own words, and a failed login says "password"; anything LizTerm sent or was
+            // given (a credential, a token) could only be in the header block.
+            var head = text[..text.IndexOf("\n\n", StringComparison.Ordinal)];
+            Assert.DoesNotContain("Authorization", head, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("password", head, StringComparison.OrdinalIgnoreCase);
+            foreach (var line in head.Split('\n').Where(l => l.StartsWith("Set-Cookie:", StringComparison.OrdinalIgnoreCase)))
                 Assert.StartsWith("Set-Cookie: LtpaToken2=<token>;", line, StringComparison.OrdinalIgnoreCase);
         }
     }

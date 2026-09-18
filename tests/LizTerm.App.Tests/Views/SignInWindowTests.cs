@@ -12,9 +12,9 @@ namespace LizTerm.App.Tests.Views;
 
 public class SignInWindowTests
 {
-    private static SignInWindow Show(string? userid = "MVSCE02", bool retry = false)
+    private static SignInWindow Show(string? userid = "MVSCE02", SignInReason reason = SignInReason.First)
     {
-        var window = new SignInWindow(new CredentialPromptRequest("MVS/CE", "http://mvs:8080/zosmf", userid, retry));
+        var window = new SignInWindow(new CredentialPromptRequest("MVS/CE", "http://mvs:8080/zosmf", userid, reason));
         window.Show();
         return window;
     }
@@ -25,17 +25,25 @@ public class SignInWindowTests
         var window = Show();
         Assert.Equal("MVS/CE · http://mvs:8080/zosmf", window.FindControl<TextBlock>("HostText")!.Text);
         Assert.Equal("MVSCE02", window.FindControl<TextBox>("UseridBox")!.Text);
-        Assert.False(window.FindControl<TextBlock>("RetryText")!.IsVisible);
+        Assert.False(window.FindControl<TextBlock>("ReasonText")!.IsVisible);
         Assert.Equal('•', window.FindControl<TextBox>("PasswordBox")!.PasswordChar);
         Assert.Equal("Sign in to mvsMF", window.Title);
     }
 
     [AvaloniaFact]
-    public void A_retry_says_the_host_refused_with_a_mark_and_words()
+    public void A_rejected_password_says_so_with_a_mark_and_words()
     {
-        var text = Show(retry: true).FindControl<TextBlock>("RetryText")!;
+        var text = Show(reason: SignInReason.Rejected).FindControl<TextBlock>("ReasonText")!;
         Assert.True(text.IsVisible);
-        Assert.Equal("✗ The host rejected the userid or password. Try again.", text.Text);
+        Assert.Equal("✗ The userid or password was not accepted. Try again.", text.Text);
+    }
+
+    [AvaloniaFact]
+    public void An_expired_session_says_so_with_a_mark_rather_than_blaming_the_password()
+    {
+        var text = Show(reason: SignInReason.Expired).FindControl<TextBlock>("ReasonText")!;
+        Assert.True(text.IsVisible);
+        Assert.Equal("⚠ Your mvsMF session has expired. Sign in again.", text.Text);
     }
 
     [AvaloniaFact]
@@ -43,7 +51,7 @@ public class SignInWindowTests
     {
         var owner = new Window();
         owner.Show();
-        var window = new SignInWindow(new CredentialPromptRequest("MVS/CE", "http://mvs/zosmf", null, false));
+        var window = new SignInWindow(new CredentialPromptRequest("MVS/CE", "http://mvs/zosmf", null, SignInReason.First));
         var result = window.ShowDialogAbove<HostCredentials?>(owner);
         window.FindControl<TextBox>("UseridBox")!.Text = " ibmuser ";
         window.FindControl<TextBox>("PasswordBox")!.Text = "secret";
@@ -80,12 +88,12 @@ public class SignInWindowTests
     {
         var owner = new Window();
         owner.Show();
-        var cancelled = new SignInWindow(new CredentialPromptRequest("p", "u", "U", false));
+        var cancelled = new SignInWindow(new CredentialPromptRequest("p", "u", "U", SignInReason.First));
         var first = cancelled.ShowDialogAbove<HostCredentials?>(owner);
         cancelled.FindControl<Button>("CancelButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Assert.Null(await first);
 
-        var closed = new SignInWindow(new CredentialPromptRequest("p", "u", "U", false));
+        var closed = new SignInWindow(new CredentialPromptRequest("p", "u", "U", SignInReason.First));
         var second = closed.ShowDialogAbove<HostCredentials?>(owner);
         closed.Close();
         Assert.Null(await second);
@@ -96,7 +104,7 @@ public class SignInWindowTests
     {
         var owner = new Window();
         owner.Show();
-        var asking = new AvaloniaCredentialPrompt(owner).AskAsync(new CredentialPromptRequest("p", "u", "U", false));
+        var asking = new AvaloniaCredentialPrompt(owner).AskAsync(new CredentialPromptRequest("p", "u", "U", SignInReason.First));
 
         var dialog = Assert.IsType<SignInWindow>(Assert.Single(owner.OwnedWindows));
         dialog.Close();

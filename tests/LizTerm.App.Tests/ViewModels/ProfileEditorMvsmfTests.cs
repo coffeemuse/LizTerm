@@ -20,13 +20,14 @@ public class ProfileEditorMvsmfTests
         public List<(string Name, Uri Url, string? Userid, CertificatePin? Pin)> Calls { get; } = [];
         public Exception? Failure { get; set; }
         public TaskCompletionSource? Gate { get; set; }
+        public HostServerInfo Info { get; set; } = new("mvsMF", "1.1.0", "MVS 3.8j");
 
         public async Task<HostServerInfo> TestAsync(string name, Uri url, string? userid, CertificatePin? pin, CancellationToken token)
         {
             Calls.Add((name, url, userid, pin));
             if (Gate is { } gate) await gate.Task;
             if (Failure is not null) throw Failure;
-            return new HostServerInfo("mvsMF", "1.1.0", "MVS 3.8j");
+            return Info;
         }
     }
 
@@ -138,6 +139,17 @@ public class ProfileEditorMvsmfTests
     }
 
     [Fact]
+    public async Task Test_rejects_a_host_below_the_minimum_version()
+    {
+        var tester = new Tester { Info = new HostServerInfo("mvsMF", "1.0.0-dev", "MVS 3.8j") };
+        var vm = new ProfileEditorViewModel(Rest(), tester: tester.TestAsync);
+
+        await vm.TestMvsmfCommand.ExecuteAsync(null);
+
+        Assert.Equal("✗ mvsMF 1.0.0-dev is not supported; LizTerm needs mvsMF 1.1.0 or later.", vm.MvsmfTestResult);
+    }
+
+    [Fact]
     public async Task Test_uses_the_rest_pin_the_editor_shows()
     {
         var tester = new Tester();
@@ -168,6 +180,8 @@ public class ProfileEditorMvsmfTests
     [InlineData(HostFileErrorKind.Unauthenticated, "The host rejected the userid or password.", "✗ The host rejected the userid or password.")]
     [InlineData(HostFileErrorKind.Unreachable, "Server information: cannot reach the host (refused).", "✗ Server information: cannot reach the host (refused).")]
     [InlineData(HostFileErrorKind.CertificateRejected, "x", "✗ The host's certificate is not trusted. Open the mvsMF Browser from a session to review it.")]
+    [InlineData(HostFileErrorKind.Unsupported, "This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.", "✗ This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.")]
+    [InlineData(HostFileErrorKind.Unsupported, "Nothing at this URL answers as mvsMF.", "✗ Nothing at this URL answers as mvsMF.")]
     public async Task Test_failures_are_reported_in_words(HostFileErrorKind kind, string message, string expected)
     {
         var tester = new Tester { Failure = new HostFileException(kind, message) };

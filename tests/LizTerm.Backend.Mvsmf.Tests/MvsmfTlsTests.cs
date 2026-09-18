@@ -16,7 +16,7 @@ public class MvsmfTlsTests
 
     private static MvsmfFileService Service(int port, CertificatePin? pin) => new(
         new MvsmfOptions(new Uri($"https://localhost:{port}/zosmf"), pin),
-        MvsmfAuthTests.Answering([], new HostCredentials("U", "p")));
+        MvsmfAuthTests.Providing([], new HostCredentials("U", "p")));
 
     private static CertificatePin PinFor(System.Security.Cryptography.X509Certificates.X509Certificate2 certificate) =>
         new(CertificateReader.Fingerprint(certificate), certificate.Subject, certificate.ExportCertificatePem());
@@ -33,6 +33,9 @@ public class MvsmfTlsTests
         var ex = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(HostFileErrorKind.CertificateRejected, ex.Kind);
+        // Over https the first request a service makes is the anonymous trust check, under the operation's own
+        // name, so no password was asked for before the refusal; HostFileMessages.Describe maps CertificateRejected
+        // to a fixed sentence, so the prefix never reaches the user.
         Assert.Equal("Server information: the host's certificate is not trusted.", ex.Message);
         Assert.Equal(CertificateReader.Fingerprint(certificate), ex.Certificate!.Sha256);
         Assert.True(ex.Certificate.Pinnable, ex.Certificate.NotPinnableReason);
@@ -117,7 +120,7 @@ public class MvsmfTlsTests
             .Then((_, _) => throw new HttpRequestException("handshake failed", new System.Security.Authentication.AuthenticationException("tls")))
             .Then((_, _) => throw new HttpRequestException("handshake failed", new System.Security.Authentication.AuthenticationException("tls")));
         using var service = new MvsmfFileService(handler, new Uri("https://mvs.test/zosmf"),
-            MvsmfAuthTests.Answering([], new HostCredentials("U", "p")), certificates: check);
+            MvsmfAuthTests.Providing([], new HostCredentials("U", "p")), certificates: check);
 
         var first = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
         Assert.Equal(HostFileErrorKind.CertificateRejected, first.Kind);

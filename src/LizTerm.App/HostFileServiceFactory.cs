@@ -10,8 +10,8 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.App;
 
-/// <summary>A one-shot connection check for the profile editor: signs in through a prompt, asks the host what it is,
-/// and forgets the sign-in.</summary>
+/// <summary>A one-shot connection check for the profile editor: asks the host what it is, signing in through a prompt
+/// only if the host will not answer anonymously, and ends any session it started.</summary>
 public delegate Task<HostServerInfo> HostFileTester(string profileName, Uri url, string? userid, CertificatePin? pin, CancellationToken cancellationToken);
 
 /// <summary>The only place the app names the mvsMF backend, as <see cref="SessionFactory"/> is for b3270. Everything
@@ -23,13 +23,22 @@ public static class HostFileServiceFactory
         MvsmfOptions.TryNormalizeBaseUrl(text, out url, out error);
 
     /// <exception cref="ArgumentException">The URL is not a usable base (see <see cref="TryNormalizeUrl"/>).</exception>
-    public static IHostFileService Create(Uri baseUrl, CertificatePin? pin, HostCredentialProvider credentials) =>
-        new MvsmfFileService(new MvsmfOptions(baseUrl, pin), credentials);
+    public static IHostFileService Create(Uri baseUrl, CertificatePin? pin, HostTokenProvider tokens) =>
+        new MvsmfFileService(new MvsmfOptions(baseUrl, pin), tokens);
 
     public static HostFileTester CreateTester(ICredentialPrompt prompt) => async (profileName, url, userid, pin, token) =>
     {
-        var holder = new CredentialHolder(profileName, url.ToString(), userid);
-        using var service = Create(url, pin, holder.ProviderFor(prompt));
-        return await service.GetServerInfoAsync(token);
+        var holder = new SignInHolder(profileName, url.ToString(), userid);
+        using var service = new MvsmfFileService(new MvsmfOptions(url, pin), holder.ProviderFor(prompt));
+        var probed = await service.ProbeAsync(token);
+        if (probed is not null) return probed;              // the host answers /info without a sign-in
+        try
+        {
+            return await service.GetServerInfoAsync(token); // signs in through the prompt, then reads /info
+        }
+        finally
+        {
+            await holder.SignOutAsync(service);             // also after a failed read, so no session is left behind
+        }
     };
 }

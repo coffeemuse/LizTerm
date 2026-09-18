@@ -35,4 +35,8 @@ public interface IHostFileService : IDisposable
 
     /// <summary>Deletes a member. Deleting a whole dataset is not supported in this release.</summary>
     Task DeleteAsync(HostPath path, CancellationToken cancellationToken = default);
+
+    /// <summary>Ends the session the token names. Best effort: a host that has already forgotten the token is a
+    /// success. The default does nothing, for a service that holds no session.</summary>
+    Task SignOutAsync(HostSessionToken token, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

@@ -1,6 +1,7 @@
 # mvsMF fixtures
 
-Each `.http` file is one exchange recorded from a live mvsMF by `tools/record-mvsmf-fixture.sh`: the response
+Each `.http` file is one exchange recorded from a live mvsMF by `tools/record-mvsmf-fixture.sh` (the table marks
+the one hand-written exception): the response
 headers without CRs (Date, Jobname, Jobid and Node dropped), a blank line, then the body bytes as received.
 `Fixture.Load` turns one into an `HttpResponseMessage`; `Transfer-Encoding`, `Content-Length` and `Connection` are
 ignored because the body is already whole. `.gitattributes` marks the files `-text` so no checkout converts their line endings.
@@ -13,6 +14,9 @@ build: a changed fixture is a changed behaviour.
 |---|---|
 | `info-200` | `GET info` |
 | `info-401` | `GET info` with a wrong password |
+| `login-200` | `POST services/authenticate` — 200 with `Set-Cookie: LtpaToken2` |
+| `login-401` | the same with a wrong password — 401, `reasonCode 1` |
+| `login-404` | a host with no authenticate route — 404 (hand-written; no pre-1.1.0 host was available) |
 | `ds-list-sys1` | `GET restfiles/ds?dslevel=SYS1.**` |
 | `ds-list-empty` | `GET restfiles/ds?dslevel=NOSUCH.HLQ` |
 | `members-proclib` | `GET restfiles/ds/SYS1.PROCLIB/member` |

@@ -35,8 +35,8 @@ Everything lives under one root — `AppPaths.ConfigRoot()`, which is
 | Recent hosts | `recent-hosts.json` | Hosts typed into Quick Connect | default |
 | CA file | temp, per session | Public certificates | `0600` |
 
-**LizTerm never writes a password anywhere.** The only one it handles is the mvsMF REST sign-in, and
-`CredentialHolder` is explicit that it is asked once, held in memory for that window, and forgotten when the
+**LizTerm never writes a password anywhere.** The only one it handles is the mvsMF REST sign-in: `SignInHolder`
+asks for it once, trades it for a session token, and drops it; only the token is held, and it is forgotten when the
 window closes. Profiles store a *userid*, never a password.
 
 **Outbound network traffic** is the host connection itself, the optional mvsMF REST calls, and — when the user

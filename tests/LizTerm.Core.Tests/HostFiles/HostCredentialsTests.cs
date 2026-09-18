@@ -19,17 +19,6 @@ public class HostCredentialsTests
     }
 
     [Fact]
-    public void A_retry_request_names_the_refused_sign_in_without_its_password()
-    {
-        var refused = new HostCredentials("MVSCE02", "s3cret-pw");
-        var request = new HostCredentialRequest(true, refused);
-        Assert.Same(refused, request.Rejected);
-        Assert.Contains("MVSCE02", request.ToString());
-        Assert.DoesNotContain("s3cret-pw", request.ToString());
-        Assert.Null(new HostCredentialRequest(false).Rejected);
-    }
-
-    [Fact]
     public void An_exception_carries_its_kind_reason_and_server_text()
     {
         var ex = new HostFileException(HostFileErrorKind.CannotOpen, "SYS1.X(Y): not found.", 3, "Cannot open dataset member");

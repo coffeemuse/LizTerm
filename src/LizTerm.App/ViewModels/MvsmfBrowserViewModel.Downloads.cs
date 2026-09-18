@@ -159,7 +159,8 @@ public sealed partial class MvsmfBrowserViewModel
     }
 
     private static bool IsConnectionFailure(HostFileException ex) =>
-        ex.Kind is HostFileErrorKind.Unreachable or HostFileErrorKind.Unauthenticated or HostFileErrorKind.CertificateRejected;
+        ex.Kind is HostFileErrorKind.Unreachable or HostFileErrorKind.Unauthenticated or HostFileErrorKind.CertificateRejected
+            or HostFileErrorKind.Unsupported;
 
     private static string Bytes(long count) => count.ToString("N0", CultureInfo.InvariantCulture);
 
