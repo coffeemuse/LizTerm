@@ -291,7 +291,7 @@ Open the profile in the editor and go to the **mvsMF** tab:
   LizTerm adds `/zosmf`. Only `http://` and `https://` addresses are accepted.
 - **Userid** is optional. It fills in the sign-in window, and the browser starts by listing `USERID.**`.
 - **Test** signs in and asks the server what it is, then shows the answer (for example
-  **✓ Connected: mvsMF 1.0.0-dev on MVS 3.8j**) or what went wrong. A sign-in made for **Test** is forgotten right
+  **✓ Connected: mvsMF 1.1.0 on MVS 3.8j**) or what went wrong. A sign-in made for **Test** is forgotten right
   after.
 
 Once a profile has a URL, its session window has **File > mvsMF Browser...**. The item has no keyboard shortcut, so

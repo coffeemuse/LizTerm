@@ -56,8 +56,8 @@ public sealed class MvsmfFileService : IHostFileService
     internal static SocketsHttpHandler CreateHandler(MvsmfCertificateCheck certificates) => new()
     {
         ConnectTimeout = ConnectTimeout,
-        // mvsMF-compat: basic-auth-every-request — this build sets no session cookie, so none is kept and every
-        // request carries Basic credentials.
+        // mvsMF-compat: basic-auth-every-request — the host sets an LtpaToken2 cookie since 1.1.0, but this release
+        // still sends Basic credentials on every request and keeps no cookie; token sign-in is the next phase of #17.
         UseCookies = false,
         AllowAutoRedirect = false,
         SslOptions = new SslClientAuthenticationOptions
@@ -71,8 +71,8 @@ public sealed class MvsmfFileService : IHostFileService
     {
         const string what = "Server information";
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        // mvsMF-compat: info-requires-auth — the docs say /info needs no credentials; this build demands them, so it
-        // goes through the same authenticated path as everything else.
+        // mvsMF-compat: info-requires-auth — the docs say /info needs no credentials; the host demands them by design
+        // (mvsMF #324), so it goes through the same authenticated path as everything else.
         using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get, Url("info")), what, idle, cancellationToken);
         var info = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfInfo, what, idle, cancellationToken);
         // mvsMF-compat: info-version-fields — 1.0.0-dev put the whole version in zosmf_version; 1.1.0 puts the major
