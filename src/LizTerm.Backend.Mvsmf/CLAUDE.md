@@ -8,16 +8,24 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
   sends it (`Cookie: LtpaToken2=…`, never `Authorization`) on every later request. The `HostTokenProvider` (the
   App's `SignInHolder`) holds the token and calls the backend's `SignInAsync` when it needs one; a 401 asks the
   provider again with the refused token and repeats the request once. **The password may exist only inside
-  `SignInAsync` and the App's prompt** — never in a field, a message, a log or a `ToString()`. Sign-in is the first
-  request a service ever makes, so a host it cannot reach is reported with a `Sign-in:` prefix rather than the
-  operation's own name. `ProbeAsync` is the separate, anonymous `GET /info` the Test button uses before it asks for
-  a password: a 401 there proves the URL is an mvsMF without spending a sign-in.
+  `SignInAsync` and the App's prompt** — never in a field, a message, a log or a `ToString()`. Over `http` the
+  sign-in is the first request a service makes, so a host it cannot reach is reported with a `Sign-in:` prefix
+  rather than the operation's own name. Over `https` a fresh service's first contact is an anonymous `GET /info`
+  (`CheckTrustAsync`, once per service, before any password is asked for), so an untrusted certificate is refused
+  (`CertificateRejected`, under the operation's name) while the sign-in prompt is still closed, and the operation
+  run again after Connect Anyway signs in once; the answer itself is ignored. A second 401 after the re-sign-in is
+  `Unauthenticated` with its own sentence ("the host would not accept the session it had just issued"), never the
+  password wording: that sign-in has just taken the password. `ProbeAsync` is the separate, anonymous `GET /info`
+  the Test button uses before it asks for a password: a 401 there proves the URL is an mvsMF without spending a
+  sign-in, a 404 is "Nothing at this URL answers as mvsMF", and any other failure is the host's own answer (a
+  proxy's 403, a 503 while it starts), mapped by `MvsmfErrors` so a correct URL is not mistaken for a wrong one.
 - **A login that does not answer JSON is `Unsupported`** (spec §4.2): 404, 405 or any other non-JSON answer — a
   proxy's or a web server's catch-all page replying 200 with HTML — means this host has no authenticate route, and
   `NoSignInRoute` says so in one sentence. Only a JSON 200 gets as far as the cookie check, where a missing
   `LtpaToken2` is a `ServerError` ("Sign-in: the host set no session cookie."). `SignOutAsync` is the one call that
   swallows rather than maps: a transport failure or the idle timeout is best effort on window close, but the
-  caller's own cancellation (the session window's five-second cap) propagates for its continuation to observe.
+  caller's own cancellation propagates for its continuation to observe; the App's `SignInHolder.SignOutCap`
+  (five seconds) is such a cancellation, applied to every sign-out, and swallowed there.
 - **Cookie, not Bearer.** LizTerm sends the token as the `LtpaToken2` cookie because real z/OSMF accepts only the
   cookie; `Authorization: Bearer` is an mvsMF convenience real z/OSMF does not honour. `UseCookies` stays false and
   the cookie is sent by hand.
@@ -67,8 +75,9 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
 - `RecordedHandler` answers queued responses, usually `Fixture.Load(name)` from `Fixtures/`, and records each
   request (method, URI, `Authorization`, `Cookie`, `X-CSRF-ZOSMF-HEADER`, `X-IBM-Data-Type`, content type, body,
   header names).
-- Fixtures are real exchanges recorded by `tools/record-mvsmf-fixture.sh`; `Fixtures/README.md` lists them. The body
-  bytes are kept exactly, so never run a fixture through a CR-stripping tool.
+- Fixtures are real exchanges recorded by `tools/record-mvsmf-fixture.sh`, except the ones `Fixtures/README.md`
+  marks hand-written (`login-404`, for a host nobody could record); the README lists them all. The body bytes are
+  kept exactly, so never run a fixture through a CR-stripping tool.
 - `LoopbackHttpsServer` serves one JSON body over TLS with a `TestCertificates` certificate (linked from
   Core.Tests), for the pin tests. Its tests carry `[Fact(Timeout = 30000)]`, so a TLS regression fails instead of
   hanging the run.

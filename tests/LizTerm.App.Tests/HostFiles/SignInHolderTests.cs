@@ -174,6 +174,30 @@ public class SignInHolderTests
         Assert.Equal(2, prompt.AskCount);
     }
 
+    /// <summary>The prompt's outcome is shared whatever it is: a sign-in that fails for anything but the password
+    /// fails the operations that were waiting on it too, rather than asking each for the password just typed.</summary>
+    [Fact]
+    public async Task Operations_waiting_on_a_failed_sign_in_fail_with_it()
+    {
+        var (holder, prompt, provider, signer) = Create();
+        prompt.Gate = new TaskCompletionSource();
+        var failure = new HostFileException(HostFileErrorKind.Unreachable, "Sign-in: cannot reach the host.");
+        HostSignIn unreachable = (_, _) => Task.FromException<HostSessionToken>(failure);
+
+        var a = provider(First, unreachable, CancellationToken.None).AsTask();
+        var b = provider(First, unreachable, CancellationToken.None).AsTask();
+        await Wait.UntilAsync(() => prompt.AskCount == 1, "the first prompt");
+        prompt.Gate.SetResult();
+
+        Assert.Same(failure, await Assert.ThrowsAsync<HostFileException>(() => a));
+        Assert.Same(failure, await Assert.ThrowsAsync<HostFileException>(() => b));
+        Assert.Equal(1, prompt.AskCount);
+        Assert.False(holder.IsSignedIn);
+
+        await provider(First, signer.SignIn, CancellationToken.None); // a later operation asks afresh
+        Assert.Equal(2, prompt.AskCount);
+    }
+
     [Fact]
     public async Task A_cancelled_sign_in_after_an_expired_token_holds_nothing()
     {
@@ -225,6 +249,20 @@ public class SignInHolderTests
 
         Assert.False(holder.IsSignedIn);
         Assert.Equal(1, service.CallsSnapshot().Count(c => c.StartsWith("signout")));
+    }
+
+    [Fact]
+    public async Task A_sign_out_the_host_never_answers_is_given_up_on_after_the_cap()
+    {
+        var (holder, _, provider, signer) = Create();
+        await provider(First, signer.SignIn, CancellationToken.None);
+        var service = new FakeHostFileService { Gate = new TaskCompletionSource() }; // never answers
+        var token = holder.Take()!;
+
+        await SignInHolder.EndAsync(service, token, TestContext.Current.CancellationToken, cap: TimeSpan.FromMilliseconds(50));
+
+        Assert.Contains("signout", service.CallsSnapshot());
+        Assert.False(holder.IsSignedIn);
     }
 
     [Fact]

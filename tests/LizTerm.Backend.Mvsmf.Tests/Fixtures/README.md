@@ -1,6 +1,7 @@
 # mvsMF fixtures
 
-Each `.http` file is one exchange recorded from a live mvsMF by `tools/record-mvsmf-fixture.sh`: the response
+Each `.http` file is one exchange recorded from a live mvsMF by `tools/record-mvsmf-fixture.sh` (the table marks
+the one hand-written exception): the response
 headers without CRs (Date, Jobname, Jobid and Node dropped), a blank line, then the body bytes as received.
 `Fixture.Load` turns one into an `HttpResponseMessage`; `Transfer-Encoding`, `Content-Length` and `Connection` are
 ignored because the body is already whole. `.gitattributes` marks the files `-text` so no checkout converts their line endings.

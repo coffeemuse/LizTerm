@@ -33,9 +33,10 @@ public class MvsmfTlsTests
         var ex = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(HostFileErrorKind.CertificateRejected, ex.Kind);
-        // The first request a service makes is the sign-in, so that is what the refusal is reported against;
-        // HostFileMessages.Describe maps CertificateRejected to a fixed sentence, so the prefix never reaches the user.
-        Assert.Equal("Sign-in: the host's certificate is not trusted.", ex.Message);
+        // Over https the first request a service makes is the anonymous trust check, under the operation's own
+        // name, so no password was asked for before the refusal; HostFileMessages.Describe maps CertificateRejected
+        // to a fixed sentence, so the prefix never reaches the user.
+        Assert.Equal("Server information: the host's certificate is not trusted.", ex.Message);
         Assert.Equal(CertificateReader.Fingerprint(certificate), ex.Certificate!.Sha256);
         Assert.True(ex.Certificate.Pinnable, ex.Certificate.NotPinnableReason);
     }

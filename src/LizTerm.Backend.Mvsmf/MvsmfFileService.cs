@@ -24,6 +24,7 @@ public sealed class MvsmfFileService : IHostFileService
     internal static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromSeconds(30);
     internal static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
     private const int CopyBufferSize = 81920;
+    private const string SessionCookie = "LtpaToken2";
     private static readonly string ProductVersion = typeof(MvsmfFileService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
     private readonly HttpClient _http;
@@ -31,6 +32,8 @@ public sealed class MvsmfFileService : IHostFileService
     private readonly HostTokenProvider _tokens;
     private readonly MvsmfCertificateCheck? _certificates;
     private readonly TimeSpan _idle;
+    private readonly SemaphoreSlim _trustGate = new(1, 1);
+    private volatile bool _trustChecked;
 
     public MvsmfFileService(MvsmfOptions options, HostTokenProvider tokens)
         : this(new MvsmfCertificateCheck(options.PinnedCertificate), options.BaseUrl, tokens)
@@ -77,11 +80,20 @@ public sealed class MvsmfFileService : IHostFileService
         // everything else. ProbeAsync (the Test button) sends an anonymous GET first and reads its 401 instead.
         using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get, Url("info")), what, idle, cancellationToken);
         var info = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfInfo, what, idle, cancellationToken);
+        return ToServerInfo(InfoFields(info));
+    }
+
+    /// <summary>The product version and the system /info names, null for one it leaves blank. The one reading of
+    /// those fields, for the token path and the anonymous probe alike.</summary>
+    private static (string? Version, string? System) InfoFields(MvsmfInfo info)
+    {
         // mvsMF-compat: info-version-fields — 1.0.0-dev put the whole version in both fields; 1.1.0 puts the major in
         // zosmf_version and the release in zosmf_full_version, as z/OSMF does, so the full one is read first.
-        var version = Blank(info.ZosmfFullVersion) ?? Blank(info.ZosmfVersion) ?? "unknown";
-        return new HostServerInfo("mvsMF", version, Blank(info.ZosVersion) ?? "unknown");
+        return (Blank(info.ZosmfFullVersion) ?? Blank(info.ZosmfVersion), Blank(info.ZosVersion));
     }
+
+    private static HostServerInfo ToServerInfo((string? Version, string? System) fields) =>
+        new("mvsMF", fields.Version ?? "unknown", fields.System ?? "unknown");
 
     public async Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default)
     {
@@ -222,7 +234,11 @@ public sealed class MvsmfFileService : IHostFileService
         return Encoding.Latin1.GetBytes(text.ToString());
     }
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _http.Dispose();
+        _trustGate.Dispose();
+    }
 
     private Uri Url(string relative) => new(_base, relative);
 
@@ -237,6 +253,7 @@ public sealed class MvsmfFileService : IHostFileService
 
     private async Task<HttpResponseMessage> SendAsync(Func<HttpRequestMessage> build, string what, IdleTimeout idle, CancellationToken cancellationToken)
     {
+        await CheckTrustAsync(what, idle, cancellationToken);
         idle.Pause();
         var token = await AskAsync(new HostTokenRequest(null), cancellationToken);
         var response = await SendOnceAsync(build, token, what, idle, cancellationToken);
@@ -246,14 +263,51 @@ public sealed class MvsmfFileService : IHostFileService
             idle.Pause();
             token = await AskAsync(new HostTokenRequest(token), cancellationToken);
             response = await SendOnceAsync(build, token, what, idle, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                // The sign-in that minted this token has just taken the password, so what the host refused is the
+                // session, not the password: a 401 on an operation never means a bad password. The generic mapping
+                // would blame the password.
+                response.Dispose();
+                throw new HostFileException(HostFileErrorKind.Unauthenticated,
+                    $"{what}: the host would not accept the session it had just issued.");
+            }
         }
         if (response.IsSuccessStatusCode) return response;
-        using (response)
+        using (response) throw await FailureAsync(response, what, idle, cancellationToken);
+    }
+
+    /// <summary>Over https, a fresh service's first contact with the host is this anonymous <c>GET info</c>, made
+    /// before any password is asked for, so that an untrusted certificate is refused (<see
+    /// cref="HostFileErrorKind.CertificateRejected"/>) while the sign-in prompt is still closed. Without it the
+    /// login POST would be the first handshake, and the operation run again after Connect Anyway, on a service that
+    /// trusts the certificate, would have to ask for the password a second time. The answer itself is ignored; a 401
+    /// is the expected one. Over http there is no handshake to fail, so nothing is sent.</summary>
+    private async Task CheckTrustAsync(string what, IdleTimeout idle, CancellationToken cancellationToken)
+    {
+        if (_trustChecked || _base.Scheme != Uri.UriSchemeHttps) return;
+        await _trustGate.WaitAsync(cancellationToken);
+        try
         {
-            using var body = new MemoryStream();
-            await CopyBodyAsync(response, body, idle, null, what, cancellationToken);
-            throw MvsmfErrors.FromResponse(response.StatusCode, body.ToArray(), what);
+            if (_trustChecked) return;
+            using var request = new HttpRequestMessage(HttpMethod.Get, Url("info"));
+            AddCommonHeaders(request);
+            using var response = await SendRawAsync(request, what, idle, cancellationToken);
+            _trustChecked = true;
         }
+        finally
+        {
+            _trustGate.Release();
+        }
+    }
+
+    /// <summary>The exception for a non-success answer: the body is drained so the error JSON, if any, can say
+    /// what went wrong. The caller disposes the response.</summary>
+    private async Task<HostFileException> FailureAsync(HttpResponseMessage response, string what, IdleTimeout idle, CancellationToken cancellationToken)
+    {
+        using var body = new MemoryStream();
+        await CopyBodyAsync(response, body, idle, null, what, cancellationToken);
+        return MvsmfErrors.FromResponse(response.StatusCode, body.ToArray(), what);
     }
 
     private async Task<HostSessionToken> AskAsync(HostTokenRequest request, CancellationToken cancellationToken) =>
@@ -277,12 +331,7 @@ public sealed class MvsmfFileService : IHostFileService
             if (response.StatusCode == HttpStatusCode.Unauthorized)
                 throw new HostFileException(HostFileErrorKind.Unauthenticated, "The host rejected the userid or password.");
             if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed) throw NoSignInRoute();
-            if (!response.IsSuccessStatusCode)
-            {
-                using var body = new MemoryStream();
-                await CopyBodyAsync(response, body, idle, null, what, cancellationToken);
-                throw MvsmfErrors.FromResponse(response.StatusCode, body.ToArray(), what);
-            }
+            if (!response.IsSuccessStatusCode) throw await FailureAsync(response, what, idle, cancellationToken);
             // A success that is not JSON is a proxy's or a web server's catch-all page answering a route this host
             // does not have (spec §4.2) — not an mvsMF that forgot its cookie, which is what the check below would
             // otherwise report.
@@ -299,7 +348,9 @@ public sealed class MvsmfFileService : IHostFileService
         new(HostFileErrorKind.Unsupported, "This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.");
 
     /// <summary>The unauthenticated reachability check for the Test button: the info when the host answers it
-    /// without credentials, null for a 401 (reachable, sign-in needed).</summary>
+    /// without credentials, null for a 401 (reachable, sign-in needed). A 404 is not an mvsMF; any other failure is
+    /// the host's own answer (a proxy's 403, a 503 while it starts) and is reported as such, so a correct URL is not
+    /// mistaken for a wrong one.</summary>
     public async Task<HostServerInfo?> ProbeAsync(CancellationToken cancellationToken = default)
     {
         const string what = "Server information";
@@ -308,8 +359,10 @@ public sealed class MvsmfFileService : IHostFileService
         AddCommonHeaders(request);
         using (var response = await SendRawAsync(request, what, idle, cancellationToken))
         {
+            _trustChecked = true; // the handshake succeeded, so a later sign-in on this service need not probe again
             if (response.StatusCode == HttpStatusCode.Unauthorized) return null;
-            if (!response.IsSuccessStatusCode) throw NotMvsmf();
+            if (response.StatusCode == HttpStatusCode.NotFound) throw NotMvsmf();
+            if (!response.IsSuccessStatusCode) throw await FailureAsync(response, what, idle, cancellationToken);
             MvsmfInfo info;
             try
             {
@@ -322,10 +375,9 @@ public sealed class MvsmfFileService : IHostFileService
             }
             // Every MvsmfInfo field is an optional string, so another product's JSON /info (or a bare {}) parses
             // happily into all-null. An answer naming neither a product version nor a system is not an mvsMF's.
-            var version = Blank(info.ZosmfFullVersion) ?? Blank(info.ZosmfVersion);
-            var system = Blank(info.ZosVersion);
-            if (version is null && system is null) throw NotMvsmf();
-            return new HostServerInfo("mvsMF", version ?? "unknown", system ?? "unknown");
+            var fields = InfoFields(info);
+            if (fields is (null, null)) throw NotMvsmf();
+            return ToServerInfo(fields);
         }
     }
 
@@ -337,7 +389,7 @@ public sealed class MvsmfFileService : IHostFileService
     {
         using var idle = new IdleTimeout(_idle, cancellationToken);
         using var request = new HttpRequestMessage(HttpMethod.Delete, Url("services/authenticate"));
-        request.Headers.Add("Cookie", $"LtpaToken2={token.Value}");
+        AddSessionCookie(request, token);
         AddCommonHeaders(request);
         try
         {
@@ -362,7 +414,7 @@ public sealed class MvsmfFileService : IHostFileService
         string what, IdleTimeout idle, CancellationToken cancellationToken)
     {
         using var request = build();
-        request.Headers.Add("Cookie", $"LtpaToken2={token.Value}");
+        AddSessionCookie(request, token);
         AddCommonHeaders(request);
         return await SendRawAsync(request, what, idle, cancellationToken);
     }
@@ -393,18 +445,22 @@ public sealed class MvsmfFileService : IHostFileService
         request.Headers.UserAgent.Add(new ProductInfoHeaderValue("LizTerm", ProductVersion));
     }
 
+    private static void AddSessionCookie(HttpRequestMessage request, HostSessionToken token) =>
+        request.Headers.Add("Cookie", $"{SessionCookie}={token.Value}");
+
+    /// <summary>The <c>LtpaToken2</c> cookie's value, matched on the cookie's name and nothing else: a proxy's cookie
+    /// whose name merely ends the same way, or whose value quotes the name, is not the session.</summary>
     private static HostSessionToken? TokenFromCookies(HttpResponseMessage response)
     {
         if (!response.Headers.TryGetValues("Set-Cookie", out var cookies)) return null;
         foreach (var cookie in cookies)
         {
             var span = cookie.AsSpan();
-            const string name = "LtpaToken2=";
-            var at = span.IndexOf(name);
-            if (at < 0) continue;
-            var rest = span[(at + name.Length)..];
-            var end = rest.IndexOf(';');
-            var value = (end < 0 ? rest : rest[..end]).ToString();
+            var end = span.IndexOf(';');
+            var pair = (end < 0 ? span : span[..end]).Trim();
+            var equals = pair.IndexOf('=');
+            if (equals < 0 || !pair[..equals].Trim().SequenceEqual(SessionCookie)) continue;
+            var value = pair[(equals + 1)..].Trim().ToString();
             if (value.Length > 0) return new HostSessionToken(value);
         }
         return null;

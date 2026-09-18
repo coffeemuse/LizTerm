@@ -176,11 +176,12 @@ rather than exporting them on a command line.
 
 ### Live mvsMF tests
 
-Set all four `LIZTERM_MVSMF_*` variables. The tests read the server information, list the scratch PDS, upload a
-small text member through the same checks the app uses, verify and download it, delete it, and make two sign-in
-attempts with a wrong password. The wrong-password test fails two sign-ins per run; on a host whose security
-product revokes a userid after failed attempts, point it at a userid that can take that. Keep them with the other
-live-test variables, in the file outside the repository that you `source`.
+Set all four `LIZTERM_MVSMF_*` variables. The tests sign in, read the server information, list the scratch PDS,
+upload a small text member through the same checks the app uses, verify and download it, delete it, sign out and
+check the host refuses the ended session; probe `/info` anonymously; and make one sign-in attempt with a wrong
+password. That wrong-password test fails one sign-in per run; on a host whose security product revokes a userid
+after failed attempts, point it at a userid that can take that. Keep them with the other live-test variables, in
+the file outside the repository that you `source`.
 
 ### Replay fixtures
 
@@ -194,9 +195,10 @@ field should add a trimmed fixture. b3270 fixtures have two recorders:
   through b3270 and saves its output. It needs x3270's `playback` tool, built by `native/build/build-playback.sh`,
   which applies LizTerm's patches and so needs `patch` installed (macOS has it).
 
-`tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/` holds recorded mvsMF exchanges, one per file, made by
-`tools/record-mvsmf-fixture.sh`; its [README](../tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md) lists them.
-Re-record them when checking a new mvsMF build against [the compatibility log](mvsmf-compatibility.md).
+`tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/` holds mvsMF exchanges, one per file, recorded by
+`tools/record-mvsmf-fixture.sh` except where its
+[README](../tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md) marks one hand-written; the README lists them.
+Re-record the recorded ones when checking a new mvsMF build against [the compatibility log](mvsmf-compatibility.md).
 
 Before committing a fixture, cut any logon from it and replace real host addresses.
 

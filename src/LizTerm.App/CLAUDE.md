@@ -752,11 +752,12 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   token is passed in and the prompt can never be reached) and ends the session.
 - **That sign-out splits across two threads on purpose.** `SignOutAsync` takes the token out of the holder
   *synchronously*, on the caller's thread, so `IsSignedIn` is false the moment the window closes; then it hands the
-  DELETE to `Task.Run`, and `OnClosed` fire-and-forgets the result. The five-second cap is a
-  `CancellationTokenSource` whose token `OnClosed` passes in and whose continuation disposes, **not** a `WaitAsync`
-  around the task: only cancelling the request itself stops a DELETE to a host that has stopped answering, which
-  would otherwise run on to the backend's 30 s idle timeout. The backend swallows transport failures and its own
-  idle timeout but lets that cancellation through, and the continuation observes it. The hand-off is not
+  DELETE to `Task.Run`, and `OnClosed` fire-and-forgets the result. The five-second cap (`SignInHolder.SignOutCap`)
+  lives in `SignInHolder.EndAsync`, which every sign-out goes through — the window's and the Test button's — as a
+  linked `CancellationTokenSource` on the request, **not** a `WaitAsync` around the task: only cancelling the
+  request itself stops a DELETE to a host that has stopped answering, which would otherwise run on to the backend's
+  30 s idle timeout. The backend swallows transport failures and its own idle timeout; `EndAsync` swallows the cap
+  and lets the caller's own cancellation through. The hand-off is not
   tidiness: nothing in this codebase uses `ConfigureAwait(false)`, so a continuation started on the UI thread is
   posted back to the Avalonia dispatcher — and on the **last** window `base.OnClosed` leads to `Shutdown()`, which
   stops that dispatcher before the queued continuation runs. Left on the UI thread the response would never be read
@@ -771,9 +772,11 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   outcome as killing the app.
 - Its prompts are serialised, so operations that start or are refused together share one prompt, and a refused
   token is asked about again only while it is still the current one (`HostTokenRequest.Rejected`); a request naming
-  a token another operation has already replaced is answered with the newer one. A cancelled prompt answers every
-  operation that was already waiting when it was cancelled (a cancellation counter), instead of each one asking in
-  turn; an operation that starts later asks afresh.
+  a token another operation has already replaced is answered with the newer one. A prompt that ends without a
+  token — cancelled, or its sign-in failed for anything but the password (unreachable, certificate, no sign-in
+  route) — answers every operation that was already waiting on it (a counter plus the failure), so they fail with
+  the same outcome instead of each asking in turn for a password that was just typed; an operation that starts
+  later asks afresh.
 - **The holder owns the refused-password loop**, which is why `SignInReason` has three members rather than a
   boolean. The backend no longer tells a bad password from an expired token — a bad password is caught inside
   `SignInAsync` — so the reason is the loop's own variable: the first ask is `First`, or `Expired` ("your mvsMF
@@ -781,14 +784,13 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   `signIn` is `Rejected` ("the userid or password was not accepted"), until the host takes it or the user cancels.
   Blaming the password for an expired session, which the old single retry line did, is the bug this replaced.
 - `_lastUserid` is written **as soon as the prompt answers**, not once the host accepts it: a sign-in that fails for
-  anything other than the password — an untrusted certificate, an unreachable host — must still prefill the userid
-  that was just typed. It is the double-prompt flow above that makes this load-bearing.
-- **Accepted: an untrusted `https` certificate costs two password prompts.** The sign-in is an ordinary request, so
-  a host whose certificate is not yet trusted refuses *inside* it, before any token exists; `HostFileConnection`
-  then shows the certificate prompt and, after Connect Anyway, runs the operation again on a service built for that
-  certificate — and that retry has no token, so it asks for the password a second time. Holding the password across
-  the certificate prompt would fix the annoyance by keeping the thing this design exists to stop keeping, so it is
-  deliberate. It costs one extra prompt, once, on the first connect to a self-signed host.
+  anything other than the password — an unreachable host, a host with no sign-in route — must still prefill the
+  userid that was just typed.
+- **An untrusted `https` certificate is refused before the password is asked for.** The backend's first contact
+  with an `https` host is an anonymous `GET /info` (`MvsmfFileService.CheckTrustAsync`), so the refusal reaches
+  `HostFileConnection` while the sign-in prompt is still closed; after Connect Anyway the operation runs again on a
+  service built for that certificate and signs in once. Nothing holds the password across the certificate prompt,
+  which is the constraint that made the earlier design cost two prompts.
 - **File > mvsMF Browser...** (`mvsMF _Browser...`, no shortcut: the menu rule) is hidden until `AttachHostFiles`
   shows both the classic item and the held native item. It does not need the 3270 connection. A profile URL that
   cannot be used goes to the session's error line rather than opening a browser.
@@ -810,7 +812,7 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   context; progress goes through `dispatch`, and a closed `RowProgress` drops late reports. Questions are an inline
   `ConfirmationRequest` strip, awaited by the operation that asked; a disposed browser shows none and answers
   Cancel.
-- **Connection failures** (`IsConnectionFailure`: cannot reach, sign-in, certificate) are the red banner with
+- **Connection failures** (`IsConnectionFailure`: cannot reach, sign-in, certificate, unsupported host) are the red banner with
   Retry; everything else is the status line or a row's status. They stop the whole operation. A download batch
   cancels its other transfers through a linked token and rethrows the first failure once; its rows say
   `– Stopped`, told apart from the user's `– Cancelled` by the outer token. An upload stops at its row, and a

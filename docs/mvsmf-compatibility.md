@@ -17,8 +17,9 @@ against disagree, and what LizTerm does about each. When a newer mvsMF is availa
 ## How to re-check a new build
 
 1. Point `LIZTERM_MVSMF_*` at the new build (see `docs/development.md`).
-2. Re-record every fixture listed in `tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md` with
-   `tools/record-mvsmf-fixture.sh`, and run `dotnet test tests/LizTerm.Backend.Mvsmf.Tests`. A test that now fails
+2. Re-record every recorded fixture listed in `tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/README.md` with
+   `tools/record-mvsmf-fixture.sh` (not the one the README marks hand-written), and run
+   `dotnet test tests/LizTerm.Backend.Mvsmf.Tests`. A test that now fails
    is named after the entry below whose behaviour changed.
 3. Run the live tests: `dotnet test tests/LizTerm.Integration.Tests --filter "FullyQualifiedName~LiveMvsmfTests"`.
 4. For each entry, probe the behaviour by hand where no test covers it, then update the entry. When a workaround is

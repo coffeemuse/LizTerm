@@ -782,19 +782,11 @@ public partial class SessionWindow : Window, ISessionHost
         // The browser is owned and would close with the window anyway; closing it here first means its connection
         // is released before the sign-in it uses is ended.
         MvsmfBrowser?.Close();
-        // Best effort: SignOutAsync drops the token on this thread and ends the session on the pool, so the close
-        // waits for nothing and the shutdown that follows the last window cannot strand the DELETE. The cap is the
-        // token's, not a WaitAsync around it: only cancelling the request itself stops a DELETE to a host that has
-        // stopped answering, which would otherwise run on to the backend's 30 s idle timeout.
+        // Best effort: SignOutAsync drops the token on this thread and ends the session on the pool, under the
+        // holder's own cap (SignInHolder.SignOutCap), so the close waits for nothing and the shutdown that follows
+        // the last window cannot strand the DELETE.
         if (_hostFiles is { } hostFiles)
-        {
-            var cap = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            _ = hostFiles.SignOutAsync(cap.Token).ContinueWith(t =>
-            {
-                _ = t.Exception; // Observed: the cap's own cancellation comes back here, and nobody is waiting.
-                cap.Dispose();
-            }, TaskScheduler.Default);
-        }
+            _ = hostFiles.SignOutAsync().ContinueWith(t => _ = t.Exception, TaskScheduler.Default); // observed; nobody waits
         base.OnClosed(e);
     }
 

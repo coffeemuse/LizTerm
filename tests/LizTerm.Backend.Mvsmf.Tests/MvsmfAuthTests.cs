@@ -133,6 +133,58 @@ public class MvsmfAuthTests
 
         var ex = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
         Assert.Equal(HostFileErrorKind.Unauthenticated, ex.Kind);
+        // The password was taken twice by then; it is the session the host refused, and the banner must not say
+        // otherwise.
+        Assert.Equal("Server information: the host would not accept the session it had just issued.", ex.Message);
+    }
+
+    [Fact]
+    public async Task The_session_cookie_is_matched_by_name_not_by_substring()
+    {
+        var handler = new RecordedHandler()
+            .Then((_, _) =>
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"returnCode":0}""", Encoding.UTF8, "application/json"),
+                };
+                response.Headers.Add("Set-Cookie", "XLtpaToken2=decoy; Path=/");
+                response.Headers.Add("Set-Cookie", "trace=prev%3DLtpaToken2=old; Path=/");
+                response.Headers.Add("Set-Cookie", " LtpaToken2 = real ; Path=/; HttpOnly");
+                return Task.FromResult(response);
+            })
+            .Then("info-200");
+        using var service = new MvsmfFileService(handler, Base, Providing([], new HostCredentials("MVSCE02", "pw")));
+
+        await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("LtpaToken2=real", handler.Requests[1].Cookie);
+    }
+
+    /// <summary>Over https the first thing a fresh service sends is an anonymous GET, so an untrusted certificate is
+    /// refused before any password is asked for; the answer is ignored, and it happens once per service.</summary>
+    [Fact]
+    public async Task An_https_service_checks_trust_anonymously_before_it_asks_for_a_password()
+    {
+        var handler = new RecordedHandler()
+            .Then(HttpStatusCode.Unauthorized, "")
+            .Then("login-200")
+            .Then("info-200")
+            .Then("info-200");
+        var asked = new List<HostSessionToken?>();
+        using var service = new MvsmfFileService(handler, new Uri("https://mvs.test/zosmf"), Providing(asked, new HostCredentials("MVSCE02", "pw")));
+
+        await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
+        await service.GetServerInfoAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, handler.Requests.Count);
+        var probe = handler.Requests[0];
+        Assert.Equal(HttpMethod.Get, probe.Method);
+        Assert.Equal("https://mvs.test/zosmf/info", probe.Uri.ToString());
+        Assert.Null(probe.Authorization);
+        Assert.Null(probe.Cookie);
+        Assert.Equal(HttpMethod.Post, handler.Requests[1].Method); // the sign-in comes after the check
+        Assert.Equal(2, asked.Count); // one sign-in, one held token
     }
 
     [Fact]
@@ -231,6 +283,23 @@ public class MvsmfAuthTests
 
         Assert.Equal(HostFileErrorKind.Unsupported, ex.Kind);
         Assert.Equal("Nothing at this URL answers as mvsMF.", ex.Message);
+    }
+
+    /// <summary>A host that answers but fails is not "not an mvsMF": a proxy's 403 or a 503 while the host starts
+    /// is reported as what it is, so a correct URL is not mistaken for a wrong one.</summary>
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable, HostFileErrorKind.ServerError, "Server information: server error (HTTP 503).")]
+    [InlineData(HttpStatusCode.Forbidden, HostFileErrorKind.NotAuthorized, "Server information: not authorized.")]
+    [InlineData(HttpStatusCode.MovedPermanently, HostFileErrorKind.ServerError, "Server information: server error (HTTP 301).")]
+    public async Task Probe_reports_a_host_that_answers_but_fails_as_its_own_answer(HttpStatusCode status, HostFileErrorKind kind, string message)
+    {
+        var handler = new RecordedHandler().Then(status, "", "text/html");
+        using var service = new MvsmfFileService(handler, Base, Providing([], new HostCredentials("MVSCE02", "pw")));
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() => service.ProbeAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(kind, ex.Kind);
+        Assert.Equal(message, ex.Message);
     }
 
     /// <summary>Named after the compat tag, as the log's rule requires: /info needs a sign-in, so server info goes
