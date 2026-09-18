@@ -56,6 +56,12 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<bool> BlinkEnabledProperty =
         AvaloniaProperty.Register<TerminalScreen, bool>(nameof(BlinkEnabled), defaultValue: true);
 
+    /// <summary>Whether this is a mono (3278) session, drawn in one phosphor with only intensity varying. The
+    /// window binds it from the profile; the snapshot is not consulted, since b3270 sends no colour for a 3278
+    /// and the fill a cell carries is not the host's (#123).</summary>
+    public static readonly StyledProperty<bool> MonochromeProperty =
+        AvaloniaProperty.Register<TerminalScreen, bool>(nameof(Monochrome));
+
     public static readonly FontFamily TerminalFont = FontFamily.Parse("avares://LizTerm.App/Assets/Fonts#IBM 3270");
 
     private readonly Typeface _typeface = new(TerminalFont);
@@ -189,6 +195,12 @@ public sealed class TerminalScreen : Control
     {
         get => GetValue(BlinkEnabledProperty);
         set => SetValue(BlinkEnabledProperty, value);
+    }
+
+    public bool Monochrome
+    {
+        get => GetValue(MonochromeProperty);
+        set => SetValue(MonochromeProperty, value);
     }
 
     public IReadOnlyList<ScreenRegion>? FindMatches
@@ -419,6 +431,13 @@ public sealed class TerminalScreen : Control
             UpdateBlinkTimer(Snapshot);
             return;
         }
+        if (change.Property == MonochromeProperty)
+        {
+            // The run plan bakes brushes in and is keyed only by snapshot and geometry, so it has to go.
+            _runPlan = null;
+            InvalidateVisual();
+            return;
+        }
         if (change.Property != SnapshotProperty) return;
         var (oldValue, newValue) = change.GetOldAndNewValue<ScreenSnapshot?>();
         UpdateBlinkTimer(newValue);
@@ -521,21 +540,15 @@ public sealed class TerminalScreen : Control
     private RunVisual BuildRun(ScreenSnapshot snapshot, int row, int start, int length, Cell style, CellGeometry g)
     {
         var rect = new Rect(g.OriginX + start * g.CellWidth, g.OriginY + row * g.CellHeight, length * g.CellWidth, g.CellHeight);
-        var reverse = style.Rendition.HasFlag(CellRendition.Reverse);
-        var fg = ResolveForeground(reverse ? style.Background : style.Foreground);
-        var bg = ResolveBackground(reverse ? style.Foreground : style.Background);
-
-        var background = bg != HostColor.NeutralBlack ? Palette.Brush(bg, false) : null;
+        var monochrome = Monochrome;
+        var background = CellColors.Background(style, monochrome);
 
         var text = snapshot.GetText(row, start, length);
         FormattedText? formatted = null;
         if (!string.IsNullOrWhiteSpace(text))
-        {
-            var bright = style.Rendition.HasFlag(CellRendition.Highlight);
-            formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, Palette.Brush(fg, bright));
-        }
+            formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, CellColors.Foreground(style, monochrome));
 
-        var underline = style.Rendition.HasFlag(CellRendition.Underline) ? new Pen(Palette.Brush(fg, false)) : null;
+        var underline = style.Rendition.HasFlag(CellRendition.Underline) ? new Pen(CellColors.Underline(style, monochrome)) : null;
         return new RunVisual(rect, background, formatted, underline, style.Rendition.HasFlag(CellRendition.Blink));
     }
 
@@ -577,8 +590,7 @@ public sealed class TerminalScreen : Control
         if (!cursor.Visible || cursor.Row >= snapshot.Rows || cursor.Column >= snapshot.Columns) return;
         var cell = snapshot[cursor.Row, cursor.Column];
         var rect = g.CellRect(cursor.Row, cursor.Column);
-        var fg = ResolveForeground(cell.Foreground);
-        context.FillRectangle(Palette.Brush(fg, false), rect);
+        context.FillRectangle(CellColors.CursorBlock(cell, Monochrome), rect);
         var ch = cell.Character.ToString();
         if (!string.IsNullOrWhiteSpace(ch))
         {
@@ -586,7 +598,4 @@ public sealed class TerminalScreen : Control
             context.DrawText(formatted, rect.TopLeft);
         }
     }
-
-    private static HostColor ResolveForeground(HostColor color) => color == HostColor.Default ? HostColor.NeutralWhite : color;
-    private static HostColor ResolveBackground(HostColor color) => color == HostColor.Default ? HostColor.NeutralBlack : color;
 }

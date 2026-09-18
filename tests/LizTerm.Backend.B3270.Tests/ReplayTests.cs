@@ -53,6 +53,43 @@ public class ReplayTests
         Assert.Equal(1, bells);
     }
 
+    /// <summary>A 3278 session as b3270 reports it (#123): intensity arrives, colour never does. Every cell ends
+    /// the replay in the fill the resize put there, which is the backend's business to leave alone and the
+    /// renderer's to ignore. A cell with any other colour would mean b3270 had started sending fg for a mono
+    /// model, and the App's phosphor rule would then be hiding information.</summary>
+    [Fact]
+    public async Task A_mono_3278_replay_paints_intensity_and_never_a_colour()
+    {
+        var fake = new FakeB3270Process { AutoInitialize = false, RunResponder = _ => [] };
+        foreach (var line in File.ReadLines(Fixture("mono-3278-opening.jsonl"))) fake.Emit(line);
+        fake.Exit(0);
+
+        var profile = new SessionProfile { Name = "replay", Host = "mvsce.test", Display = TerminalDisplay.Mono };
+        var session = new B3270Session(profile, () => fake);
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, _) => ended.TrySetResult();
+
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        var screen = session.CurrentScreen;
+        Assert.Equal(24, screen.Rows);
+        Assert.Equal(80, screen.Columns);
+        // The Hercules banner is repainted as the MVS/CE logo before the recording ends; Quit then hides the cursor.
+        Assert.Equal("ver: 6672504", screen.GetText(0, 67, 12));
+        Assert.Equal(new CursorPosition(22, 16, false), screen.Cursor);
+        var fill = screen[0, 0].Foreground;
+        var highlighted = 0;
+        for (var row = 0; row < screen.Rows; row++)
+            for (var col = 0; col < screen.Columns; col++)
+            {
+                Assert.Equal(fill, screen[row, col].Foreground);
+                Assert.Equal(HostColor.NeutralBlack, screen[row, col].Background);
+                if (screen[row, col].Rendition.HasFlag(CellRendition.Highlight)) highlighted++;
+            }
+        Assert.True(highlighted > 0, "the host still intensifies fields on a 3278");
+    }
+
     [Fact]
     public async Task Gateway_login_replays_tls_connect_tab_and_host_disconnect()
     {

@@ -23,6 +23,7 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private bool _verifyCertificate = true;
     [ObservableProperty] private int _model = 2;
     [ObservableProperty] private bool _extended = true;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(SelectedDisplayChoice))] private TerminalDisplay _display = TerminalDisplay.Color;
     [ObservableProperty] private string _codePage = "cp037";
     [ObservableProperty] private string _luName = "";
     [ObservableProperty] private bool _destructiveBackspace = true;
@@ -148,6 +149,19 @@ public partial class ProfileEditorViewModel : ObservableObject
     /// <summary>Same seeding rule as the models.</summary>
     public IReadOnlyList<CodePage> CodePages { get; }
 
+    /// <summary>Colour (3279) or Mono (3278), a view over <see cref="Display"/>, which stays what TryBuild reads.</summary>
+    public IReadOnlyList<DisplayChoice> DisplayChoices => DisplayChoice.All;
+
+    public DisplayChoice SelectedDisplayChoice
+    {
+        get => DisplayChoices.First(c => c.Display == Display);
+        set
+        {
+            if (value is null) return;
+            Display = value.Display;
+        }
+    }
+
     /// <summary>The model Other saves. With an oversize, b3270 sends IBM-DYNAMIC and starts on 24x80 whatever the
     /// model is, so the model's only remaining effect is the floor the oversize must clear; model 2's is the
     /// lowest, so it refuses nothing a custom size could legally be.</summary>
@@ -242,6 +256,7 @@ public partial class ProfileEditorViewModel : ObservableObject
         _verifyCertificate = existing.VerifyCertificate;
         _model = custom is null ? existing.Model : CustomSizeModel.Number;
         _extended = existing.Extended;
+        _display = existing.Display;
         _codePage = existing.CodePage;
         _luName = existing.LuName ?? "";
         _destructiveBackspace = existing.DestructiveBackspace;
@@ -644,6 +659,7 @@ public partial class ProfileEditorViewModel : ObservableObject
             PinnedCertificate = PinnedCertificate,
             Model = Model,
             Extended = Extended,
+            Display = Display,
             CodePage = CodePage.Trim(),
             LuName = string.IsNullOrWhiteSpace(LuName) ? null : LuName.Trim(),
             DestructiveBackspace = DestructiveBackspace,

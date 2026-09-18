@@ -92,12 +92,14 @@ public class MappersTests
     }
 
     [Theory]
-    [InlineData(2, true, "3279-2-E")]
-    [InlineData(4, false, "3279-4")]
-    [InlineData(5, true, "3279-5-E")]
-    public void ModelArgument_formats_model(int model, bool extended, string expected)
+    [InlineData(2, true, TerminalDisplay.Color, "3279-2-E")]
+    [InlineData(4, false, TerminalDisplay.Color, "3279-4")]
+    [InlineData(5, true, TerminalDisplay.Color, "3279-5-E")]
+    [InlineData(2, true, TerminalDisplay.Mono, "3278-2-E")]
+    [InlineData(4, false, TerminalDisplay.Mono, "3278-4")]
+    public void ModelArgument_formats_model(int model, bool extended, TerminalDisplay display, string expected)
     {
-        var p = new SessionProfile { Name = "a", Host = "h", Model = model, Extended = extended };
+        var p = new SessionProfile { Name = "a", Host = "h", Model = model, Extended = extended, Display = display };
         Assert.Equal(expected, HostStringBuilder.ModelArgument(p));
     }
 }

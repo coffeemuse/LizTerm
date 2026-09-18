@@ -137,6 +137,7 @@ public class ProfileStoreTests : IDisposable
         Assert.Equal(23, old.Port);
         Assert.Equal(2, old.Model);
         Assert.True(old.Extended);
+        Assert.Equal(TerminalDisplay.Color, old.Display);
         Assert.Equal("cp037", old.CodePage);
         Assert.Null(old.PinnedCertificate);
         Assert.Equal(60, old.KeepAliveSeconds);
@@ -434,6 +435,17 @@ public class ProfileStoreTests : IDisposable
         var text = File.ReadAllText(Directory.GetFiles(_dir).Single(f => File.ReadAllText(f).Contains("\"plain\"")));
         Assert.Contains("\"hostFilesUrl\": null", text);
         Assert.Contains("\"hostFilesPinnedCertificate\": null", text);
+    }
+
+    /// <summary>Written by name, like the settings enums, so the file stays hand-readable and a reordering of
+    /// the enum can never turn a saved 3278 into a 3279 (#123).</summary>
+    [Fact]
+    public void The_display_round_trips_and_is_written_by_name()
+    {
+        var store = new ProfileStore(_dir);
+        store.Save(new SessionProfile { Name = "mono", Host = "h", Display = TerminalDisplay.Mono });
+        Assert.Equal(TerminalDisplay.Mono, store.Load("mono")!.Display);
+        Assert.Contains("\"display\": \"Mono\"", File.ReadAllText(Directory.GetFiles(_dir, "*.json").Single()));
     }
 
     [Fact]

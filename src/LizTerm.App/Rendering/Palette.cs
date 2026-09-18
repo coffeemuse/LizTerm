@@ -61,6 +61,16 @@ public static class Palette
 
     public static Color ColorOf(HostColor color) => Colors[color];
 
+    /// <summary>The one colour a mono (3278) screen is drawn in: a green phosphor, with intensified text blended
+    /// brighter exactly as the colour path blends. b3270 reports no colour at all for a 3278, so a mono session
+    /// never reaches the table above; this is the single value #78's themes override for amber or white.</summary>
+    public static readonly Color Phosphor = Color.FromRgb(0x33, 0xFF, 0x33);
+
+    private static readonly IBrush PhosphorPlain = new ImmutableSolidColorBrush(Phosphor);
+    private static readonly IBrush PhosphorBright = new ImmutableSolidColorBrush(Color.FromRgb(Blend(Phosphor.R), Blend(Phosphor.G), Blend(Phosphor.B)));
+
+    public static IBrush PhosphorBrush(bool bright) => bright ? PhosphorBright : PhosphorPlain;
+
     /// <param name="bright">Intensified (highlight) rendition: blend 35% toward white.</param>
     public static IBrush Brush(HostColor color, bool bright)
     {

@@ -227,6 +227,9 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     }
 
     public SessionProfile Profile => _session.Profile;
+
+    /// <summary>Whether the screen and its captures draw in the one phosphor of a 3278 (#123).</summary>
+    public bool Monochrome => Profile.Display == TerminalDisplay.Mono;
     public string Title => $"{Profile.Name} - {Profile.Host}";
 
     /// <summary>The profile as the session window shows it (#93): the banner on connect and the status bar's
@@ -807,7 +810,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
             var extension = Path.GetExtension(path);
             var html = extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
                        || extension.Equals(".htm", StringComparison.OrdinalIgnoreCase);
-            await File.WriteAllTextAsync(path, html ? ScreenHtml.RenderDocument(screen) : screen.ToText());
+            await File.WriteAllTextAsync(path, html ? ScreenHtml.RenderDocument(screen, Monochrome) : screen.ToText());
         }
         catch (Exception ex)
         {
@@ -823,7 +826,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         if (Screen is not { } screen) return;
         try
         {
-            await _clipboard.SetTextAsync(ScreenHtml.Render(screen));
+            await _clipboard.SetTextAsync(ScreenHtml.Render(screen, Monochrome));
         }
         catch (Exception ex)
         {

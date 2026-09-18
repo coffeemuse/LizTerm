@@ -44,6 +44,7 @@ public class StatusFormatterTests
         var profile = new SessionProfile { Name = "a", Host = "mvs.local", Model = 4 };
         Assert.Equal("Connected to mvs.local (TN3270E)\n3279-4-E", StatusFormatter.ModeTip(ConnectionState.ConnectedTn3270E, profile));
         Assert.Equal("Not connected\n3279-4-E", StatusFormatter.ModeTip(ConnectionState.Disconnected, profile));
+        Assert.Equal("Not connected\n3278-4-E", StatusFormatter.ModeTip(ConnectionState.Disconnected, profile with { Display = TerminalDisplay.Mono }));
     }
 
     [Fact]

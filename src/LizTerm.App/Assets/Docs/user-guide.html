@@ -87,7 +87,8 @@ the buttons.</p>
 <tr><td>Keep-alive every <em>n</em> seconds</td><td>Keeps the network connection open through firewalls and routers that drop idle connections. <code>0</code> turns it off. It does not stop the host logging you off for being idle.</td></tr>
 <tr><td>Reconnect automatically</td><td>Reconnect if the host drops the session.</td></tr>
 <tr><td>Model</td><td>The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132), or <strong>Other (custom size)</strong> for a size of your own, for hosts that support one.</td></tr>
-<tr><td>Extended data stream</td><td>Colours and extended attributes (on by default).</td></tr>
+<tr><td>Colour / Mono</td><td><strong>Colour (3279)</strong>, the default, or <strong>Mono (3278)</strong>. A mono profile tells the host it is a 3278, so the host leaves colour out of what it sends, and the screen is drawn in one green phosphor, brighter where the host intensifies. Some applications lay out their panels differently for a mono terminal.</td></tr>
+<tr><td>Extended data stream</td><td>Colours and extended attributes (on by default). It applies to both terminal types.</td></tr>
 <tr><td>Screen size</td><td>Columns and rows. They show the model's own size, and you can change them, by typing or with the arrows, only when Model is <strong>Other</strong>, which starts from the size already shown. A custom size must be at least 80 columns and 24 rows, and columns times rows can be at most 16,383 (at 160 columns, 102 rows at most).</td></tr>
 <tr><td>Code page</td><td>The host's character set. The default is <code>cp037</code> (US/Canada); TK4- and TK5 users may want <code>bracket</code>, which maps the 3270 bracket characters.</td></tr>
 <tr><td>LU name</td><td>Request a specific logical unit from the host. Optional.</td></tr>
