@@ -4,8 +4,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Records one mvsMF exchange as a test fixture in tests/LizTerm.Backend.Mvsmf.Tests/Fixtures/<name>.http: the
-# response headers with CRs removed (Date, Jobname, Jobid and Node dropped), a blank line, then the body bytes
-# untouched. The body is never passed through tr, because binary records can hold 0x0D.
+# response headers with CRs removed (Date, Jobname, Jobid and Node dropped; the LtpaToken2 cookie's value replaced
+# by <token>), a blank line, then the body bytes untouched. The body is never passed through tr, because binary
+# records can hold 0x0D.
 #
 # Needs LIZTERM_MVSMF_URL (the base, ending in /zosmf), LIZTERM_MVSMF_USER and LIZTERM_MVSMF_PASSWORD. The
 # credentials reach curl through a netrc on a file descriptor, never the command line. MVSMF_BAD_PASSWORD=1 sends a
@@ -32,5 +33,5 @@ trap 'rm -rf "$tmp"' EXIT
 touch "$tmp/body"
 curl -sS --netrc-file <(printf 'machine %s login %s password %s\n' "$host" "$LIZTERM_MVSMF_USER" "$password") \
   -X "$method" -D "$tmp/headers" -o "$tmp/body" "$@" "${LIZTERM_MVSMF_URL%/}/$path"
-{ tr -d '\r' < "$tmp/headers" | grep -viE '^(date|jobname|jobid|node):'; cat "$tmp/body"; } > "$out"
+{ tr -d '\r' < "$tmp/headers" | grep -viE '^(date|jobname|jobid|node):' | sed -E 's/^(Set-Cookie: LtpaToken2=)[^;]*/\1<token>/I'; cat "$tmp/body"; } > "$out"
 echo "$name: $(head -1 "$out")"

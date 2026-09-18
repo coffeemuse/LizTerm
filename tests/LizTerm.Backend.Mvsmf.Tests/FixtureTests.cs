@@ -26,13 +26,15 @@ public class FixtureTests
     }
 
     [Fact]
-    public void No_fixture_holds_credentials()
+    public void No_fixture_holds_credentials_or_a_session_token()
     {
         foreach (var file in Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Fixtures"), "*.http"))
         {
             var text = File.ReadAllText(file);
             Assert.DoesNotContain("Authorization", text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("password", text, StringComparison.OrdinalIgnoreCase);
+            foreach (var line in text.Split('\n').Where(l => l.StartsWith("Set-Cookie:", StringComparison.OrdinalIgnoreCase)))
+                Assert.StartsWith("Set-Cookie: LtpaToken2=<token>;", line);
         }
     }
 }
