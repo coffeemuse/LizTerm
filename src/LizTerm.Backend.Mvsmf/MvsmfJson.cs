@@ -28,7 +28,9 @@ internal sealed record MvsmfDatasetList(
 
 internal sealed record MvsmfMember([property: JsonPropertyName("member")] string? Member);
 
-internal sealed record MvsmfMemberList([property: JsonPropertyName("items")] List<MvsmfMember>? Items);
+internal sealed record MvsmfMemberList(
+    [property: JsonPropertyName("items")] List<MvsmfMember>? Items,
+    [property: JsonPropertyName("moreRows")] bool? MoreRows);
 
 internal sealed record MvsmfError(
     [property: JsonPropertyName("rc")] int? Rc,

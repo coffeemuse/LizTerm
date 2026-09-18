@@ -87,13 +87,12 @@ public sealed class MvsmfFileService : IHostFileService
         const string what = "Dataset list";
         var filter = pattern.Trim().ToUpperInvariant();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        // mvsMF-compat: dataset-list-ignores-start — this build ignores start, so a list cannot be paged; the whole
-        // list is asked for, with no X-IBM-Max-Items.
+        // mvsMF-compat: no-paging — start and X-IBM-Max-Items work since mvsMF 1.1.0, but LizTerm asks for the whole
+        // list with neither (paging is #144).
         using var response = await SendAsync(
             () => new HttpRequestMessage(HttpMethod.Get, Url($"restfiles/ds?dslevel={EscapeName(filter)}")), what, idle, cancellationToken);
         var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfDatasetList, what, idle, cancellationToken);
-        // mvsMF-compat: dataset-list-morerows-false — moreRows arrives as false rather than absent. No item limit is
-        // ever sent, so a true means the host changed behaviour and the list is partial: refuse it.
+        // No item limit is ever sent, so a true moreRows means the host returned a partial list: refuse it.
         if (list.MoreRows == true)
             throw new HostFileException(HostFileErrorKind.ServerError, $"{what}: the host returned only part of the list.");
         return [.. (list.Items ?? Enumerable.Empty<MvsmfDataset>()).Where(d => !string.IsNullOrWhiteSpace(d.Dsname)).Select(ToEntry)];
@@ -104,13 +103,12 @@ public sealed class MvsmfFileService : IHostFileService
         if (dataset.Kind != HostPathKind.Dataset) throw new ArgumentException("Only a dataset has members.", nameof(dataset));
         var what = dataset.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        // mvsMF-compat: member-list-ignores-max-items — the host returns every member whatever limit is asked, so
-        // none is sent.
+        // mvsMF-compat: no-paging — as for datasets: whole list, no X-IBM-Max-Items (paging is #144).
         using var response = await SendAsync(
             () => new HttpRequestMessage(HttpMethod.Get, Url(DatasetPath(dataset) + "/member")), what, idle, cancellationToken);
         var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfMemberList, what, idle, cancellationToken);
-        // mvsMF-compat: member-list-empty-for-missing-dataset — a missing or sequential dataset answers 200 with no
-        // items, so an empty list is passed on as it is; IHostFileService tells callers to confirm the dataset.
+        if (list.MoreRows == true)
+            throw new HostFileException(HostFileErrorKind.ServerError, $"{what}: the host returned only part of the list.");
         return [.. (list.Items ?? Enumerable.Empty<MvsmfMember>())
             .Where(m => !string.IsNullOrWhiteSpace(m.Member))
             .Select(m => new HostFileEntry(m.Member!.Trim(), HostFileEntryKind.Member))];
