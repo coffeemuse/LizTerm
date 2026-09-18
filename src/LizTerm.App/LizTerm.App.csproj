@@ -78,6 +78,18 @@
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- About wears -DEV unless the build says it is a release, and only release.yml's tag arm says so, with
+       -p:LizTermReleaseBuild=true (docs/ci-and-release.md, "Release builds and test builds"). A marker that has
+       to be written is the point: the commit the SDK stamps inside a git checkout is absent from a source
+       tarball too, so a build that merely lacks one must not pass for a release. The key is
+       AppVersion.ReleaseMarkerKey; keep the two in step. -->
+  <ItemGroup Condition="'$(LizTermReleaseBuild)' == 'true'">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>LizTerm.ReleaseBuild</_Parameter1>
+      <_Parameter2>true</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="LizTerm.App.Tests" />
   </ItemGroup>

@@ -13,6 +13,13 @@ concurrency:
 permissions:
   contents: read
 
+# A release is a pushed tag and nothing else -- not a workflow_dispatch rehearsal, which the Actions UI can
+# start from a tag as readily as from a branch. Every publish step hands this to the build, which marks the
+# assembly with it and so tells About whether to wear -DEV (docs/ci-and-release.md, "Release builds and test
+# builds").
+env:
+  LIZTERM_RELEASE_BUILD: ${{ github.event_name == 'push' && github.ref_type == 'tag' && 'true' || 'false' }}
+
 jobs:
   # The same five engines platforms.yml builds, from the same definition, each proven to start before it is
   # published. On a tag cut from a green main these are cache hits: actions/cache is repository-scoped, not
@@ -145,7 +152,16 @@ jobs:
         run: |
           dotnet publish src/LizTerm.App -c Release -r ${{ matrix.rid }} --self-contained \
             -p:Version=${{ needs.version.outputs.version }} \
+            -p:LizTermReleaseBuild=$LIZTERM_RELEASE_BUILD \
             -o publish/${{ matrix.rid }}
+
+      # Before this job packages anything, and once per publish rather than once per pipeline: see
+      # docs/ci-and-release.md, "Release builds and test builds".
+      - name: The build is marked as a release only on a release
+        run: |
+          set -euo pipefail
+          if [ "${LIZTERM_RELEASE_BUILD:-}" = "true" ]; then expected=release; else expected=test; fi
+          tools/verify-release-marker.sh ${{ matrix.rid }} ${{ needs.version.outputs.version }} "$expected"
 
       # Pinned like every other external input in this repository (container digests, tarball checksums, the
       # SDK band, package versions): this workflow fires rarely and long after its last green run, which makes
@@ -376,7 +392,16 @@ jobs:
         run: |
           dotnet publish src/LizTerm.App -c Release -r linux-x64 --self-contained \
             -p:Version=${{ needs.version.outputs.version }} \
+            -p:LizTermReleaseBuild=$LIZTERM_RELEASE_BUILD \
             -o publish/linux-x64
+
+      # Before this job packages anything, and once per publish rather than once per pipeline: see
+      # docs/ci-and-release.md, "Release builds and test builds".
+      - name: The linux-x64 build is marked as a release only on a release
+        run: |
+          set -euo pipefail
+          if [ "${LIZTERM_RELEASE_BUILD:-}" = "true" ]; then expected=release; else expected=test; fi
+          tools/verify-release-marker.sh linux-x64 ${{ needs.version.outputs.version }} "$expected"
 
       # Unlike `dotnet publish`, `parcel pack` does not create its own `-o` directory -- it throws
       # System.ArgumentException: Provided output directory doesn't exist if the path is missing.
@@ -437,7 +462,16 @@ jobs:
         run: |
           dotnet publish src/LizTerm.App -c Release -r linux-arm64 --self-contained \
             -p:Version=${{ needs.version.outputs.version }} \
+            -p:LizTermReleaseBuild=$LIZTERM_RELEASE_BUILD \
             -o publish/linux-arm64
+
+      # Before this job packages anything, and once per publish rather than once per pipeline: see
+      # docs/ci-and-release.md, "Release builds and test builds".
+      - name: The linux-arm64 build is marked as a release only on a release
+        run: |
+          set -euo pipefail
+          if [ "${LIZTERM_RELEASE_BUILD:-}" = "true" ]; then expected=release; else expected=test; fi
+          tools/verify-release-marker.sh linux-arm64 ${{ needs.version.outputs.version }} "$expected"
 
       - name: Package linux-arm64
         env:
@@ -505,7 +539,17 @@ jobs:
         run: |
           dotnet publish src/LizTerm.App -c Release -r ${{ matrix.rid }} --self-contained `
             -p:Version=${{ needs.version.outputs.version }} `
+            -p:LizTermReleaseBuild=$env:LIZTERM_RELEASE_BUILD `
             -o publish/${{ matrix.rid }}
+
+      # Before this job packages anything, and once per publish rather than once per pipeline: see
+      # docs/ci-and-release.md, "Release builds and test builds".
+      - name: The build is marked as a release only on a release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${LIZTERM_RELEASE_BUILD:-}" = "true" ]; then expected=release; else expected=test; fi
+          tools/verify-release-marker.sh ${{ matrix.rid }} ${{ needs.version.outputs.version }} "$expected"
 
       - name: Install Parcel
         run: dotnet tool install --global AvaloniaUI.Parcel --version 1.1.1

@@ -271,6 +271,14 @@ The dialog shows progress while the transfer runs. **Cancel**, or closing the di
 host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
 the transfer ends. The dialog remembers your last transfer for that window.
 
+## Which build you are running
+
+**Help > About LizTerm...** names the version, and so does the splash screen. A build that is not a release — one
+made from source, or from a pull request — shows it as `0.6.1-DEV (a1b2c3d)`, where `a1b2c3d` is the commit it was
+built from; a build made outside a git checkout, such as one from a downloaded source archive, says `0.6.1-DEV` with
+no commit. A release shows its plain version, with no `-DEV` and no commit. The line in About can be selected and
+copied, so a bug report can say exactly which build it was filed against.
+
 ## Wire logs
 
 A wire log records every message between LizTerm and its emulation engine. It is the most useful thing to attach

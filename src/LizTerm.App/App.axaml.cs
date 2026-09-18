@@ -301,7 +301,7 @@ public partial class App : Application
         // A session's own Help item stays modal to that session even if another window is active; the
         // application menu passes null and takes whatever the user is looking at.
         var owner = preferredOwner ?? ActiveWindow();
-        var about = new AboutWindow(AppVersion.Current, AboutEngine(preferredOwner), SessionFactory.OverrideOrigin);
+        var about = new AboutWindow(AppVersion.Display, AboutEngine(preferredOwner), SessionFactory.OverrideOrigin);
         _about = about;
         about.Closed += (_, _) => { if (ReferenceEquals(_about, about)) _about = null; };
         if (owner is null)
