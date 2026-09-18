@@ -31,10 +31,11 @@ public sealed class SignInHolder(string profileName, string url, string? userid)
     public HostTokenProvider ProviderFor(ICredentialPrompt prompt) => (request, signIn, token) => GetAsync(prompt, request, signIn, token);
 
     /// <summary>Ends the session through <paramref name="service"/> if one is held, and drops the token. Any failure
-    /// is the service's to swallow (best effort on window close).</summary>
-    public async Task SignOutAsync(IHostFileService service)
+    /// is the service's to swallow (best effort on window close); <paramref name="cancellationToken"/> is the
+    /// caller's own give-up, which the service lets through.</summary>
+    public async Task SignOutAsync(IHostFileService service, CancellationToken cancellationToken = default)
     {
-        if (Take() is { } token) await service.SignOutAsync(token);
+        if (Take() is { } token) await service.SignOutAsync(token, cancellationToken);
     }
 
     /// <summary>Drops the held token and answers it, or null when nothing is held. Its own step, so a caller that

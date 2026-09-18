@@ -752,7 +752,11 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   token is passed in and the prompt can never be reached) and ends the session.
 - **That sign-out splits across two threads on purpose.** `SignOutAsync` takes the token out of the holder
   *synchronously*, on the caller's thread, so `IsSignedIn` is false the moment the window closes; then it hands the
-  DELETE to `Task.Run`, and `OnClosed` fire-and-forgets the result under a five-second cap. The hand-off is not
+  DELETE to `Task.Run`, and `OnClosed` fire-and-forgets the result. The five-second cap is a
+  `CancellationTokenSource` whose token `OnClosed` passes in and whose continuation disposes, **not** a `WaitAsync`
+  around the task: only cancelling the request itself stops a DELETE to a host that has stopped answering, which
+  would otherwise run on to the backend's 30 s idle timeout. The backend swallows transport failures and its own
+  idle timeout but lets that cancellation through, and the continuation observes it. The hand-off is not
   tidiness: nothing in this codebase uses `ConfigureAwait(false)`, so a continuation started on the UI thread is
   posted back to the Avalonia dispatcher — and on the **last** window `base.OnClosed` leads to `Shutdown()`, which
   stops that dispatcher before the queued continuation runs. Left on the UI thread the response would never be read
@@ -762,6 +766,9 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   sign-in window's text box, and the `HostCredentials` it hands to the backend's `SignInAsync`. The holder asks
   once, trades the answer for a token through the `HostSignIn` the backend passes its provider, and drops the
   credentials; nothing else in App ever sees a password, and no log, message or `ToString()` may carry one.
+- **Known leak:** a session window closed while a login POST is still in flight stores the token that POST wins in a
+  holder nobody signs out any more, so that session lives until the host reaps it at its idle timeout — the same
+  outcome as killing the app.
 - Its prompts are serialised, so operations that start or are refused together share one prompt, and a refused
   token is asked about again only while it is still the current one (`HostTokenRequest.Rejected`); a request naming
   a token another operation has already replaced is answered with the newer one. A cancelled prompt answers every

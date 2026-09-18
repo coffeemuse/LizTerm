@@ -220,8 +220,8 @@ public class SignInHolderTests
         await provider(First, signer.SignIn, CancellationToken.None);
         var service = new FakeHostFileService();
 
-        await holder.SignOutAsync(service);
-        await holder.SignOutAsync(service); // no token now, no second call
+        await holder.SignOutAsync(service, TestContext.Current.CancellationToken);
+        await holder.SignOutAsync(service, TestContext.Current.CancellationToken); // no token now, no second call
 
         Assert.False(holder.IsSignedIn);
         Assert.Equal(1, service.CallsSnapshot().Count(c => c.StartsWith("signout")));

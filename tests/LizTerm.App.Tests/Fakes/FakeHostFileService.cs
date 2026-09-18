@@ -43,10 +43,11 @@ public sealed class FakeHostFileService : IHostFileService
         lock (_lock) return [.. Calls];
     }
 
-    public Task SignOutAsync(HostSessionToken token, CancellationToken cancellationToken = default)
+    public async Task SignOutAsync(HostSessionToken token, CancellationToken cancellationToken = default)
     {
-        lock (_lock) Calls.Add("signout");
-        return Task.CompletedTask;
+        // Through EnterAsync like every other operation, so Failures["signout"] throws and Gate holds it.
+        await EnterAsync("signout", "signout", cancellationToken);
+        Leave();
     }
 
     public async Task<HostServerInfo> GetServerInfoAsync(CancellationToken cancellationToken = default)

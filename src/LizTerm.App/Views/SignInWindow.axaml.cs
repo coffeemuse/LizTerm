@@ -23,7 +23,8 @@ public partial class SignInWindow : Window
         ReasonText.Text = request.Reason switch
         {
             SignInReason.Rejected => "✗ The userid or password was not accepted. Try again.",
-            SignInReason.Expired => "Your mvsMF session has expired. Sign in again.",
+            // Both lines are drawn in the error red, so both lead with a mark: colour never carries meaning alone.
+            SignInReason.Expired => "⚠ Your mvsMF session has expired. Sign in again.",
             _ => "",
         };
         ReasonText.IsVisible = request.Reason != SignInReason.First;

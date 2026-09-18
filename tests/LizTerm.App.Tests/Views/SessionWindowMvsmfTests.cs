@@ -143,6 +143,24 @@ public class SessionWindowMvsmfTests
         Assert.False(shown.Access.SignIn.IsSignedIn);
     }
 
+    /// <summary>The sign-out is best effort and fire-and-forget: a host that refuses it must not keep the window
+    /// open or throw out of Close, and the token is gone either way.</summary>
+    [AvaloniaFact]
+    public async Task A_failing_sign_out_does_not_stop_the_window_closing()
+    {
+        var shown = Show();
+        shown.Host.Failures["signout"] = new HostFileException(HostFileErrorKind.Unreachable, "Sign-out: cannot reach the host.");
+        await shown.Access!.SignIn.ProviderFor(new FakeCredentialPrompt())(
+            new HostTokenRequest(null), (c, _) => Task.FromResult(new HostSessionToken($"tok:{c.Userid}")), CancellationToken.None);
+        Assert.True(shown.Access.SignIn.IsSignedIn);
+
+        shown.Window.Close();
+
+        Assert.False(shown.Access.SignIn.IsSignedIn);
+        Assert.False(shown.Window.IsVisible);
+        await Wait.UntilAsync(() => shown.Host.CallsSnapshot().Contains("signout"), "the sign-out to be attempted");
+    }
+
     [AvaloniaFact]
     public void An_unusable_url_is_reported_in_the_banner()
     {

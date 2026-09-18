@@ -39,11 +39,11 @@ public class SignInWindowTests
     }
 
     [AvaloniaFact]
-    public void An_expired_session_says_so_rather_than_blaming_the_password()
+    public void An_expired_session_says_so_with_a_mark_rather_than_blaming_the_password()
     {
         var text = Show(reason: SignInReason.Expired).FindControl<TextBlock>("ReasonText")!;
         Assert.True(text.IsVisible);
-        Assert.Equal("Your mvsMF session has expired. Sign in again.", text.Text);
+        Assert.Equal("⚠ Your mvsMF session has expired. Sign in again.", text.Text);
     }
 
     [AvaloniaFact]

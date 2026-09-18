@@ -50,7 +50,7 @@ public class HostFileAccessTests
             new HostTokenRequest(null), (c, _) => Task.FromResult(new HostSessionToken($"tok:{c.Userid}")), CancellationToken.None);
         Assert.True(access.SignIn.IsSignedIn);
 
-        await access.SignOutAsync();
+        await access.SignOutAsync(TestContext.Current.CancellationToken);
 
         Assert.False(access.SignIn.IsSignedIn);
         Assert.Equal(["signout"], services.Single().CallsSnapshot());
@@ -64,7 +64,7 @@ public class HostFileAccessTests
         var access = new HostFileAccess(new SessionProfile { Name = "x", Host = "h", HostFilesUrl = "http://h" },
             (_, _, _) => { built++; return new FakeHostFileService(); }, savePin: null);
 
-        await access.SignOutAsync();
+        await access.SignOutAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(0, built);
     }

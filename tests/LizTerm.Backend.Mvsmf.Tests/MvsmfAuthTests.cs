@@ -71,6 +71,33 @@ public class MvsmfAuthTests
         var ex = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
 
         Assert.Equal(HostFileErrorKind.Unsupported, ex.Kind);
+        Assert.Equal("This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.", ex.Message);
+    }
+
+    /// <summary>Spec §4.2: 404, 405 <em>or any other non-JSON answer</em>. A proxy's catch-all page answering the
+    /// login with 200 and HTML is a host without the route, not an mvsMF that forgot its cookie.</summary>
+    [Fact]
+    public async Task A_login_answered_with_a_page_rather_than_json_is_unsupported()
+    {
+        var handler = new RecordedHandler().Then(HttpStatusCode.OK, "<html>Welcome</html>", "text/html");
+        using var service = new MvsmfFileService(handler, Base, Providing([], new HostCredentials("MVSCE02", "pw")));
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(HostFileErrorKind.Unsupported, ex.Kind);
+        Assert.Equal("This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_json_login_that_sets_no_cookie_is_a_server_error()
+    {
+        var handler = new RecordedHandler().Then(HttpStatusCode.OK, """{"returnCode":0,"message":"Success."}""");
+        using var service = new MvsmfFileService(handler, Base, Providing([], new HostCredentials("MVSCE02", "pw")));
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() => service.GetServerInfoAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(HostFileErrorKind.ServerError, ex.Kind);
+        Assert.Equal("Sign-in: the host set no session cookie.", ex.Message);
     }
 
     [Fact]
@@ -135,6 +162,40 @@ public class MvsmfAuthTests
         Assert.All(handler.Requests, r => Assert.Equal(HttpMethod.Delete, r.Method));
         Assert.All(handler.Requests, r => Assert.Equal("services/authenticate", r.Uri.AbsolutePath.TrimStart('/')["zosmf/".Length..]));
         Assert.All(handler.Requests, r => Assert.Equal("LtpaToken2=tok", r.Cookie));
+    }
+
+    /// <summary>The idle timeout and a dropped connection are swallowed; the caller's own cancellation — the
+    /// session window's five-second cap — is not, so the window's continuation can see the DELETE was given up on.
+    /// </summary>
+    [Fact]
+    public async Task A_sign_out_the_caller_cancels_propagates()
+    {
+        using var gaveUp = new CancellationTokenSource();
+        await gaveUp.CancelAsync();
+        // RecordedHandler answers whatever is queued whatever the token says, so this plays what a real handler
+        // does with a cancelled one.
+        var handler = new RecordedHandler().Then((_, ct) => throw new TaskCanceledException("Canceled.", null, ct));
+        using var service = new MvsmfFileService(handler, Base, Providing([], new HostCredentials("MVSCE02", "pw")));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.SignOutAsync(new HostSessionToken("tok"), gaveUp.Token));
+
+        Assert.Single(handler.Requests); // handed over and then given up on, rather than never attempted
+    }
+
+    [Fact]
+    public async Task A_sign_out_the_host_refuses_or_ignores_is_swallowed()
+    {
+        var handler = new RecordedHandler()
+            .Then((_, _) => throw new HttpRequestException("Connection refused (mvs.test:8080)"))
+            .Then(async (_, ct) => { await Task.Delay(TimeSpan.FromSeconds(5), ct); return new HttpResponseMessage(HttpStatusCode.NoContent); });
+        using var service = new MvsmfFileService(handler, Base, Providing([], new HostCredentials("MVSCE02", "pw")),
+            idleTimeout: TimeSpan.FromMilliseconds(50));
+
+        await service.SignOutAsync(new HostSessionToken("tok"), TestContext.Current.CancellationToken); // dropped connection
+        await service.SignOutAsync(new HostSessionToken("tok"), TestContext.Current.CancellationToken); // host went quiet
+
+        Assert.Equal(2, handler.Requests.Count);
     }
 
     [Theory]

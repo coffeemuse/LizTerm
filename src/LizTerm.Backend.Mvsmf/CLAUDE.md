@@ -12,6 +12,12 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
   request a service ever makes, so a host it cannot reach is reported with a `Sign-in:` prefix rather than the
   operation's own name. `ProbeAsync` is the separate, anonymous `GET /info` the Test button uses before it asks for
   a password: a 401 there proves the URL is an mvsMF without spending a sign-in.
+- **A login that does not answer JSON is `Unsupported`** (spec §4.2): 404, 405 or any other non-JSON answer — a
+  proxy's or a web server's catch-all page replying 200 with HTML — means this host has no authenticate route, and
+  `NoSignInRoute` says so in one sentence. Only a JSON 200 gets as far as the cookie check, where a missing
+  `LtpaToken2` is a `ServerError` ("Sign-in: the host set no session cookie."). `SignOutAsync` is the one call that
+  swallows rather than maps: a transport failure or the idle timeout is best effort on window close, but the
+  caller's own cancellation (the session window's five-second cap) propagates for its continuation to observe.
 - **Cookie, not Bearer.** LizTerm sends the token as the `LtpaToken2` cookie because real z/OSMF accepts only the
   cookie; `Authorization: Bearer` is an mvsMF convenience real z/OSMF does not honour. `UseCookies` stays false and
   the cookie is sent by hand.

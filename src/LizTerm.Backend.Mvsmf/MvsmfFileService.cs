@@ -276,20 +276,27 @@ public sealed class MvsmfFileService : IHostFileService
         {
             if (response.StatusCode == HttpStatusCode.Unauthorized)
                 throw new HostFileException(HostFileErrorKind.Unauthenticated, "The host rejected the userid or password.");
-            if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed)
-                throw new HostFileException(HostFileErrorKind.Unsupported,
-                    "This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.");
+            if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed) throw NoSignInRoute();
             if (!response.IsSuccessStatusCode)
             {
                 using var body = new MemoryStream();
                 await CopyBodyAsync(response, body, idle, null, what, cancellationToken);
                 throw MvsmfErrors.FromResponse(response.StatusCode, body.ToArray(), what);
             }
+            // A success that is not JSON is a proxy's or a web server's catch-all page answering a route this host
+            // does not have (spec §4.2) — not an mvsMF that forgot its cookie, which is what the check below would
+            // otherwise report.
+            if (!string.Equals(response.Content.Headers.ContentType?.MediaType, "application/json", StringComparison.OrdinalIgnoreCase))
+                throw NoSignInRoute();
             if (TokenFromCookies(response) is not { } token)
                 throw new HostFileException(HostFileErrorKind.ServerError, "Sign-in: the host set no session cookie.");
             return token;
         }
     }
+
+    /// <summary>A host with no usable sign-in route (spec §4.2): 404, 405, or any other non-JSON answer.</summary>
+    private static HostFileException NoSignInRoute() =>
+        new(HostFileErrorKind.Unsupported, "This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.");
 
     /// <summary>The unauthenticated reachability check for the Test button: the info when the host answers it
     /// without credentials, null for a 401 (reachable, sign-in needed).</summary>
@@ -334,15 +341,20 @@ public sealed class MvsmfFileService : IHostFileService
         AddCommonHeaders(request);
         try
         {
-            // Not through SendRawAsync: its HttpRequestException arm calls MvsmfCertificateCheck.TakeRejected(),
-            // and a best-effort sign-out must not consume a refusal the next operation is meant to report.
+            // Not through SendRawAsync: that turns every failure into a HostFileException naming the operation,
+            // and a best-effort sign-out swallows instead of mapping. The certificate check is not the reason —
+            // its one refusal slot is filled by MvsmfCertificateCheck.Validate during the handshake, and this
+            // DELETE runs on a service built for it and disposed with it, so its check is a fresh one anyway.
             idle.Reset();
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, idle.Token);
             // 204 is a clean logout; 401 means the host already forgot the token. Both are success.
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException ||
+            (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            // Best effort: the caller (window close) ignores a failed sign-out.
+            // Best effort: a transport failure or the idle timeout is swallowed, since the caller (window close)
+            // can do nothing about it. The caller's OWN cancellation — the close-time cap — is not swallowed: it
+            // says the DELETE was given up on, and the caller's continuation observes it.
         }
     }
 

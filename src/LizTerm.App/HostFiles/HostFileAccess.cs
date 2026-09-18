@@ -65,18 +65,21 @@ public sealed class HostFileAccess
     /// nothing in this codebase uses <c>ConfigureAwait(false)</c>: called from <c>OnClosed</c> on the UI thread, its
     /// continuations would be posted to a dispatcher that stops with the last window, and the response would never
     /// be read (<c>B3270Session.ConnectAsync</c> escapes the same trap the same way).</remarks>
-    public Task SignOutAsync()
+    /// <param name="cancellationToken">Gives up on the DELETE. The token is dropped either way; only the network
+    /// half is cancelled, and it comes back as an <see cref="OperationCanceledException"/> for the caller to
+    /// observe, since the backend swallows everything but the caller's own cancellation.</param>
+    public Task SignOutAsync(CancellationToken cancellationToken = default)
     {
         if (Url is not { } url || SignIn.Take() is not { } token) return Task.CompletedTask;
-        return Task.Run(() => EndSessionAsync(url, token));
+        return Task.Run(() => EndSessionAsync(url, token, cancellationToken));
     }
 
     /// <summary>The network half of <see cref="SignOutAsync"/>. <see cref="NullPrompt"/> can never be reached: the
     /// token is passed in, so the service never asks the provider for one.</summary>
-    private async Task EndSessionAsync(Uri url, HostSessionToken token)
+    private async Task EndSessionAsync(Uri url, HostSessionToken token, CancellationToken cancellationToken)
     {
         using var service = CreateService(url, Pin, SignIn.ProviderFor(NullPrompt.Instance));
-        await service.SignOutAsync(token);
+        await service.SignOutAsync(token, cancellationToken);
     }
 
     internal IHostFileService CreateService(Uri url, CertificatePin? pin, HostTokenProvider tokens) =>
