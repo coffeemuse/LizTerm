@@ -542,7 +542,10 @@ public class SessionWindowTests
         _ = app.ShowAboutAsync(window);
 
         var dialog = Assert.Single(window.OwnedWindows);
-        Assert.IsType<AboutWindow>(dialog);
+        var about = Assert.IsType<AboutWindow>(dialog);
+        // The -DEV marker and the commit are useless if App passes something else here, and nothing else would
+        // notice: AboutWindowTests builds its windows with hand-written strings (issue #141).
+        Assert.Equal("Version " + AppVersion.Display, about.FindControl<TextBlock>("VersionText")!.Text);
         dialog.Close();
         Assert.Empty(window.OwnedWindows);
     }

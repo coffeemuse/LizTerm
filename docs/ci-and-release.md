@@ -154,6 +154,32 @@ Parcel also treats a missing or misnamed icon as a warning, not an error, so a t
 would ship an icon-less installer with a green build. The same job asserts that every icon path `LizTerm.parcel`
 names (`Win32Settings.InstallerIcon`, `MacOsSettings.AppIcon`, `LinuxSettings.AppIcon`) exists.
 
+### Release builds and test builds
+
+About shows the bare version for a release and `0.6.1-DEV (a1b2c3d)` for anything else
+([#141](https://github.com/coffeemuse/LizTerm/issues/141)), so that a bug report filed against a test build can say
+which build it was. A build states which it is rather than being guessed at: the workflow-level
+`LIZTERM_RELEASE_BUILD` is `true` only for a pushed tag, every publish step passes it to `dotnet publish` as
+`LizTermReleaseBuild`, and `LizTerm.App.csproj` turns that into an `AssemblyMetadata` attribute that
+`AppVersion.IsRelease` reads. Everything without the attribute is a test build, a `workflow_dispatch` rehearsal
+included — the Actions UI will start one from a tag as readily as from a branch, which is why the condition is
+`github.event_name == 'push'` and not the ref type alone.
+
+The commit beside `-DEV` is a separate fact: the SDK stamps it on `AssemblyInformationalVersion` from its
+source-control query, so it is present in a git checkout and absent from a source tarball, and `AppVersion.Commit`
+is null in the second case. A build with no commit still says `-DEV`, because the marker, not the stamp, is what
+decides.
+
+`tools/verify-release-marker.sh` proves it, once per publish step and before anything is packaged: a release
+without the marker, or anything else with it, fails there rather than shipping an About that lies about itself.
+That is the only check of the release arm — the manual pass before a release runs on rehearsal artifacts, which
+are meant to say `-DEV` — so it asserts the assembly carries this run's version before it is allowed to conclude
+anything from an absent marker. Each of the four publish jobs runs it on its own output: the steps reach
+`LIZTERM_RELEASE_BUILD` through bash on macOS and Linux and through `$env:` in PowerShell on Windows, and an empty
+value would quietly produce a test build. It reads `src/LizTerm.App/bin/Release/<tfm>/<rid>/LizTerm.App.dll`, the
+ordinary build output Parcel's `--no-build` consumes, because the `publish/` tree is single-file and keeps the
+assembly inside the host.
+
 ### Packaging with Parcel
 
 - `parcel pack` always runs its own `dotnet publish` into a randomised temp directory, `--no-build` or not. What

@@ -19,7 +19,7 @@ public partial class SplashWindow : Window
     private readonly DispatcherTimer _timer = new();
     private bool _dismissed;
 
-    public SplashWindow() : this(AppVersion.Current, SplashTiming.Default) { }
+    public SplashWindow() : this(AppVersion.Display, SplashTiming.Default) { }
 
     public SplashWindow(string version, SplashTiming timing)
     {
