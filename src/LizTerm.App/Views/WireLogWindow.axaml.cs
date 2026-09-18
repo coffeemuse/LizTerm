@@ -19,18 +19,13 @@ public partial class WireLogWindow : Window
     public WireLogWindow(WireLogPromptRequest request)
     {
         InitializeComponent();
+        // Named, because the logs folder is the same for every session and several windows can be open at once
+        // (#46): without it nothing on the dialog says which host is about to be recorded.
+        DestinationLabel.Text = $"The log for {request.ProfileName} will be written to:";
         PathText.Text = request.Directory;
     }
 
-    public bool Confirmed { get; private set; }
+    private void OnStartClick(object? sender, RoutedEventArgs e) => Close(true);
 
-    private void OnStartClick(object? sender, RoutedEventArgs e) => Finish(true);
-
-    private void OnCancelClick(object? sender, RoutedEventArgs e) => Finish(false);
-
-    private void Finish(bool confirmed)
-    {
-        Confirmed = confirmed;
-        Close(confirmed);
-    }
+    private void OnCancelClick(object? sender, RoutedEventArgs e) => Close(false);
 }

@@ -283,7 +283,7 @@ public sealed class B3270Session : IEmulatorSession
             {
                 Volatile.Read(ref _wireLog)?.Inbound(line);
                 if (!IndicationParser.TryParse(line, out var indication)) continue;
-                try { Handle(indication); }
+                try { Handle(indication, process); }
                 catch (Exception ex) { HostMessage?.Invoke(this, "Internal error handling emulator output: " + ex.Message); }
             }
         }
@@ -508,7 +508,9 @@ public sealed class B3270Session : IEmulatorSession
 
     // ---- indications ----
 
-    private void Handle(Indication indication)
+    /// <param name="process">The process whose reader thread read this line, for the cases that write state its
+    /// successor would otherwise inherit. See the fatal <c>ui-error</c> case.</param>
+    private void Handle(Indication indication, IB3270Process process)
     {
         switch (indication)
         {
@@ -540,7 +542,7 @@ public sealed class B3270Session : IEmulatorSession
                     foreach (var item in init.Items)
                     {
                         if (item is HelloIndication h) hello = h;
-                        else Handle(item);
+                        else Handle(item, process);
                     }
                 }
                 finally
@@ -565,8 +567,15 @@ public sealed class B3270Session : IEmulatorSession
                 // b3270 does not carry on after one of these: it writes the ui-error and exits. Recording the
                 // reason lets the fault that follows say why (OnProcessEnded), and the message here says the
                 // session is going rather than leaving it to disappear under a bare "Protocol error" (#139).
-                _fatalUiError = WithLastOutbound(error.Text);
-                HostMessage?.Invoke(this, FatalUiErrorMessage + _fatalUiError);
+                //
+                // Recorded only while this reader still owns the slot, the guard OnProcessEnded carries for the
+                // same reason: a torn-down engine's reader can still be draining lines it had buffered while its
+                // replacement is already running, and _fatalUiError is the one thing here that would outlive this
+                // process and be read as its successor's cause of death. The message itself is not guarded, since
+                // every other case says something about the process it came from too.
+                var text = WithLastOutbound(error.Text);
+                if (ReferenceEquals(process, _process)) _fatalUiError = text;
+                HostMessage?.Invoke(this, FatalUiErrorMessage + text);
                 break;
             case UiErrorIndication error:
                 HostMessage?.Invoke(this, "Protocol error: " + WithLastOutbound(error.Text));

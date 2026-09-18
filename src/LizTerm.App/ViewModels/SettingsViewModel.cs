@@ -133,8 +133,6 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Whether App shows the splash before its first window (#108). On by default, so an upgrade changes
-    /// nobody's launch; App reads it once, at startup, so a change in Preferences reaches the next launch.</summary>
     /// <summary>Hidden: nothing in Preferences binds this. See AppSettings for why.</summary>
     public bool WarnBeforeWireLog
     {
@@ -145,6 +143,8 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Whether App shows the splash before its first window (#108). On by default, so an upgrade changes
+    /// nobody's launch; App reads it once, at startup, so a change in Preferences reaches the next launch.</summary>
     public bool ShowSplashOnLaunch
     {
         get => Current.ShowSplashOnLaunch;

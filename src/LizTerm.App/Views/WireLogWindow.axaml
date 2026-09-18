@@ -23,7 +23,7 @@
     </StackPanel>
     <TextBlock TextWrapping="Wrap" Text="There are no automatic redactions. Review the log before you share it with anyone or post to GitHub. The LizTerm team is not responsible for any sensitive information that may be exposed." />
     <StackPanel Spacing="4">
-      <TextBlock Text="The log will be written to:" Foreground="#A0A0A0" FontSize="12" />
+      <TextBlock x:Name="DestinationLabel" Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap" />
       <TextBlock x:Name="PathText" FontFamily="{x:Static controls:TerminalScreen.TerminalFont}" TextWrapping="Wrap" />
     </StackPanel>
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

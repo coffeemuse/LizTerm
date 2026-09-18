@@ -407,24 +407,6 @@ public partial class SessionWindow : Window, ISessionHost
         }
     }
 
-    /// <summary>The native Wire Log item needs this handler for two independent reasons, and the classic item
-    /// needs it for neither — which is why it is the one place the two menus' bindings differ (OneWay here,
-    /// TwoWay there).
-    ///
-    /// First, it is what makes the item usable at all on macOS. Avalonia's exporter gives every NSMenuItem the
-    /// validation predicate <c>(Command != null || HasClickHandlers) &amp;&amp; IsEnabled</c>
-    /// (<c>__MicroComIAvnMenuItemProxy.UpdateAction</c>); an item carrying only a binding satisfies neither
-    /// disjunct, so AppKit greys it out and never calls back. Second, a NativeMenuItem does not toggle itself:
-    /// <c>NativeMenuItem.RaiseClicked</c> raises Click and executes Command and never touches IsChecked, so
-    /// even an enabled item would leave the check mark and the log alone. The view model is therefore the only
-    /// thing that flips, and the OneWay binding carries the new state back to the check mark — including the
-    /// correction to false that SessionViewModel.OnIsWireLoggingChanged marshals when the log will not open.
-    ///
-    /// The classic item is the other way round because <c>DefaultMenuInteractionHandler.Click</c> toggles a
-    /// MenuItem's IsChecked *before* raising Click, and its TwoWay binding carries that to the view model. The
-    /// in-window NativeMenuBar fallback runs that same handler over a MenuItem bound TwoWay to this
-    /// NativeMenuItem, so it toggles too and then calls RaiseClicked: OneWay here is what stops that path
-    /// toggling twice and ending where it started.</summary>
     /// <summary>The classic item, Click-driven for the same reason the native one is: starting a log asks first
     /// (#139), so the request has to reach ToggleWireLogCommand rather than writing IsWireLogging through a
     /// two-way binding. Both menus are now the same shape — ToggleType, a OneWay check mark and a Click handler —
@@ -439,10 +421,26 @@ public partial class SessionWindow : Window, ISessionHost
         if (ViewModel is { } vm) _ = vm.ToggleWireLogCommand.ExecuteAsync(null);
     }
 
+    /// <summary>The native item goes through the command for the confirmation, as the classic one does, and needs
+    /// a handler for two further reasons of its own.
+    ///
+    /// First, it is what makes the item usable at all on macOS. Avalonia's exporter gives every NSMenuItem the
+    /// validation predicate <c>(Command != null || HasClickHandlers) &amp;&amp; IsEnabled</c>
+    /// (<c>__MicroComIAvnMenuItemProxy.UpdateAction</c>); an item carrying only a binding satisfies neither
+    /// disjunct, so AppKit greys it out and never calls back. Second, a NativeMenuItem does not toggle itself:
+    /// <c>NativeMenuItem.RaiseClicked</c> raises Click and executes Command and never touches IsChecked, so
+    /// even an enabled item would leave the check mark and the log alone. The view model is therefore the only
+    /// thing that flips, and the OneWay binding carries the new state back to the check mark — including the
+    /// correction to false that SessionViewModel.OnIsWireLoggingChanged marshals when the log will not open.
+    ///
+    /// OneWay is required here rather than tidy: the in-window NativeMenuBar fallback runs
+    /// <c>DefaultMenuInteractionHandler.Click</c> over a MenuItem bound TwoWay to this NativeMenuItem, so that
+    /// path toggles the native item as well and then calls RaiseClicked. A TwoWay binding to the view model
+    /// would make that two toggles, ending where it started.
+    ///
+    /// Fire and forget, as a menu click must be.</summary>
     private void OnWireLogClickNative(object? sender, EventArgs e)
     {
-        // Goes through the command, not the property: starting a log asks first (#139), and the property is the
-        // state rather than the request. Fire and forget, as a menu click must be.
         if (ViewModel is { } vm) _ = vm.ToggleWireLogCommand.ExecuteAsync(null);
     }
 

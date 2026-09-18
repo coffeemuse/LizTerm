@@ -312,8 +312,12 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         if (Settings.WarnBeforeWireLog)
         {
             // No prompt declines, as a null ICertificatePrompt does: a warning nobody can show is not a reason
-            // to record the session anyway.
-            if (_wireLogPrompt is null) return;
+            // to record the session anyway. It leaves the check mark as a decline does, for the same reason.
+            if (_wireLogPrompt is null)
+            {
+                OnPropertyChanged(nameof(IsWireLogging));
+                return;
+            }
             if (!await _wireLogPrompt.ConfirmAsync(new WireLogPromptRequest(Profile.Name, WireLogDirectory)))
             {
                 // The classic MenuItem ticks its own check mark before the command runs
@@ -357,14 +361,17 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
     }
 
     /// <summary>Help &gt; Show Wire Logs. Opens the wire log directory in the OS file manager, falling back to
-    /// naming the path in the error banner when the platform cannot open it.</summary>
+    /// naming the path in the error banner when the platform cannot open it. Creates it through
+    /// <see cref="AppPaths.EnsureDirectory"/>, as starting a log does: this command runs first at least as often —
+    /// someone looking for logs they have not recorded yet — and a directory created here at 0755 would keep that
+    /// mode forever, since EnsureDirectory leaves an existing one alone (#139).</summary>
     [RelayCommand]
     private async Task ShowWireLogsAsync()
     {
         var directory = WireLogDirectory;
         try
         {
-            Directory.CreateDirectory(directory);
+            AppPaths.EnsureDirectory(directory);
             if (_folderOpener is not null && await _folderOpener.OpenAsync(directory)) return;
         }
         catch (Exception)
