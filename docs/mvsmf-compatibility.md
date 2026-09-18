@@ -104,7 +104,7 @@ Entries marked *log only* change nothing in the code.
   (LRECL for F, LRECL−4 for V, BLKSIZE for U) before anything is sent; pinned by `TextUploadCheckTests`, since Core
   does not name mvsMF. Should a 500 reason 3 arrive anyway, it is reported as a server error with that message.
 
-### `put-json-is-rename` (log only)
+### `put-json-is-rename`
 
 - **Source and docs:** a `PUT` with `Content-Type: application/json` and `"request":"rename"` is a rename
   (`docs/endpoints/datasets/authorization.md`), not a write.
@@ -141,7 +141,8 @@ Entries marked *log only* change nothing in the code.
 
 ## Resolved on 1.1.0
 
-Entries the 1.0.0-dev baseline needed and 1.1.0 does not. Each was removed with its code and test on 2026-09-18.
+Entries the 1.0.0-dev baseline needed and 1.1.0 does not. Each code entry was removed with its code and test on
+2026-09-18; the log-only ones were simply struck.
 
 - `no-www-authenticate`: a 401 now carries `WWW-Authenticate`.
 - `dataset-list-morerows-false`: `moreRows` is now absent on a complete list, as the source says. The refusal of a
