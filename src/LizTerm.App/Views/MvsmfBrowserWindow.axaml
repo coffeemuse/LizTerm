@@ -69,7 +69,7 @@
     <Border x:Name="ConfirmationStrip" DockPanel.Dock="Bottom" Background="#2A3340" Padding="12,6"
             IsVisible="{Binding HasConfirmation}">
       <DockPanel>
-        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
           <CheckBox x:Name="ApplyToAllBox" Content="Apply to all" IsChecked="{Binding Confirmation.ApplyToAll}"
                     IsVisible="{Binding Confirmation.OffersApplyToAll, FallbackValue=False}" />
           <Button x:Name="ConfirmCancelButton" Content="Cancel" Command="{Binding Confirmation.CancelCommand}" />
@@ -79,7 +79,17 @@
           <Button x:Name="ConfirmPrimaryButton" Content="{Binding Confirmation.PrimaryLabel}"
                   Command="{Binding Confirmation.PrimaryCommand}" />
         </StackPanel>
-        <TextBlock Text="{Binding Confirmation.Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        <StackPanel Spacing="4" Margin="0,0,8,0">
+          <DockPanel>
+            <TextBox x:Name="ConfirmInputBox" DockPanel.Dock="Right" Width="240" MaxLength="44"
+                     FontFamily="Menlo, Consolas, monospace" Text="{Binding Confirmation.Input}"
+                     IsVisible="{Binding Confirmation.HasInput, FallbackValue=False}" Margin="8,0,0,0" />
+            <TextBlock Text="{Binding Confirmation.Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          </DockPanel>
+          <TextBlock x:Name="ConfirmInputProblem" Text="{Binding Confirmation.InputProblem, StringFormat='✗ {0}'}"
+                     Foreground="#FF8080" TextWrapping="Wrap"
+                     IsVisible="{Binding Confirmation.InputProblem, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
+        </StackPanel>
       </DockPanel>
     </Border>
 
@@ -93,6 +103,7 @@
           <CheckBox x:Name="VerifyBox" Content="Verify after upload" IsChecked="{Binding VerifyUploads}" IsEnabled="{Binding IsTextMode}" />
           <Button x:Name="DownloadButton" Content="Download…" Command="{Binding DownloadCommand}" />
           <Button x:Name="UploadButton" Content="Upload…" Command="{Binding UploadCommand}" />
+          <Button x:Name="RenameMemberButton" Content="Rename…" Command="{Binding RenameMemberCommand}" />
           <Button x:Name="DeleteButton" Content="Delete…" Command="{Binding DeleteCommand}" />
           <Button x:Name="CancelButton" Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
         </WrapPanel>
@@ -115,6 +126,11 @@
         </Grid>
         <Button x:Name="LoadMoreDatasetsButton" DockPanel.Dock="Bottom" Content="Load more datasets" Margin="8,4"
                 HorizontalAlignment="Left" Command="{Binding LoadMoreDatasetsCommand}" IsVisible="{Binding HasMoreDatasets}" />
+        <WrapPanel x:Name="DatasetButtons" DockPanel.Dock="Bottom" ItemSpacing="8" LineSpacing="6" Margin="8,4">
+          <Button x:Name="NewDatasetButton" Content="New…" Command="{Binding NewDatasetCommand}" />
+          <Button x:Name="RenameDatasetButton" Content="Rename…" Command="{Binding RenameDatasetCommand}" />
+          <Button x:Name="DeleteDatasetButton" Content="Delete…" Command="{Binding DeleteDatasetCommand}" />
+        </WrapPanel>
         <ListBox x:Name="DatasetList" ItemsSource="{Binding Datasets}" SelectedItem="{Binding SelectedDataset}"
                  SelectionMode="Single" IsEnabled="{Binding CanChooseDataset}">
           <ListBox.ItemTemplate>
@@ -199,6 +215,79 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+
+        <DockPanel x:Name="CreatePane" IsVisible="{Binding IsCreating}">
+          <TextBlock DockPanel.Dock="Top" Text="New dataset" FontWeight="SemiBold" Margin="8,4" />
+          <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="8">
+            <TextBlock x:Name="CreateMessage" Text="{Binding Form.Message}" Foreground="#FF8080" TextWrapping="Wrap"
+                       IsVisible="{Binding Form.Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+              <Button x:Name="CloseFormButton" Content="Close" Command="{Binding CloseFormCommand}" />
+              <Button x:Name="CreateButton" Content="Create" Command="{Binding CreateCommand}" />
+            </StackPanel>
+          </StackPanel>
+          <ScrollViewer>
+            <StackPanel Margin="8,0" Spacing="4" IsEnabled="{Binding IsIdle}">
+              <StackPanel.Styles>
+                <Style Selector="TextBlock.problem">
+                  <Setter Property="Foreground" Value="#FF8080" />
+                  <Setter Property="TextWrapping" Value="Wrap" />
+                  <Setter Property="FontSize" Value="12" />
+                </Style>
+                <Style Selector="TextBox">
+                  <Setter Property="FontFamily" Value="Menlo, Consolas, monospace" />
+                </Style>
+              </StackPanel.Styles>
+              <TextBlock Text="Name" />
+              <TextBox x:Name="NewNameBox" Text="{Binding Form.Name}" MaxLength="44" />
+              <TextBlock Classes="problem" Text="{Binding Form.NameProblem}" IsVisible="{Binding Form.NameProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <TextBlock Text="Type" Margin="0,6,0,0" />
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <RadioButton x:Name="PartitionedButton" GroupName="NewType" Content="Partitioned (PDS)" IsChecked="{Binding Form.IsPartitioned}" />
+                <RadioButton x:Name="SequentialButton" GroupName="NewType" Content="Sequential" IsChecked="{Binding Form.IsSequential}" />
+              </StackPanel>
+              <Grid ColumnDefinitions="*,8,*,8,*" Margin="0,6,0,0">
+                <StackPanel Grid.Column="0" Spacing="4">
+                  <TextBlock Text="RECFM" />
+                  <TextBox x:Name="NewRecfmBox" Text="{Binding Form.Recfm}" MaxLength="4" />
+                  <TextBlock Classes="problem" Text="{Binding Form.RecfmProblem}" IsVisible="{Binding Form.RecfmProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="4">
+                  <TextBlock Text="LRECL" />
+                  <TextBox x:Name="NewLreclBox" Text="{Binding Form.Lrecl}" MaxLength="5" />
+                  <TextBlock Classes="problem" Text="{Binding Form.LreclProblem}" IsVisible="{Binding Form.LreclProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+                <StackPanel Grid.Column="4" Spacing="4">
+                  <TextBlock Text="BLKSIZE" />
+                  <TextBox x:Name="NewBlksizeBox" Text="{Binding Form.Blksize}" MaxLength="5" />
+                  <TextBlock Classes="problem" Text="{Binding Form.BlksizeProblem}" IsVisible="{Binding Form.BlksizeProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+              </Grid>
+              <TextBlock Text="Space" Margin="0,6,0,0" />
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <RadioButton x:Name="TracksButton" GroupName="NewSpace" Content="Tracks" IsChecked="{Binding Form.IsTracks}" />
+                <RadioButton x:Name="CylindersButton" GroupName="NewSpace" Content="Cylinders" IsChecked="{Binding Form.IsCylinders}" />
+              </StackPanel>
+              <Grid ColumnDefinitions="*,8,*,8,*">
+                <StackPanel Grid.Column="0" Spacing="4">
+                  <TextBlock Text="Primary" />
+                  <TextBox x:Name="NewPrimaryBox" Text="{Binding Form.Primary}" MaxLength="5" />
+                  <TextBlock Classes="problem" Text="{Binding Form.PrimaryProblem}" IsVisible="{Binding Form.PrimaryProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="4">
+                  <TextBlock Text="Secondary" />
+                  <TextBox x:Name="NewSecondaryBox" Text="{Binding Form.Secondary}" MaxLength="5" />
+                  <TextBlock Classes="problem" Text="{Binding Form.SecondaryProblem}" IsVisible="{Binding Form.SecondaryProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+                <StackPanel Grid.Column="4" Spacing="4" IsEnabled="{Binding Form.IsPartitioned}">
+                  <TextBlock Text="Directory blocks" />
+                  <TextBox x:Name="NewDirectoryBlocksBox" Text="{Binding Form.DirectoryBlocks}" MaxLength="5" />
+                  <TextBlock Classes="problem" Text="{Binding Form.DirectoryBlocksProblem}" IsVisible="{Binding Form.DirectoryBlocksProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+              </Grid>
+            </StackPanel>
           </ScrollViewer>
         </DockPanel>
       </Panel>

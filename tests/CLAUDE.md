@@ -62,7 +62,9 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   while a request is out); and `FakeCredentialPrompt` (an `Answers` queue, then `Answer`, where null plays Cancel;
   `Calls` as `ask:<userid>:<Reason>`; `LastRequest`; a `Gate` that holds every prompt open; `AskCount`).
 - `FakeHostFileService` (`Fakes/`) is an in-memory mvsMF: `AddDataset` seeds `Datasets` and `Members`, and `Text`
-  and `Binary` hold contents keyed by `HostPath.ToString()`. `Calls` records `list:<pattern>`, `members:<dsn>`,
+  and `Binary` hold contents keyed by `HostPath.ToString()`. `Calls` records `list:<pattern>` (which returns only
+  the datasets the pattern matches: `**` any qualifiers, `*` within a qualifier, `%` one character, case ignored,
+  so a test that wants a dataset "not shown by the filter" names it under another first qualifier), `members:<dsn>`,
   `readtext:<path>`, `readbinary:<path>`, `writetext:<path>:<lines>`, `writebinary:<path>`, `delete:<path>`,
   `info` and `signout`; a `Failures` entry under the same key, without the line count, makes that call throw.
   `ListRequests` keeps each list call's `HostListRequest`, and the fake pages the way the backend does over a host
@@ -87,7 +89,9 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   a `HostFileAccess` that cannot remember a pin, a 20 ms filter delay, and `GuideOpened` counting the guide link.
   `ChooseAsync` lists if nothing is listed yet, loads more pages until the dataset shows, and selects it, waiting
   for its member list; `Select` sets the member selection the window would push; `FilterMembersAsync` types a
-  member filter and waits out the host-side listing it may start.
+  member filter and waits out the host-side listing it may start. `Access` is the `HostFileAccess`, so
+  `Access.Etags` reads the stamp memory. A window test can put a question up without an operation by setting
+  `Vm.Confirmation` directly.
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
   `src/LizTerm.App/CLAUDE.md` say why.
 - Session switching tests seed a `SessionList` with `TestSessions`. `Create(name, ...)` builds an entry over a

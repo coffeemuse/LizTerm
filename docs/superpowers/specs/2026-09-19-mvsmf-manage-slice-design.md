@@ -283,3 +283,29 @@ Each PR gets the usual review pass before it is opened, and a hands-on pass agai
 Copy (no endpoint; composed as create-read-write later if wanted), `like` allocation, `BLK` as a space unit,
 volume selection, the extra listing columns (Created, Referred, Volume), conditional reads, a Sign Out control,
 jobs, USS, console services, and the UI items parked on #17.
+
+## 10. As built in PR 1 (#150, merged 2026-09-19 as 01094e8)
+
+PR 1 delivered §4.1–§4.3, §6 and §8 with these differences from the text above, settled in review. PR 2 builds on
+the code, not on §4.1's listing.
+
+- **Reads opt in to the stamp.** `ReadTextAsync` and `ReadBinaryAsync` take `bool withEtag = false` before the
+  cancellation token. A download asks (`HostFileTransfer.DownloadAsync` passes `withEtag: true`); the verify
+  read-back after an upload does not, so the host's second pass over the member is paid once per download. An
+  unasked read reports no stamp even when the answer carries one.
+- **The stamp is echoed exactly.** `EtagOf` keeps quotes and a `W/` prefix; the value is trimmed of blanks and
+  otherwise never touched, so a host that quotes its entity tags gets its own text back. mvsMF's is bare hex.
+- **`DatasetAllocation.Problems()` is per field**: an `IReadOnlyDictionary<AllocationField, string>` rather than a
+  flat list, so PR 2's form can mark each box. `RecfmError(string)` is public for the same reason.
+- **`UploadOutcome` carries the stamp** (`Etag`, the write's, never the read-back's) and lost its static `Matches`
+  and `NotChecked` instances; `DownloadAsync` returns `DownloadResult(BytesWritten, Etag)`; `UploadBinaryAsync`
+  returns the stamp.
+- **`AlreadyExists` is member-only** (400 reason 7). A dataset renamed onto an existing name is the host's 500
+  reason 8, a server error quoting it (`rename-target-exists-400`); `create-failure-is-one-500` is the one 500 for
+  every allocation failure. Neither is log-only: both carry code.
+- **Already done for PR 2:** `HostFileMessages` names the three kinds (§4.5's arms; `Conflict` never gets the
+  "may be partly written" suffix), and the App fake fails as the host does (a delete of nothing is `NotFound`, a
+  create or rename the local rules refuse throws `ArgumentException` before it is logged, a dataset rename onto an
+  existing name is the host's 500).
+- **Still for PR 2, beyond §4.4, §5 and §7:** guard the member-delete loop on `path.Kind == HostPathKind.Member`,
+  since `DeleteAsync` now takes a dataset; the fake's `KeysUnder` treats `NAME` and `NAME(…)` as under `NAME`.

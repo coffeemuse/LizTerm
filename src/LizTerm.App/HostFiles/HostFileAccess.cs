@@ -42,6 +42,9 @@ public sealed class HostFileAccess
     public SignInHolder SignIn { get; }
     public bool CanRememberPin => _savePin is not null;
 
+    /// <summary>The stamps of what this session's browser windows have downloaded or written (spec §5.1).</summary>
+    public EtagMemory Etags { get; } = new();
+
     /// <summary>Remember was chosen but the profile file could not be written; the pin still holds for the
     /// session. Raised on the thread that accepted the pin, with a sentence for the user.</summary>
     public event EventHandler<string>? PinSaveFailed;

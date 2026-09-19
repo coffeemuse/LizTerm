@@ -15,7 +15,7 @@ public sealed partial class MvsmfBrowserViewModel
     public const int ParallelDownloads = 2;
 
     private bool CanDownload =>
-        !IsBusy && SelectedDataset is { IsSupported: true } dataset && (dataset.IsSequential || _selectedMembers.Count > 0);
+        !IsBusy && !IsCreating && SelectedDataset is { IsSupported: true } dataset && (dataset.IsSequential || _selectedMembers.Count > 0);
 
     private string Extension => Mode == HostTransferMode.Text ? ".txt" : "";
 
@@ -134,6 +134,9 @@ public sealed partial class MvsmfBrowserViewModel
         try
         {
             var result = await _connection.RunAsync(service => HostFileTransfer.DownloadAsync(service, path, file, options, progress, token));
+            // The file is in place, so this is the copy the stamp describes. A cancelled or failed download remembers
+            // nothing (spec §5.2).
+            _access.Etags.Remember(path, result.Etag);
             progress.Close();
             Show($"✓ Done · {Bytes(result.BytesWritten)} bytes");
             return true;

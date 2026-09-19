@@ -24,16 +24,16 @@ public sealed partial class MvsmfBrowserViewModel
     /// <summary>Set when a connection failure stopped a write part-way, so the banner warns about a partial member.</summary>
     private bool _uploadStoppedMidWrite;
 
-    /// <summary>The member list gives way to the upload review.</summary>
-    public bool ShowMemberPane => ShowMembers && !IsReviewingUpload;
+    /// <summary>The member list gives way to the upload review or the New dataset form.</summary>
+    public bool ShowMemberPane => ShowMembers && !IsReviewingUpload && !IsCreating;
 
-    /// <summary>The dataset list is fixed while an operation runs or a review is open: the review and the member
-    /// list both belong to the chosen dataset.</summary>
-    public bool CanChooseDataset => !IsBusy && !IsReviewingUpload;
+    /// <summary>The dataset list is fixed while an operation runs, or a review or the form is open: the review and
+    /// the member list both belong to the chosen dataset.</summary>
+    public bool CanChooseDataset => !IsBusy && !IsReviewingUpload && !IsCreating;
 
     public string UploadHeader => SelectedDataset is { } dataset ? $"Upload to {dataset.Name}" : "";
 
-    private bool CanUpload => !IsBusy && !IsReviewingUpload && SelectedDataset is { IsSupported: true };
+    private bool CanUpload => !IsBusy && !IsReviewingUpload && !IsCreating && SelectedDataset is { IsSupported: true };
     private bool CanStartUpload => !IsBusy && IsReviewingUpload && !UploadFinished;
     private bool CanCloseReview => !IsBusy && IsReviewingUpload;
 
@@ -73,9 +73,7 @@ public sealed partial class MvsmfBrowserViewModel
     [RelayCommand(CanExecute = nameof(CanCloseReview))]
     private void CloseReview()
     {
-        _retry = null;
-        ErrorText = null;
-        OnPropertyChanged(nameof(CanRetry));
+        DropRetry();
         IsReviewingUpload = false;
         UploadFinished = false;
         ReviewMessage = null;
@@ -146,7 +144,7 @@ public sealed partial class MvsmfBrowserViewModel
         // Asked of the host now, and of the whole library, never of the list on screen: that one can be empty after
         // a failed listing, miss members an earlier, stopped run of this review created, or be one page of many.
         var existing = await ListAllMemberNamesAsync(dataset, token);
-        var plan = new List<UploadRow>();
+        var plan = new List<(UploadRow Row, bool Replaces)>();
         bool? replaceAll = null;
         foreach (var row in pending)
         {
@@ -178,13 +176,14 @@ public sealed partial class MvsmfBrowserViewModel
                 }
             }
             row.Status = "⟳ Waiting";
-            plan.Add(row);
+            plan.Add((row, existing.Contains(row.UploadName)));
         }
 
         var sent = Uploads.Count - pending.Count;
-        foreach (var row in plan)
+        var cancelled = false;
+        foreach (var (row, replaces) in plan)
         {
-            if (token.IsCancellationRequested)
+            if (token.IsCancellationRequested || cancelled)
             {
                 row.Status = "– Cancelled";
                 continue;
@@ -192,27 +191,63 @@ public sealed partial class MvsmfBrowserViewModel
             row.Status = "⟳ Sending";
             var started = false;
             var path = dataset.Path.WithMember(row.UploadName);
-            try
+            // Only a member being replaced is checked against its stamp (spec §5.2); a member this window never
+            // downloaded or wrote has none, and is replaced as before.
+            var ifMatch = replaces ? _access.Etags.TryGet(path) : null;
+
+            async Task SendAsync(string? stamp)
             {
+                // Each send starts afresh: one the host refused for its stamp wrote nothing.
+                started = false;
                 if (mode == HostTransferMode.Text)
                 {
                     var check = row.Check!;
                     var outcome = await _connection.RunAsync(service =>
                     {
                         started = true;
-                        return HostFileTransfer.UploadTextAsync(service, path, check, verify, cancellationToken: token);
+                        return HostFileTransfer.UploadTextAsync(service, path, check, verify, stamp, token,
+                            written: etag => _access.Etags.Remember(path, etag));
                     });
                     row.Status = Describe(outcome);
                     row.HostCopyDiffers = outcome.Verification == UploadVerification.Differs;
                 }
                 else
                 {
-                    await _connection.RunAsync(service =>
+                    var etag = await _connection.RunAsync(service =>
                     {
                         started = true;
-                        return HostFileTransfer.UploadBinaryAsync(service, path, row.LocalPath, cancellationToken: token);
+                        return HostFileTransfer.UploadBinaryAsync(service, path, row.LocalPath, stamp, token);
                     });
+                    _access.Etags.Remember(path, etag);
                     row.Status = "✓ Uploaded";
+                }
+            }
+
+            try
+            {
+                try
+                {
+                    await SendAsync(ifMatch);
+                }
+                catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.Conflict)
+                {
+                    // The host checks the stamp before it writes, so nothing was written. Asked per member, with no
+                    // Apply to all: a conflict is rare (spec §5.3).
+                    var answer = await AskAsync(new ConfirmationRequest(
+                        $"{row.UploadName} changed on the host since you downloaded it.", "Replace anyway", "Skip"));
+                    switch (answer.Choice)
+                    {
+                        case ConfirmChoice.Primary:
+                            await SendAsync(null);
+                            break;
+                        case ConfirmChoice.Secondary:
+                            row.Status = "– Skipped: changed on the host";
+                            continue;
+                        default:
+                            cancelled = true;
+                            row.Status = "– Cancelled";
+                            continue;
+                    }
                 }
                 row.Sent = true;
                 sent++;
@@ -226,7 +261,7 @@ public sealed partial class MvsmfBrowserViewModel
             {
                 // Stop here and let the banner offer Retry. The review stays open and unfinished, so Retry (or Start)
                 // can run it again; rows already sent are not sent again.
-                foreach (var each in plan.SkipWhile(each => !ReferenceEquals(each, row))) each.Status = "– Stopped";
+                foreach (var each in plan.SkipWhile(each => !ReferenceEquals(each.Row, row))) each.Row.Status = "– Stopped";
                 row.Status = "– Stopped: the member may be partly written";
                 _uploadStoppedMidWrite = true;
                 throw;
@@ -238,7 +273,7 @@ public sealed partial class MvsmfBrowserViewModel
         }
 
         UploadFinished = true;
-        if (token.IsCancellationRequested)
+        if (token.IsCancellationRequested || cancelled)
         {
             StatusText = "– Upload cancelled.";
             return;
@@ -287,19 +322,40 @@ public sealed partial class MvsmfBrowserViewModel
             StatusText = "– Upload cancelled.";
             return;
         }
-        try
+        async Task SendAsync(string? stamp)
         {
             if (check is not null)
             {
-                var outcome = await _connection.RunAsync(service => HostFileTransfer.UploadTextAsync(service, dataset.Path, check, verify, cancellationToken: token));
+                var outcome = await _connection.RunAsync(service => HostFileTransfer.UploadTextAsync(service, dataset.Path, check, verify, stamp, token,
+                    written: etag => _access.Etags.Remember(dataset.Path, etag)));
                 StatusText = outcome.Verification == UploadVerification.Differs
                     ? $"{Describe(outcome)} — {dataset.Name}"
                     : $"✓ Uploaded {name} to {dataset.Name}.";
             }
             else
             {
-                await _connection.RunAsync(service => HostFileTransfer.UploadBinaryAsync(service, dataset.Path, file, cancellationToken: token));
+                var etag = await _connection.RunAsync(service => HostFileTransfer.UploadBinaryAsync(service, dataset.Path, file, stamp, token));
+                _access.Etags.Remember(dataset.Path, etag);
                 StatusText = $"✓ Uploaded {name} to {dataset.Name}.";
+            }
+        }
+
+        try
+        {
+            try
+            {
+                await SendAsync(_access.Etags.TryGet(dataset.Path));
+            }
+            catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.Conflict)
+            {
+                // One file, one dataset: there is nothing to skip to, so the question offers Replace anyway or Cancel.
+                var conflict = await AskAsync(new ConfirmationRequest($"{dataset.Name} changed on the host since you downloaded it.", "Replace anyway"));
+                if (conflict.Choice != ConfirmChoice.Primary)
+                {
+                    StatusText = "– Upload cancelled.";
+                    return;
+                }
+                await SendAsync(null);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException && !(ex is HostFileException host && IsConnectionFailure(host)))

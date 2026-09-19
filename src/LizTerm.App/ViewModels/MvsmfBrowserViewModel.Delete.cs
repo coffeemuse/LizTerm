@@ -12,7 +12,7 @@ public sealed partial class MvsmfBrowserViewModel
 {
     private const int NamesInQuestion = 5;
 
-    private bool CanDelete => !IsBusy && !IsReviewingUpload && SelectedDataset is { IsPartitioned: true } && _selectedMembers.Count > 0;
+    private bool CanDelete => !IsBusy && !IsReviewingUpload && !IsCreating && SelectedDataset is { IsPartitioned: true } && _selectedMembers.Count > 0;
 
     [RelayCommand(CanExecute = nameof(CanDelete))]
     private Task DeleteAsync() => DeleteMembersAsync(SelectedDataset!, [.. _selectedMembers]);
@@ -56,6 +56,7 @@ public sealed partial class MvsmfBrowserViewModel
                 try
                 {
                     await _connection.RunAsync(service => service.DeleteAsync(member.Path, token));
+                    _access.Etags.Forget(member.Path);
                     deleted++;
                 }
                 catch (HostFileException ex) when (IsConnectionFailure(ex))

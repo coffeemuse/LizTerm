@@ -34,16 +34,29 @@ public partial class MvsmfBrowserWindow : Window
 
     protected override void OnDataContextChanged(EventArgs e)
     {
-        if (_watched is not null) _watched.PropertyChanged -= OnViewModelPropertyChanged;
+        if (_watched is not null)
+        {
+            _watched.PropertyChanged -= OnViewModelPropertyChanged;
+            _watched.SelectMemberRequested -= SelectMember;
+        }
         _watched = ViewModel;
-        if (_watched is not null) _watched.PropertyChanged += OnViewModelPropertyChanged;
+        if (_watched is not null)
+        {
+            _watched.PropertyChanged += OnViewModelPropertyChanged;
+            _watched.SelectMemberRequested += SelectMember;
+        }
         base.OnDataContextChanged(e);
     }
 
-    /// <summary>A question takes the keyboard to its Cancel button, the safe answer, once the strip has been laid
-    /// out; a focus request on a control that is still hidden is refused. An operation disables the lists and the
-    /// filter box, which drops their focus and does not give it back when they are enabled again, so the window
-    /// remembers where the keyboard was when the operation started and returns it there afterwards.</summary>
+    /// <summary>The list box is the selection's owner; setting its SelectedItem replaces the selection with the one
+    /// row, and its SelectionChanged pushes that back to the view model.</summary>
+    private void SelectMember(MemberRow row) => MemberList.SelectedItem = row;
+
+    /// <summary>A question takes the keyboard to its Cancel button, the safe answer, or to its text box when it has
+    /// one, once the strip has been laid out; a focus request on a control that is still hidden is refused. An
+    /// operation disables the lists and the filter box, which drops their focus and does not give it back when they
+    /// are enabled again, so the window remembers where the keyboard was — the filter box, a list's row, or any
+    /// other control, the form's boxes included — and returns it there afterwards.</summary>
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_watched is not { } vm) return;
@@ -57,13 +70,39 @@ public partial class MvsmfBrowserWindow : Window
                 PostRestoreFocus(forget: true);
                 break;
             case nameof(MvsmfBrowserViewModel.HasConfirmation) when vm.HasConfirmation:
+                // An input question takes the keyboard to its box, with the old name selected so typing replaces it;
+                // any other to Cancel, the safe answer.
                 Dispatcher.UIThread.Post(() =>
                 {
-                    if (_watched is { HasConfirmation: true }) ConfirmCancelButton.Focus();
+                    if (_watched is not { HasConfirmation: true, Confirmation: { } question }) return;
+                    if (question.HasInput)
+                    {
+                        ConfirmInputBox.Focus();
+                        ConfirmInputBox.SelectAll();
+                    }
+                    else ConfirmCancelButton.Focus();
                 }, DispatcherPriority.Loaded);
                 break;
             case nameof(MvsmfBrowserViewModel.HasConfirmation):
                 PostRestoreFocus(forget: false);
+                break;
+            case nameof(MvsmfBrowserViewModel.IsCreating) when vm.IsCreating:
+                // The form's first box, like the filter box when the window opens; posted because the pane is
+                // still hidden when the notification arrives.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_watched is { IsCreating: true }) NewNameBox.Focus();
+                }, DispatcherPriority.Loaded);
+                break;
+            case nameof(MvsmfBrowserViewModel.IsCreating) when !vm.IsCreating && !vm.IsBusy:
+                // Closed without an operation (Close, Escape): the keyboard was in the form, which is now hidden, so
+                // it goes where the window opens. A form an operation closes is handled by the IsBusy case above.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_watched is not { IsCreating: false, IsBusy: false }) return;
+                    if (FocusManager?.GetFocusedElement() is Control { IsEffectivelyVisible: true }) return;
+                    FilterBox.Focus();
+                }, DispatcherPriority.Loaded);
                 break;
         }
     }
@@ -77,8 +116,7 @@ public partial class MvsmfBrowserWindow : Window
         _focusBefore = null;
         _focusedItemBefore = null;
         _focusedIndexBefore = -1;
-        if (FilterBox.IsKeyboardFocusWithin) _focusBefore = FilterBox;
-        else if (FocusedList() is { } list)
+        if (FocusedList() is { } list)
         {
             _focusBefore = list;
             if (FocusManager?.GetFocusedElement() is Control focused
@@ -88,6 +126,7 @@ public partial class MvsmfBrowserWindow : Window
                 _focusedIndexBefore = list.IndexFromContainer(container);
             }
         }
+        else if (FocusManager?.GetFocusedElement() is Control other) _focusBefore = other;
     }
 
     private ListBox? FocusedList() =>
@@ -103,6 +142,8 @@ public partial class MvsmfBrowserWindow : Window
             if (_focusBefore is not { } target || _watched is not { HasConfirmation: false } vm) return;
             if (forget && vm.IsBusy) return;
             if (FocusManager?.GetFocusedElement() is Control { IsEffectivelyVisible: true, IsEffectivelyEnabled: true }) return;
+            // The pane it was in may have closed (the form after a Create); the filter box is where the window opens.
+            if (!target.IsEffectivelyVisible) target = FilterBox;
             var (item, index) = (_focusedItemBefore, _focusedIndexBefore);
             if (forget)
             {
@@ -136,7 +177,11 @@ public partial class MvsmfBrowserWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        if (_watched is not null) _watched.PropertyChanged -= OnViewModelPropertyChanged;
+        if (_watched is not null)
+        {
+            _watched.PropertyChanged -= OnViewModelPropertyChanged;
+            _watched.SelectMemberRequested -= SelectMember;
+        }
         _watched = null;
         ViewModel?.Dispose();
         base.OnClosed(e);
@@ -152,7 +197,12 @@ public partial class MvsmfBrowserWindow : Window
                 if (vm.Confirmation is { } question) question.CancelCommand.Execute(null);
                 else if (vm.IsBusy) vm.CancelCommand.Execute(null);
                 else if (vm.IsReviewingUpload) vm.CloseReviewCommand.Execute(null);
+                else if (vm.IsCreating) vm.CloseFormCommand.Execute(null);
                 else Close();
+                break;
+            case Key.Enter when vm.Confirmation is { HasInput: true } inputQuestion && ConfirmInputBox.IsKeyboardFocusWithin:
+                e.Handled = true;
+                if (inputQuestion.PrimaryCommand.CanExecute(null)) inputQuestion.PrimaryCommand.Execute(null);
                 break;
             case Key.Enter when FilterBox.IsFocused:
                 e.Handled = true;

@@ -14,7 +14,9 @@ What changed in each LizTerm release, newest first. Downloads are on the
 - **mvsMF Browser (feature preview).** On MVS 3.8j hosts running [mvsMF](https://github.com/mvslovers/mvsmf) 1.1.0
   or later, a second way to move files beside IND$FILE: sign in once per session window, then list, download,
   upload and delete. Long lists arrive 500 entries at a time with **Load more** for the rest, and on such a library
-  the member filter is the host's work. It is not yet complete and there are likely bugs. See the user guide's
+  the member filter is the host's work. It can create, rename and delete datasets and members, and warns before
+  replacing a member that changed on the host since you downloaded it. It is not yet complete and there are likely
+  bugs. See the user guide's
   [mvsMF Browser section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-browser-preview).
 - **A build that is not a release says so.** **About LizTerm** and the splash screen show the version as
   `0.6.1-DEV (a1b2c3d)`, naming the commit it was built from, and you can select and copy it for a bug report

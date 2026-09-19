@@ -12,7 +12,8 @@ using LizTerm.Core.HostFiles;
 namespace LizTerm.App.ViewModels;
 
 /// <summary>The mvsMF Browser (spec §4): datasets on the left, members of the chosen PDS on the right, and the
-/// transfers in the bottom bar. One operation at a time; see the partial files for downloads, uploads and delete.</summary>
+/// transfers in the bottom bar. One operation at a time; see the partial files for downloads, uploads, delete,
+/// manage and create.</summary>
 public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposable
 {
     private readonly HostFileAccess _access;
@@ -36,6 +37,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _openGuide = openGuide;
         _filter = access.Userid is { Length: > 0 } userid ? userid + ".**" : "";
         _access.PinSaveFailed += OnPinSaveFailed;
+        WatchForm();
     }
 
     /// <summary>The operation that accepted the pin goes on; the warning replaces its status line when it ends.</summary>
@@ -100,8 +102,8 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     }
 
     public bool ShowMembers => SelectedDataset is { IsPartitioned: true };
-    public bool ShowSequentialNote => SelectedDataset is { IsSequential: true };
-    public bool ShowChooseHint => SelectedDataset is not { IsSupported: true };
+    public bool ShowSequentialNote => SelectedDataset is { IsSequential: true } && !IsCreating;
+    public bool ShowChooseHint => SelectedDataset is not { IsSupported: true } && !IsCreating;
 
     public string ChooseHint => SelectedDataset is { IsSupported: false } dataset
         ? $"{dataset.Name} cannot be opened in this release (DSORG {(dataset.Dsorg.Length > 0 ? dataset.Dsorg : "unknown")})."
@@ -219,6 +221,14 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         }
     }
 
+    /// <summary>Drops a pending Retry with its banner: the operation it belongs to has been closed away from.</summary>
+    private void DropRetry()
+    {
+        _retry = null;
+        ErrorText = null;
+        OnPropertyChanged(nameof(CanRetry));
+    }
+
     [RelayCommand]
     private async Task RetryAsync()
     {
@@ -327,8 +337,14 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         StartUploadCommand.NotifyCanExecuteChanged();
         CloseReviewCommand.NotifyCanExecuteChanged();
         DeleteCommand.NotifyCanExecuteChanged();
+        RenameMemberCommand.NotifyCanExecuteChanged();
+        RenameDatasetCommand.NotifyCanExecuteChanged();
+        DeleteDatasetCommand.NotifyCanExecuteChanged();
         LoadMoreDatasetsCommand.NotifyCanExecuteChanged();
         LoadMoreMembersCommand.NotifyCanExecuteChanged();
+        NewDatasetCommand.NotifyCanExecuteChanged();
+        CreateCommand.NotifyCanExecuteChanged();
+        CloseFormCommand.NotifyCanExecuteChanged();
     }
 
     public void Dispose()

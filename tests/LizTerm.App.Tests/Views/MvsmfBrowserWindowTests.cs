@@ -14,6 +14,7 @@ using LizTerm.App.Tests.Fakes;
 using LizTerm.App.Tests.ViewModels;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
+using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.Tests.Views;
 
@@ -431,5 +432,165 @@ public class MvsmfBrowserWindowTests
 
         await Wait.UntilAsync(() => ReferenceEquals(window.FocusManager?.GetFocusedElement(), Named<Button>(window, "ConfirmCancelButton")),
             "the focus on Cancel");
+    }
+
+    [AvaloniaFact]
+    public async Task An_input_question_shows_a_text_box_focused_and_selected_and_enter_answers_it()
+    {
+        var (window, t) = Show(userid: null);
+        var question = new ConfirmationRequest("Rename HELLO in MVSCE02.CNTL to:", "Rename",
+            input: "HELLO", inputRule: HostPath.MemberNameError);
+
+        t.Vm.Confirmation = question;
+
+        var box = Named<TextBox>(window, "ConfirmInputBox");
+        await Wait.UntilAsync(() => box.IsFocused, "the focus in the text box");
+        Assert.True(box.IsVisible);
+        Assert.Equal("HELLO", box.Text);
+        Assert.Equal("HELLO", box.SelectedText);
+        Assert.False(Named<TextBlock>(window, "ConfirmInputProblem").IsVisible);
+        Assert.False(Named<Button>(window, "ConfirmPrimaryButton").IsEffectivelyEnabled);
+
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.False(question.Answer.IsCompleted);
+
+        box.Text = "BAD-NAME";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Named<TextBlock>(window, "ConfirmInputProblem").IsVisible);
+        Assert.Equal("✗ A member name cannot contain '-'.", Named<TextBlock>(window, "ConfirmInputProblem").Text);
+
+        box.Text = "HELLO2";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Named<Button>(window, "ConfirmPrimaryButton").IsEffectivelyEnabled);
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+
+        Assert.Equal(ConfirmChoice.Primary, (await question.Answer).Choice);
+        Assert.Equal("HELLO2", question.Input);
+        t.Vm.Confirmation = null;
+    }
+
+    [AvaloniaFact]
+    public async Task A_plain_question_hides_the_text_box()
+    {
+        var (window, t) = Show(userid: null);
+
+        t.Vm.Confirmation = new ConfirmationRequest("Delete HELLO from MVSCE02.CNTL? This cannot be undone.", "Delete 1 member");
+
+        await Wait.UntilAsync(() => Named<Button>(window, "ConfirmCancelButton").IsFocused, "the focus on Cancel");
+        Assert.False(Named<TextBox>(window, "ConfirmInputBox").IsVisible);
+        t.Vm.Confirmation = null;
+    }
+
+    [AvaloniaFact]
+    public async Task The_manage_buttons_follow_the_selection()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var rename = Named<Button>(window, "RenameDatasetButton");
+        var delete = Named<Button>(window, "DeleteDatasetButton");
+        var renameMember = Named<Button>(window, "RenameMemberButton");
+        Assert.Equal("Rename…", rename.Content);
+        Assert.Equal("Delete…", delete.Content);
+        Assert.Equal("Rename…", renameMember.Content);
+        Assert.False(rename.IsEffectivelyEnabled);
+        Assert.False(delete.IsEffectivelyEnabled);
+        Assert.False(renameMember.IsEffectivelyEnabled);
+
+        await t.ChooseAsync("MVSCE02.DB");
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(rename.IsEffectivelyEnabled);
+        Assert.True(delete.IsEffectivelyEnabled);
+        Assert.False(renameMember.IsEffectivelyEnabled);
+
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var members = Named<ListBox>(window, "MemberList");
+        members.SelectedItems!.Add(t.Vm.VisibleMembers[0]);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(renameMember.IsEffectivelyEnabled);
+        members.SelectedItems!.Add(t.Vm.VisibleMembers[1]);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(renameMember.IsEffectivelyEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task A_renamed_member_is_selected_in_the_list()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var members = Named<ListBox>(window, "MemberList");
+        members.SelectedItems!.Add(t.Vm.VisibleMembers[2]);
+        Dispatcher.UIThread.RunJobs();
+
+        var renaming = t.Vm.RenameMemberCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => t.Vm.HasConfirmation, "the question");
+        t.Vm.Confirmation!.Input = "HELLO2";
+        t.Vm.Confirmation.PrimaryCommand.Execute(null);
+        await renaming;
+        window.UpdateLayout();
+
+        Assert.Equal(new[] { "HELLO2" }, members.SelectedItems!.OfType<MemberRow>().Select(m => m.Name));
+        Assert.Equal(new[] { "HELLO2" }, t.Vm.SelectedMembers.Select(m => m.Name));
+    }
+
+    [AvaloniaFact]
+    public async Task New_opens_the_form_in_the_right_pane_with_the_focus_in_the_name_box()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var newButton = Named<Button>(window, "NewDatasetButton");
+        Assert.Equal("New…", newButton.Content);
+        Assert.True(newButton.IsEffectivelyEnabled);
+
+        newButton.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(Named<DockPanel>(window, "CreatePane").IsVisible);
+        Assert.False(Named<DockPanel>(window, "MemberPane").IsVisible);
+        Assert.False(Named<ListBox>(window, "DatasetList").IsEffectivelyEnabled);
+        Assert.False(newButton.IsEffectivelyEnabled);
+        var name = Named<TextBox>(window, "NewNameBox");
+        await Wait.UntilAsync(() => name.IsFocused, "the focus in the name box");
+        Assert.Equal("MVSCE02.", name.Text);
+        Assert.False(Named<Button>(window, "CreateButton").IsEffectivelyEnabled);
+
+        name.Text = "MVSCE02.NEW";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Named<Button>(window, "CreateButton").IsEffectivelyEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task Escape_closes_the_form_before_the_window()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        t.Vm.NewDatasetCommand.Execute(null);
+        Assert.True(t.Vm.IsCreating);
+
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+
+        Assert.False(t.Vm.IsCreating);
+        Assert.True(window.IsVisible);
+        Assert.True(Named<DockPanel>(window, "MemberPane").IsVisible || Named<TextBlock>(window, "ChooseHint").IsVisible);
+        await Wait.UntilAsync(() => Named<TextBox>(window, "FilterBox").IsFocused, "the focus back in the filter box");
+    }
+
+    [AvaloniaFact]
+    public async Task Focus_returns_to_the_form_after_a_refused_create()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        t.Vm.NewDatasetCommand.Execute(null);
+        t.Vm.Form.Name = "MVSCE02.CNTL";
+        Dispatcher.UIThread.RunJobs();
+        var name = Named<TextBox>(window, "NewNameBox");
+        await Wait.UntilAsync(() => name.IsFocused, "the focus in the name box");
+
+        await t.Vm.CreateCommand.ExecuteAsync(null);
+
+        Assert.True(t.Vm.IsCreating);
+        Assert.True(Named<TextBlock>(window, "CreateMessage").IsVisible);
+        await Wait.UntilAsync(() => name.IsFocused, "the focus back in the name box");
     }
 }
