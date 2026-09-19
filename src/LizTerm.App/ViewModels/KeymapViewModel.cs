@@ -19,6 +19,8 @@ public sealed class KeymapViewModel : ObservableObject
     private readonly KeymapStore? _store;
     private string? _lastSaveError;
     private bool _unsaved;
+    private Keymap? _erasing;
+    private Keymap? _cursorLeft;
 
     /// <summary>In-memory only: every default, nothing written.</summary>
     public KeymapViewModel() => Overlay = KeymapOverlay.Empty;
@@ -50,8 +52,12 @@ public sealed class KeymapViewModel : ObservableObject
     /// <summary>Entries in the file this build left alone, for the tab's note.</summary>
     public int UnreadableEntries => Overlay.IgnoredCount;
 
-    /// <summary>The map in force for one window: the profile's Backspace choice under the user's entries.</summary>
-    public Keymap Compose(bool destructiveBackspace) => Overlay.Compose(destructiveBackspace);
+    /// <summary>The map in force for one window: the profile's Backspace choice under the user's entries. Composed
+    /// once per change: Keymap is immutable, and the tab asks once per row on every change, so every caller shares
+    /// the one instance until the next Apply.</summary>
+    public Keymap Compose(bool destructiveBackspace) => destructiveBackspace
+        ? _erasing ??= Overlay.Compose(destructiveBackspace: true)
+        : _cursorLeft ??= Overlay.Compose(destructiveBackspace: false);
 
     /// <summary>Every chord that does <paramref name="action"/>, from the erasing default; none for Unbound.</summary>
     public IReadOnlyList<KeyChord> ChordsFor(KeymapAction action)
@@ -85,6 +91,7 @@ public sealed class KeymapViewModel : ObservableObject
     {
         var before = UnreadableEntries;
         Overlay = change(Overlay);
+        _erasing = _cursorLeft = null;
         try
         {
             if (UnreadableEntries != before) OnPropertyChanged(nameof(UnreadableEntries));

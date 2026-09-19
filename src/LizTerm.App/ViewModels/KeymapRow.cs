@@ -88,6 +88,16 @@ public sealed class KeymapRow : ObservableObject
         var previous = _keymap.ActionOf(chord);
         if (previous == Target && chord != BackspaceChord) return new CaptureResult(true, "Already does this");
         _keymap.Bind(chord, Target);
-        return new CaptureResult(true, previous is null || previous == Target ? null : "Moved from " + TitleOf(previous));
+        return new CaptureResult(true, MovedFrom(chord, previous));
+    }
+
+    /// <summary>The note for a chord another action held. Unmodified Backspace taken from one Backspace action says
+    /// nothing: which of the two it did was the profile's choice in every window, and the erasing default these rows
+    /// answer from is not necessarily the one in force, so "Moved from Backspace, erasing" could be false.</summary>
+    private string? MovedFrom(KeyChord chord, KeymapAction? previous)
+    {
+        if (previous is null || previous == Target) return null;
+        if (chord == BackspaceChord && previous is KeymapAction.SendKey { Key: TerminalKey.Erase or TerminalKey.Backspace }) return null;
+        return "Moved from " + TitleOf(previous);
     }
 }

@@ -13,12 +13,8 @@
        SettingsViewModel, so PreferencesWindow sets it. One row per action: the name on the left, its chords as
        chips (each with a × that removes it) and the Add slot on the right. Colour never carries meaning alone: the
        armed slot reads "Press a key" and has a thicker border, a refusal is text, a chip has its ×. -->
+  <!-- TextBlock.hint is PreferencesWindow's style: a window's styles reach the tab it hosts, so it is not repeated. -->
   <UserControl.Styles>
-    <Style Selector="TextBlock.hint">
-      <Setter Property="Foreground" Value="#A0A0A0" />
-      <Setter Property="FontSize" Value="12" />
-      <Setter Property="TextWrapping" Value="Wrap" />
-    </Style>
     <!-- ChordCaptureBox is a Button under another type, so it is styled by class, not by type. -->
     <Style Selector="Button.chord-slot">
       <Setter Property="MinWidth" Value="84" />

@@ -246,6 +246,42 @@ public class ChordCaptureBoxTests
         Assert.True(box.IsArmed);
     }
 
+    /// <summary>The mirror of the rule above: a fresh Enter captured as a chord disarms the slot with Enter still down,
+    /// and its auto-repeat would reach the idle slot's Button, arm it again and wipe the note.</summary>
+    [AvaloniaFact]
+    public void A_held_Enter_that_was_bound_does_not_rearm_the_slot_on_its_auto_repeat()
+    {
+        var (window, box, _, _, offered) = Show(new CaptureResult(true, "Moved from Enter"));
+        Arm(window);
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Assert.False(box.IsArmed);
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.Single(offered);
+        Assert.False(box.IsArmed);
+        Assert.Equal("Moved from Enter", box.Text);
+    }
+
+    /// <summary>A silent accept leaves the slot idle with no note, so losing focus had nothing to disarm; the key it
+    /// consumed must still be forgotten, or its release, gone elsewhere, leaves the slot owing a swallow.</summary>
+    [AvaloniaFact]
+    public void Losing_focus_after_a_silent_accept_still_leaves_Space_able_to_arm_it()
+    {
+        var (window, box, other, _, _) = Show();
+        Arm(window);
+        window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None);
+        Assert.False(box.IsArmed);
+        other.Focus();
+        window.KeyReleaseQwerty(PhysicalKey.Space, RawInputModifiers.None);
+
+        box.Focus();
+        window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Space, RawInputModifiers.None);
+
+        Assert.True(box.IsArmed);
+    }
+
     [AvaloniaFact]
     public void An_idle_slot_lets_Tab_move_focus_on()
     {

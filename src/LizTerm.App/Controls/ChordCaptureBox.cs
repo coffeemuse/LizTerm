@@ -76,6 +76,13 @@ public sealed class ChordCaptureBox : Button
     {
         if (!IsArmed)
         {
+            if (_consumed == e.Key)
+            {
+                // The OS auto-repeat of a key the slot captured and the user still holds: an accepted Enter would
+                // otherwise activate Button here and arm the slot again, wiping the note it had just shown.
+                e.Handled = true;
+                return;
+            }
             base.OnKeyDown(e);
             // Button activates from the Enter press, so a slot armed by this very event is armed with its key still
             // down. Remember it, and the auto-repeat below is ignored rather than captured.
@@ -122,9 +129,12 @@ public sealed class ChordCaptureBox : Button
         if (_taps.KeyUp(e.Key) is { } tapped) Offer(KeyChord.TapOf(tapped));
     }
 
+    /// <summary>Unconditional: every transient record goes with the focus. A key consumed by a silent accept (Space,
+    /// whose release now reaches whatever took the focus) would otherwise stay owed a swallow, and the next Space
+    /// that tried to arm this slot would be eaten.</summary>
     protected override void OnLostFocus(FocusChangedEventArgs e)
     {
-        if (IsArmed || _message is not null) Disarm();
+        Disarm();
         base.OnLostFocus(e);
     }
 

@@ -225,6 +225,39 @@ public class KeymapEditorViewModelTests : IDisposable
         Assert.True(keymap.Overlay.Entries.ContainsKey(backspace));
     }
 
+    /// <summary>Which Backspace action the unmodified key did was the profile's choice, not the erasing default the
+    /// rows answer from, so a Backspace taken from one Backspace row onto the other is bound without a "Moved from".</summary>
+    [Fact]
+    public void Capturing_Backspace_onto_the_moving_left_row_binds_it_without_claiming_a_move()
+    {
+        var (editor, keymap) = Build();
+        var backspace = new KeyChord(Key.Back);
+
+        var result = Row(editor, "Backspace, moving left").TryCapture(backspace);
+
+        Assert.Equal(new CaptureResult(true, null), result);
+        Assert.Equal(new KeymapAction.SendKey(TerminalKey.Backspace), keymap.ActionOf(backspace));
+        Assert.Equal(["Backspace"], Texts(Row(editor, "Backspace, moving left")));
+        Assert.Empty(Row(editor, "Backspace, erasing").Chips);
+    }
+
+    /// <summary>Every row asks the keymap on every change, so the composition is one instance per change, not one
+    /// per row.</summary>
+    [Fact]
+    public void The_rows_share_one_composition_per_change()
+    {
+        var (_, keymap) = Build();
+        var before = keymap.Compose(destructiveBackspace: true);
+
+        Assert.Same(before, keymap.Compose(destructiveBackspace: true));
+        keymap.Bind(CtrlHome, new KeymapAction.SendKey(TerminalKey.PA1));
+
+        var after = keymap.Compose(destructiveBackspace: true);
+        Assert.NotSame(before, after);
+        Assert.Same(after, keymap.Compose(destructiveBackspace: true));
+        Assert.True(after.TryMap(CtrlHome, out var key) && key == TerminalKey.PA1);
+    }
+
     [Fact]
     public void A_refused_chord_binds_nothing_and_gives_the_policys_reason()
     {

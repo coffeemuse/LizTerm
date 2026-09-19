@@ -210,7 +210,8 @@ session window, and the keypad's tooltips follow them.
 LizTerm will not bind a key it needs, and says why in the slot: the platform's Copy, Paste and Select All shortcuts,
 Find and Switch Session; any key with Cmd, or the Windows key; a letter, digit, punctuation mark or Space on its own
 or with Shift, which would stop you typing it; and, on Windows and Linux, Ctrl+Alt with one of those, which is how
-some keyboards type characters such as @. Everything else can be bound, Escape and Tab included.
+some keyboards type characters such as @; and Caps Lock, Num Lock and Scroll Lock. Everything else can be bound,
+Escape and Tab included.
 
 Backspace follows the profile's Backspace setting until you bind it here. The two Backspace rows are the two things
 it can do: erase the character to the left, or move the cursor left.
