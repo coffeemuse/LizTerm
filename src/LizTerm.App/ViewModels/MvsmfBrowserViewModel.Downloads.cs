@@ -133,9 +133,9 @@ public sealed partial class MvsmfBrowserViewModel
         Show("⟳ Running");
         try
         {
-            var written = await _connection.RunAsync(service => HostFileTransfer.DownloadAsync(service, path, file, options, progress, token));
+            var result = await _connection.RunAsync(service => HostFileTransfer.DownloadAsync(service, path, file, options, progress, token));
             progress.Close();
-            Show($"✓ Done · {Bytes(written)} bytes");
+            Show($"✓ Done · {Bytes(result.BytesWritten)} bytes");
             return true;
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)

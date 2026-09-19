@@ -200,7 +200,7 @@ public sealed partial class MvsmfBrowserViewModel
                     var outcome = await _connection.RunAsync(service =>
                     {
                         started = true;
-                        return HostFileTransfer.UploadTextAsync(service, path, check, verify, token);
+                        return HostFileTransfer.UploadTextAsync(service, path, check, verify, cancellationToken: token);
                     });
                     row.Status = Describe(outcome);
                     row.HostCopyDiffers = outcome.Verification == UploadVerification.Differs;
@@ -210,7 +210,7 @@ public sealed partial class MvsmfBrowserViewModel
                     await _connection.RunAsync(service =>
                     {
                         started = true;
-                        return HostFileTransfer.UploadBinaryAsync(service, path, row.LocalPath, token);
+                        return HostFileTransfer.UploadBinaryAsync(service, path, row.LocalPath, cancellationToken: token);
                     });
                     row.Status = "✓ Uploaded";
                 }
@@ -291,14 +291,14 @@ public sealed partial class MvsmfBrowserViewModel
         {
             if (check is not null)
             {
-                var outcome = await _connection.RunAsync(service => HostFileTransfer.UploadTextAsync(service, dataset.Path, check, verify, token));
+                var outcome = await _connection.RunAsync(service => HostFileTransfer.UploadTextAsync(service, dataset.Path, check, verify, cancellationToken: token));
                 StatusText = outcome.Verification == UploadVerification.Differs
                     ? $"{Describe(outcome)} — {dataset.Name}"
                     : $"✓ Uploaded {name} to {dataset.Name}.";
             }
             else
             {
-                await _connection.RunAsync(service => HostFileTransfer.UploadBinaryAsync(service, dataset.Path, file, token));
+                await _connection.RunAsync(service => HostFileTransfer.UploadBinaryAsync(service, dataset.Path, file, cancellationToken: token));
                 StatusText = $"✓ Uploaded {name} to {dataset.Name}.";
             }
         }

@@ -107,8 +107,8 @@ public class LiveMvsmfTests
             var checkedText = HostFileTransfer.CheckTextFile(local, target);
             Assert.True(checkedText.CanUpload, string.Join(" | ", checkedText.Errors.Select(e => e.Message)));
 
-            var outcome = await HostFileTransfer.UploadTextAsync(service, path, checkedText, verify: true, ct);
-            Assert.Equal(UploadOutcome.Matches, outcome);
+            var outcome = await HostFileTransfer.UploadTextAsync(service, path, checkedText, verify: true, cancellationToken: ct);
+            Assert.Equal(UploadVerification.Matches, outcome.Verification);
 
             var members = (await service.ListMembersAsync(HostPath.ForDataset(live.ScratchPds), HostListRequest.All, ct)).Entries;
             Assert.Contains(members, m => m.Name == ScratchMember);

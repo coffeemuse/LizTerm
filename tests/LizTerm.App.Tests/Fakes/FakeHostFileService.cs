@@ -9,8 +9,8 @@ namespace LizTerm.App.Tests.Fakes;
 
 /// <summary>An in-memory mvsMF for the App tests. Every call is logged as "op:target" — list:&lt;pattern&gt;,
 /// members:&lt;dsn&gt;, readtext:&lt;path&gt;, readbinary:&lt;path&gt;, writetext:&lt;path&gt;:&lt;lines&gt;,
-/// writebinary:&lt;path&gt;, delete:&lt;path&gt;, info, signout — and a <see cref="Failures"/> entry under the same key
-/// (without the line count) makes that call throw.</summary>
+/// writebinary:&lt;path&gt;, delete:&lt;path&gt;, create:&lt;dsn&gt;, rename:&lt;from&gt;:&lt;new&gt;, info, signout — and a
+/// <see cref="Failures"/> entry under the same key (without the line count) makes that call throw.</summary>
 public sealed class FakeHostFileService : IHostFileService
 {
     private readonly object _lock = new();
@@ -22,6 +22,12 @@ public sealed class FakeHostFileService : IHostFileService
     /// <summary>HostPath.ToString() → records.</summary>
     public Dictionary<string, List<string>> Text { get; } = [];
     public Dictionary<string, byte[]> Binary { get; } = [];
+    /// <summary>HostPath.ToString() → the stamp of the last write, <c>stamp-N</c>; a read returns it and a write
+    /// with another <c>ifMatch</c> is a conflict.</summary>
+    public Dictionary<string, string> Etags { get; } = [];
+    /// <summary>Every write's <c>ifMatch</c>, in order.</summary>
+    public List<string?> IfMatches { get; } = [];
+    private int _writes;
     public Dictionary<string, Exception> Failures { get; } = [];
     /// <summary>When set, a text write stores what this returns for (path, lines) instead of the lines: a host that
     /// alters what it stores.</summary>
@@ -85,49 +91,60 @@ public sealed class FakeHostFileService : IHostFileService
         finally { Leave(); }
     }
 
-    public async Task<IReadOnlyList<string>> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"readtext:{path}", $"readtext:{path}", cancellationToken);
         try
         {
             List<string> lines;
+            string? etag;
             lock (_lock)
+            {
                 lines = Text.TryGetValue(path.ToString(), out var found) ? [.. found] : throw Missing(path);
+                etag = Etags.GetValueOrDefault(path.ToString());
+            }
             progress?.Report(lines.Sum(l => l.Length + 1));
-            return lines;
+            return new HostTextRead(lines, etag);
         }
         finally { Leave(); }
     }
 
-    public async Task<long> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"readbinary:{path}", $"readbinary:{path}", cancellationToken);
         try
         {
             byte[] bytes;
-            lock (_lock) bytes = Binary.TryGetValue(path.ToString(), out var found) ? found : throw Missing(path);
+            string? etag;
+            lock (_lock)
+            {
+                bytes = Binary.TryGetValue(path.ToString(), out var found) ? found : throw Missing(path);
+                etag = Etags.GetValueOrDefault(path.ToString());
+            }
             await destination.WriteAsync(bytes, cancellationToken);
             progress?.Report(bytes.Length);
-            return bytes.Length;
+            return new HostBinaryRead(bytes.Length, etag);
         }
         finally { Leave(); }
     }
 
-    public async Task WriteTextAsync(HostPath path, IReadOnlyList<string> lines, CancellationToken cancellationToken = default)
+    public async Task<string?> WriteTextAsync(HostPath path, IReadOnlyList<string> lines, string? ifMatch = null, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"writetext:{path}:{lines.Count}", $"writetext:{path}", cancellationToken);
         try
         {
             lock (_lock)
             {
+                CheckStamp(path, ifMatch);
                 Text[path.ToString()] = StoreTransform?.Invoke(path.ToString(), lines) ?? [.. lines];
                 AddMember(path);
+                return Stamp(path);
             }
         }
         finally { Leave(); }
     }
 
-    public async Task WriteBinaryAsync(HostPath path, Stream source, CancellationToken cancellationToken = default)
+    public async Task<string?> WriteBinaryAsync(HostPath path, Stream source, string? ifMatch = null, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"writebinary:{path}", $"writebinary:{path}", cancellationToken);
         try
@@ -136,8 +153,42 @@ public sealed class FakeHostFileService : IHostFileService
             await source.CopyToAsync(copy, cancellationToken);
             lock (_lock)
             {
+                CheckStamp(path, ifMatch);
                 Binary[path.ToString()] = copy.ToArray();
                 AddMember(path);
+                return Stamp(path);
+            }
+        }
+        finally { Leave(); }
+    }
+
+    public async Task CreateDatasetAsync(HostPath dataset, DatasetAllocation allocation, CancellationToken cancellationToken = default)
+    {
+        await EnterAsync($"create:{dataset}", $"create:{dataset}", cancellationToken);
+        try
+        {
+            lock (_lock)
+            {
+                if (Datasets.Any(d => d.Name == dataset.Dataset))
+                    throw new HostFileException(HostFileErrorKind.CannotAllocate, $"{dataset}: the host could not allocate it (it may already exist, there may be no space, or you may not be authorized).", 7, "Dynamic allocation Error");
+                var partitioned = allocation.Organization == DatasetOrganization.Partitioned;
+                Datasets.Add(new HostFileEntry(dataset.Dataset, HostFileEntryKind.Dataset,
+                    new DatasetAttributes(partitioned ? "PO" : "PS", allocation.FoldedRecfm, allocation.Lrecl, allocation.Blksize, "PUB000")));
+                if (partitioned) Members[dataset.Dataset] = [];
+            }
+        }
+        finally { Leave(); }
+    }
+
+    public async Task RenameAsync(HostPath from, string newName, CancellationToken cancellationToken = default)
+    {
+        await EnterAsync($"rename:{from}:{newName}", $"rename:{from}:{newName}", cancellationToken);
+        try
+        {
+            lock (_lock)
+            {
+                if (from.Member is { } member) RenameMember(from, member, HostPath.ForMember(from.Dataset, newName));
+                else RenameDataset(from, HostPath.ForDataset(newName));
             }
         }
         finally { Leave(); }
@@ -150,9 +201,17 @@ public sealed class FakeHostFileService : IHostFileService
         {
             lock (_lock)
             {
-                if (path.Member is { } member && Members.TryGetValue(path.Dataset, out var names)) names.Remove(member);
-                Text.Remove(path.ToString());
-                Binary.Remove(path.ToString());
+                if (path.Member is { } member)
+                {
+                    if (Members.TryGetValue(path.Dataset, out var names)) names.Remove(member);
+                    Forget(path.ToString());
+                }
+                else
+                {
+                    Datasets.RemoveAll(d => d.Name == path.Dataset);
+                    Members.Remove(path.Dataset);
+                    foreach (var key in KeysUnder(path.Dataset)) Forget(key);
+                }
             }
         }
         finally { Leave(); }
@@ -180,6 +239,56 @@ public sealed class FakeHostFileService : IHostFileService
         if (request.MaxItems > 0 && list.Count > request.MaxItems)
             return new HostFileListing(list.Take(request.MaxItems).ToList(), list[request.MaxItems - 1].Name);
         return new HostFileListing(list, null);
+    }
+
+    /// <summary>A write's ifMatch must be the path's current stamp; a stamp the fake never issued, or an old one,
+    /// is a conflict, as the host answers 412.</summary>
+    private void CheckStamp(HostPath path, string? ifMatch)
+    {
+        IfMatches.Add(ifMatch);
+        if (ifMatch is null) return;
+        if (Etags.GetValueOrDefault(path.ToString()) != ifMatch)
+            throw new HostFileException(HostFileErrorKind.Conflict, $"{path}: changed on the host since it was read.", 10);
+    }
+
+    private string Stamp(HostPath path) => Etags[path.ToString()] = $"stamp-{++_writes}";
+
+    private void RenameMember(HostPath from, string member, HostPath to)
+    {
+        if (!Members.TryGetValue(from.Dataset, out var names) || !names.Contains(member)) throw Missing(from);
+        if (names.Contains(to.Member!))
+            throw new HostFileException(HostFileErrorKind.AlreadyExists, $"Rename {from} to {to.Member}: a member of that name already exists.", 7);
+        names[names.IndexOf(member)] = to.Member!;
+        Move(from.ToString(), to.ToString());
+    }
+
+    private void RenameDataset(HostPath from, HostPath to)
+    {
+        var index = Datasets.FindIndex(d => d.Name == from.Dataset);
+        if (index < 0) throw new HostFileException(HostFileErrorKind.NotFound, $"Rename {from} to {to.Dataset}: not found.", 4);
+        Datasets[index] = Datasets[index] with { Name = to.Dataset };
+        if (Members.Remove(from.Dataset, out var names)) Members[to.Dataset] = names;
+        // KeysUnder includes the dataset's own key (a sequential dataset's content), so one loop moves everything.
+        foreach (var key in KeysUnder(from.Dataset)) Move(key, to.Dataset + key[from.Dataset.Length..]);
+    }
+
+    /// <summary>Every content or stamp key that is the dataset itself or one of its members.</summary>
+    private List<string> KeysUnder(string dataset) =>
+        Text.Keys.Concat(Binary.Keys).Concat(Etags.Keys).Distinct()
+            .Where(key => key == dataset || key.StartsWith(dataset + "(", StringComparison.Ordinal)).ToList();
+
+    private void Move(string from, string to)
+    {
+        if (Text.Remove(from, out var text)) Text[to] = text;
+        if (Binary.Remove(from, out var bytes)) Binary[to] = bytes;
+        if (Etags.Remove(from, out var etag)) Etags[to] = etag;
+    }
+
+    private void Forget(string key)
+    {
+        Text.Remove(key);
+        Binary.Remove(key);
+        Etags.Remove(key);
     }
 
     private void AddMember(HostPath path)
