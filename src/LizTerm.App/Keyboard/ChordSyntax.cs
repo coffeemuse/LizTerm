@@ -69,6 +69,7 @@ public static class ChordSyntax
     /// <summary>The keys ModifierTapDetector watches; a tap of anything else is not a chord.</summary>
     private static bool IsTappable(Key key) => key is Key.LeftCtrl or Key.RightCtrl;
 
-    private static bool IsModifierKey(Key key) =>
+    /// <summary>The keys that are modifiers and nothing else; a chord's key is never one of them.</summary>
+    public static bool IsModifierKey(Key key) =>
         key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin;
 }

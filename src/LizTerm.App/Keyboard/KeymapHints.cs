@@ -7,9 +7,9 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.App.Keyboard;
 
-/// <summary>The keyboard equivalents of a key as one line of text, for the keypad's tooltips (keypad spec §5) and,
-/// one day, the Keys menu (#23). Pure: the keymap and the format are arguments, so a remap (#18) changes the
-/// answer and a test can pin the words.</summary>
+/// <summary>The keyboard equivalents of a key as one line of text, for the keypad's tooltips (keypad spec §5), the
+/// Keyboard tab's chips and the Keys menu (#23). Pure: the keymap and the format are arguments, so a remap (#18)
+/// changes the answer and a test can pin the words.</summary>
 public static class KeymapHints
 {
     /// <summary>Every chord in the keymap that sends the key, or null when none does. Ordered without reference to
@@ -24,13 +24,7 @@ public static class KeymapHints
     /// asks about many keys: the keypad's 36 tooltips are one lookup rather than 36 scans of the table.</summary>
     public static string? Describe(IEnumerable<KeyChord> chords, IFormatProvider? format = null)
     {
-        var formatted = chords
-            .OrderBy(chord => chord.Tap ? 1 : 0)
-            .ThenBy(chord => (int)chord.Modifiers)
-            .ThenBy(chord => IsFunctionKey(chord.Key) ? 0 : 1)
-            .ThenBy(chord => (int)chord.Key)
-            .Select(chord => Format(chord, format))
-            .ToList();
+        var formatted = Ordered(chords).Select(chord => Format(chord, format)).ToList();
         return formatted.Count switch
         {
             0 => null,
@@ -38,6 +32,17 @@ public static class KeymapHints
             _ => string.Join(", ", formatted.Take(formatted.Count - 1)) + " or " + formatted[^1],
         };
     }
+
+    /// <summary>One chord as text, worded exactly as it is inside a tooltip's line, for the Keyboard tab's chips.</summary>
+    public static string Describe(KeyChord chord, IFormatProvider? format = null) => Format(chord, format);
+
+    /// <summary>The order every list of chords is shown in, tooltips and the Keyboard tab alike: unmodified chords
+    /// first, then by KeyModifiers value, function keys ahead of other keys within a group, taps last.</summary>
+    public static IEnumerable<KeyChord> Ordered(IEnumerable<KeyChord> chords) => chords
+        .OrderBy(chord => chord.Tap ? 1 : 0)
+        .ThenBy(chord => (int)chord.Modifiers)
+        .ThenBy(chord => IsFunctionKey(chord.Key) ? 0 : 1)
+        .ThenBy(chord => (int)chord.Key);
 
     private static bool IsFunctionKey(Key key) => key is >= Key.F1 and <= Key.F24;
 

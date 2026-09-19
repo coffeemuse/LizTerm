@@ -84,4 +84,29 @@ public class KeymapHintsTests
     {
         Assert.NotNull(KeymapHints.Describe(Map, TerminalKey.PA1));
     }
+
+    [Fact]
+    public void Ordered_puts_unmodified_first_then_modifiers_then_taps()
+    {
+        var chords = new[]
+        {
+            KeyChord.TapOf(Key.LeftCtrl),
+            new KeyChord(Key.Home, KeyModifiers.Control),
+            new KeyChord(Key.D2, KeyModifiers.Alt),
+            new KeyChord(Key.F7),
+            new KeyChord(Key.PageUp),
+        };
+
+        Assert.Equal(
+            [new KeyChord(Key.F7), new KeyChord(Key.PageUp), new KeyChord(Key.D2, KeyModifiers.Alt),
+             new KeyChord(Key.Home, KeyModifiers.Control), KeyChord.TapOf(Key.LeftCtrl)],
+            KeymapHints.Ordered(chords));
+    }
+
+    [Fact]
+    public void One_chord_reads_as_it_does_in_a_tooltip()
+    {
+        Assert.Equal("Alt+2", KeymapHints.Describe(new KeyChord(Key.D2, KeyModifiers.Alt), Words));
+        Assert.Equal("a tap of Right Ctrl", KeymapHints.Describe(KeyChord.TapOf(Key.RightCtrl), Words));
+    }
 }
