@@ -57,10 +57,15 @@ public partial class App : Application
     private TagRegistryStore? _tags;
     private RecentHostsStore? _recentHosts;
     private SettingsViewModel? _settings;
+    private KeymapViewModel? _keymap;
 
     /// <summary>The process's one settings object, for every session window and for Preferences. Lazy with ??=
     /// for the same reason _store is: the headless test lifetime never runs OnFrameworkInitializationCompleted.</summary>
     internal SettingsViewModel Settings => _settings ??= new SettingsViewModel(new SettingsStore(AppPaths.SettingsFile()));
+
+    /// <summary>The process's one keymap object (#18), for every session window and, in time, for Preferences.
+    /// Lazy for the reason Settings is.</summary>
+    internal KeymapViewModel Keymap => _keymap ??= new KeymapViewModel(new KeymapStore(AppPaths.KeymapFile()));
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -205,6 +210,7 @@ public partial class App : Application
         var entry = new SessionEntry(viewModel, new ProfileRow(profile, tags, isSaved: fromStore), fromStore, window);
         _sessions.Add(entry);
         window.AttachSessions(_sessions, entry);
+        window.AttachKeymap(Keymap);
         if (!string.IsNullOrWhiteSpace(profile.HostFilesUrl))
         {
             // A saved profile can keep a certificate the user trusts; an ad hoc one has nowhere to put it.
