@@ -40,26 +40,40 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   shutdown. So each window's `Closing` records `ShutdownPolicy.IsShutdown(e.CloseReason)` (`ApplicationShutdown` or
   `OSShutdown` — both, never just one), and `Closed` asks `UserClosedLastWindow` before acting. It is read in
   `Closing` because `Closed` carries no reason. A close that the owned File Transfer dialog refuses never reaches
-  `Closing` at all (`ShouldCancelClose` asks the children first), and the next attempt overwrites the flag, so it
-  always describes the close that is actually finishing. The picker uses the same test for the mirror-image failure:
+  `Closing` at all (`SessionWindow.OnClosing` asks it and returns before raising the event; see #151 below), and
+  the next attempt overwrites the flag, so it always describes the close that is actually finishing. The picker uses the same test for the mirror-image failure:
   a shutdown that closed it would otherwise answer with `Quit()` → `TryShutdown()`, a second `DoShutdown` re-entered
   inside the first.
 - **Closing a connected session asks first (#151).** `ClosePolicy` (`Startup/`, pure, beside `ShutdownPolicy`)
-  holds both decisions. A window's own close: `SessionWindow.OnClosing` cancels, asks through `IClosePrompt`
-  (`Dialogs/`, injected by `AttachClosePrompt` like the wire log's prompt; `ConfirmCloseWindow` is the dialog, and
-  the words live in `ClosePromptRequest`), and on Disconnect calls `Close()` again past a one-attempt bypass. The
-  owned File Transfer dialog's refusal has already run by then, so a running transfer's cancel-first rule keeps
-  winning. Quit: `QuitGuard` (`Startup/`), one per process, is consulted from every owner-less window's `Closing`
-  (each session window and the picker) with the close reason. `TryShutdown` makes one pass over those windows,
-  closing each with `ApplicationShutdown`, so the guard holds *every* window of the pass while its one question is
-  up (Keep Connected must leave everything as it was) and on Disconnect calls `App.Quit()` again with the guard
-  lowered for that pass. The reason is how a user's Quit is told from an OS shutdown: Avalonia closes windows with
-  `OSShutdown` when the platform is logging out or shutting down, and its `ShutdownRequestedEventArgs.IsOSShutdown`
-  is internal, so the close reason is the one public place the two differ. An OS shutdown is therefore never held.
-  `App.Quit()` uses `TryShutdown`, not `Shutdown`: the forced one closes every window past `Closing`, so neither
-  the guard nor a running transfer could hold it; a refused shutdown takes `_quitting` back. The shutdown reasons
-  cannot be produced headlessly, so `ClosePolicyTests` and `QuitGuardTests` take the reason directly, and
-  `SessionWindowCloseTests` cover the window's own question with `FakeClosePrompt`.
+  holds both decisions, and `CloseQuestion` (`Startup/`) the one shape both askers share: cancel the synchronous
+  `Closing`, put the question up, and on Disconnect repeat the close (or the quit) with `IsConfirmed` set for that
+  one attempt; a second ask while it is up asks nothing more, and a question that could not be put up is answered
+  Keep Connected and written to the session's `ErrorMessage`, so the user hears why nothing happened. A window's
+  own close: `SessionWindow.OnClosing` asks through `IClosePrompt` (`Dialogs/`, injected by `AttachClosePrompt`
+  like the wire log's prompt; `ConfirmCloseWindow` is the dialog, and the words live in `ClosePromptRequest`). The
+  session window's `ClosingBehavior` is `OwnerWindowOnly`, so Avalonia no longer asks the owned File Transfer
+  dialog first: `OnClosing` asks it itself (`FileTransferWindow.RefusesClose`, the cancel-first rule) *after* the
+  questions, because asked first it had already cancelled the transfer by the time Keep Connected was chosen.
+  Quit: `QuitGuard` (`Startup/`), one per process, is consulted from every owner-less window's `Closing` (each
+  session window and the picker) with the close reason. `TryShutdown` makes one pass over those windows, closing
+  each with `ApplicationShutdown`, so the guard holds *every* window of the pass while its one question is up
+  (Keep Connected must leave everything as it was) and on Disconnect calls `App.Quit()` again with the guard
+  lowered for that pass. Two questions never share a screen: a window's question is counted by the guard
+  (`NewWindowQuestion`), and a Quit meanwhile holds without asking, while a window closing under the Quit question
+  (`IsAsking`) refuses without asking; the open question decides. The reason is how a user's Quit is told from an
+  OS shutdown where Avalonia tells them apart: it closes windows with `OSShutdown` when the platform reports a
+  logout or shutdown, and its `ShutdownRequestedEventArgs.IsOSShutdown` is internal, so the close reason is the
+  one public place the two differ. **The macOS backend never sets that flag** (`AvaloniaNativeApplicationPlatform`
+  raises `ShutdownRequested` with a plain `ShutdownRequestedEventArgs`, and `applicationShouldTerminate:` answers
+  `NSTerminateCancel` when the pass is refused), so on macOS a logout with connected sessions is asked the Quit
+  question and the logout is cancelled until it is answered; the user guide says so. `App.Quit()` uses
+  `TryShutdown`, not `Shutdown`: the forced one closes every window past `Closing`, so neither the guard nor a
+  running transfer could hold it; a refused shutdown takes `_quitting` back. A `Quit()` from a `Closed` handler
+  is posted to the dispatcher: `Closed` is raised before the routed `WindowClosedEvent` that takes the window off
+  the lifetime's list, and `TryShutdown` refuses while anything is still on it, which would strand the process
+  with no window. `AvaloniaClosePrompt` yields one dispatcher turn after its dialog for the same reason. The
+  shutdown reasons cannot be produced headlessly, so `ClosePolicyTests` and `QuitGuardTests` take the reason
+  directly, and `SessionWindowCloseTests` cover the window's own question with `FakeClosePrompt`.
 
 ## Session view model
 

@@ -21,12 +21,16 @@ public partial class FileTransferWindow : Window
 
     private FileTransferViewModel? ViewModel => DataContext as FileTransferViewModel;
 
-    /// <summary>Closing a running transfer asks the engine to cancel and keeps the window until the Done panel
-    /// shows the outcome; closing again while that answer is still pending lets the window go. The policy is
-    /// <see cref="FileTransferViewModel.TryClose"/>.</summary>
+    /// <summary>Whether a close of this dialog, or of the session window that owns it, must be refused now: a
+    /// running transfer is asked to cancel and the window kept until the Done panel shows the outcome; closing
+    /// again while that answer is still pending lets the window go. The policy is
+    /// <see cref="FileTransferViewModel.TryClose"/>. The owner asks from its own OnClosing, after its close
+    /// questions (#151), because its ClosingBehavior is OwnerWindowOnly rather than Avalonia's child-first default.</summary>
+    internal bool RefusesClose() => ViewModel is { } vm && !vm.TryClose();
+
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (ViewModel is { } vm && !vm.TryClose()) e.Cancel = true;
+        if (RefusesClose()) e.Cancel = true;
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();

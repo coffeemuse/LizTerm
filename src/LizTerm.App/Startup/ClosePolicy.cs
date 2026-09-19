@@ -21,8 +21,11 @@ internal static class ClosePolicy
 
     /// <summary>A Quit asks once, for all connected sessions. It is recognised by the reason the windows it closes
     /// receive: ApplicationShutdown for a user's Quit (Cmd+Q, the Quit menu item, the picker's Quit), OSShutdown
-    /// when the platform is logging out or shutting down, which never asks. Avalonia keeps the OS flag on its
-    /// ShutdownRequested event internal, so the close reason is the one public place the two are told apart. A
+    /// when the platform reports a logout or shutdown, which never asks. Avalonia keeps the OS flag on its
+    /// ShutdownRequested event internal, so the close reason is the one public place the two are told apart, and
+    /// only where the backend sets the flag: the macOS backend never does (AvaloniaNativeApplicationPlatform
+    /// raises ShutdownRequested with a plain ShutdownRequestedEventArgs), so there a logout arrives as
+    /// ApplicationShutdown and is asked like a Quit, and macOS cancels the logout while the question is up. A
     /// user closing a single window is never a quit. Nothing connected, the preference off, or a quit the user
     /// has just confirmed all go through.</summary>
     public static bool ConfirmsQuit(WindowCloseReason reason, int connectedSessions, bool confirmEnabled, bool confirmed) =>

@@ -15,11 +15,14 @@ public sealed class FakeClosePrompt : IClosePrompt
     public ClosePromptRequest? LastRequest { get; private set; }
     /// <summary>When set, every ask waits for it: a test holds the prompt open to see what a second close does.</summary>
     public TaskCompletionSource? Gate { get; set; }
+    /// <summary>When set, every ask throws it after being logged: a question that could not be put up.</summary>
+    public Exception? Exception { get; set; }
 
     public async Task<bool> ConfirmAsync(ClosePromptRequest request)
     {
         Calls.Add($"confirm:{request.Title}");
         LastRequest = request;
+        if (Exception is { } exception) throw exception;
         if (Gate is { } gate) await gate.Task;
         return Disconnect;
     }

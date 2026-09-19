@@ -148,4 +148,48 @@ public class QuitGuardTests
 
         Assert.Equal([second], owners);
     }
+
+    /// <summary>A question that could not be put up holds the quit (a failed question is not Disconnect) and says
+    /// so on the session it would have opened over, so the user hears why Cmd+Q did nothing. The next Cmd+Q asks
+    /// again rather than waiting on a question that never opened.</summary>
+    [Fact]
+    public void A_prompt_that_fails_holds_the_quit_and_reports_it()
+    {
+        var sessions = new SessionList();
+        var entry = TestSessions.Create("S", state: ConnectionState.Connected3270).Entry;
+        sessions.Add(entry);
+        var prompt = new FakeClosePrompt { Exception = new InvalidOperationException("no dialog") };
+        var quits = 0;
+        var guard = new QuitGuard(sessions, () => true, _ => prompt, () => quits++);
+
+        Assert.True(guard.Holds(Quit));
+
+        Assert.Single(prompt.Calls);
+        Assert.Equal(0, quits);
+        Assert.Equal("Could not ask before quitting: no dialog", entry.Session.ErrorMessage);
+        Assert.False(guard.IsAsking);
+        Assert.True(guard.Holds(Quit));
+        Assert.Equal(2, prompt.Calls.Count);
+    }
+
+    /// <summary>A session window's own question is up: a Quit meanwhile holds every window and asks nothing, so
+    /// two questions never share the screen; the open one decides for its window, and the next Quit asks its own.</summary>
+    [Fact]
+    public async Task A_window_question_up_holds_the_quit_without_a_second_question()
+    {
+        var (guard, prompt, quits) = Build(true, ConnectionState.Connected3270);
+        var gate = new TaskCompletionSource<bool>();
+        var repeated = 0;
+        guard.NewWindowQuestion().Ask(() => gate.Task, () => repeated++, _ => { });
+
+        Assert.True(guard.Holds(Quit));
+        Assert.Empty(prompt.Calls);
+        Assert.Empty(quits);
+
+        gate.SetResult(false);
+        await Task.Yield();
+        Assert.Equal(0, repeated);
+        Assert.True(guard.Holds(Quit));
+        Assert.Single(prompt.Calls);
+    }
 }

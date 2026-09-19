@@ -74,7 +74,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   while a request is out); and `FakeCredentialPrompt` (an `Answers` queue, then `Answer`, where null plays Cancel;
   `Calls` as `ask:<userid>:<Reason>`; `LastRequest`; a `Gate` that holds every prompt open; `AskCount`); and
   `FakeClosePrompt` (`Disconnect`, the answer; `Calls` as `confirm:<title>`; `LastRequest`; a `Gate` that holds the
-  question open, which a `QuitGuard` test needs because a real modal answer never lands mid-pass).
+  question open, which a `QuitGuard` test needs because a real modal answer never lands mid-pass; and an optional
+  `Exception`, a question that could not be put up).
 - `FakeHostFileService` (`Fakes/`) is an in-memory mvsMF: `AddDataset` seeds `Datasets` and `Members`, and `Text`
   and `Binary` hold contents keyed by `HostPath.ToString()`. `Calls` records `list:<pattern>` (which returns only
   the datasets the pattern matches: `**` any qualifiers, `*` within a qualifier, `%` one character, case ignored,

@@ -62,8 +62,10 @@ brings the list back; closing the list with no sessions open quits.</p>
 meant for something else does not end a live session: <strong>Keep Connected</strong> (the default, and Escape) leaves the
 window and the session as they were, and <strong>Disconnect</strong> closes the window. Quitting with one or more sessions
 connected asks once, for all of them, and <strong>Keep Connected</strong> leaves every window open. A window that is not
-connected closes without a question, and <strong>Disconnect</strong> in the menu never asks. Turn the question off under
-<strong>Closing</strong> in <a href="#preferences">Preferences</a>.</p>
+connected closes without a question, and <strong>Disconnect</strong> in the menu never asks. A system logout or shutdown skips
+the question where the system tells LizTerm it is one; macOS does not, so there a logout with connected sessions
+asks the same question and macOS cancels the logout until you answer. Log out again once you have. Turn the
+question off under <strong>Closing</strong> in <a href="#preferences">Preferences</a>.</p>
 <p>Right-click a profile (on macOS, Control-click or a two-finger tap) for <strong>Connect</strong>, <strong>Edit...</strong> and <strong>Mark as
 FAVORITE</strong>, which stars it without opening the editor. On a starred profile the same entry reads <strong>Remove from
 FAVORITE</strong>. A profile already carrying 8 tags has no room for FAVORITE until you remove one.</p>
