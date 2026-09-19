@@ -1,0 +1,86 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:LizTerm.App.ViewModels"
+             xmlns:controls="using:LizTerm.App.Controls"
+             x:Class="LizTerm.App.Views.KeyboardTab"
+             x:DataType="vm:KeymapEditorViewModel">
+  <!-- The Keyboard tab (#18). Its data context is the KeymapEditorViewModel, not the Preferences window's
+       SettingsViewModel, so PreferencesWindow sets it. One row per action: the name on the left, its chords as
+       chips (each with a × that removes it) and the Add slot on the right. Colour never carries meaning alone: the
+       armed slot reads "Press a key" and has a thicker border, a refusal is text, a chip has its ×. -->
+  <UserControl.Styles>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#A0A0A0" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- ChordCaptureBox is a Button under another type, so it is styled by class, not by type. -->
+    <Style Selector="Button.chord-slot">
+      <Setter Property="MinWidth" Value="84" />
+      <Setter Property="MaxWidth" Value="180" />
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="6,0,0,4" />
+    </Style>
+    <Style Selector="Button.chord-slot:armed">
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+    <Style Selector="Button.remove">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
+      <!-- Hidden until a save fails; the session windows show the same message in their banners. -->
+      <TextBlock x:Name="SaveErrorText" Text="{Binding SaveError}" IsVisible="{Binding HasSaveError}"
+                 Foreground="#FF8080" TextWrapping="Wrap" />
+      <TextBlock x:Name="UnreadableText" Classes="hint" Text="{Binding UnreadableNote}" IsVisible="{Binding HasUnreadable}" />
+      <Button x:Name="ResetButton" Content="Reset to defaults" Command="{Binding ResetCommand}" />
+    </StackPanel>
+    <ScrollViewer x:Name="RowScroller" VerticalScrollBarVisibility="Auto">
+      <ItemsControl x:Name="RowList" ItemsSource="{Binding Rows}" Margin="0,0,12,0">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:KeymapRow">
+            <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto" Margin="0,4">
+              <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" Margin="0,3,8,0" TextWrapping="Wrap" />
+              <DockPanel Grid.Column="1">
+                <controls:ChordCaptureBox DockPanel.Dock="Right" CaptureHandler="{Binding CaptureHandler}"
+                                          AutomationProperties.Name="{Binding AddName}" />
+                <ItemsControl ItemsSource="{Binding Chips}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:KeymapChip">
+                      <Border Background="#303030" CornerRadius="3" Padding="6,0,1,0" Margin="0,0,4,4">
+                        <StackPanel Orientation="Horizontal" Spacing="1">
+                          <TextBlock Text="{Binding Text}" FontSize="12" VerticalAlignment="Center" />
+                          <Button Classes="remove" Content="×" Command="{Binding RemoveCommand}"
+                                  AutomationProperties.Name="{Binding RemoveName}" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </DockPanel>
+              <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Classes="hint" Text="{Binding Note}" IsVisible="{Binding HasNote}" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>
