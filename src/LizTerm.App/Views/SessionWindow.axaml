@@ -446,7 +446,6 @@
                                BlinkEnabled="{Binding Settings.Blink}"
                                FindMatches="{Binding Find.Matches}"
                                CurrentMatch="{Binding Find.CurrentMatch}"
-                               DestructiveBackspace="{Binding Profile.DestructiveBackspace}"
                                Monochrome="{Binding Monochrome}" />
       <controls:SessionSwitcher x:Name="SwitcherPanel" IsVisible="False" DataContext="{x:Null}" />
     </Panel>

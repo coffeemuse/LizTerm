@@ -7,6 +7,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using LizTerm.App.Controls;
+using LizTerm.App.Keyboard;
 using LizTerm.Core.Screen;
 using LizTerm.Core.Session;
 
@@ -38,14 +39,14 @@ public class TerminalScreenInputTests
     }
 
     [AvaloniaFact]
-    public void Backspace_erases_by_default_and_moves_left_when_the_profile_says_so()
+    public void Backspace_erases_by_default_and_moves_left_with_the_cursor_left_table()
     {
         var (window, screen) = Show();
         var keys = new List<TerminalKey>();
         screen.KeyRequested += (_, k) => keys.Add(k);
 
         window.KeyPressQwerty(PhysicalKey.Backspace, RawInputModifiers.None);
-        screen.DestructiveBackspace = false;
+        screen.Keymap = DefaultKeymap.Create(destructiveBackspace: false);
         window.KeyPressQwerty(PhysicalKey.Backspace, RawInputModifiers.None);
 
         Assert.Equal([TerminalKey.Erase, TerminalKey.Backspace], keys);

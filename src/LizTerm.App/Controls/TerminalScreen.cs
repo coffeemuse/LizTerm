@@ -25,10 +25,11 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<ScreenSnapshot?> SnapshotProperty =
         AvaloniaProperty.Register<TerminalScreen, ScreenSnapshot?>(nameof(Snapshot));
 
-    /// <summary>Mirrors the profile's DestructiveBackspace choice; the window binds it. True (erase) by default,
-    /// like a new profile (spec 3.2).</summary>
-    public static readonly StyledProperty<bool> DestructiveBackspaceProperty =
-        AvaloniaProperty.Register<TerminalScreen, bool>(nameof(DestructiveBackspace), defaultValue: true);
+    /// <summary>The table in force. The window composes it from the profile's Backspace choice and the user's
+    /// keymap.json (#18) and sets it here, on open and on every change; a screen shown on its own (the tests) has
+    /// the erasing default, which is what it always had.</summary>
+    public static readonly StyledProperty<Keymap> KeymapProperty =
+        AvaloniaProperty.Register<TerminalScreen, Keymap>(nameof(Keymap), DefaultKeymap.Create(destructiveBackspace: true));
 
     /// <summary>The mouse selection, or null. Two-way by default so the window can bind it to the view model,
     /// which clears it whenever input is sent to the host.</summary>
@@ -68,7 +69,6 @@ public sealed class TerminalScreen : Control
     private readonly SelectionGesture _gesture = new();
     private readonly ModifierTapDetector _taps = new();
     private WindowBase? _window;
-    private Keymap Keymap => DefaultKeymap.Create(DestructiveBackspace);
     private double _advancePerEm;
     private double _lineHeightPerEm;
 
@@ -173,10 +173,10 @@ public sealed class TerminalScreen : Control
         set => SetValue(SnapshotProperty, value);
     }
 
-    public bool DestructiveBackspace
+    public Keymap Keymap
     {
-        get => GetValue(DestructiveBackspaceProperty);
-        set => SetValue(DestructiveBackspaceProperty, value);
+        get => GetValue(KeymapProperty);
+        set => SetValue(KeymapProperty, value);
     }
 
     public ScreenRegion? Selection
