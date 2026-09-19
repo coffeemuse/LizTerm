@@ -120,6 +120,40 @@ public class KeymapOverlayTests
         Assert.Equal("""{"bindings":{}}""", overlay.ToFile().ToJson().ToJsonString());
     }
 
+    [Fact]
+    public void ToFile_drops_an_ignored_entry_for_a_chord_the_user_has_bound()
+    {
+        var overlay = KeymapOverlay.Parse(File("""{"F1": "PF99", "f1": "PF1"}"""));
+
+        var file = overlay.ToFile();
+
+        Assert.Equal(new KeymapEntry.SendKey("PF1"), file.Bindings["F1"]);
+        Assert.Single(file.Bindings);
+    }
+
+    [Fact]
+    public void Binding_a_chord_whose_file_entry_was_unreadable_replaces_it_on_save()
+    {
+        var overlay = KeymapOverlay.Parse(File("""{"F1": "PF99"}"""));
+        Assert.Equal(1, overlay.IgnoredCount);
+
+        var bound = overlay.Bind(new KeyChord(Key.F1), new KeymapAction.SendKey(TerminalKey.PF2));
+        var file = bound.ToFile();
+
+        Assert.Equal(new KeymapEntry.SendKey("PF2"), file.Bindings["F1"]);
+        Assert.Single(file.Bindings);
+    }
+
+    [Fact]
+    public void Two_spellings_of_one_chord_are_one_entry_and_the_later_wins()
+    {
+        var overlay = KeymapOverlay.Parse(File("""{"ctrl+home": "PA1", "Ctrl+Home": "PA3"}"""));
+
+        Assert.Single(overlay.Entries);
+        Assert.Equal(new KeymapAction.SendKey(TerminalKey.PA3), overlay.Entries[CtrlHome]);
+        Assert.Equal(0, overlay.IgnoredCount);
+    }
+
     private static TerminalKey Send(Keymap map, KeyChord chord)
     {
         Assert.True(map.TryMap(chord, out var key));

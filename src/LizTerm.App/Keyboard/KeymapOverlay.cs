@@ -50,10 +50,12 @@ public sealed class KeymapOverlay
         return new(entries, new KeymapFile(ignored, file.Unreadable));
     }
 
-    /// <summary>Entries in the canonical spelling, then the ignored ones. The two cannot collide: an ignored
-    /// spelling is one that did not parse, and a canonical one always does.</summary>
+    /// <summary>Entries in the canonical spelling, then the ignored ones except any whose spelling names a chord the
+    /// entries already hold, because a chord that parsed but whose action did not is ignored under a spelling that
+    /// can collide with the canonical one.</summary>
     public KeymapFile ToFile() =>
-        new(Entries.Select(e => KeyValuePair.Create(ChordSyntax.Format(e.Key), e.Value.ToEntry())).Concat(Ignored.Bindings),
+        new(Entries.Select(e => KeyValuePair.Create(ChordSyntax.Format(e.Key), e.Value.ToEntry()))
+            .Concat(Ignored.Bindings.Where(pair => !(ChordSyntax.TryParse(pair.Key, out var chord) && Entries.ContainsKey(chord)))),
             Ignored.Unreadable);
 
     /// <summary>With <paramref name="chord"/> doing <paramref name="action"/>; an entry that says what the
