@@ -448,7 +448,6 @@ public class MvsmfBrowserWindowTests
         Assert.True(box.IsVisible);
         Assert.Equal("HELLO", box.Text);
         Assert.Equal("HELLO", box.SelectedText);
-        Assert.False(Named<TextBlock>(window, "ConfirmInputLabel").IsVisible);
         Assert.False(Named<TextBlock>(window, "ConfirmInputProblem").IsVisible);
         Assert.False(Named<Button>(window, "ConfirmPrimaryButton").IsEffectivelyEnabled);
 
@@ -574,6 +573,7 @@ public class MvsmfBrowserWindowTests
         Assert.False(t.Vm.IsCreating);
         Assert.True(window.IsVisible);
         Assert.True(Named<DockPanel>(window, "MemberPane").IsVisible || Named<TextBlock>(window, "ChooseHint").IsVisible);
+        await Wait.UntilAsync(() => Named<TextBox>(window, "FilterBox").IsFocused, "the focus back in the filter box");
     }
 
     [AvaloniaFact]

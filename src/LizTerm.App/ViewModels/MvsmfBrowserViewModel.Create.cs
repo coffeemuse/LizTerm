@@ -40,9 +40,7 @@ public sealed partial class MvsmfBrowserViewModel
     private void NewDataset()
     {
         // A banner's Retry belongs to the operation that failed, and nothing else runs while the form is open.
-        _retry = null;
-        ErrorText = null;
-        OnPropertyChanged(nameof(CanRetry));
+        DropRetry();
         Form.Message = null;
         Form.Name = FirstQualifier(Filter) is { } hlq ? hlq + "." : "";
         if (SelectedDataset is { } dataset) Form.PrefillFrom(dataset.Attributes);
@@ -60,9 +58,7 @@ public sealed partial class MvsmfBrowserViewModel
     [RelayCommand(CanExecute = nameof(CanCloseForm))]
     private void CloseForm()
     {
-        _retry = null;
-        ErrorText = null;
-        OnPropertyChanged(nameof(CanRetry));
+        DropRetry();
         HideForm();
     }
 
@@ -103,8 +99,8 @@ public sealed partial class MvsmfBrowserViewModel
             return;
         }
         var what = $"Created {path}";
-        retryWith(() => ListAgainAsync(path.Dataset, what, null));
+        retryWith(() => ListAgainAsync(path.Dataset, what));
         HideForm();
-        await ShowAfterChangeAsync(path.Dataset, what, null, token);
+        await ShowAfterChangeAsync(path.Dataset, what, token);
     }
 }

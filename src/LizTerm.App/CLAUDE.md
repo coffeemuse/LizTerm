@@ -855,26 +855,31 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   rules accept, opened or not; Rename… in the bottom bar needs exactly one selected member. A member rename
   reloads the list and selects the new name through `SelectMemberRequested`, which the window applies to its list
   box (the list box owns the selection, so the view model never sets it directly); a `NotFound` means the member
-  went meanwhile, so the list is reloaded before the status line. A dataset rename or a create lists the filter
+  went meanwhile, so the list is reloaded before the status line. Once the host has renamed, the old member row
+  (`RemoveDeletedMembers`) or the old dataset row (`DropDataset`) goes at once, before any listing, so a listing
+  that fails leaves nothing on screen that names what the host no longer has; a `NotFound` on a dataset rename or
+  delete drops the row the same way, with the host's sentence. A dataset rename or a create lists the filter
   again and chooses the new name if it shows (`ShowAfterChangeAsync`); `SelectAsync` exists because setting
   `SelectedDataset` inside a running operation starts no member load of its own (`RunExclusiveAsync` ignores a
   second operation). `RunThenListAsync` swaps the retry to the listing once the host has done the first half of a
   rename or a create, so Retry after a failed listing never repeats it: a member rename pairs it with
   `ShowRenamedMemberAsync`, a dataset rename or a create with `ShowAfterChangeAsync`. When the filter in the box is
   one the rules would refuse (an emptied box, say), the host has already done its part and the list cannot be asked
-  again until the filter is fixed, so `ShowAfterChangeAsync` drops the gone row (the old row for a rename, none for
-  a create) instead of leaving it stale and reports `⚠ … The list was not refreshed: …` rather than re-listing. The
-  delete-dataset question carries the loaded member count only when a member listing for the dataset landed (with a
-  plus while the host has more or a host-side member filter is in force); one that never listed — cancelled, failed
-  — reads as a bare "a partitioned dataset", never as "0 members".
+  again until the filter is fixed, so `ShowAfterChangeAsync` reports `⚠ … The list was not refreshed: …` rather
+  than re-listing. The delete-dataset question carries the loaded member count only when a member listing for the
+  dataset landed (with a plus while the host has more or a host-side member filter is in force); one that never
+  listed — cancelled, failed — reads as a bare "a partitioned dataset", never as "0 members".
 - **Create** (`Create.cs`, `NewDatasetFormViewModel`): the form is one instance per window, so the space values it
   was last sent with are kept; opening it prefills type and DCB from the chosen dataset and the name from the
   filter's first qualifier. Every field is a string; a numeric field that is not a whole number is checked as
   `-1` and its own "Enter a whole number." wins. A `CannotAllocate` or `InvalidRequest` stays in `Form.Message`
   with the form open; a connection failure's Retry sends the form as it now reads. `CloseForm` (the form's Close
-  and Escape) clears a pending Retry and the banner, exactly as `CloseReview` does, so a failed create's Retry
-  goes with the form. While the form is open every other operation is off (`!IsCreating` in each rule) and the
-  right pane shows the form in place of the member list, the review, the hint and the sequential note.
+  and Escape) clears a pending Retry and the banner (`DropRetry`, shared with `CloseReview`), so a failed create's
+  Retry goes with the form; closed without an operation, the keyboard goes to the filter box, since the form's
+  boxes are hidden. The form builds its allocation and problem list once per field change (`Check`), since every
+  problem line and `CanCreate` read them. While the form is open every other operation is off (`!IsCreating` in
+  each rule) and the right pane shows the form in place of the member list, the review, the hint and the
+  sequential note.
 - **ETag memory** (`HostFileAccess.Etags`, `EtagMemory`): a download remembers the stamp once the file is in
   place; a write remembers the write's stamp; a member delete forgets, a dataset delete forgets everything under
   it, a rename moves. An upload sends the stamp as `ifMatch` only for a member it is replacing; a `Conflict` is

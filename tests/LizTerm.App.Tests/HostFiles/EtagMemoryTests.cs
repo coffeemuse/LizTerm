@@ -109,6 +109,21 @@ public class EtagMemoryTests
     }
 
     [Fact]
+    public void Move_onto_the_same_name_keeps_the_stamps()
+    {
+        var memory = new EtagMemory();
+        memory.Remember(Hello, "1");
+        memory.Remember(Cntl, "2");
+
+        memory.Move(Cntl, HostPath.ForDataset("mvsce02.cntl"));
+        memory.Move(Hello, Hello);
+
+        Assert.Equal("1", memory.TryGet(Hello));
+        Assert.Equal("2", memory.TryGet(Cntl));
+        Assert.Equal(2, memory.Count);
+    }
+
+    [Fact]
     public void An_access_owns_one_memory()
     {
         var access = new HostFileAccess(

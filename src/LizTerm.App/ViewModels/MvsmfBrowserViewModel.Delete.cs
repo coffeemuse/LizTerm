@@ -55,9 +55,6 @@ public sealed partial class MvsmfBrowserViewModel
                 var member = members[i];
                 try
                 {
-                    // MemberRow.Path is built by HostPath.ForMember, so this can only be a member; the check stands
-                    // because DeleteAsync now takes a dataset too, and a dataset must never go through this loop.
-                    if (member.Path.Kind != HostPathKind.Member) throw new InvalidOperationException($"{member.Path} is not a member.");
                     await _connection.RunAsync(service => service.DeleteAsync(member.Path, token));
                     _access.Etags.Forget(member.Path);
                     deleted++;

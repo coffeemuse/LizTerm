@@ -61,6 +61,8 @@ public sealed partial class MvsmfBrowserViewModel
             return;
         }
         _access.Etags.Move(member.Path, to);
+        // The old name is gone from the host, so its row goes now: a listing that fails must not leave it to act on.
+        RemoveDeletedMembers(dataset, [member]);
         retryWith(() => ShowRenamedMemberAsync(dataset, member.Name, to));
         await ShowRenamedMemberAsync(dataset, member.Name, to, token);
     }
@@ -102,11 +104,23 @@ public sealed partial class MvsmfBrowserViewModel
         var from = HostPath.ForDataset(dataset.Name);
         var to = HostPath.ForDataset(question.Input);
         StatusText = $"⟳ Renaming {from} to {to}…";
-        await _connection.RunAsync(service => service.RenameAsync(from, to.Dataset, token));
+        try
+        {
+            await _connection.RunAsync(service => service.RenameAsync(from, to.Dataset, token));
+        }
+        catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.NotFound)
+        {
+            // The dataset went meanwhile (another user, a job), so its row is stale.
+            DropDataset(dataset);
+            StatusText = $"✗ {from}: {HostFileMessages.Describe(ex)}";
+            return;
+        }
         _access.Etags.Move(from, to);
+        // The old name is gone from the host, so its row goes now, whether or not the listing below can be asked.
+        DropDataset(dataset);
         var what = $"Renamed {from} to {to}";
-        retryWith(() => ListAgainAsync(to.Dataset, what, dataset));
-        await ShowAfterChangeAsync(to.Dataset, what, dataset, token);
+        retryWith(() => ListAgainAsync(to.Dataset, what));
+        await ShowAfterChangeAsync(to.Dataset, what, token);
     }
 
     // ---- dataset delete ----
@@ -127,10 +141,20 @@ public sealed partial class MvsmfBrowserViewModel
         }
         var path = HostPath.ForDataset(dataset.Name);
         StatusText = $"⟳ Deleting {path}…";
-        await _connection.RunAsync(service => service.DeleteAsync(path, token));
+        try
+        {
+            await _connection.RunAsync(service => service.DeleteAsync(path, token));
+        }
+        catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.NotFound)
+        {
+            // Gone already (another user, a job): the row is stale either way.
+            _access.Etags.ForgetUnder(path);
+            DropDataset(dataset);
+            StatusText = $"✗ {path}: {HostFileMessages.Describe(ex)}";
+            return;
+        }
         _access.Etags.ForgetUnder(path);
-        if (ReferenceEquals(SelectedDataset, dataset)) SelectedDataset = null;
-        Datasets.Remove(dataset);
+        DropDataset(dataset);
         StatusText = $"✓ Deleted {dataset.Name}.";
     }
 
@@ -161,24 +185,26 @@ public sealed partial class MvsmfBrowserViewModel
         return RunExclusiveAsync(token => work(next => retry = next, token), () => retry());
     }
 
-    private Task ListAgainAsync(string name, string what, DatasetRow? gone) =>
-        RunExclusiveAsync(token => ShowAfterChangeAsync(name, what, gone, token), () => ListAgainAsync(name, what, gone));
+    private Task ListAgainAsync(string name, string what) =>
+        RunExclusiveAsync(token => ShowAfterChangeAsync(name, what, token), () => ListAgainAsync(name, what));
 
-    /// <summary>After a dataset is renamed or created: if the filter in the box is one the rules would refuse (an
-    /// emptied box, say), the host has already done its part and the list cannot be asked again until the filter is
-    /// fixed, so <paramref name="gone"/> — the old row for a rename, null for a create — is dropped rather than left
-    /// stale, and the line says what did and did not happen. Otherwise the filter is listed again, the dataset is
-    /// chosen if the listing shows it, and the status line says what happened, adding that the filter hides it when
-    /// it does.</summary>
-    private async Task ShowAfterChangeAsync(string name, string what, DatasetRow? gone, CancellationToken token)
+    /// <summary>Takes a row off the list without asking the host: a dataset deleted, renamed away, or found gone.
+    /// Nothing else on screen can then act on a name the host no longer has.</summary>
+    private void DropDataset(DatasetRow dataset)
+    {
+        if (ReferenceEquals(SelectedDataset, dataset)) SelectedDataset = null;
+        Datasets.Remove(dataset);
+    }
+
+    /// <summary>After a dataset is renamed (its old row already dropped) or created: if the filter in the box is one
+    /// the rules would refuse (an emptied box, say), the host has already done its part and the list cannot be asked
+    /// again until the filter is fixed, so the line says what did and did not happen. Otherwise the filter is listed
+    /// again, the dataset is chosen if the listing shows it, and the status line says what happened, adding that the
+    /// filter hides it when it does.</summary>
+    private async Task ShowAfterChangeAsync(string name, string what, CancellationToken token)
     {
         if (HostPath.DatasetPatternError(Filter) is { } problem)
         {
-            if (gone is not null)
-            {
-                if (ReferenceEquals(SelectedDataset, gone)) SelectedDataset = null;
-                Datasets.Remove(gone);
-            }
             StatusText = $"⚠ {what}. The list was not refreshed: {problem}";
             return;
         }

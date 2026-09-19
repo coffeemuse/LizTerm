@@ -34,7 +34,6 @@ public class ConfirmationRequestTests
 
         Assert.True(question.HasInput);
         Assert.Equal("HELLO", question.Input);
-        Assert.Equal("", question.InputLabel);
         Assert.Null(question.InputProblem);
         Assert.False(question.CanAnswerPrimary);
         Assert.False(question.PrimaryCommand.CanExecute(null));

@@ -84,9 +84,6 @@
             <TextBox x:Name="ConfirmInputBox" DockPanel.Dock="Right" Width="240" MaxLength="44"
                      FontFamily="Menlo, Consolas, monospace" Text="{Binding Confirmation.Input}"
                      IsVisible="{Binding Confirmation.HasInput, FallbackValue=False}" Margin="8,0,0,0" />
-            <TextBlock x:Name="ConfirmInputLabel" DockPanel.Dock="Right" Text="{Binding Confirmation.InputLabel}"
-                       VerticalAlignment="Center" Margin="8,0,0,0"
-                       IsVisible="{Binding Confirmation.InputLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
             <TextBlock Text="{Binding Confirmation.Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
           </DockPanel>
           <TextBlock x:Name="ConfirmInputProblem" Text="{Binding Confirmation.InputProblem, StringFormat='✗ {0}'}"

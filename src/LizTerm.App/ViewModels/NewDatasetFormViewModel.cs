@@ -56,12 +56,25 @@ public sealed partial class NewDatasetFormViewModel : ObservableObject
         if (attributes.Blksize is { } blksize) Blksize = blksize.ToString(CultureInfo.InvariantCulture);
     }
 
-    /// <summary>What Create sends. A numeric field that is not a whole number is sent as -1, which every rule
-    /// refuses, and its own problem line wins (<see cref="NumberProblem"/>).</summary>
-    public DatasetAllocation Allocation => new(
-        IsPartitioned ? DatasetOrganization.Partitioned : DatasetOrganization.Sequential,
-        Recfm, Number(Lrecl), Number(Blksize), IsTracks ? SpaceUnit.Tracks : SpaceUnit.Cylinders,
-        Number(Primary), Number(Secondary), Number(DirectoryBlocks));
+    private DatasetAllocation _allocation;
+    private IReadOnlyDictionary<AllocationField, string> _problems;
+
+    public NewDatasetFormViewModel() => (_allocation, _problems) = Check();
+
+    /// <summary>What Create sends, as the fields last read. A numeric field that is not a whole number is sent as
+    /// -1, which every rule refuses, and its own problem line wins (<see cref="NumberProblem"/>).</summary>
+    public DatasetAllocation Allocation => _allocation;
+
+    /// <summary>The allocation and its problems, built once per change: every problem line and CanCreate read
+    /// them, and a keystroke raises them all.</summary>
+    private (DatasetAllocation, IReadOnlyDictionary<AllocationField, string>) Check()
+    {
+        var allocation = new DatasetAllocation(
+            IsPartitioned ? DatasetOrganization.Partitioned : DatasetOrganization.Sequential,
+            Recfm, Number(Lrecl), Number(Blksize), IsTracks ? SpaceUnit.Tracks : SpaceUnit.Cylinders,
+            Number(Primary), Number(Secondary), Number(DirectoryBlocks));
+        return (allocation, allocation.Problems());
+    }
 
     public string? NameProblem => Mark(HostPath.DatasetNameError(Name));
     public string? RecfmProblem => Mark(Problems.GetValueOrDefault(AllocationField.Recfm));
@@ -76,7 +89,7 @@ public sealed partial class NewDatasetFormViewModel : ObservableObject
         NameProblem is null && RecfmProblem is null && LreclProblem is null && BlksizeProblem is null
         && PrimaryProblem is null && SecondaryProblem is null && DirectoryBlocksProblem is null;
 
-    private IReadOnlyDictionary<AllocationField, string> Problems => Allocation.Problems();
+    private IReadOnlyDictionary<AllocationField, string> Problems => _problems;
 
     private static string? Mark(string? problem) => problem is null ? null : "✗ " + problem;
 
@@ -94,6 +107,7 @@ public sealed partial class NewDatasetFormViewModel : ObservableObject
     {
         base.OnPropertyChanged(e);
         if (e.PropertyName is null || e.PropertyName == nameof(Message) || Derived.Contains(e.PropertyName)) return;
+        (_allocation, _problems) = Check();
         foreach (var name in Derived) base.OnPropertyChanged(new PropertyChangedEventArgs(name));
     }
 }

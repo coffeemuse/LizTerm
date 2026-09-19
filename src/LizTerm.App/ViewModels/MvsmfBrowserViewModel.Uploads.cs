@@ -73,9 +73,7 @@ public sealed partial class MvsmfBrowserViewModel
     [RelayCommand(CanExecute = nameof(CanCloseReview))]
     private void CloseReview()
     {
-        _retry = null;
-        ErrorText = null;
-        OnPropertyChanged(nameof(CanRetry));
+        DropRetry();
         IsReviewingUpload = false;
         UploadFinished = false;
         ReviewMessage = null;
@@ -199,6 +197,8 @@ public sealed partial class MvsmfBrowserViewModel
 
             async Task SendAsync(string? stamp)
             {
+                // Each send starts afresh: one the host refused for its stamp wrote nothing.
+                started = false;
                 if (mode == HostTransferMode.Text)
                 {
                     var check = row.Check!;

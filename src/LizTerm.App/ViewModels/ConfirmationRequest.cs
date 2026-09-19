@@ -17,7 +17,7 @@ public sealed record ConfirmOutcome(ConfirmChoice Choice, bool ApplyToAll);
 /// allowed only for an acceptable value that differs from the original, ignoring case and surrounding blanks. The
 /// asker reads the answer from <see cref="Input"/>.</summary>
 public sealed partial class ConfirmationRequest(string message, string primaryLabel, string? secondaryLabel = null,
-    bool offersApplyToAll = false, string? input = null, Func<string, string?>? inputRule = null, string inputLabel = "")
+    bool offersApplyToAll = false, string? input = null, Func<string, string?>? inputRule = null)
     : ObservableObject
 {
     private readonly TaskCompletionSource<ConfirmOutcome> _answer = new();
@@ -29,7 +29,6 @@ public sealed partial class ConfirmationRequest(string message, string primaryLa
     public bool HasSecondary => SecondaryLabel is not null;
     public bool OffersApplyToAll { get; } = offersApplyToAll;
     public bool HasInput { get; } = input is not null;
-    public string InputLabel { get; } = inputLabel;
 
     [ObservableProperty] private bool _applyToAll;
 

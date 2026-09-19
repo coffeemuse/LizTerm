@@ -47,6 +47,8 @@ public sealed class EtagMemory
     /// <summary>A rename: a member's entry moves to its new name; a dataset's moves with everything under it.</summary>
     public void Move(HostPath from, HostPath to)
     {
+        // A rename onto its own name moves nothing, and must not clear the stamps as stale ones.
+        if (from.ToString() == to.ToString()) return;
         lock (_lock)
         {
             // The host refused nothing, so nothing stood at the new name: a stamp left there is a stale one.

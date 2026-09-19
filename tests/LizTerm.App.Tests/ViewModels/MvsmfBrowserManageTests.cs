@@ -137,6 +137,9 @@ public class MvsmfBrowserManageTests
         Answer(await AskedAsync(t, renaming), "HELLO2");
         await renaming;
         Assert.True(t.Vm.CanRetry);
+        // The host has renamed, so the old name is off the list even before the listing succeeds.
+        Assert.DoesNotContain(t.Vm.Members, m => m.Name == "HELLO");
+        Assert.Empty(t.Vm.SelectedMembers);
 
         t.Host.Failures.Clear();
         await t.Vm.RetryCommand.ExecuteAsync(null);
@@ -226,6 +229,10 @@ public class MvsmfBrowserManageTests
         Answer(await AskedAsync(t, renaming), "MVSCE02.JCL");
         await renaming;
         Assert.True(t.Vm.CanRetry);
+        // The host has renamed, so the old row is gone even before the listing succeeds: nothing can act on it.
+        Assert.DoesNotContain(t.Vm.Datasets, d => d.Name == "MVSCE02.CNTL");
+        Assert.Null(t.Vm.SelectedDataset);
+        Assert.Empty(t.Vm.Members);
 
         t.Host.Failures.Clear();
         await t.Vm.RetryCommand.ExecuteAsync(null);
@@ -334,6 +341,41 @@ public class MvsmfBrowserManageTests
         Assert.Equal("✗ Not authorized.", t.Vm.StatusText);
         Assert.Equal("MVSCE02.CNTL", t.Vm.SelectedDataset?.Name);
         Assert.Equal(4, t.Vm.Datasets.Count);
+    }
+
+    [Fact]
+    public async Task A_dataset_that_went_meanwhile_is_dropped_by_delete()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ChooseAsync("MVSCE02.CNTL");
+        t.Host.Failures["delete:MVSCE02.CNTL"] = new HostFileException(HostFileErrorKind.NotFound, "MVSCE02.CNTL: not found.", 4);
+
+        var deleting = t.Vm.DeleteDatasetCommand.ExecuteAsync(null);
+        (await AskedAsync(t, deleting)).PrimaryCommand.Execute(null);
+        await deleting;
+
+        Assert.Equal("✗ MVSCE02.CNTL: Not found.", t.Vm.StatusText);
+        Assert.DoesNotContain(t.Vm.Datasets, d => d.Name == "MVSCE02.CNTL");
+        Assert.Null(t.Vm.SelectedDataset);
+        Assert.Equal(3, t.Vm.Datasets.Count);
+    }
+
+    [Fact]
+    public async Task A_dataset_that_went_meanwhile_is_dropped_by_rename()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ChooseAsync("MVSCE02.CNTL");
+        t.Host.Failures["rename:MVSCE02.CNTL:MVSCE02.JCL"] = new HostFileException(HostFileErrorKind.NotFound, "MVSCE02.CNTL: not found.", 4);
+
+        var renaming = t.Vm.RenameDatasetCommand.ExecuteAsync(null);
+        Answer(await AskedAsync(t, renaming), "MVSCE02.JCL");
+        await renaming;
+
+        Assert.Equal("✗ MVSCE02.CNTL: Not found.", t.Vm.StatusText);
+        Assert.DoesNotContain(t.Vm.Datasets, d => d.Name == "MVSCE02.CNTL");
+        Assert.Null(t.Vm.SelectedDataset);
+        // Nothing to re-list for: the one listing is ChooseAsync's.
+        Assert.Equal(1, t.Host.CallsSnapshot().Count(c => c.StartsWith("list:")));
     }
 
     [Fact]

@@ -94,6 +94,16 @@ public partial class MvsmfBrowserWindow : Window
                     if (_watched is { IsCreating: true }) NewNameBox.Focus();
                 }, DispatcherPriority.Loaded);
                 break;
+            case nameof(MvsmfBrowserViewModel.IsCreating) when !vm.IsCreating && !vm.IsBusy:
+                // Closed without an operation (Close, Escape): the keyboard was in the form, which is now hidden, so
+                // it goes where the window opens. A form an operation closes is handled by the IsBusy case above.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_watched is not { IsCreating: false, IsBusy: false }) return;
+                    if (FocusManager?.GetFocusedElement() is Control { IsEffectivelyVisible: true }) return;
+                    FilterBox.Focus();
+                }, DispatcherPriority.Loaded);
+                break;
         }
     }
 

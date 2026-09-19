@@ -221,6 +221,14 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         }
     }
 
+    /// <summary>Drops a pending Retry with its banner: the operation it belongs to has been closed away from.</summary>
+    private void DropRetry()
+    {
+        _retry = null;
+        ErrorText = null;
+        OnPropertyChanged(nameof(CanRetry));
+    }
+
     [RelayCommand]
     private async Task RetryAsync()
     {
