@@ -218,4 +218,23 @@ public class MvsmfBrowserCreateTests
         t.Vm.Form.Lrecl = "80";
         Assert.True(t.Vm.CreateCommand.CanExecute(null));
     }
+
+    [Fact]
+    public async Task Closing_the_form_drops_a_failed_creates_retry()
+    {
+        var t = await OpenedAsync();
+        t.Vm.Form.Name = "MVSCE02.NEW";
+        t.Host.Failures["create:MVSCE02.NEW"] = new HostFileException(HostFileErrorKind.Unreachable, "MVSCE02.NEW: cannot reach the host (refused).");
+        await t.Vm.CreateCommand.ExecuteAsync(null);
+        Assert.True(t.Vm.CanRetry);
+
+        t.Vm.CloseFormCommand.Execute(null);
+
+        Assert.False(t.Vm.IsCreating);
+        Assert.False(t.Vm.HasError);
+        Assert.False(t.Vm.CanRetry);
+        t.Host.Failures.Clear();
+        await t.Vm.RetryCommand.ExecuteAsync(null);
+        Assert.Equal(1, t.Host.CallsSnapshot().Count(c => c == "create:MVSCE02.NEW"));
+    }
 }

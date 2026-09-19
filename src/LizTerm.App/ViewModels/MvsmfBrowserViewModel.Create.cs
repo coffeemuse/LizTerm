@@ -52,8 +52,15 @@ public sealed partial class MvsmfBrowserViewModel
         return first.Length > 0 && !first.Contains('*') && !first.Contains('%') ? first : null;
     }
 
+    /// <summary>A Retry left by a failed create belongs to this form, so it goes with it.</summary>
     [RelayCommand(CanExecute = nameof(CanCloseForm))]
-    private void CloseForm() => HideForm();
+    private void CloseForm()
+    {
+        _retry = null;
+        ErrorText = null;
+        OnPropertyChanged(nameof(CanRetry));
+        HideForm();
+    }
 
     private void HideForm()
     {
