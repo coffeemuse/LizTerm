@@ -343,7 +343,7 @@ bytes unchanged. **Binary** is chosen for you on an undefined-length (`RECFM=U`)
 
 The keyboard reaches everything. In the member list, **Enter** downloads the selection, and **Delete** or
 **Backspace** deletes it. **Escape** answers a question with Cancel, else cancels what is running, else closes an
-upload review, else closes the window.
+upload review or the New dataset form, else closes the window.
 
 ### Downloading
 
@@ -379,6 +379,11 @@ Choose **Upload** to start. Before replacing a member that already exists, the b
 **Skip**. With **Verify after upload** on (the default), each text member is read back and compared with what was
 sent. A member that differs is marked **⚠ Uploaded, but the host copy differs at line N**.
 
+If you downloaded a member in this window and it has changed on the host since, the browser says so before
+replacing it: **Replace anyway** writes your copy over the change, **Skip** leaves the member alone. The check
+covers only members downloaded or uploaded through this browser window; anything else is replaced as before, and
+a sequential dataset is checked the same way.
+
 A sequential dataset takes one file at a time. After the checks, the browser asks before replacing the dataset's
 contents.
 
@@ -387,9 +392,34 @@ left partly written, and its row says so.
 
 ### Deleting
 
-**Delete…** deletes the selected members, after a question that names them (**Delete 3 members**). A deleted
-member cannot be recovered. If you cancel part-way, the browser lists the members again and says how many were
-deleted. Datasets themselves can't be deleted from the browser.
+**Delete…** in the bottom bar deletes the selected members, after a question that names them (**Delete 3
+members**). A deleted member cannot be recovered. If you cancel part-way, the browser lists the members again and
+says how many were deleted. **Delete…** under the dataset list deletes a whole dataset; see
+[Managing datasets](#managing-datasets).
+
+### Managing datasets
+
+The buttons under the dataset list create, rename and delete datasets.
+
+**New…** opens a form in the right pane. With a dataset selected, the form starts from its type, RECFM, LRECL and
+BLKSIZE, and the name starts with your filter's first qualifier, so a new library like the one selected is a name
+and **Create** away. Space is in tracks or cylinders, a primary and a secondary amount, and directory blocks for a
+partitioned dataset; the form keeps the space you last used while the window is open. A value the host cannot take
+is marked **✗** under its box until you fix it.
+
+mvsMF cannot say why an allocation failed: a name that already exists, no room on the volume and a missing
+authorization all come back as the same **The host could not allocate it** message, which stays in the form so you
+can change the values and try again. A record layout the host rejects (a BLKSIZE that is not a multiple of a
+fixed LRECL, say) fails the same way.
+
+**Rename…** under the dataset list renames the selected dataset, and **Rename…** in the bottom bar renames the
+selected member. Both ask for the new name in the strip at the bottom of the window, where **Rename** is enabled
+once the name is different and acceptable, and **Enter** confirms. A renamed dataset your filter does not show is
+reported in the status line. The host refuses to rename a member onto a name that already exists; renaming a
+dataset onto an existing name fails with a server error.
+
+**Delete…** under the dataset list deletes the selected dataset, after a question that names it and, for a
+partitioned dataset, says how many members it has. This cannot be undone.
 
 ### When something goes wrong
 
@@ -532,5 +562,4 @@ empties the drop-down.
 - **No keymap editing yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)).
 - **No printer sessions or scripting.**
 - **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). Older mvsMF builds
-  are not supported (see [Signing in](#signing-in)). It can't create, rename or delete datasets, submit jobs, or
-  browse the z/OS UNIX file system.
+  are not supported (see [Signing in](#signing-in)). It can't submit jobs or browse the z/OS UNIX file system.

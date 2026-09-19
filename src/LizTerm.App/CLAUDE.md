@@ -824,7 +824,9 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   download batch runs two transfers at once (`ParallelDownloads`). Results are set after `await` on the UI
   context; progress goes through `dispatch`, and a closed `RowProgress` drops late reports. Questions are an inline
   `ConfirmationRequest` strip, awaited by the operation that asked; a disposed browser shows none and answers
-  Cancel.
+  Cancel. A question with a text box (`ConfirmationRequest` with `input` and an `inputRule`) is how a rename asks;
+  its primary is allowed only for an acceptable, changed value, and `Primary()` checks that itself because the
+  window's Enter goes through `Execute`.
 - **Connection failures** (`IsConnectionFailure`: cannot reach, sign-in, certificate, unsupported host) are the red banner with
   Retry; everything else is the status line or a row's status. They stop the whole operation. A download batch
   cancels its other transfers through a linked token and rethrows the first failure once; its rows say
@@ -849,16 +851,44 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   before its contents are replaced that names the check's warnings.
 - **Delete** asks once, naming up to five members. A delete cancelled part-way refreshes the list and says how
   many members went, because a delete cannot be undone and the interrupted request may have deleted its member.
+- **Manage** (`Manage.cs`): Rename… and Delete… under the dataset list act on any listed dataset whose name the
+  rules accept, opened or not; Rename… in the bottom bar needs exactly one selected member. A member rename
+  reloads the list and selects the new name through `SelectMemberRequested`, which the window applies to its list
+  box (the list box owns the selection, so the view model never sets it directly); a `NotFound` means the member
+  went meanwhile, so the list is reloaded before the status line. A dataset rename or a create lists the filter
+  again and chooses the new name if it shows (`ShowAfterChangeAsync`); `SelectAsync` exists because setting
+  `SelectedDataset` inside a running operation starts no member load of its own (`RunExclusiveAsync` ignores a
+  second operation). `RunThenListAsync` swaps the retry to the listing once the host has done the first half of a
+  rename or a create, so Retry after a failed listing never repeats it: a member rename pairs it with
+  `ShowRenamedMemberAsync`, a dataset rename or a create with `ShowAfterChangeAsync`. The delete-dataset question
+  carries the loaded member count, with a plus while the host has more or a host-side member filter is in force.
+- **Create** (`Create.cs`, `NewDatasetFormViewModel`): the form is one instance per window, so the space values it
+  was last sent with are kept; opening it prefills type and DCB from the chosen dataset and the name from the
+  filter's first qualifier. Every field is a string; a numeric field that is not a whole number is checked as
+  `-1` and its own "Enter a whole number." wins. A `CannotAllocate` or `InvalidRequest` stays in `Form.Message`
+  with the form open; a connection failure's Retry sends the form as it now reads. `CloseForm` (the form's Close
+  and Escape) clears a pending Retry and the banner, exactly as `CloseReview` does, so a failed create's Retry
+  goes with the form. While the form is open every other operation is off (`!IsCreating` in each rule) and the
+  right pane shows the form in place of the member list, the review, the hint and the sequential note.
+- **ETag memory** (`HostFileAccess.Etags`, `EtagMemory`): a download remembers the stamp once the file is in
+  place; a write remembers the write's stamp; a member delete forgets, a dataset delete forgets everything under
+  it, a rename moves. An upload sends the stamp as `ifMatch` only for a member it is replacing; a `Conflict` is
+  the question `NAME changed on the host since you downloaded it.` with Replace anyway / Skip (Cancel stops the
+  batch; a sequential dataset offers Replace anyway or Cancel), and Replace anyway sends again with no stamp. A
+  member never downloaded or written here sends nothing and gets the old behaviour.
 - The window pushes the member selection through `SetSelectedMembers`, and only rows the member filter still
   shows, so a transfer or a delete never acts on a member the user cannot see. In the member list, Enter downloads,
   and Delete or Backspace (the key Apple labels "delete") deletes. A question moves focus to its
   Cancel button, posted at `Loaded` priority because a control that is still hidden refuses focus. Escape cancels
-  a question, else the running operation, else an open upload review, else closes the window.
+  a question, else the running operation, else an open upload review or the New dataset form, else closes the
+  window. A question with a text box takes the focus to the box with the old name selected, and Enter in it is the
+  primary.
 - **Focus survives an operation.** In Avalonia 12.1.2, disabling a list whose row has the focus drops the focus,
   and enabling it again does not give it back, so arrowing onto a PDS (a member load) or pressing Enter or Delete
   used to strand the keyboard. When `IsBusy` turns on (its notification comes before `IsIdle` and
-  `CanChooseDataset`, which disable the controls), the window remembers whether the filter box, the dataset list or
-  the member list had the focus, and for a list the focused row and its index. When `IsBusy` turns off with no
+  `CanChooseDataset`, which disable the controls), the window remembers which control had the focus — a list's row
+  with its index, or any other control (the filter box, the form's boxes, a button). Opening the form focuses its
+  name box, posted at `Loaded` priority like a question's. When `IsBusy` turns off with no
   question showing, or a question closes, it posts a restore at `Loaded` priority, so a refilled list has its rows:
   the same row if it is still listed, else the selected row, else the row now at the old index (a deleted member's
   neighbour). A `ListBox` itself does not take the focus. The restore does nothing when the focus is already on a
