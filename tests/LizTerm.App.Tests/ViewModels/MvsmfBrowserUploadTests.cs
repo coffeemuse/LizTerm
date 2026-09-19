@@ -59,6 +59,25 @@ public sealed class MvsmfBrowserUploadTests : IDisposable
     }
 
     [Fact]
+    public async Task An_existing_member_beyond_the_loaded_page_is_still_asked_about()
+    {
+        var t = BrowserTestHost.Create(seed: BrowserTestHost.Large, pageSize: 2);
+        await t.ChooseAsync("MVSCE02.BIG");
+        Assert.DoesNotContain(t.Vm.Members, m => m.Name == "RUN");
+        t.Picker.Results = [Write("run.jcl", "//RUN JOB\n")];
+        await t.Vm.UploadCommand.ExecuteAsync(null);
+
+        var starting = StartAsync(t);
+        await Wait.UntilAsync(() => t.Vm.HasConfirmation, "the replace question");
+
+        Assert.Equal("Member RUN already exists in MVSCE02.BIG.", t.Vm.Confirmation!.Message);
+        Assert.Equal(new HostListRequest(), t.Host.ListRequests[^1]);
+        t.Vm.Confirmation.SecondaryCommand.Execute(null);
+        await starting;
+        Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("writetext:MVSCE02.BIG(RUN)"));
+    }
+
+    [Fact]
     public async Task Listing_is_off_while_a_review_is_open()
     {
         var t = await ReviewAsync(Write("hello.jcl", "//HELLO JOB\n"));

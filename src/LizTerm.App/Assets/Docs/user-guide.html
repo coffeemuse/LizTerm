@@ -323,6 +323,13 @@ as <strong>(not supported)</strong>: nothing can be downloaded from or uploaded 
 <p>Choosing a partitioned dataset (a PDS) lists its members on the right, where <strong>Filter members</strong> narrows the list as
 you type and you can select several members at once. For a sequential dataset, <strong>Download…</strong> and <strong>Upload…</strong> act on
 the dataset itself.</p>
+<p>Long lists arrive 500 entries at a time. When the host has more, the status line says so (<strong>500 datasets shown,
+more on the host</strong>) and a <strong>Load more</strong> button appears under the list; each press adds the next 500. On such a
+library the host does the narrowing: what you type in <strong>Filter members</strong> is sent to it, after a short pause, and
+the members shown are every match, again 500 at a time. There <code>*</code> stands for any run of characters and <code>%</code> for
+exactly one, so <code>IEF*</code> lists the members starting with IEF. Download, Upload and Delete act on the members that
+are shown, but an upload always checks the whole library before replacing a member, whether or not its page is
+loaded.</p>
 <p><strong>Mode</strong> chooses <strong>Text</strong>, which converts between EBCDIC and your computer's characters, or <strong>Binary</strong>, which copies
 bytes unchanged. <strong>Binary</strong> is chosen for you on an undefined-length (<code>RECFM=U</code>) dataset, such as a load library.</p>
 <p>The keyboard reaches everything. In the member list, <strong>Enter</strong> downloads the selection, and <strong>Delete</strong> or
@@ -495,9 +502,8 @@ underlying x3270 engine does not send a server name (<a href="https://github.com
 <li><strong>No keymap editing yet</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/18">#18</a>).</li>
 <li><strong>No printer sessions or scripting.</strong></li>
 <li><strong>The mvsMF Browser is a preview</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/17">#17</a>). Older mvsMF builds
-are not supported (see <a href="#signing-in">Signing in</a>). Very long dataset or member lists arrive in one piece, with no
-paging. It
-can't create, rename or delete datasets, submit jobs, or browse the z/OS UNIX file system.</li>
+are not supported (see <a href="#signing-in">Signing in</a>). It can't create, rename or delete datasets, submit jobs, or
+browse the z/OS UNIX file system.</li>
 </ul>
 </body>
 </html>

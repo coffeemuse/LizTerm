@@ -23,11 +23,11 @@ internal sealed class FakeHostFileService : IHostFileService
     public Task<HostServerInfo> GetServerInfoAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(new HostServerInfo("fake", "1", "test"));
 
-    public Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<HostFileEntry>>([]);
+    public Task<HostFileListing> ListDatasetsAsync(string pattern, HostListRequest request, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new HostFileListing([], null));
 
-    public Task<IReadOnlyList<HostFileEntry>> ListMembersAsync(HostPath dataset, CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<HostFileEntry>>([]);
+    public Task<HostFileListing> ListMembersAsync(HostPath dataset, HostListRequest request, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new HostFileListing([], null));
 
     public Task<IReadOnlyList<string>> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
     {

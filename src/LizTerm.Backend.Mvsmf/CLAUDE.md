@@ -42,8 +42,12 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
   reason 4 or 5; a refused open is 500 in category 4; a failed open is 500 in category 6, reason 3 with a message
   starting `Cannot open`; a truncated write is the same shape with another message and reaches the caller as a
   server error carrying it. `MvsmfErrors` is the one place that mapping lives.
-- **No paging.** mvsMF 1.1.0 honours `start` and `X-IBM-Max-Items`, but lists are still fetched whole (`no-paging`,
-  #144); a `moreRows: true` on either list is refused as a partial answer.
+- **Paging is the caller's `HostListRequest`.** `MaxItems` becomes `X-IBM-Max-Items`, `NamePattern` the member
+  list's `pattern=`, and `Continuation` (the last name of the page before, opaque to callers) `start=`. `start` is
+  inclusive on mvsMF and z/OSMF, so a continued page asks for one more than its size and `Page` drops the repeat, or
+  cuts the page to size when that name is gone. A `moreRows: true` on a list asked for whole (`MaxItems` 0) is
+  refused as a partial answer. Every dataset list sends `X-IBM-Attributes: base`, which mvsMF ignores and z/OSMF
+  needs (`attributes-header-ignored`).
 - **Timeouts:** 10 s to connect (`SocketsHttpHandler.ConnectTimeout`), 30 s without data (`IdleTimeout`, reset on
   every chunk), and no `HttpClient.Timeout`, so a long download is never cut off while bytes arrive.
   `HttpCompletionOption.ResponseHeadersRead` everywhere, so bodies stream. `SendAsync` calls `IdleTimeout.Pause()`

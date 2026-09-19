@@ -56,15 +56,26 @@ Entries marked *log only* change nothing in the code.
 - **LizTerm:** reads `zosmf_full_version` first and falls back to `zosmf_version`, so both builds report their
   release.
 
-### `no-paging`
+### `attributes-header-ignored`
 
-- **Docs and source:** `start` names the first item of a page and `X-IBM-Max-Items` its size, on the dataset list
-  and the member list; a partial page answers `returnedRows` and `moreRows: true`.
-- **Observed:** 1.1.0 honours both (5 datasets from `SYS1.PARMLIB`; 3 of `SYS1.MACLIB`'s 742 members). 1.0.0-dev
-  ignored both.
-- **LizTerm:** still asks for whole lists, with neither `start` nor `X-IBM-Max-Items` (`SYS1.**`, 97 entries,
-  arrives at once). A `moreRows: true` on either list is refused as a partial answer, since none was asked for.
-  Paging is #144.
+- **Docs and source:** `X-IBM-Attributes` is not read; every dataset listing carries the base attributes (`dsorg`,
+  `recfm`, `lrecl`, `blksz`, `vol`, the dates), and the member list carries names only. z/OSMF answers names alone
+  unless `X-IBM-Attributes: base` is sent.
+- **LizTerm:** sends `X-IBM-Attributes: base` on every dataset list, which mvsMF ignores and z/OSMF needs.
+
+### `paging` (log only)
+
+- **Docs and source:** `X-IBM-Max-Items` caps a page and `start` names its first entry, **inclusive**, on the
+  dataset list and the member list; a partial page carries `moreRows: true` and a complete one no `moreRows` at
+  all; the member list also takes `pattern=` (`*` for any run of characters, `%` for one, folded to upper case,
+  sent with `%` as `%25`); entries skipped by `start` or rejected by `pattern` are not charged against the page.
+- **Observed:** 1.1.0 honours all of it (three of `SYS1.MACLIB`'s 742 members for `X-IBM-Max-Items: 3`, recorded as
+  `members-maclib-page`; 1.0.0-dev ignored `start` and `X-IBM-Max-Items`).
+- **LizTerm:** both lists are fetched 500 at a time with **Load more** for the rest (#144). Because `start` is
+  inclusive, a continued page asks for one entry more than its size and drops the repeat; a page that no longer
+  begins with that name (deleted meanwhile) is cut to the page size instead. A `moreRows: true` on a list asked for
+  whole is still refused as a partial answer. The member filter goes to the host as `pattern=*TEXT*` once the host
+  has more members than are shown.
 
 ### `dslevel-is-a-prefix` (log only)
 
@@ -159,9 +170,10 @@ Entries the 1.0.0-dev baseline needed and 1.1.0 does not. Each code entry was re
   `LtpaToken2` cookie, and sends it (never `Authorization`) on every request; the tag is gone from the code.
 - `no-www-authenticate`: a 401 now carries `WWW-Authenticate`.
 - `dataset-list-morerows-false`: `moreRows` is now absent on a complete list, as the source says. The refusal of a
-  `moreRows: true` stays as plain code under `no-paging`.
-- `member-list-ignores-max-items` and `dataset-list-ignores-start`: merged into `no-paging`, since the host honours
-  both now.
+  `moreRows: true` on a list asked for whole stays as plain code (`paging`).
+- `member-list-ignores-max-items`, `dataset-list-ignores-start` and, on 2026-09-18 once the browser paged, the
+  `no-paging` entry that merged them: the host honours `start` and `X-IBM-Max-Items`, and LizTerm uses them
+  (`paging`).
 - `member-list-empty-for-missing-dataset`: a missing dataset answers 404 reason 4 and a sequential one 400 reason 1,
   as the source says; LizTerm reports not found and an invalid request.
 - `missing-read-is-500`: a missing member or dataset on read answers 404 reason 5 or 4; the reason-3 special case

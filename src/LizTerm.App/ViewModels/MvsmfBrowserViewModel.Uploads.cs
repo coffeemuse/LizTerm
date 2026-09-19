@@ -143,10 +143,9 @@ public sealed partial class MvsmfBrowserViewModel
             row.HostCopyDiffers = false;
         }
 
-        // Asked of the host now, never of the list on screen: that one can be empty after a failed listing, or miss
-        // members an earlier, stopped run of this review created.
-        var listed = await LoadMembersCoreAsync(dataset, token);
-        var existing = listed.Select(entry => entry.Name).ToHashSet(StringComparer.Ordinal);
+        // Asked of the host now, and of the whole library, never of the list on screen: that one can be empty after
+        // a failed listing, miss members an earlier, stopped run of this review created, or be one page of many.
+        var existing = await ListAllMemberNamesAsync(dataset, token);
         var plan = new List<UploadRow>();
         bool? replaceAll = null;
         foreach (var row in pending)

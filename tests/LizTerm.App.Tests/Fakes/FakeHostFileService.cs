@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Text.RegularExpressions;
 using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.Tests.Fakes;
@@ -29,6 +30,8 @@ public sealed class FakeHostFileService : IHostFileService
     /// <summary>When set, every call waits for it (and for its token) after being logged.</summary>
     public TaskCompletionSource? Gate { get; set; }
     public List<string> Calls { get; } = [];
+    /// <summary>Every list call's request, in order, beside its "list:" or "members:" entry in <see cref="Calls"/>.</summary>
+    public List<HostListRequest> ListRequests { get; } = [];
     public int MaxConcurrent { get; private set; }
     public bool Disposed { get; private set; }
 
@@ -57,14 +60,14 @@ public sealed class FakeHostFileService : IHostFileService
         finally { Leave(); }
     }
 
-    public async Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default)
+    public async Task<HostFileListing> ListDatasetsAsync(string pattern, HostListRequest request, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"list:{pattern}", $"list:{pattern}", cancellationToken);
-        try { lock (_lock) return [.. Datasets]; }
+        try { lock (_lock) return PageOf(Datasets, request with { NamePattern = null }); }
         finally { Leave(); }
     }
 
-    public async Task<IReadOnlyList<HostFileEntry>> ListMembersAsync(HostPath dataset, CancellationToken cancellationToken = default)
+    public async Task<HostFileListing> ListMembersAsync(HostPath dataset, HostListRequest request, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"members:{dataset}", $"members:{dataset}", cancellationToken);
         try
@@ -72,7 +75,7 @@ public sealed class FakeHostFileService : IHostFileService
             lock (_lock)
             {
                 if (Members.TryGetValue(dataset.Dataset, out var names))
-                    return [.. names.Select(n => new HostFileEntry(n, HostFileEntryKind.Member))];
+                    return PageOf(names.Select(n => new HostFileEntry(n, HostFileEntryKind.Member)), request);
                 throw Datasets.Any(d => d.Name == dataset.Dataset)
                     ? new HostFileException(HostFileErrorKind.InvalidRequest,
                         $"{dataset}: the host refused the request (Dataset is not partitioned).", 1, "Dataset is not partitioned")
@@ -156,6 +159,23 @@ public sealed class FakeHostFileService : IHostFileService
     }
 
     public void Dispose() => Disposed = true;
+
+    /// <summary>Pages the way a host does: the pattern narrows, the continuation (the last name of the page before)
+    /// skips, and the limit cuts, with the last name handed back while anything is left.</summary>
+    private HostFileListing PageOf(IEnumerable<HostFileEntry> all, HostListRequest request)
+    {
+        ListRequests.Add(request);
+        var list = all.ToList();
+        if (request.NamePattern is { } pattern)
+        {
+            var regex = new Regex("^" + Regex.Escape(pattern.ToUpperInvariant()).Replace("\\*", ".*").Replace("%", ".") + "$");
+            list = list.Where(e => regex.IsMatch(e.Name)).ToList();
+        }
+        if (request.Continuation is { } after) list = list.SkipWhile(e => e.Name != after).Skip(1).ToList();
+        if (request.MaxItems > 0 && list.Count > request.MaxItems)
+            return new HostFileListing(list.Take(request.MaxItems).ToList(), list[request.MaxItems - 1].Name);
+        return new HostFileListing(list, null);
+    }
 
     private void AddMember(HostPath path)
     {

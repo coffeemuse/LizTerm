@@ -108,7 +108,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         : "Choose a dataset on the left.";
 
     public string MembersHeader => SelectedDataset is { IsPartitioned: true } dataset
-        ? $"{dataset.Name} · {Plural(Members.Count, "member")}"
+        ? $"{dataset.Name} · {Plural(Members.Count, "member")}{(HasMoreMembers ? " shown, more on the host" : "")}"
         : "";
 
     /// <summary>Binary transfers to fixed-length records are padded to whole records (compatibility log,
@@ -139,7 +139,11 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _ = LoadMembersAsync(value);
     }
 
-    partial void OnMemberFilterChanged(string value) => RefreshVisibleMembers();
+    partial void OnMemberFilterChanged(string value)
+    {
+        if (_allMembersLoaded || SelectedDataset is not { IsPartitioned: true }) RefreshVisibleMembers();
+        else ScheduleHostFilter();
+    }
 
     partial void OnIsBusyChanged(bool value) => NotifyCommands();
 
@@ -158,11 +162,14 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         }
         var pattern = Filter.Trim().ToUpperInvariant();
         StatusText = $"⟳ Listing {pattern}…";
-        var entries = await _connection.RunAsync(service => service.ListDatasetsAsync(pattern, token));
+        var listing = await _connection.RunAsync(service => service.ListDatasetsAsync(pattern, new HostListRequest(PageSize), token));
         SelectedDataset = null;
         Datasets.Clear();
-        foreach (var entry in entries) Datasets.Add(new DatasetRow(entry));
-        StatusText = Plural(entries.Count, "dataset");
+        foreach (var entry in listing.Entries) Datasets.Add(new DatasetRow(entry));
+        _listedPattern = pattern;
+        _datasetContinuation = listing.Continuation;
+        HasMoreDatasets = !listing.IsComplete;
+        StatusText = DatasetsStatus();
     }
 
     private Task LoadMembersAsync(DatasetRow? row)
@@ -172,36 +179,23 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         return RunExclusiveAsync(token => LoadMembersCoreAsync(row, token), () => LoadMembersAsync(SelectedDataset));
     }
 
-    /// <summary>Also used inside other operations (after an upload or a delete), which already hold the busy flag.
-    /// Returns what the host listed, whether or not the list still shows <paramref name="row"/>.</summary>
-    private async Task<IReadOnlyList<HostFileEntry>> LoadMembersCoreAsync(DatasetRow row, CancellationToken token)
-    {
-        StatusText = $"⟳ Listing members of {row.Name}…";
-        var entries = await _connection.RunAsync(service => service.ListMembersAsync(row.Path, token));
-        if (!ReferenceEquals(SelectedDataset, row)) return entries;
-        ClearMembers();
-        foreach (var entry in entries)
-        {
-            if (HostPath.MemberNameError(entry.Name) is null) Members.Add(new MemberRow(row.Name, entry.Name));
-        }
-        RefreshVisibleMembers();
-        OnPropertyChanged(nameof(MembersHeader));
-        StatusText = MembersHeader;
-        return entries;
-    }
-
     private void ClearMembers()
     {
         Members.Clear();
         VisibleMembers.Clear();
+        _memberContinuation = null;
+        _memberPattern = null;
+        HasMoreMembers = false;
         SetSelectedMembers([]);
         OnPropertyChanged(nameof(MembersHeader));
     }
 
+    /// <summary>The filter narrows the rows here only while the whole library is loaded; otherwise the host has
+    /// already applied it and every loaded member is a match.</summary>
     private void RefreshVisibleMembers()
     {
         VisibleMembers.Clear();
-        var filter = MemberFilter.Trim();
+        var filter = _allMembersLoaded ? MemberFilter.Trim() : "";
         foreach (var member in Members)
         {
             if (filter.Length == 0 || member.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) VisibleMembers.Add(member);
@@ -316,6 +310,8 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         StartUploadCommand.NotifyCanExecuteChanged();
         CloseReviewCommand.NotifyCanExecuteChanged();
         DeleteCommand.NotifyCanExecuteChanged();
+        LoadMoreDatasetsCommand.NotifyCanExecuteChanged();
+        LoadMoreMembersCommand.NotifyCanExecuteChanged();
     }
 
     public void Dispose()
@@ -323,6 +319,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         if (_disposed) return;
         _disposed = true;
         _access.PinSaveFailed -= OnPinSaveFailed;
+        _filterDebounce?.Cancel();
         _cts?.Cancel();
         Confirmation?.CancelCommand.Execute(null);
         _connection.Dispose();

@@ -112,6 +112,22 @@ public sealed record HostPath
         return null;
     }
 
+    /// <summary>Why <paramref name="pattern"/> cannot filter a member list, or null when it can. <c>*</c> matches any
+    /// run of characters and <c>%</c> exactly one; a pattern without either names one member. The host refuses a
+    /// pattern of 45 characters or more, so the limit is the dataset name's rather than the member name's.</summary>
+    public static string? MemberPatternError(string pattern)
+    {
+        var folded = Fold(pattern);
+        if (folded.Length == 0) return "Enter a member filter.";
+        if (folded.Length > MaxDatasetLength) return $"A member filter is at most {MaxDatasetLength} characters.";
+        foreach (var c in folded)
+        {
+            if (!IsNameStart(c) && !char.IsAsciiDigit(c) && c is not ('*' or '%'))
+                return $"A member filter cannot contain '{c}'.";
+        }
+        return null;
+    }
+
     public override string ToString() => Member is null ? Dataset : $"{Dataset}({Member})";
 
     private static string Fold(string name) => (name ?? "").Trim().ToUpperInvariant();

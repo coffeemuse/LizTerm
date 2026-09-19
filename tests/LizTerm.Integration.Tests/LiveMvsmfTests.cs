@@ -55,7 +55,7 @@ public class LiveMvsmfTests
         using var service = Connect(live);
 
         var info = await service.GetServerInfoAsync(ct);
-        var datasets = await service.ListDatasetsAsync(live.ScratchPds, ct);
+        var datasets = (await service.ListDatasetsAsync(live.ScratchPds, HostListRequest.All, ct)).Entries;
 
         Assert.Equal("mvsMF", info.Product);
         Assert.False(string.IsNullOrWhiteSpace(info.ProductVersion));
@@ -64,12 +64,41 @@ public class LiveMvsmfTests
     }
 
     [Fact(Timeout = LiveTimeout)]
+    public async Task Pages_the_system_libraries_and_filters_their_members_on_the_host()
+    {
+        var live = Require();
+        var ct = TestContext.Current.CancellationToken;
+        using var service = Connect(live);
+
+        var first = await service.ListDatasetsAsync("SYS1.**", new HostListRequest(MaxItems: 3), ct);
+        var second = await service.ListDatasetsAsync("SYS1.**", new HostListRequest(MaxItems: 3, Continuation: first.Continuation), ct);
+        var whole = await service.ListDatasetsAsync("SYS1.**", HostListRequest.All, ct);
+
+        Assert.Equal(3, first.Entries.Count);
+        Assert.False(first.IsComplete);
+        Assert.Equal(whole.Entries.Take(6).Select(e => e.Name), first.Entries.Concat(second.Entries).Select(e => e.Name));
+
+        var maclib = HostPath.ForDataset("SYS1.MACLIB");
+        var page = await service.ListMembersAsync(maclib, new HostListRequest(MaxItems: 5), ct);
+        var next = await service.ListMembersAsync(maclib, new HostListRequest(MaxItems: 5, Continuation: page.Continuation), ct);
+        var matches = await service.ListMembersAsync(maclib, new HostListRequest(NamePattern: "IEF*"), ct);
+
+        Assert.Equal(5, page.Entries.Count);
+        Assert.False(page.IsComplete);
+        Assert.Equal(5, next.Entries.Count);
+        Assert.DoesNotContain(next.Entries, m => page.Entries.Any(p => p.Name == m.Name));
+        Assert.True(matches.IsComplete);
+        Assert.NotEmpty(matches.Entries);
+        Assert.All(matches.Entries, m => Assert.StartsWith("IEF", m.Name));
+    }
+
+    [Fact(Timeout = LiveTimeout)]
     public async Task Round_trips_a_scratch_member_and_deletes_it()
     {
         var live = Require();
         var ct = TestContext.Current.CancellationToken;
         using var service = Connect(live);
-        var target = (await service.ListDatasetsAsync(live.ScratchPds, ct)).Single(d => d.Name == live.ScratchPds.ToUpperInvariant()).Attributes!;
+        var target = (await service.ListDatasetsAsync(live.ScratchPds, HostListRequest.All, ct)).Entries.Single(d => d.Name == live.ScratchPds.ToUpperInvariant()).Attributes!;
         var path = HostPath.ForMember(live.ScratchPds, ScratchMember);
         var local = Path.Combine(Path.GetTempPath(), $"lizitest-{Guid.NewGuid():N}.jcl");
         await File.WriteAllTextAsync(local, "//LIZITEST JOB (ACCT),LIZTERM\n\n//* ¬ ¢ | ~ end\n\tTABBED\n", ct);
@@ -81,7 +110,7 @@ public class LiveMvsmfTests
             var outcome = await HostFileTransfer.UploadTextAsync(service, path, checkedText, verify: true, ct);
             Assert.Equal(UploadOutcome.Matches, outcome);
 
-            var members = await service.ListMembersAsync(HostPath.ForDataset(live.ScratchPds), ct);
+            var members = (await service.ListMembersAsync(HostPath.ForDataset(live.ScratchPds), HostListRequest.All, ct)).Entries;
             Assert.Contains(members, m => m.Name == ScratchMember);
 
             var back = Path.Combine(Path.GetTempPath(), $"lizitest-{Guid.NewGuid():N}.txt");
@@ -133,7 +162,7 @@ public class LiveMvsmfTests
         var holding = new Holding(live.Credentials);
         using var service = new MvsmfFileService(new MvsmfOptions(live.Url), holding.Provider);
 
-        await service.ListDatasetsAsync(live.ScratchPds, ct);
+        await service.ListDatasetsAsync(live.ScratchPds, HostListRequest.All, ct);
         var first = holding.Held!;
         await service.SignOutAsync(first, ct); // 204
         await service.SignOutAsync(first, ct); // 401 for a token the host has forgotten: still fine

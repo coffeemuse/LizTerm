@@ -12,13 +12,14 @@ public interface IHostFileService : IDisposable
 {
     Task<HostServerInfo> GetServerInfoAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Every dataset matching <paramref name="pattern"/> (see <see cref="HostPath.DatasetPatternError"/>),
-    /// in the host's order.</summary>
-    Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default);
+    /// <summary>The datasets matching <paramref name="pattern"/> (see <see cref="HostPath.DatasetPatternError"/>),
+    /// in the host's order, as much of them as <paramref name="request"/> asks for.</summary>
+    Task<HostFileListing> ListDatasetsAsync(string pattern, HostListRequest request, CancellationToken cancellationToken = default);
 
-    /// <summary>The members of a partitioned dataset. A dataset that does not exist is <see cref="HostFileErrorKind.NotFound"/>;
-    /// one that is not partitioned is <see cref="HostFileErrorKind.InvalidRequest"/>.</summary>
-    Task<IReadOnlyList<HostFileEntry>> ListMembersAsync(HostPath dataset, CancellationToken cancellationToken = default);
+    /// <summary>The members of a partitioned dataset, as much of them as <paramref name="request"/> asks for. A
+    /// dataset that does not exist is <see cref="HostFileErrorKind.NotFound"/>; one that is not partitioned is
+    /// <see cref="HostFileErrorKind.InvalidRequest"/>.</summary>
+    Task<HostFileListing> ListMembersAsync(HostPath dataset, HostListRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>The records as lines, trailing blanks as the host sent them. <paramref name="progress"/> reports
     /// bytes received.</summary>
