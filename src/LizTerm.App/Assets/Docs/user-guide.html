@@ -174,8 +174,8 @@ shows <strong>Quick Connect</strong> under its name.</p>
 <p><strong>Window &gt; Keep on Top</strong> keeps that window above other applications' windows, for a session you want in view while
 you work in another, such as an operator console. It is not remembered: a new window starts without it.</p>
 <h2 id="keyboard">Keyboard</h2>
-<p>The default layout follows Vista TN3270, cross-checked against wc3270. To change a binding, edit <code>keymap.json</code> by
-hand; see <a href="#where-lizterm-keeps-its-files">Where LizTerm keeps its files</a>.</p>
+<p>The table below is the default layout. It follows Vista TN3270, cross-checked against wc3270. You can change any
+binding in <strong>Preferences &gt; Keyboard</strong>; see <a href="#changing-a-binding">Changing a binding</a> below the table.</p>
 <table>
 <thead>
 <tr><th>Key</th><th>3270 key</th></tr>
@@ -212,6 +212,22 @@ The session switcher is Cmd+K on macOS and Ctrl+K elsewhere; see <a href="#sever
 <p>The <strong>Keys</strong> menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, Insert,
 PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. The on-screen keypad
 (<strong>View &gt; Keypad &gt; Show the Keypad</strong>) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.</p>
+<h3 id="changing-a-binding">Changing a binding</h3>
+<p><strong>Preferences &gt; Keyboard</strong> lists every 3270 key with the keys that send it. Changes apply at once, to every open
+session window, and the keypad's tooltips follow them.</p>
+<ul>
+<li><strong>Add a key</strong>: click <strong>Add</strong> on the row, or Tab to it and press Enter or Space, then press the key you want. A tap
+of Left or Right Ctrl is captured the same way: press and release the Ctrl key on its own.</li>
+<li><strong>Remove a key</strong>: click the <strong>×</strong> on its chip.</li>
+<li><strong>Move a key</strong>: add it to another row. It leaves the row it was on, and the slot says where it came from.</li>
+<li><strong>Reset to defaults</strong> puts back the table above and clears every change you made.</li>
+</ul>
+<p>LizTerm will not bind a key it needs, and says why in the slot: the platform's Copy, Paste and Select All shortcuts,
+Find and Switch Session; any key with Cmd, or the Windows key; a letter, digit, punctuation mark or Space on its own
+or with Shift, which would stop you typing it; and, on Windows and Linux, Ctrl+Alt with one of those, which is how
+some keyboards type characters such as @. Everything else can be bound, Escape and Tab included.</p>
+<p>Backspace follows the profile's Backspace setting until you bind it here. The two Backspace rows are the two things
+it can do: erase the character to the left, or move the cursor left.</p>
 <h2 id="mouse-selection-and-clipboard">Mouse, selection and clipboard</h2>
 <ul>
 <li>Click to move the cursor.</li>
@@ -443,7 +459,7 @@ window itself.</p>
 <p><strong>Preferences...</strong> is in the LizTerm application menu on macOS (Cmd-comma). It is also at the bottom of the
 <strong>Edit</strong> menu wherever a session window draws its menu inside the window: always on Windows and Linux, and on macOS
 under <strong>Inside the window</strong> or <strong>Both</strong>. Changes apply as you make them, to every open session window. The settings
-sit on four tabs:</p>
+sit on five tabs:</p>
 <p><strong>General</strong></p>
 <ul>
 <li><strong>Splash screen</strong> — whether LizTerm shows its splash screen when it starts (on by default). Off, LizTerm opens
@@ -474,6 +490,12 @@ note icon and the connect banner are always there.</li>
 View &gt; Keypad submenu carries both of the same settings. <strong>Show PF1 to PF24</strong>, on by default, is here only: turn
 it off when your keyboard's F-keys are enough, and the keypad keeps just PA1 to Field Mark.</li>
 </ul>
+<p><strong>Keyboard</strong></p>
+<ul>
+<li>One row for each 3270 key, with the keys that send it and an <strong>Add</strong> slot. See <a href="#changing-a-binding">Changing a binding</a>.</li>
+<li><strong>Reset to defaults</strong> clears every change. The tab also says how many entries in <code>keymap.json</code> it could not read,
+and keeps them as written.</li>
+</ul>
 <h2 id="where-lizterm-keeps-its-files">Where LizTerm keeps its files</h2>
 <table>
 <thead>
@@ -493,9 +515,10 @@ the ones you have changed, so deleting it puts everything back to the defaults. 
 name; deleting it loses only the colours, because the tag names themselves live in the profiles and are given fresh
 colours the next time LizTerm starts. <code>recent-hosts.json</code> holds the hosts Quick Connect remembers; deleting it
 empties the drop-down.</p>
-<p><code>keymap.json</code> holds your keyboard bindings, only the ones that differ from the table under
-<a href="#keyboard">Keyboard</a>. Each entry is a chord, such as <code>Ctrl+Home</code>, <code>Shift+F1</code> or <code>Tap:LeftCtrl</code>, set to a 3270 key
-name such as <code>PA1</code>, to <code>{"text": "¬"}</code> for text to type, or to <code>null</code> to take that key away:</p>
+<p><code>keymap.json</code> holds your keyboard bindings, written by Preferences &gt; Keyboard, only the ones that differ from the
+table under <a href="#keyboard">Keyboard</a>. You can edit it by hand too, in this form: each entry is a chord, such as
+<code>Ctrl+Home</code>, <code>Shift+F1</code> or <code>Tap:LeftCtrl</code>, set to a 3270 key name such as <code>PA1</code>, to <code>{"text": "¬"}</code> for text to
+type, or to <code>null</code> to take that key away:</p>
 <pre><code>{
   "bindings": {
     "Ctrl+Home": "PA1",
@@ -508,9 +531,10 @@ are <code>Enter</code>, <code>Clear</code>, <code>PF1</code> to <code>PF24</code
 <code>EraseInput</code>, <code>Delete</code>, <code>Backspace</code>, <code>Erase</code>, <code>Insert</code>, <code>Dup</code>, <code>FieldMark</code>, <code>Newline</code>, <code>Up</code>, <code>Down</code>, <code>Left</code> and <code>Right</code>,
 spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default; a file that
 is not valid JSON (a trailing comma, a comment, the same chord twice) is skipped as a whole, and every default
-applies. LizTerm reads the file once, when the first session window opens, so restart it after editing by hand.
-Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless the file binds <code>Back</code>
-itself. The file is not checked against what you type: binding a plain letter takes that key away from typing. The
+applies. LizTerm reads the file once, when the first session window or Preferences opens, so restart it after
+editing by hand. Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless
+the file binds <code>Back</code> itself. A hand edit is not checked against what you type: binding a plain letter takes that
+key away from typing, which Preferences &gt; Keyboard would have refused. The
 platform's Copy, Paste and Select All shortcuts, Find and Switch Session are handled before the keymap, so a binding
 on one of those chords does nothing. Only <code>Tap:LeftCtrl</code> and <code>Tap:RightCtrl</code> are taps; a tap sends a key or types
 text like any other chord.</p>
@@ -523,7 +547,6 @@ store and cannot pin a certificate. A profile carrying a pin refuses to connect 
 the pin.</li>
 <li><strong>TLS hosts that rely on SNI</strong> (several TLS sites sharing one address) cannot be verified, because the
 underlying x3270 engine does not send a server name (<a href="https://github.com/coffeemuse/LizTerm/issues/12">#12</a>).</li>
-<li><strong>No in-app keymap editor yet</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/18">#18</a>): bindings are changed by hand in <code>keymap.json</code>; see <a href="#keyboard">Keyboard</a>.</li>
 <li><strong>No printer sessions or scripting.</strong></li>
 <li><strong>The mvsMF Browser is a preview</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/17">#17</a>). Older mvsMF builds
 are not supported (see <a href="#signing-in">Signing in</a>). It can't create, rename or delete datasets, submit jobs, or
