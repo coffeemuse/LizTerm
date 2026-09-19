@@ -106,6 +106,7 @@
           <CheckBox x:Name="VerifyBox" Content="Verify after upload" IsChecked="{Binding VerifyUploads}" IsEnabled="{Binding IsTextMode}" />
           <Button x:Name="DownloadButton" Content="Download…" Command="{Binding DownloadCommand}" />
           <Button x:Name="UploadButton" Content="Upload…" Command="{Binding UploadCommand}" />
+          <Button x:Name="RenameMemberButton" Content="Rename…" Command="{Binding RenameMemberCommand}" />
           <Button x:Name="DeleteButton" Content="Delete…" Command="{Binding DeleteCommand}" />
           <Button x:Name="CancelButton" Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
         </WrapPanel>
@@ -128,6 +129,10 @@
         </Grid>
         <Button x:Name="LoadMoreDatasetsButton" DockPanel.Dock="Bottom" Content="Load more datasets" Margin="8,4"
                 HorizontalAlignment="Left" Command="{Binding LoadMoreDatasetsCommand}" IsVisible="{Binding HasMoreDatasets}" />
+        <WrapPanel x:Name="DatasetButtons" DockPanel.Dock="Bottom" ItemSpacing="8" LineSpacing="6" Margin="8,4">
+          <Button x:Name="RenameDatasetButton" Content="Rename…" Command="{Binding RenameDatasetCommand}" />
+          <Button x:Name="DeleteDatasetButton" Content="Delete…" Command="{Binding DeleteDatasetCommand}" />
+        </WrapPanel>
         <ListBox x:Name="DatasetList" ItemsSource="{Binding Datasets}" SelectedItem="{Binding SelectedDataset}"
                  SelectionMode="Single" IsEnabled="{Binding CanChooseDataset}">
           <ListBox.ItemTemplate>

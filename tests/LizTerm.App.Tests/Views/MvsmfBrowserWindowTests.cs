@@ -481,4 +481,56 @@ public class MvsmfBrowserWindowTests
         Assert.False(Named<TextBox>(window, "ConfirmInputBox").IsVisible);
         t.Vm.Confirmation = null;
     }
+
+    [AvaloniaFact]
+    public async Task The_manage_buttons_follow_the_selection()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var rename = Named<Button>(window, "RenameDatasetButton");
+        var delete = Named<Button>(window, "DeleteDatasetButton");
+        var renameMember = Named<Button>(window, "RenameMemberButton");
+        Assert.Equal("Rename…", rename.Content);
+        Assert.Equal("Delete…", delete.Content);
+        Assert.Equal("Rename…", renameMember.Content);
+        Assert.False(rename.IsEffectivelyEnabled);
+        Assert.False(delete.IsEffectivelyEnabled);
+        Assert.False(renameMember.IsEffectivelyEnabled);
+
+        await t.ChooseAsync("MVSCE02.DB");
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(rename.IsEffectivelyEnabled);
+        Assert.True(delete.IsEffectivelyEnabled);
+        Assert.False(renameMember.IsEffectivelyEnabled);
+
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var members = Named<ListBox>(window, "MemberList");
+        members.SelectedItems!.Add(t.Vm.VisibleMembers[0]);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(renameMember.IsEffectivelyEnabled);
+        members.SelectedItems!.Add(t.Vm.VisibleMembers[1]);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(renameMember.IsEffectivelyEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task A_renamed_member_is_selected_in_the_list()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var members = Named<ListBox>(window, "MemberList");
+        members.SelectedItems!.Add(t.Vm.VisibleMembers[2]);
+        Dispatcher.UIThread.RunJobs();
+
+        var renaming = t.Vm.RenameMemberCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => t.Vm.HasConfirmation, "the question");
+        t.Vm.Confirmation!.Input = "HELLO2";
+        t.Vm.Confirmation.PrimaryCommand.Execute(null);
+        await renaming;
+        window.UpdateLayout();
+
+        Assert.Equal(new[] { "HELLO2" }, members.SelectedItems!.OfType<MemberRow>().Select(m => m.Name));
+        Assert.Equal(new[] { "HELLO2" }, t.Vm.SelectedMembers.Select(m => m.Name));
+    }
 }

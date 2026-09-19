@@ -12,7 +12,8 @@ using LizTerm.Core.HostFiles;
 namespace LizTerm.App.ViewModels;
 
 /// <summary>The mvsMF Browser (spec §4): datasets on the left, members of the chosen PDS on the right, and the
-/// transfers in the bottom bar. One operation at a time; see the partial files for downloads, uploads and delete.</summary>
+/// transfers in the bottom bar. One operation at a time; see the partial files for downloads, uploads, delete,
+/// manage and create.</summary>
 public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposable
 {
     private readonly HostFileAccess _access;
@@ -327,6 +328,9 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         StartUploadCommand.NotifyCanExecuteChanged();
         CloseReviewCommand.NotifyCanExecuteChanged();
         DeleteCommand.NotifyCanExecuteChanged();
+        RenameMemberCommand.NotifyCanExecuteChanged();
+        RenameDatasetCommand.NotifyCanExecuteChanged();
+        DeleteDatasetCommand.NotifyCanExecuteChanged();
         LoadMoreDatasetsCommand.NotifyCanExecuteChanged();
         LoadMoreMembersCommand.NotifyCanExecuteChanged();
     }

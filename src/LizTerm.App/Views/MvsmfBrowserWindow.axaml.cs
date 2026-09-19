@@ -34,11 +34,23 @@ public partial class MvsmfBrowserWindow : Window
 
     protected override void OnDataContextChanged(EventArgs e)
     {
-        if (_watched is not null) _watched.PropertyChanged -= OnViewModelPropertyChanged;
+        if (_watched is not null)
+        {
+            _watched.PropertyChanged -= OnViewModelPropertyChanged;
+            _watched.SelectMemberRequested -= SelectMember;
+        }
         _watched = ViewModel;
-        if (_watched is not null) _watched.PropertyChanged += OnViewModelPropertyChanged;
+        if (_watched is not null)
+        {
+            _watched.PropertyChanged += OnViewModelPropertyChanged;
+            _watched.SelectMemberRequested += SelectMember;
+        }
         base.OnDataContextChanged(e);
     }
+
+    /// <summary>The list box is the selection's owner; setting its SelectedItem replaces the selection with the one
+    /// row, and its SelectionChanged pushes that back to the view model.</summary>
+    private void SelectMember(MemberRow row) => MemberList.SelectedItem = row;
 
     /// <summary>A question takes the keyboard to its Cancel button, the safe answer, or to its text box when it has
     /// one, once the strip has been laid out; a focus request on a control that is still hidden is refused. An
@@ -145,7 +157,11 @@ public partial class MvsmfBrowserWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        if (_watched is not null) _watched.PropertyChanged -= OnViewModelPropertyChanged;
+        if (_watched is not null)
+        {
+            _watched.PropertyChanged -= OnViewModelPropertyChanged;
+            _watched.SelectMemberRequested -= SelectMember;
+        }
         _watched = null;
         ViewModel?.Dispose();
         base.OnClosed(e);
