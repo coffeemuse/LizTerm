@@ -448,6 +448,23 @@ public class ProfileStoreTests : IDisposable
         Assert.Contains("\"display\": \"Mono\"", File.ReadAllText(Directory.GetFiles(_dir, "*.json").Single()));
     }
 
+    /// <summary>A display this build does not know (a later build's kind, or a typo), or a number, costs the
+    /// display alone, which falls to colour: ProfileStore.Read skips a file that fails to deserialise, so a strict
+    /// enum reader would make the whole saved session vanish from the list (#123).</summary>
+    [Fact]
+    public void An_unknown_display_reads_as_colour_rather_than_losing_the_profile()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "amber.json"), """{"name":"amber","host":"h","display":"Amber"}""");
+        File.WriteAllText(Path.Combine(_dir, "seven.json"), """{"name":"seven","host":"h","display":7}""");
+        File.WriteAllText(Path.Combine(_dir, "lower.json"), """{"name":"lower","host":"h","display":"mono"}""");
+        var store = new ProfileStore(_dir);
+        Assert.Equal(TerminalDisplay.Color, store.Load("amber")!.Display);
+        Assert.Equal(TerminalDisplay.Color, store.Load("seven")!.Display);
+        Assert.Equal(TerminalDisplay.Mono, store.Load("lower")!.Display);
+        Assert.Equal(3, store.LoadAll().Count);
+    }
+
     [Fact]
     public void A_file_without_host_files_fields_reads_them_as_null()
     {

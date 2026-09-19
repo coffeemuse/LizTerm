@@ -55,7 +55,7 @@ the buttons.
 | Keep-alive every *n* seconds | Keeps the network connection open through firewalls and routers that drop idle connections. `0` turns it off. It does not stop the host logging you off for being idle. |
 | Reconnect automatically | Reconnect if the host drops the session. |
 | Model | The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132), or **Other (custom size)** for a size of your own, for hosts that support one. |
-| Colour / Mono | **Colour (3279)**, the default, or **Mono (3278)**. A mono profile tells the host it is a 3278, so the host leaves colour out of what it sends, and the screen is drawn in one green phosphor, brighter where the host intensifies. Some applications lay out their panels differently for a mono terminal. |
+| Colour (3279) / Mono (3278) | The drop-down under Model: **Colour (3279)**, the default, or **Mono (3278)**. A mono profile tells the host it is a 3278, so the host leaves colour out of what it sends, and the screen is drawn in one green phosphor, brighter where the host intensifies. Some applications lay out their panels differently for a mono terminal. |
 | Extended data stream | Colours and extended attributes (on by default). It applies to both terminal types. |
 | Screen size | Columns and rows. They show the model's own size, and you can change them, by typing or with the arrows, only when Model is **Other**, which starts from the size already shown. A custom size must be at least 80 columns and 24 rows, and columns times rows can be at most 16,383 (at 160 columns, 102 rows at most). |
 | Code page | The host's character set. The default is `cp037` (US/Canada); TK4- and TK5 users may want `bracket`, which maps the 3270 bracket characters. |

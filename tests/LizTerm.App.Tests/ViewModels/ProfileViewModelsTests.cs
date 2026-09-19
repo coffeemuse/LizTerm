@@ -78,6 +78,9 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal(TerminalDisplay.Mono, vm.TryBuild()!.Display);
         vm.Display = TerminalDisplay.Color;
         Assert.Same(vm.DisplayChoices[0], vm.SelectedDisplayChoice);
+        // A value outside the enum shows as Colour rather than throwing when the drop-down binds.
+        vm.Display = (TerminalDisplay)7;
+        Assert.Same(vm.DisplayChoices[0], vm.SelectedDisplayChoice);
     }
 
     [Fact]

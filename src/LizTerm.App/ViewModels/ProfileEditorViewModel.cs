@@ -154,7 +154,8 @@ public partial class ProfileEditorViewModel : ObservableObject
 
     public DisplayChoice SelectedDisplayChoice
     {
-        get => DisplayChoices.First(c => c.Display == Display);
+        // A file can hold a value outside the enum (a hand-edited number); the editor shows the colour default for it.
+        get => DisplayChoices.FirstOrDefault(c => c.Display == Display) ?? DisplayChoices[0];
         set
         {
             if (value is null) return;

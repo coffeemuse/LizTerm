@@ -56,21 +56,10 @@ public static class ScreenHtml
 
     private static void AppendRun(StringBuilder sb, string text, in Cell style, bool monochrome)
     {
-        var reverse = style.Rendition.HasFlag(CellRendition.Reverse);
-        string foreground, background;
-        if (monochrome)
-        {
-            var black = Hex(HostColor.NeutralBlack);
-            (foreground, background) = reverse ? (black, PhosphorHex) : (PhosphorHex, black);
-        }
-        else
-        {
-            foreground = Hex(Resolve(reverse ? style.Background : style.Foreground, HostColor.NeutralWhite));
-            background = Hex(Resolve(reverse ? style.Foreground : style.Background, HostColor.NeutralBlack));
-        }
-
-        sb.Append("<span style=\"color:").Append(foreground)
-          .Append(";background:").Append(background);
+        // The same rule the screen draws with, so a capture never disagrees with what was on it.
+        var (foreground, background) = CellColors.Colors(style, monochrome);
+        sb.Append("<span style=\"color:").Append(Hex(foreground))
+          .Append(";background:").Append(Hex(background));
 
         // Bold, not the renderer's 35%-toward-white blend: that is a phosphor trick, and in a browser it reads
         // as washed-out text rather than as emphasis.
@@ -82,11 +71,6 @@ public static class ScreenHtml
         Escape(sb, text);
         sb.Append("</span>");
     }
-
-    private static HostColor Resolve(HostColor color, HostColor fallback) =>
-        color == HostColor.Default ? fallback : color;
-
-    private static string Hex(HostColor color) => Hex(Palette.ColorOf(color));
 
     private static string Hex(Avalonia.Media.Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 

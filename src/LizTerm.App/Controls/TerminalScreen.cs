@@ -517,6 +517,7 @@ public sealed class TerminalScreen : Control
         if (_runPlan is not null && ReferenceEquals(_runPlanSnapshot, snapshot) && _runPlanGeometry == g) return _runPlan;
 
         var plan = new List<RunVisual>();
+        var monochrome = Monochrome;
         for (var row = 0; row < snapshot.Rows; row++)
         {
             var cells = snapshot.Row(row);
@@ -526,7 +527,7 @@ public sealed class TerminalScreen : Control
                 var start = col;
                 var style = cells[col];
                 while (col < cells.Length && cells[col].SameStyleAs(style)) col++;
-                plan.Add(BuildRun(snapshot, row, start, col - start, style, g));
+                plan.Add(BuildRun(snapshot, row, start, col - start, style, g, monochrome));
             }
         }
 
@@ -537,10 +538,9 @@ public sealed class TerminalScreen : Control
         return plan;
     }
 
-    private RunVisual BuildRun(ScreenSnapshot snapshot, int row, int start, int length, Cell style, CellGeometry g)
+    private RunVisual BuildRun(ScreenSnapshot snapshot, int row, int start, int length, Cell style, CellGeometry g, bool monochrome)
     {
         var rect = new Rect(g.OriginX + start * g.CellWidth, g.OriginY + row * g.CellHeight, length * g.CellWidth, g.CellHeight);
-        var monochrome = Monochrome;
         var background = CellColors.Background(style, monochrome);
 
         var text = snapshot.GetText(row, start, length);
@@ -590,11 +590,12 @@ public sealed class TerminalScreen : Control
         if (!cursor.Visible || cursor.Row >= snapshot.Rows || cursor.Column >= snapshot.Columns) return;
         var cell = snapshot[cursor.Row, cursor.Column];
         var rect = g.CellRect(cursor.Row, cursor.Column);
-        context.FillRectangle(CellColors.CursorBlock(cell, Monochrome), rect);
+        var monochrome = Monochrome;
+        context.FillRectangle(CellColors.CursorBlock(cell, monochrome), rect);
         var ch = cell.Character.ToString();
         if (!string.IsNullOrWhiteSpace(ch))
         {
-            var formatted = new FormattedText(ch, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, Palette.Brush(HostColor.NeutralBlack, false));
+            var formatted = new FormattedText(ch, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, CellColors.CursorGlyph(cell, monochrome));
             context.DrawText(formatted, rect.TopLeft);
         }
     }

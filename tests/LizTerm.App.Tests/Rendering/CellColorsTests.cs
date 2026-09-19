@@ -55,6 +55,34 @@ public class CellColorsTests
         var cell = Cell(HostColor.Green, HostColor.Blue, CellRendition.Reverse);
         Assert.Same(Palette.PhosphorBrush(false), CellColors.Background(cell, monochrome: true));
         Assert.Same(Palette.Brush(HostColor.NeutralBlack, false), CellColors.Foreground(cell, monochrome: true));
+        // The underline follows the text, or it would be phosphor on the phosphor block and vanish.
+        Assert.Same(Palette.Brush(HostColor.NeutralBlack, false), CellColors.Underline(cell, monochrome: true));
+    }
+
+    /// <summary>On a reversed cell the block is already the text colour, so the cursor takes the cell's other
+    /// colour and cuts the glyph out in the first, or it would paint exactly what is there and disappear.</summary>
+    [Fact]
+    public void The_cursor_inverts_a_reversed_cell_on_both_screens()
+    {
+        var cell = Cell(HostColor.Red, HostColor.Blue, CellRendition.Reverse);
+        Assert.Same(Palette.Brush(HostColor.NeutralBlack, false), CellColors.CursorBlock(cell, monochrome: true));
+        Assert.Same(Palette.PhosphorBrush(false), CellColors.CursorGlyph(cell, monochrome: true));
+        Assert.Same(Palette.Brush(HostColor.Blue, false), CellColors.CursorBlock(cell, monochrome: false));
+        Assert.Same(Palette.Brush(HostColor.Red, false), CellColors.CursorGlyph(cell, monochrome: false));
+
+        Assert.Same(Palette.Brush(HostColor.NeutralBlack, false), CellColors.CursorGlyph(Cell(HostColor.Red), monochrome: false));
+        Assert.Same(Palette.Brush(HostColor.NeutralBlack, false), CellColors.CursorGlyph(Cell(HostColor.Red), monochrome: true));
+    }
+
+    /// <summary>The colour pair a capture writes is the pair the screen draws, reverse video included.</summary>
+    [Fact]
+    public void The_colour_pair_is_the_screen_rule_for_a_capture()
+    {
+        Assert.Equal((Palette.ColorOf(HostColor.Red), Palette.ColorOf(HostColor.Blue)), CellColors.Colors(Cell(HostColor.Red, HostColor.Blue), monochrome: false));
+        Assert.Equal((Palette.ColorOf(HostColor.Blue), Palette.ColorOf(HostColor.Red)), CellColors.Colors(Cell(HostColor.Red, HostColor.Blue, CellRendition.Reverse), monochrome: false));
+        Assert.Equal((Palette.ColorOf(HostColor.NeutralWhite), Palette.ColorOf(HostColor.NeutralBlack)), CellColors.Colors(Cell(HostColor.Default, HostColor.Default), monochrome: false));
+        Assert.Equal((Palette.Phosphor, Palette.ColorOf(HostColor.NeutralBlack)), CellColors.Colors(Cell(HostColor.Red, HostColor.Blue), monochrome: true));
+        Assert.Equal((Palette.ColorOf(HostColor.NeutralBlack), Palette.Phosphor), CellColors.Colors(Cell(HostColor.Red, HostColor.Blue, CellRendition.Reverse), monochrome: true));
     }
 
     [Fact]
