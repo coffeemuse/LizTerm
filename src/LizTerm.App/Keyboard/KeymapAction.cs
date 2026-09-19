@@ -44,11 +44,12 @@ public abstract record KeymapAction
         _ => KeymapEntry.Unbound.Instance,
     };
 
-    /// <summary>By name only: Enum.TryParse would also accept "3", which no one wrote on purpose.</summary>
+    /// <summary>By name only: Enum.TryParse would also accept "3", " 3", "+1" and a comma list such as "PF1,PF2"
+    /// (which ORs the values), none of which anyone wrote on purpose. A name is a letter, then letters and digits.</summary>
     private static bool TryKey(string name, out TerminalKey key)
     {
         key = default;
-        return name.Length > 0 && !char.IsDigit(name[0])
+        return name.Length > 0 && char.IsAsciiLetter(name[0]) && name.All(char.IsAsciiLetterOrDigit)
                && Enum.TryParse(name, ignoreCase: true, out key) && Enum.IsDefined(key);
     }
 }

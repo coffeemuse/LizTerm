@@ -29,6 +29,7 @@ public class KeymapPolicyTests
         { "mac", Key.OemComma, KeyModifiers.Meta, "The menu bar sees Cmd shortcuts before the screen does" },
         { "mac", Key.Q, KeyModifiers.Meta | KeyModifiers.Shift, "The menu bar sees Cmd shortcuts before the screen does" },
         { "windows", Key.A, KeyModifiers.None, "This would take away typing that character" },
+        { "windows", Key.Q, KeyModifiers.Control | KeyModifiers.Alt, "AltGr types this character on some keyboards" },
         { "windows", Key.A, KeyModifiers.Shift, "This would take away typing that character" },
         { "windows", Key.D1, KeyModifiers.None, "This would take away typing that character" },
         { "windows", Key.Space, KeyModifiers.None, "This would take away typing that character" },

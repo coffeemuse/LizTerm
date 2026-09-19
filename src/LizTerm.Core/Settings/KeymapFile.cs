@@ -8,12 +8,13 @@ namespace LizTerm.Core.Settings;
 
 /// <summary>keymap.json as a document: <c>{"bindings": {"&lt;chord&gt;": "&lt;key&gt;" | {"text": "…"} | null}}</c>
 /// (editable keymap spec §3.1). Chords and key names are strings here; LizTerm.App parses them. A value of any
-/// other shape is kept in Unreadable and written back verbatim, so one hand-edited mistake costs one binding and a
-/// newer build's value survives an older build saving. Written with the chords in ordinal order, so a file diff is
+/// other shape is kept in Unreadable and written back verbatim, so one hand-edited mistake in a binding costs that binding (a file that is not JSON at all costs every one:
+/// JsonFiles.Parse reads it as no file) and a newer build's value survives an older build saving. A newer build's
+/// other top-level keys survive too (KeymapStore.Update passes the file it read to ToJson). Written with the chords in ordinal order, so a file diff is
 /// stable. Immutable.</summary>
 public sealed class KeymapFile
 {
-    private const string BindingsKey = "bindings";
+    internal const string BindingsKey = "bindings";
     private const string TextKey = "text";
 
     public static KeymapFile Empty { get; } = new([], []);
@@ -56,7 +57,9 @@ public sealed class KeymapFile
         return new(bindings, unreadable);
     }
 
-    public JsonObject ToJson()
+    /// <summary>The document to write. Keys of <paramref name="existing"/> other than "bindings" (a newer build's) are
+    /// carried over as they are.</summary>
+    public JsonObject ToJson(JsonObject? existing = null)
     {
         var entries = new JsonObject();
         var spellings = Bindings.Keys.Concat(Unreadable.Keys).Order(StringComparer.Ordinal);
@@ -71,6 +74,10 @@ public sealed class KeymapFile
                 }
                 : Unreadable[chord]?.DeepClone();
         }
-        return new JsonObject { [BindingsKey] = entries };
+        var document = new JsonObject { [BindingsKey] = entries };
+        if (existing is not null)
+            foreach (var (key, value) in existing.Where(pair => pair.Key != BindingsKey))
+                document[key] = value?.DeepClone();
+        return document;
     }
 }

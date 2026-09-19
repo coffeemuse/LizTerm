@@ -96,6 +96,23 @@ public class KeymapViewModelTests : IDisposable
     }
 
     [Fact]
+    public void A_save_after_a_failed_one_writes_the_earlier_binding_too()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var vm = new KeymapViewModel(new KeymapStore(FilePath));
+        vm.Bind(CtrlHome, Pa1);
+        File.Delete(FilePath);
+
+        vm.Bind(new KeyChord(Key.End, KeyModifiers.Control), new KeymapAction.SendKey(TerminalKey.PF3));
+
+        var bindings = new KeymapStore(FilePath).Load().Bindings;
+        Assert.Equal(new KeymapEntry.SendKey("PA1"), bindings["Ctrl+Home"]);
+        Assert.Equal(new KeymapEntry.SendKey("PF3"), bindings["Ctrl+End"]);
+        Assert.Null(vm.LastSaveError);
+    }
+
+    [Fact]
     public void Unreadable_entries_are_counted_and_notified()
     {
         Directory.CreateDirectory(_dir);

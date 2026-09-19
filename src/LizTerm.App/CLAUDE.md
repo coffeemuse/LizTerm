@@ -299,8 +299,9 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `KeyGesture.ToString("p", format)`, taps worded by hand. The overload taking a `Keymap` and one `TerminalKey`
   scans the table; the one taking the chords themselves is what the control uses, over a single `ToLookup`, so 36
   tooltips are one pass and not 36. The control passes a null format, the platform's registration (glyphs on macOS,
-  words elsewhere); tests pass an explicit `KeyGestureFormatInfo`. The control's `Keymap` property is the #18 hook,
-  nothing binds it yet, and a null from that future binding leaves the tooltips as they are rather than throwing.
+  words elsewhere); tests pass an explicit `KeyGestureFormatInfo`. The control's `Keymap` property is the window's
+  composed map (`SessionWindow.ApplyKeymap` sets it on open and on every change), and a null from a binding leaves
+  the tooltips as they are rather than throwing.
 
 ## Menus
 

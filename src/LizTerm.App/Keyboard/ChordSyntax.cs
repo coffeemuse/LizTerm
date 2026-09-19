@@ -57,11 +57,12 @@ public static class ChordSyntax
         return true;
     }
 
-    /// <summary>A Key by name: defined, not None, and not a number (Enum.TryParse would accept "3").</summary>
+    /// <summary>A Key by name: defined, not None, and not a number, a sign or a comma list (Enum.TryParse would
+    /// accept "3", "+1" and "Home,End"). A name is a letter, then letters and digits.</summary>
     private static bool TryKey(string name, out Key key)
     {
         key = Key.None;
-        return name.Length > 0 && !char.IsDigit(name[0])
+        return name.Length > 0 && char.IsAsciiLetter(name[0]) && name.All(char.IsAsciiLetterOrDigit)
                && Enum.TryParse(name, ignoreCase: true, out key) && Enum.IsDefined(key) && key != Key.None;
     }
 

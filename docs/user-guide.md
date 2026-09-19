@@ -534,11 +534,17 @@ name such as `PA1`, to `{"text": "¬"}` for text to type, or to `null` to take t
 }
 ```
 
-Key names are Avalonia's (`Home`, `PageUp`, `D1` for the 1 key, `OemOpenBrackets` for `[`); an entry LizTerm cannot
-read is skipped, and that key keeps its default. Deleting the file restores the defaults. Backspace follows the
-profile's Backspace setting unless the file binds `Back` itself. The file is not checked: binding a plain letter or
-the platform's Copy shortcut takes that key away from typing or copying. Only `Tap:LeftCtrl` and `Tap:RightCtrl` are
-taps.
+Key names in a chord are Avalonia's (`Home`, `PageUp`, `D1` for the 1 key, `OemOpenBrackets` for `[`). The 3270 keys
+are `Enter`, `Clear`, `PF1` to `PF24`, `PA1` to `PA3`, `Attn`, `SysReq`, `Reset`, `Tab`, `BackTab`, `Home`, `EraseEof`,
+`EraseInput`, `Delete`, `Backspace`, `Erase`, `Insert`, `Dup`, `FieldMark`, `Newline`, `Up`, `Down`, `Left` and `Right`,
+spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default; a file that
+is not valid JSON (a trailing comma, a comment, the same chord twice) is skipped as a whole, and every default
+applies. LizTerm reads the file once, when the first session window opens, so restart it after editing by hand.
+Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless the file binds `Back`
+itself. The file is not checked against what you type: binding a plain letter takes that key away from typing. The
+platform's Copy, Paste and Select All shortcuts, Find and Switch Session are handled before the keymap, so a binding
+on one of those chords does nothing. Only `Tap:LeftCtrl` and `Tap:RightCtrl` are taps; a tap sends a key or types
+text like any other chord.
 
 ## Known limitations
 

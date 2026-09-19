@@ -23,6 +23,10 @@ public class KeymapActionTests
     [Theory]
     [InlineData("")]
     [InlineData("3")]
+    [InlineData(" 3")]
+    [InlineData("+1")]
+    [InlineData("PF1,PF2")]
+    [InlineData(" PA1")]
     [InlineData("PF25")]
     [InlineData("Copy")]
     public void A_name_this_build_does_not_know_does_not_read(string name)

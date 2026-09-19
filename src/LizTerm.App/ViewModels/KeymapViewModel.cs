@@ -18,6 +18,7 @@ public sealed class KeymapViewModel : ObservableObject
 {
     private readonly KeymapStore? _store;
     private string? _lastSaveError;
+    private bool _unsaved;
 
     /// <summary>In-memory only: every default, nothing written.</summary>
     public KeymapViewModel() => Overlay = KeymapOverlay.Empty;
@@ -95,17 +96,22 @@ public sealed class KeymapViewModel : ObservableObject
         }
     }
 
-    /// <summary>The same change applied to what is on disk now, the discipline SettingsViewModel follows.</summary>
+    /// <summary>The same change applied to what is on disk now, the discipline SettingsViewModel follows. After a
+    /// failed save the disk no longer holds what this object shows, so the next save writes the whole overlay
+    /// instead of one change to a file that lacks the earlier ones; the banner clears only when the two agree.</summary>
     private void Save(Func<KeymapOverlay, KeymapOverlay> change)
     {
         if (_store is null) return;
         try
         {
-            _store.Update(file => change(KeymapOverlay.Parse(file)).ToFile());
+            if (_unsaved) _store.Update(_ => Overlay.ToFile());
+            else _store.Update(file => change(KeymapOverlay.Parse(file)).ToFile());
+            _unsaved = false;
             LastSaveError = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
+            _unsaved = true;
             LastSaveError = "Could not save the keymap: " + ex.Message;
             SaveFailed?.Invoke(this, LastSaveError);
         }

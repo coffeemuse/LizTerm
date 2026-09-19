@@ -56,7 +56,8 @@ internal static class JsonFiles
 
     /// <summary>Through a sibling temp file renamed over the target, so a reader never sees a partial file, and
     /// a write interrupted by a crash or a full disk leaves the old file rather than a broken one. The temp file
-    /// is a sibling on purpose: File.Move across a filesystem is a copy, which is not atomic.</summary>
+    /// is a sibling on purpose: File.Move across a filesystem is a copy, which is not atomic. Its name ends in ".tmp", not
+    /// ".json", so a directory read for *.json (the profiles) never takes a leftover for a file of its own.</summary>
     public static void Write(string path, string text)
     {
         if (Path.GetDirectoryName(path) is { Length: > 0 } directory) Directory.CreateDirectory(directory);

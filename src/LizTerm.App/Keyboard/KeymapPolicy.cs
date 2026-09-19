@@ -7,8 +7,12 @@ using Avalonia.Input.Platform;
 
 namespace LizTerm.App.Keyboard;
 
+/// <summary>What TerminalScreen keeps for itself ahead of the keymap.</summary>
+public enum ReservedGesture { None, Copy, Paste, SelectAll, Find, SwitchSession }
+
 /// <summary>The platform gestures TerminalScreen checks ahead of the keymap, as data, so the policy is the same
-/// pure function on a Mac, on Windows and in a test.</summary>
+/// pure function on a Mac, on Windows and in a test. <see cref="Classify"/> is the one place the screen and the
+/// policy both ask, so a gesture added there is refused by the tab and inert in the file alike.</summary>
 public sealed record PlatformHotkeys(
     IReadOnlyList<KeyGesture> Copy,
     IReadOnlyList<KeyGesture> Paste,
@@ -37,7 +41,23 @@ public sealed record PlatformHotkeys(
             : new(OrFallback(configuration.Copy, Fallback.Copy), OrFallback(configuration.Paste, Fallback.Paste),
                   OrFallback(configuration.SelectAll, Fallback.SelectAll), configuration.CommandModifiers);
 
-    /// <summary>TerminalScreen.Matches falls back to Ctrl+key when the platform lists nothing; so does this.</summary>
+    /// <summary>Which reserved gesture, if any, this key and these modifiers are. PlatformHotkeyConfiguration carries
+    /// no Find or Switch Session, so those are the command modifier and F or K, which is Cmd on macOS and Ctrl
+    /// elsewhere.</summary>
+    public ReservedGesture Classify(Key key, KeyModifiers modifiers)
+    {
+        if (Uses(Copy, key, modifiers)) return ReservedGesture.Copy;
+        if (Uses(Paste, key, modifiers)) return ReservedGesture.Paste;
+        if (Uses(SelectAll, key, modifiers)) return ReservedGesture.SelectAll;
+        if (modifiers == CommandModifiers && key == Key.F) return ReservedGesture.Find;
+        if (modifiers == CommandModifiers && key == Key.K) return ReservedGesture.SwitchSession;
+        return ReservedGesture.None;
+    }
+
+    private static bool Uses(IReadOnlyList<KeyGesture> gestures, Key key, KeyModifiers modifiers) =>
+        gestures.Any(gesture => gesture.Key == key && gesture.KeyModifiers == modifiers);
+
+    /// <summary>TerminalScreen used to fall back to Ctrl+key when the platform lists nothing; so does this.</summary>
     private static IReadOnlyList<KeyGesture> OrFallback(IReadOnlyList<KeyGesture> gestures, IReadOnlyList<KeyGesture> fallback) =>
         gestures.Count > 0 ? gestures : fallback;
 }
@@ -57,8 +77,8 @@ public abstract record KeymapVerdict
 
 /// <summary>Editable keymap spec §4: what the Keyboard tab will not bind. The platform gestures the screen checks
 /// first, because a binding there would never fire; any Cmd or Windows-key chord, because the menu bar or the
-/// system sees it first; and a printable key with no modifier or Shift alone, because there would be no way to
-/// type that character afterwards. Everything else is allowed: a chord another action holds moves (the tab says
+/// system sees it first; and a printable key with no modifier, Shift alone, or Ctrl+Alt (AltGr on Windows and
+/// Linux), because there would be no way to type that character afterwards. Everything else is allowed: a chord another action holds moves (the tab says
 /// from where), and unbinding a default is silent. "Printable" is decided by the Key value alone, not by asking
 /// the platform what it would type: the answer has to be the same in a test as on a Mac.</summary>
 public static class KeymapPolicy
@@ -76,11 +96,14 @@ public static class KeymapPolicy
     public static KeymapVerdict Check(KeyChord chord, PlatformHotkeys hotkeys)
     {
         if (chord.Tap) return KeymapVerdict.Allowed.Instance;
-        if (Uses(hotkeys.Copy, chord)) return Reserved("Copy");
-        if (Uses(hotkeys.Paste, chord)) return Reserved("Paste");
-        if (Uses(hotkeys.SelectAll, chord)) return Reserved("Select All");
-        if (chord.Modifiers == hotkeys.CommandModifiers && chord.Key == Key.F) return Reserved("Find");
-        if (chord.Modifiers == hotkeys.CommandModifiers && chord.Key == Key.K) return Reserved("Switch Session");
+        switch (hotkeys.Classify(chord.Key, chord.Modifiers))
+        {
+            case ReservedGesture.Copy: return Reserved("Copy");
+            case ReservedGesture.Paste: return Reserved("Paste");
+            case ReservedGesture.SelectAll: return Reserved("Select All");
+            case ReservedGesture.Find: return Reserved("Find");
+            case ReservedGesture.SwitchSession: return Reserved("Switch Session");
+        }
         if (chord.Modifiers.HasFlag(KeyModifiers.Meta))
         {
             return new KeymapVerdict.Refused(hotkeys.CommandModifiers.HasFlag(KeyModifiers.Meta)
@@ -89,11 +112,12 @@ public static class KeymapPolicy
         }
         if (Printable.Contains(chord.Key) && chord.Modifiers is KeyModifiers.None or KeyModifiers.Shift)
             return new KeymapVerdict.Refused("This would take away typing that character");
+        // AltGr arrives as Ctrl+Alt on Windows and Linux, and types a character on many layouts (Ctrl+Alt+Q is @ on a
+        // German one).
+        if (Printable.Contains(chord.Key) && chord.Modifiers.HasFlag(KeyModifiers.Control) && chord.Modifiers.HasFlag(KeyModifiers.Alt))
+            return new KeymapVerdict.Refused("AltGr types this character on some keyboards");
         return KeymapVerdict.Allowed.Instance;
     }
 
     private static KeymapVerdict Reserved(string use) => new KeymapVerdict.Refused($"LizTerm uses this for {use}");
-
-    private static bool Uses(IReadOnlyList<KeyGesture> gestures, KeyChord chord) =>
-        gestures.Any(gesture => gesture.Key == chord.Key && gesture.KeyModifiers == chord.Modifiers);
 }

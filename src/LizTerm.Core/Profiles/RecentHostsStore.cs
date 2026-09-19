@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Text.Json;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.Core.Profiles;
 
@@ -49,18 +50,7 @@ public sealed class RecentHostsStore(string filePath)
 
     public void Save(RecentHosts recent)
     {
-        if (Path.GetDirectoryName(FilePath) is { Length: > 0 } directory) Directory.CreateDirectory(directory);
         var json = JsonSerializer.Serialize(new RecentHostsFile([.. recent.Entries]), RecentHostsJsonContext.Default.RecentHostsFile);
-        var temp = FilePath + ".tmp";
-        try
-        {
-            File.WriteAllText(temp, json);
-            File.Move(temp, FilePath, overwrite: true);
-        }
-        catch
-        {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch { /* the write already failed; this is cleanup */ }
-            throw;
-        }
+        JsonFiles.Write(FilePath, json);
     }
 }

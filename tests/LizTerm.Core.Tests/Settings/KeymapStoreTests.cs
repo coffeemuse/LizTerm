@@ -47,6 +47,27 @@ public class KeymapStoreTests : IDisposable
     }
 
     [Fact]
+    public void Update_keeps_the_files_other_top_level_keys()
+    {
+        WriteFile("""{"version": 2, "bindings": {"F2": "PA1"}}""");
+
+        Store.Update(f => Plus(f, "Ctrl+Home", new KeymapEntry.SendKey("PA2")));
+
+        Assert.Equal(2, JsonNode.Parse(File.ReadAllText(FilePath))!["version"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public void Update_refuses_a_bindings_that_is_not_an_object()
+    {
+        WriteFile("""{"bindings": ["F2"]}""");
+
+        var ex = Assert.Throws<InvalidDataException>(() => Store.Update(f => f));
+
+        Assert.Contains("keymap.json", ex.Message);
+        Assert.Equal("""{"bindings": ["F2"]}""", File.ReadAllText(FilePath));
+    }
+
+    [Fact]
     public void Update_applies_the_change_to_what_is_on_disk_now()
     {
         WriteFile("""{"bindings": {"Alt+2": null}}""");

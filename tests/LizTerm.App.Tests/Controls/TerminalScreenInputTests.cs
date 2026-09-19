@@ -39,6 +39,22 @@ public class TerminalScreenInputTests
     }
 
     [AvaloniaFact]
+    public void A_tap_bound_to_text_types_it_on_release()
+    {
+        var (window, screen) = Show();
+        var typed = new List<string>();
+        screen.TextEntered += (_, t) => typed.Add(t);
+        screen.Keymap = DefaultKeymap.Create(destructiveBackspace: true)
+            .Without([KeyChord.TapOf(Key.RightCtrl)])
+            .With([], [KeyValuePair.Create(KeyChord.TapOf(Key.RightCtrl), "x")]);
+
+        window.KeyPressQwerty(PhysicalKey.ControlRight, RawInputModifiers.Control);
+        window.KeyReleaseQwerty(PhysicalKey.ControlRight, RawInputModifiers.None);
+
+        Assert.Equal(["x"], typed);
+    }
+
+    [AvaloniaFact]
     public void Backspace_erases_by_default_and_moves_left_with_the_cursor_left_table()
     {
         var (window, screen) = Show();
