@@ -14,6 +14,7 @@ using LizTerm.App.Tests.Fakes;
 using LizTerm.App.Tests.ViewModels;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
+using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.Tests.Views;
 
@@ -431,5 +432,53 @@ public class MvsmfBrowserWindowTests
 
         await Wait.UntilAsync(() => ReferenceEquals(window.FocusManager?.GetFocusedElement(), Named<Button>(window, "ConfirmCancelButton")),
             "the focus on Cancel");
+    }
+
+    [AvaloniaFact]
+    public async Task An_input_question_shows_a_text_box_focused_and_selected_and_enter_answers_it()
+    {
+        var (window, t) = Show(userid: null);
+        var question = new ConfirmationRequest("Rename HELLO in MVSCE02.CNTL to:", "Rename",
+            input: "HELLO", inputRule: HostPath.MemberNameError);
+
+        t.Vm.Confirmation = question;
+
+        var box = Named<TextBox>(window, "ConfirmInputBox");
+        await Wait.UntilAsync(() => box.IsFocused, "the focus in the text box");
+        Assert.True(box.IsVisible);
+        Assert.Equal("HELLO", box.Text);
+        Assert.Equal("HELLO", box.SelectedText);
+        Assert.False(Named<TextBlock>(window, "ConfirmInputLabel").IsVisible);
+        Assert.False(Named<TextBlock>(window, "ConfirmInputProblem").IsVisible);
+        Assert.False(Named<Button>(window, "ConfirmPrimaryButton").IsEffectivelyEnabled);
+
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.False(question.Answer.IsCompleted);
+
+        box.Text = "BAD-NAME";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Named<TextBlock>(window, "ConfirmInputProblem").IsVisible);
+        Assert.Equal("✗ A member name cannot contain '-'.", Named<TextBlock>(window, "ConfirmInputProblem").Text);
+
+        box.Text = "HELLO2";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Named<Button>(window, "ConfirmPrimaryButton").IsEffectivelyEnabled);
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+
+        Assert.Equal(ConfirmChoice.Primary, (await question.Answer).Choice);
+        Assert.Equal("HELLO2", question.Input);
+        t.Vm.Confirmation = null;
+    }
+
+    [AvaloniaFact]
+    public async Task A_plain_question_hides_the_text_box()
+    {
+        var (window, t) = Show(userid: null);
+
+        t.Vm.Confirmation = new ConfirmationRequest("Delete HELLO from MVSCE02.CNTL? This cannot be undone.", "Delete 1 member");
+
+        await Wait.UntilAsync(() => Named<Button>(window, "ConfirmCancelButton").IsFocused, "the focus on Cancel");
+        Assert.False(Named<TextBox>(window, "ConfirmInputBox").IsVisible);
+        t.Vm.Confirmation = null;
     }
 }

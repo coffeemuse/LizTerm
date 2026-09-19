@@ -69,7 +69,7 @@
     <Border x:Name="ConfirmationStrip" DockPanel.Dock="Bottom" Background="#2A3340" Padding="12,6"
             IsVisible="{Binding HasConfirmation}">
       <DockPanel>
-        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
           <CheckBox x:Name="ApplyToAllBox" Content="Apply to all" IsChecked="{Binding Confirmation.ApplyToAll}"
                     IsVisible="{Binding Confirmation.OffersApplyToAll, FallbackValue=False}" />
           <Button x:Name="ConfirmCancelButton" Content="Cancel" Command="{Binding Confirmation.CancelCommand}" />
@@ -79,7 +79,20 @@
           <Button x:Name="ConfirmPrimaryButton" Content="{Binding Confirmation.PrimaryLabel}"
                   Command="{Binding Confirmation.PrimaryCommand}" />
         </StackPanel>
-        <TextBlock Text="{Binding Confirmation.Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        <StackPanel Spacing="4" Margin="0,0,8,0">
+          <DockPanel>
+            <TextBox x:Name="ConfirmInputBox" DockPanel.Dock="Right" Width="240" MaxLength="44"
+                     FontFamily="Menlo, Consolas, monospace" Text="{Binding Confirmation.Input}"
+                     IsVisible="{Binding Confirmation.HasInput, FallbackValue=False}" Margin="8,0,0,0" />
+            <TextBlock x:Name="ConfirmInputLabel" DockPanel.Dock="Right" Text="{Binding Confirmation.InputLabel}"
+                       VerticalAlignment="Center" Margin="8,0,0,0"
+                       IsVisible="{Binding Confirmation.InputLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}" />
+            <TextBlock Text="{Binding Confirmation.Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          </DockPanel>
+          <TextBlock x:Name="ConfirmInputProblem" Text="{Binding Confirmation.InputProblem, StringFormat='✗ {0}'}"
+                     Foreground="#FF8080" TextWrapping="Wrap"
+                     IsVisible="{Binding Confirmation.InputProblem, Converter={x:Static ObjectConverters.IsNotNull}, FallbackValue=False}" />
+        </StackPanel>
       </DockPanel>
     </Border>
 
