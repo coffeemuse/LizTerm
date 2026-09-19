@@ -547,7 +547,7 @@ Backspace setting unless the file binds `Back` itself.
   the pin.
 - **TLS hosts that rely on SNI** (several TLS sites sharing one address) cannot be verified, because the
   underlying x3270 engine does not send a server name ([#12](https://github.com/coffeemuse/LizTerm/issues/12)).
-- **No keymap editing yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)).
+- **No in-app keymap editor yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)): bindings are changed by hand in `keymap.json`; see [Keyboard](#keyboard).
 - **No printer sessions or scripting.**
 - **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). Older mvsMF builds
   are not supported (see [Signing in](#signing-in)). It can't create, rename or delete datasets, submit jobs, or
