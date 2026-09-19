@@ -86,6 +86,15 @@ public class SettingsLayersTests
         Assert.True(SettingsLayers.Read(Doc("""{"blink":false}""")).ShowSplashOnLaunch);
     }
 
+    /// <summary>The close confirmation (#151) is on by default, so a file from before it, which says nothing about
+    /// it, still asks before a connected session is closed.</summary>
+    [Fact]
+    public void The_close_confirmation_reads_by_name_and_defaults_on()
+    {
+        Assert.False(SettingsLayers.Read(Doc("""{"confirmCloseWhileConnected":false}""")).ConfirmCloseWhileConnected);
+        Assert.True(SettingsLayers.Read(Doc("""{"blink":false}""")).ConfirmCloseWhileConnected);
+    }
+
     /// <summary>A style this build does not know (a later build's name, say) costs that key alone, the same
     /// guarantee the bell's sound and the keypad's dock rely on.</summary>
     [Fact]

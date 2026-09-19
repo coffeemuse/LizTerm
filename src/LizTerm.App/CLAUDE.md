@@ -42,8 +42,24 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `Closing` because `Closed` carries no reason. A close that the owned File Transfer dialog refuses never reaches
   `Closing` at all (`ShouldCancelClose` asks the children first), and the next attempt overwrites the flag, so it
   always describes the close that is actually finishing. The picker uses the same test for the mirror-image failure:
-  a shutdown that closed it would otherwise answer with `Quit()` → `Shutdown()`, a second `DoShutdown` re-entered
+  a shutdown that closed it would otherwise answer with `Quit()` → `TryShutdown()`, a second `DoShutdown` re-entered
   inside the first.
+- **Closing a connected session asks first (#151).** `ClosePolicy` (`Startup/`, pure, beside `ShutdownPolicy`)
+  holds both decisions. A window's own close: `SessionWindow.OnClosing` cancels, asks through `IClosePrompt`
+  (`Dialogs/`, injected by `AttachClosePrompt` like the wire log's prompt; `ConfirmCloseWindow` is the dialog, and
+  the words live in `ClosePromptRequest`), and on Disconnect calls `Close()` again past a one-attempt bypass. The
+  owned File Transfer dialog's refusal has already run by then, so a running transfer's cancel-first rule keeps
+  winning. Quit: `QuitGuard` (`Startup/`), one per process, is consulted from every owner-less window's `Closing`
+  (each session window and the picker) with the close reason. `TryShutdown` makes one pass over those windows,
+  closing each with `ApplicationShutdown`, so the guard holds *every* window of the pass while its one question is
+  up (Keep Connected must leave everything as it was) and on Disconnect calls `App.Quit()` again with the guard
+  lowered for that pass. The reason is how a user's Quit is told from an OS shutdown: Avalonia closes windows with
+  `OSShutdown` when the platform is logging out or shutting down, and its `ShutdownRequestedEventArgs.IsOSShutdown`
+  is internal, so the close reason is the one public place the two differ. An OS shutdown is therefore never held.
+  `App.Quit()` uses `TryShutdown`, not `Shutdown`: the forced one closes every window past `Closing`, so neither
+  the guard nor a running transfer could hold it; a refused shutdown takes `_quitting` back. The shutdown reasons
+  cannot be produced headlessly, so `ClosePolicyTests` and `QuitGuardTests` take the reason directly, and
+  `SessionWindowCloseTests` cover the window's own question with `FakeClosePrompt`.
 
 ## Session view model
 

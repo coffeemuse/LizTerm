@@ -1,0 +1,20 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LizTerm.App.Views.ConfirmCloseWindow"
+        Width="440" SizeToContent="Height" CanResize="False" CanMinimize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="16" Spacing="16">
+    <TextBlock x:Name="MessageText" TextWrapping="Wrap" />
+    <!-- The safe button is the default and the Escape action, so a stray Enter confirms nothing; the verb on the
+         other one says what it does. Both are named for a screen reader. -->
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="DisconnectButton" Click="OnDisconnectClick" />
+      <Button x:Name="KeepButton" IsDefault="True" IsCancel="True" Click="OnKeepClick" />
+    </StackPanel>
+  </StackPanel>
+</Window>

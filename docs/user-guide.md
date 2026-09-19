@@ -24,6 +24,13 @@ LizTerm opens on the **Sessions** list. Select a saved profile and choose **Conn
 **Edit...** and **Delete** to manage them. Each session opens in its own window. Closing the last session window
 brings the list back; closing the list with no sessions open quits.
 
+Closing a window whose session is still connected asks first, so a stray click on the close button or a Cmd/Ctrl+W
+meant for something else does not end a live session: **Keep Connected** (the default, and Escape) leaves the
+window and the session as they were, and **Disconnect** closes the window. Quitting with one or more sessions
+connected asks once, for all of them, and **Keep Connected** leaves every window open. A window that is not
+connected closes without a question, and **Disconnect** in the menu never asks. Turn the question off under
+**Closing** in [Preferences](#preferences).
+
 Right-click a profile (on macOS, Control-click or a two-finger tap) for **Connect**, **Edit...** and **Mark as
 FAVORITE**, which stars it without opening the editor. On a starred profile the same entry reads **Remove from
 FAVORITE**. A profile already carrying 8 tags has no room for FAVORITE until you remove one.
@@ -538,6 +545,8 @@ sit on five tabs:
   never interrupts you unless there is something new, and skipping a version keeps it quiet only until the next
   one is published. Help > Check for Updates... works either way. A check is one request to GitHub
   (`api.github.com`) that sends LizTerm's version number and nothing about your profiles or sessions.
+- **Closing** — whether closing a session window, or quitting, asks first while a session is connected (on by
+  default). Off, a connected window closes at once and Quit disconnects everything without a word.
 
 **Display**
 

@@ -24,6 +24,9 @@ public sealed record AppSettings(
     bool CheckForUpdatesAutomatically = true,
     string? SkippedUpdateVersion = null,
     bool ShowSplashOnLaunch = true,
+    // Whether closing a session window, or quitting, asks first while a session is connected (#151). On by
+    // default: the accident it guards against is a stray Cmd/Ctrl+W or Cmd/Ctrl+Q ending a live host session.
+    bool ConfirmCloseWhileConnected = true,
     // Hidden on purpose: no Preferences row writes this one. A wire log records every keystroke and every screen
     // the host painted, and LizTerm cannot tell a hobbyist's MVS 3.8 from a production z/OS, so the warning is
     // not one checkbox away from being silenced forever. Someone recording fixtures all day can set it by hand.
