@@ -1,0 +1,13 @@
+HTTP/1.1 412 Precondition Failed
+Server: HTTPD Server
+X-Powered-By: MVSLOVERS
+Connection: close
+Content-Type: application/json
+Content-Length: 107
+Cache-Control: no-store
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
+
+{"rc":8,"category":6,"reason":10,"message":"The resource was modified since the supplied ETag was created"}

@@ -32,3 +32,14 @@ build: a changed fixture is a changed behaviour.
 | `write-truncated` | `PUT` of a 100-character line to an LRECL 80 member — 500, reason 3, after writing the truncated record |
 | `delete-204` | `DELETE` of that member |
 | `delete-missing` | the same `DELETE` again — 404, reason 5 |
+| `create-201` | `POST restfiles/ds/<hlq>.LIZITEST.FIX`, an FB 80 PDS of 1 track and 2 directory blocks |
+| `create-dynalloc-500` | the same `POST` again — 500, category 8, rc 900, reason 7, the one answer for every allocation failure |
+| `write-etag-204` | `PUT` of a member with `X-IBM-Return-Etag: true` — 204 with `ETag` |
+| `read-etag` | `GET` of that member, text, with `X-IBM-Return-Etag: true` — 200 with the same `ETag` |
+| `write-412` | `PUT` of that member with a stale `If-Match` — 412, reason 10, nothing written |
+| `rename-member-204` | `PUT …(TWO)` with the JSON rename body naming `ONE` — 204 |
+| `rename-member-missing` | the same again, `ONE` gone — 404, reason 5 |
+| `rename-member-exists` | the same with `ONE` written again, `TWO` still there — 400, reason 7 |
+| `rename-ds-204` | `PUT restfiles/ds/<hlq>.LIZITEST.FIX2` with the JSON rename body naming the old dataset — 204 |
+| `delete-ds-204` | `DELETE` of that dataset — 204 |
+| `delete-ds-missing` | the same again — 404, reason 4 |
