@@ -21,20 +21,34 @@ public interface IHostFileService : IDisposable
     /// <see cref="HostFileErrorKind.InvalidRequest"/>.</summary>
     Task<HostFileListing> ListMembersAsync(HostPath dataset, HostListRequest request, CancellationToken cancellationToken = default);
 
-    /// <summary>The records as lines, trailing blanks as the host sent them. <paramref name="progress"/> reports
-    /// bytes received.</summary>
-    Task<IReadOnlyList<string>> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
+    /// <summary>The records as lines, trailing blanks as the host sent them, with the host's stamp of the content
+    /// when it gives one. <paramref name="progress"/> reports bytes received.</summary>
+    Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Copies the record bytes to <paramref name="destination"/>; returns the byte count.</summary>
-    Task<long> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
+    /// <summary>Copies the record bytes to <paramref name="destination"/>; returns the byte count and the stamp.</summary>
+    Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
 
     /// <summary>Replaces the dataset's or member's records, creating a member that does not exist. Every line must
-    /// already have passed <see cref="TextUploadCheck"/>. A failure may leave the target partly written.</summary>
-    Task WriteTextAsync(HostPath path, IReadOnlyList<string> lines, CancellationToken cancellationToken = default);
+    /// already have passed <see cref="TextUploadCheck"/>. With <paramref name="ifMatch"/>, the stamp an earlier
+    /// read or write returned, the write happens only while the target still holds that content; otherwise
+    /// <see cref="HostFileErrorKind.Conflict"/> and nothing is written. Returns the stamp of the target as written,
+    /// null when the host gives none. A failure without a conflict may leave the target partly written.</summary>
+    Task<string?> WriteTextAsync(HostPath path, IReadOnlyList<string> lines, string? ifMatch = null, CancellationToken cancellationToken = default);
 
-    Task WriteBinaryAsync(HostPath path, Stream source, CancellationToken cancellationToken = default);
+    /// <summary>As <see cref="WriteTextAsync"/>, for bytes.</summary>
+    Task<string?> WriteBinaryAsync(HostPath path, Stream source, string? ifMatch = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Deletes a member. Deleting a whole dataset is not supported in this release.</summary>
+    /// <summary>Allocates a new dataset. <paramref name="allocation"/> must pass its own <see cref="DatasetAllocation.Problems"/>.
+    /// A name the host could not allocate, for whatever reason it can name, is <see cref="HostFileErrorKind.CannotAllocate"/>.</summary>
+    Task CreateDatasetAsync(HostPath dataset, DatasetAllocation allocation, CancellationToken cancellationToken = default);
+
+    /// <summary>Renames a member within its library (<paramref name="newName"/> is the new member name) or a
+    /// dataset (<paramref name="newName"/> is the new dataset name). A missing source is
+    /// <see cref="HostFileErrorKind.NotFound"/>; a member name already in use is <see cref="HostFileErrorKind.AlreadyExists"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="newName"/> fails the naming rules.</exception>
+    Task RenameAsync(HostPath from, string newName, CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes a member, or a whole dataset with everything in it.</summary>
     Task DeleteAsync(HostPath path, CancellationToken cancellationToken = default);
 
     /// <summary>Ends the session the token names. Best effort: a host that has already forgotten the token is a

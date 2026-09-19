@@ -72,6 +72,15 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
   destination and renames it only on success. Text downloads trim trailing blanks by default and end lines with the
   platform's newline unless told otherwise. `UploadTextAsync` refuses text that failed its check and, when asked,
   reads it back and compares with trailing blanks ignored.
+- `DatasetAllocation` is what a create sends. `Problems()` holds the local rules only (a record format of F, V or
+  U plus B, S, A, M at most once each; LRECL 1–32760, or 0–32760 for U; BLKSIZE 1–32760; primary ≥ 1; secondary
+  ≥ 0; a partitioned dataset needs a directory block); every DCB combination beyond that is the host's to judge,
+  and it answers every allocation failure the same way (`HostFileErrorKind.CannotAllocate`).
+- **The stamp.** A read returns the host's stamp of the content (`HostTextRead.Etag`, `HostBinaryRead.Etag`) and a
+  write takes one as `ifMatch` and returns the stamp of what it wrote. It is opaque: never parsed, only echoed. A
+  write whose `ifMatch` no longer holds is `HostFileErrorKind.Conflict` and writes nothing. `HostFileTransfer`
+  carries it through: `DownloadResult.Etag`, `UploadOutcome.Etag` (the write's stamp, not the read-back's).
+- `RenameAsync` renames a member within its library or a dataset; `DeleteAsync` takes a member or a whole dataset.
 - `HostCredentials` is a class, not a record, so no generated `ToString` can print the password.
 
 ## Profiles
