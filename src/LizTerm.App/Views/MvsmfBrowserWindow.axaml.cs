@@ -55,8 +55,8 @@ public partial class MvsmfBrowserWindow : Window
     /// <summary>A question takes the keyboard to its Cancel button, the safe answer, or to its text box when it has
     /// one, once the strip has been laid out; a focus request on a control that is still hidden is refused. An
     /// operation disables the lists and the filter box, which drops their focus and does not give it back when they
-    /// are enabled again, so the window remembers where the keyboard was when the operation started and returns it
-    /// there afterwards.</summary>
+    /// are enabled again, so the window remembers where the keyboard was — the filter box, a list's row, or any
+    /// other control, the form's boxes included — and returns it there afterwards.</summary>
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_watched is not { } vm) return;
@@ -86,6 +86,14 @@ public partial class MvsmfBrowserWindow : Window
             case nameof(MvsmfBrowserViewModel.HasConfirmation):
                 PostRestoreFocus(forget: false);
                 break;
+            case nameof(MvsmfBrowserViewModel.IsCreating) when vm.IsCreating:
+                // The form's first box, like the filter box when the window opens; posted because the pane is
+                // still hidden when the notification arrives.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_watched is { IsCreating: true }) NewNameBox.Focus();
+                }, DispatcherPriority.Loaded);
+                break;
         }
     }
 
@@ -98,8 +106,7 @@ public partial class MvsmfBrowserWindow : Window
         _focusBefore = null;
         _focusedItemBefore = null;
         _focusedIndexBefore = -1;
-        if (FilterBox.IsKeyboardFocusWithin) _focusBefore = FilterBox;
-        else if (FocusedList() is { } list)
+        if (FocusedList() is { } list)
         {
             _focusBefore = list;
             if (FocusManager?.GetFocusedElement() is Control focused
@@ -109,6 +116,7 @@ public partial class MvsmfBrowserWindow : Window
                 _focusedIndexBefore = list.IndexFromContainer(container);
             }
         }
+        else if (FocusManager?.GetFocusedElement() is Control other) _focusBefore = other;
     }
 
     private ListBox? FocusedList() =>
@@ -177,6 +185,7 @@ public partial class MvsmfBrowserWindow : Window
                 if (vm.Confirmation is { } question) question.CancelCommand.Execute(null);
                 else if (vm.IsBusy) vm.CancelCommand.Execute(null);
                 else if (vm.IsReviewingUpload) vm.CloseReviewCommand.Execute(null);
+                else if (vm.IsCreating) vm.CloseFormCommand.Execute(null);
                 else Close();
                 break;
             case Key.Enter when vm.Confirmation is { HasInput: true } inputQuestion && ConfirmInputBox.IsKeyboardFocusWithin:

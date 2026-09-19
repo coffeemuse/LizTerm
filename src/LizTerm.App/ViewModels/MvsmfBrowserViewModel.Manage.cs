@@ -19,11 +19,11 @@ public sealed partial class MvsmfBrowserViewModel
     /// <summary>A dataset the pane's Rename… and Delete… can act on: listed under a name the rules accept. Its
     /// organisation does not matter, since neither operation opens it.</summary>
     private bool CanManageDataset =>
-        !IsBusy && !IsReviewingUpload && SelectedDataset is { } dataset && HostPath.DatasetNameError(dataset.Name) is null;
+        !IsBusy && !IsReviewingUpload && !IsCreating && SelectedDataset is { } dataset && HostPath.DatasetNameError(dataset.Name) is null;
 
     private bool CanRenameDataset => CanManageDataset;
     private bool CanDeleteDataset => CanManageDataset;
-    private bool CanRenameMember => !IsBusy && !IsReviewingUpload && SelectedDataset is { IsPartitioned: true } && _selectedMembers.Count == 1;
+    private bool CanRenameMember => !IsBusy && !IsReviewingUpload && !IsCreating && SelectedDataset is { IsPartitioned: true } && _selectedMembers.Count == 1;
 
     // ---- member rename ----
 

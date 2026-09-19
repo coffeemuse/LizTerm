@@ -42,8 +42,8 @@ public sealed partial class MvsmfBrowserViewModel
 
     partial void OnHasMoreMembersChanged(bool value) => NotifyCommands();
 
-    private bool CanLoadMoreDatasets => !IsBusy && !IsReviewingUpload && HasMoreDatasets;
-    private bool CanLoadMoreMembers => !IsBusy && !IsReviewingUpload && HasMoreMembers && SelectedDataset is { IsPartitioned: true };
+    private bool CanLoadMoreDatasets => !IsBusy && !IsReviewingUpload && !IsCreating && HasMoreDatasets;
+    private bool CanLoadMoreMembers => !IsBusy && !IsReviewingUpload && !IsCreating && HasMoreMembers && SelectedDataset is { IsPartitioned: true };
 
     [RelayCommand(CanExecute = nameof(CanLoadMoreDatasets))]
     private Task LoadMoreDatasetsAsync() => RunExclusiveAsync(LoadMoreDatasetsCoreAsync, () => LoadMoreDatasetsAsync());

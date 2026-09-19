@@ -15,7 +15,7 @@ public sealed partial class MvsmfBrowserViewModel
     public const int ParallelDownloads = 2;
 
     private bool CanDownload =>
-        !IsBusy && SelectedDataset is { IsSupported: true } dataset && (dataset.IsSequential || _selectedMembers.Count > 0);
+        !IsBusy && !IsCreating && SelectedDataset is { IsSupported: true } dataset && (dataset.IsSequential || _selectedMembers.Count > 0);
 
     private string Extension => Mode == HostTransferMode.Text ? ".txt" : "";
 

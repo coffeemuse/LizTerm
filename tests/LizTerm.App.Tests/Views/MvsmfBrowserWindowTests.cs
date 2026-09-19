@@ -533,4 +533,64 @@ public class MvsmfBrowserWindowTests
         Assert.Equal(new[] { "HELLO2" }, members.SelectedItems!.OfType<MemberRow>().Select(m => m.Name));
         Assert.Equal(new[] { "HELLO2" }, t.Vm.SelectedMembers.Select(m => m.Name));
     }
+
+    [AvaloniaFact]
+    public async Task New_opens_the_form_in_the_right_pane_with_the_focus_in_the_name_box()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var newButton = Named<Button>(window, "NewDatasetButton");
+        Assert.Equal("New…", newButton.Content);
+        Assert.True(newButton.IsEffectivelyEnabled);
+
+        newButton.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(Named<DockPanel>(window, "CreatePane").IsVisible);
+        Assert.False(Named<DockPanel>(window, "MemberPane").IsVisible);
+        Assert.False(Named<ListBox>(window, "DatasetList").IsEffectivelyEnabled);
+        Assert.False(newButton.IsEffectivelyEnabled);
+        var name = Named<TextBox>(window, "NewNameBox");
+        await Wait.UntilAsync(() => name.IsFocused, "the focus in the name box");
+        Assert.Equal("MVSCE02.", name.Text);
+        Assert.False(Named<Button>(window, "CreateButton").IsEffectivelyEnabled);
+
+        name.Text = "MVSCE02.NEW";
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(Named<Button>(window, "CreateButton").IsEffectivelyEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task Escape_closes_the_form_before_the_window()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        t.Vm.NewDatasetCommand.Execute(null);
+        Assert.True(t.Vm.IsCreating);
+
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+
+        Assert.False(t.Vm.IsCreating);
+        Assert.True(window.IsVisible);
+        Assert.True(Named<DockPanel>(window, "MemberPane").IsVisible || Named<TextBlock>(window, "ChooseHint").IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task Focus_returns_to_the_form_after_a_refused_create()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        t.Vm.NewDatasetCommand.Execute(null);
+        t.Vm.Form.Name = "MVSCE02.CNTL";
+        Dispatcher.UIThread.RunJobs();
+        var name = Named<TextBox>(window, "NewNameBox");
+        await Wait.UntilAsync(() => name.IsFocused, "the focus in the name box");
+
+        await t.Vm.CreateCommand.ExecuteAsync(null);
+
+        Assert.True(t.Vm.IsCreating);
+        Assert.True(Named<TextBlock>(window, "CreateMessage").IsVisible);
+        await Wait.UntilAsync(() => name.IsFocused, "the focus back in the name box");
+    }
 }

@@ -24,16 +24,16 @@ public sealed partial class MvsmfBrowserViewModel
     /// <summary>Set when a connection failure stopped a write part-way, so the banner warns about a partial member.</summary>
     private bool _uploadStoppedMidWrite;
 
-    /// <summary>The member list gives way to the upload review.</summary>
-    public bool ShowMemberPane => ShowMembers && !IsReviewingUpload;
+    /// <summary>The member list gives way to the upload review or the New dataset form.</summary>
+    public bool ShowMemberPane => ShowMembers && !IsReviewingUpload && !IsCreating;
 
-    /// <summary>The dataset list is fixed while an operation runs or a review is open: the review and the member
-    /// list both belong to the chosen dataset.</summary>
-    public bool CanChooseDataset => !IsBusy && !IsReviewingUpload;
+    /// <summary>The dataset list is fixed while an operation runs, or a review or the form is open: the review and
+    /// the member list both belong to the chosen dataset.</summary>
+    public bool CanChooseDataset => !IsBusy && !IsReviewingUpload && !IsCreating;
 
     public string UploadHeader => SelectedDataset is { } dataset ? $"Upload to {dataset.Name}" : "";
 
-    private bool CanUpload => !IsBusy && !IsReviewingUpload && SelectedDataset is { IsSupported: true };
+    private bool CanUpload => !IsBusy && !IsReviewingUpload && !IsCreating && SelectedDataset is { IsSupported: true };
     private bool CanStartUpload => !IsBusy && IsReviewingUpload && !UploadFinished;
     private bool CanCloseReview => !IsBusy && IsReviewingUpload;
 
