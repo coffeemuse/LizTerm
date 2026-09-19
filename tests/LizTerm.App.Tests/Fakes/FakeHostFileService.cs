@@ -7,7 +7,8 @@ using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.Tests.Fakes;
 
-/// <summary>An in-memory mvsMF for the App tests. Every call is logged as "op:target" — list:&lt;pattern&gt;,
+/// <summary>An in-memory mvsMF for the App tests. <c>list:&lt;pattern&gt;</c> returns the datasets the pattern
+/// matches. Every call is logged as "op:target" — list:&lt;pattern&gt;,
 /// members:&lt;dsn&gt;, readtext:&lt;path&gt;, readbinary:&lt;path&gt;, writetext:&lt;path&gt;:&lt;lines&gt;,
 /// writebinary:&lt;path&gt;, delete:&lt;path&gt;, create:&lt;dsn&gt;, rename:&lt;from&gt;:&lt;new&gt;, info, signout — and a
 /// <see cref="Failures"/> entry under the same key (without the line count) makes that call throw. It fails the way
@@ -72,7 +73,7 @@ public sealed class FakeHostFileService : IHostFileService
     public async Task<HostFileListing> ListDatasetsAsync(string pattern, HostListRequest request, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"list:{pattern}", $"list:{pattern}", cancellationToken);
-        try { lock (_lock) return PageOf(Datasets, request with { NamePattern = null }); }
+        try { lock (_lock) return PageOf(Datasets.Where(DatasetPattern(pattern)), request with { NamePattern = null }); }
         finally { Leave(); }
     }
 
@@ -252,6 +253,15 @@ public sealed class FakeHostFileService : IHostFileService
         if (request.MaxItems > 0 && list.Count > request.MaxItems)
             return new HostFileListing(list.Take(request.MaxItems).ToList(), list[request.MaxItems - 1].Name);
         return new HostFileListing(list, null);
+    }
+
+    /// <summary>A dataset pattern as the host reads it: <c>**</c> any run of qualifiers, <c>*</c> any run within a
+    /// qualifier, <c>%</c> one character; case ignored.</summary>
+    private static Func<HostFileEntry, bool> DatasetPattern(string pattern)
+    {
+        var regex = new Regex("^" + Regex.Escape(pattern.Trim().ToUpperInvariant())
+            .Replace("\\*\\*", ".*").Replace("\\*", "[^.]*").Replace("%", "[^.]") + "$");
+        return entry => regex.IsMatch(entry.Name);
     }
 
     /// <summary>A write's ifMatch must be the path's current stamp; a stamp the fake never issued, or an old one,
