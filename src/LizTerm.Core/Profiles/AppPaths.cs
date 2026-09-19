@@ -51,4 +51,8 @@ public static class AppPaths
     /// <summary>The hosts typed into Quick Connect, newest first, one file beside tags.json. A history rather than a
     /// preference, which is why it is not a key in settings.json; deleting it only empties the drop-down.</summary>
     public static string RecentHostsFile() => Path.Combine(ConfigRoot(), "recent-hosts.json");
+
+    /// <summary>The user's keyboard bindings, one file beside settings.json (#18). Holds only the chords the user
+    /// changed (see LizTerm.Core.Settings.KeymapFile), so deleting it restores every default.</summary>
+    public static string KeymapFile() => Path.Combine(ConfigRoot(), "keymap.json");
 }

@@ -12,6 +12,7 @@ using Avalonia.VisualTree;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
 using LizTerm.App.HostFiles;
+using LizTerm.App.Keyboard;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
 using LizTerm.App.ViewModels;
@@ -94,6 +95,7 @@ public partial class SessionWindow : Window, ISessionHost
             // ApplyMenuStyle on a dead window for the life of the process. Nothing changes the style between
             // the two, so nothing is missed.
             if (_styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
+            if (_keymap is not null) _keymap.Changed += OnKeymapChanged;
             // Subscribed here for the reason the settings are: a window never shown never raises Closed.
             if (_sessions is not null)
             {
@@ -140,6 +142,10 @@ public partial class SessionWindow : Window, ISessionHost
     /// <summary>The SettingsViewModel this window follows for live style changes, so a data-context swap can
     /// unsubscribe from the old one — the same shape as _bellSource below.</summary>
     private SettingsViewModel? _styleSource;
+
+    /// <summary>The process's keymap, once App has attached it; null for a window built without one, as most
+    /// tests build it, which then composes the profile's default and never changes it.</summary>
+    private KeymapViewModel? _keymap;
 
     /// <summary>The view model whose BellRang this window is subscribed to, so a data-context swap can unsubscribe
     /// from the old one before a bell from it flashes a screen it no longer owns.</summary>
@@ -574,6 +580,29 @@ public partial class SessionWindow : Window, ISessionHost
         Activated += (_, _) => sessions.Activated(own);
     }
 
+    /// <summary>Joins this window to the process's keymap (editable keymap spec §5.2). Called by App once, before
+    /// Show(). The subscription's lifetime is the settings subscription's: taken in Opened (or here, when attached
+    /// after it), released in OnClosed, so the process-wide object never calls into a window that is gone.</summary>
+    internal void AttachKeymap(KeymapViewModel keymap)
+    {
+        if (_keymap is not null) throw new InvalidOperationException("This window already has a keymap.");
+        _keymap = keymap;
+        if (_opened) keymap.Changed += OnKeymapChanged;
+        ApplyKeymap();
+    }
+
+    private void OnKeymapChanged(object? sender, EventArgs e) => ApplyKeymap();
+
+    /// <summary>The map in force for this window: the profile's Backspace choice under the user's keymap.json. Set
+    /// on the screen and on the keypad, whose tooltips follow it (keypad spec §4.4).</summary>
+    private void ApplyKeymap()
+    {
+        var destructive = ViewModel?.Profile.DestructiveBackspace ?? true;
+        var map = _keymap?.Compose(destructive) ?? DefaultKeymap.Create(destructive);
+        Screen.Keymap = map;
+        KeypadPanel.Keymap = map;
+    }
+
     /// <summary>Cmd/Ctrl+K from the screen, and Window &gt; Switch Session... (Task 7).</summary>
     private void ToggleSwitcher()
     {
@@ -746,6 +775,7 @@ public partial class SessionWindow : Window, ISessionHost
         _styleSource = ViewModel?.Settings;
         // Only once the window is open; see the Opened handler for why.
         if (_opened && _styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
+        ApplyKeymap();
     }
 
     private void OnBellRang(object? sender, EventArgs e) => Screen.Flash();
@@ -772,6 +802,8 @@ public partial class SessionWindow : Window, ISessionHost
         _bellSource = null;
         if (_styleSource is not null) _styleSource.PropertyChanged -= OnSettingsChanged;
         _styleSource = null;
+        if (_keymap is not null) _keymap.Changed -= OnKeymapChanged;
+        _keymap = null;
         // Before base.OnClosed raises Closed: App's handler asks ShutdownPolicy with the count of sessions left.
         if (Switcher is { IsOpen: true }) Switcher.Close();
         if (_sessions is not null && _ownEntry is not null)

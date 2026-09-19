@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Text.Json;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.Core.Profiles;
 
@@ -64,21 +65,8 @@ public sealed class TagRegistryStore(string filePath)
     /// <summary>Writes <see cref="TagRegistry.Stored"/>, so the synthesised FAVORITE never reaches the file.</summary>
     public void Save(TagRegistry registry)
     {
-        if (Path.GetDirectoryName(FilePath) is { Length: > 0 } directory) Directory.CreateDirectory(directory);
         var file = new TagRegistryFile([.. registry.Stored.Select(d => new TagEntry(d.Name, d.Color.ToString()))]);
         var json = JsonSerializer.Serialize(file, TagRegistryJsonContext.Default.TagRegistryFile);
-        // Not ".json" beside a directory read for "*.json" anywhere, but the same rule as ProfileStore: a temp
-        // file left by a crash must never be mistaken for the real one.
-        var temp = FilePath + ".tmp";
-        try
-        {
-            File.WriteAllText(temp, json);
-            File.Move(temp, FilePath, overwrite: true);
-        }
-        catch
-        {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch { /* the write already failed; this is cleanup */ }
-            throw;
-        }
+        JsonFiles.Write(FilePath, json);
     }
 }

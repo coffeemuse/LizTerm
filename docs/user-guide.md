@@ -158,7 +158,8 @@ you work in another, such as an operator console. It is not remembered: a new wi
 
 ## Keyboard
 
-The default layout follows Vista TN3270, cross-checked against wc3270. It cannot be changed yet.
+The default layout follows Vista TN3270, cross-checked against wc3270. To change a binding, edit `keymap.json` by
+hand; see [Where LizTerm keeps its files](#where-lizterm-keeps-its-files).
 
 | Key | 3270 key |
 |---|---|
@@ -520,6 +521,31 @@ name; deleting it loses only the colours, because the tag names themselves live 
 colours the next time LizTerm starts. `recent-hosts.json` holds the hosts Quick Connect remembers; deleting it
 empties the drop-down.
 
+`keymap.json` holds your keyboard bindings, only the ones that differ from the table under
+[Keyboard](#keyboard). Each entry is a chord, such as `Ctrl+Home`, `Shift+F1` or `Tap:LeftCtrl`, set to a 3270 key
+name such as `PA1`, to `{"text": "¬"}` for text to type, or to `null` to take that key away:
+
+```json
+{
+  "bindings": {
+    "Ctrl+Home": "PA1",
+    "Alt+2": null
+  }
+}
+```
+
+Key names in a chord are Avalonia's (`Home`, `PageUp`, `D1` for the 1 key, `OemOpenBrackets` for `[`). The 3270 keys
+are `Enter`, `Clear`, `PF1` to `PF24`, `PA1` to `PA3`, `Attn`, `SysReq`, `Reset`, `Tab`, `BackTab`, `Home`, `EraseEof`,
+`EraseInput`, `Delete`, `Backspace`, `Erase`, `Insert`, `Dup`, `FieldMark`, `Newline`, `Up`, `Down`, `Left` and `Right`,
+spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default; a file that
+is not valid JSON (a trailing comma, a comment, the same chord twice) is skipped as a whole, and every default
+applies. LizTerm reads the file once, when the first session window opens, so restart it after editing by hand.
+Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless the file binds `Back`
+itself. The file is not checked against what you type: binding a plain letter takes that key away from typing. The
+platform's Copy, Paste and Select All shortcuts, Find and Switch Session are handled before the keymap, so a binding
+on one of those chords does nothing. Only `Tap:LeftCtrl` and `Tap:RightCtrl` are taps; a tap sends a key or types
+text like any other chord.
+
 ## Known limitations
 
 - **Unsigned Windows builds.** Windows SmartScreen warns about the app the first time you open it; the
@@ -529,7 +555,7 @@ empties the drop-down.
   the pin.
 - **TLS hosts that rely on SNI** (several TLS sites sharing one address) cannot be verified, because the
   underlying x3270 engine does not send a server name ([#12](https://github.com/coffeemuse/LizTerm/issues/12)).
-- **No keymap editing yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)).
+- **No in-app keymap editor yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)): bindings are changed by hand in `keymap.json`; see [Keyboard](#keyboard).
 - **No printer sessions or scripting.**
 - **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). Older mvsMF builds
   are not supported (see [Signing in](#signing-in)). It can't create, rename or delete datasets, submit jobs, or

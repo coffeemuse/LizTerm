@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.Core.Profiles;
 
@@ -118,19 +119,7 @@ public sealed class ProfileStore(string directory)
         System.IO.Directory.CreateDirectory(Directory);
         var json = JsonSerializer.Serialize(profile, ProfileJsonContext.Default.SessionProfile);
         var path = Find(profile.Name, failOnIoError: true)?.FilePath ?? NewFileFor(profile.Name);
-        // Not ".json": LoadAll enumerates *.json, and a temp file left by a crash mid-write must not be read
-        // back as a profile of its own.
-        var temp = path + ".tmp";
-        try
-        {
-            File.WriteAllText(temp, json);
-            File.Move(temp, path, overwrite: true);
-        }
-        catch
-        {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch { /* the write already failed; this is cleanup */ }
-            throw;
-        }
+        JsonFiles.Write(path, json);
     }
 
     /// <summary>Deletes the file holding that name (see <see cref="Find"/>), or nothing when no file does.</summary>

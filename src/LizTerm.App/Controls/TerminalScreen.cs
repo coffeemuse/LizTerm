@@ -25,10 +25,11 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<ScreenSnapshot?> SnapshotProperty =
         AvaloniaProperty.Register<TerminalScreen, ScreenSnapshot?>(nameof(Snapshot));
 
-    /// <summary>Mirrors the profile's DestructiveBackspace choice; the window binds it. True (erase) by default,
-    /// like a new profile (spec 3.2).</summary>
-    public static readonly StyledProperty<bool> DestructiveBackspaceProperty =
-        AvaloniaProperty.Register<TerminalScreen, bool>(nameof(DestructiveBackspace), defaultValue: true);
+    /// <summary>The table in force. The window composes it from the profile's Backspace choice and the user's
+    /// keymap.json (#18) and sets it here, on open and on every change; a screen shown on its own (the tests) has
+    /// the erasing default, which is what it always had.</summary>
+    public static readonly StyledProperty<Keymap> KeymapProperty =
+        AvaloniaProperty.Register<TerminalScreen, Keymap>(nameof(Keymap), DefaultKeymap.Create(destructiveBackspace: true));
 
     /// <summary>The mouse selection, or null. Two-way by default so the window can bind it to the view model,
     /// which clears it whenever input is sent to the host.</summary>
@@ -68,7 +69,6 @@ public sealed class TerminalScreen : Control
     private readonly SelectionGesture _gesture = new();
     private readonly ModifierTapDetector _taps = new();
     private WindowBase? _window;
-    private Keymap Keymap => DefaultKeymap.Create(DestructiveBackspace);
     private double _advancePerEm;
     private double _lineHeightPerEm;
 
@@ -173,10 +173,10 @@ public sealed class TerminalScreen : Control
         set => SetValue(SnapshotProperty, value);
     }
 
-    public bool DestructiveBackspace
+    public Keymap Keymap
     {
-        get => GetValue(DestructiveBackspaceProperty);
-        set => SetValue(DestructiveBackspaceProperty, value);
+        get => GetValue(KeymapProperty);
+        set => SetValue(KeymapProperty, value);
     }
 
     public ScreenRegion? Selection
@@ -278,11 +278,21 @@ public sealed class TerminalScreen : Control
     /// <summary>A Ctrl key released alone is a tap chord (Right Ctrl is Enter, Left Ctrl is Reset by default).</summary>
     protected override void OnKeyUp(KeyEventArgs e)
     {
-        if (_taps.KeyUp(e.Key) is { } tapped && Keymap.TryMap(KeyChord.TapOf(tapped), out var key))
+        if (_taps.KeyUp(e.Key) is { } tapped)
         {
-            KeyRequested?.Invoke(this, key);
-            e.Handled = true;
-            return;
+            var chord = KeyChord.TapOf(tapped);
+            if (Keymap.TryMap(chord, out var key))
+            {
+                KeyRequested?.Invoke(this, key);
+                e.Handled = true;
+                return;
+            }
+            if (Keymap.TryText(chord, out var text))
+            {
+                TextEntered?.Invoke(this, text);
+                e.Handled = true;
+                return;
+            }
         }
         base.OnKeyUp(e);
     }
@@ -312,33 +322,22 @@ public sealed class TerminalScreen : Control
 
     private bool TryHandlePlatformGesture(KeyEventArgs e)
     {
-        var hotkeys = this.GetPlatformSettings()?.HotkeyConfiguration;
-        if (Matches(hotkeys?.Copy, e, Key.C)) { CopyRequested?.Invoke(this, EventArgs.Empty); return true; }
-        if (Matches(hotkeys?.Paste, e, Key.V)) { PasteRequested?.Invoke(this, EventArgs.Empty); return true; }
-        if (Matches(hotkeys?.SelectAll, e, Key.A)) { SelectAllRequested?.Invoke(this, EventArgs.Empty); return true; }
-
-        // PlatformHotkeyConfiguration carries no Find, so this one is built rather than read. CommandModifiers
-        // still supplies Cmd on macOS and Ctrl elsewhere, so nothing here is hardcoded per platform.
-        if (e.Key == Key.F && e.KeyModifiers == (hotkeys?.CommandModifiers ?? KeyModifiers.Control))
+        // The same classification the keymap policy refuses chords by: the platform's gestures when available
+        // (Cmd on macOS, Ctrl elsewhere), Ctrl+key as the fallback, and Find and Switch Session built from
+        // CommandModifiers because PlatformHotkeyConfiguration carries neither.
+        var hotkeys = PlatformHotkeys.From(this.GetPlatformSettings()?.HotkeyConfiguration);
+        var (raise, handled) = hotkeys.Classify(e.Key, e.KeyModifiers) switch
         {
-            FindRequested?.Invoke(this, EventArgs.Empty);
-            return true;
-        }
-
-        // The switcher's chord, built the same way as Find's.
-        if (e.Key == Key.K && e.KeyModifiers == (hotkeys?.CommandModifiers ?? KeyModifiers.Control))
-        {
-            SwitcherRequested?.Invoke(this, EventArgs.Empty);
-            return true;
-        }
-        return false;
+            ReservedGesture.Copy => (CopyRequested, true),
+            ReservedGesture.Paste => (PasteRequested, true),
+            ReservedGesture.SelectAll => (SelectAllRequested, true),
+            ReservedGesture.Find => (FindRequested, true),
+            ReservedGesture.SwitchSession => (SwitcherRequested, true),
+            _ => ((EventHandler?)null, false),
+        };
+        raise?.Invoke(this, EventArgs.Empty);
+        return handled;
     }
-
-    /// <summary>The platform's gestures when available (Cmd on macOS, Ctrl elsewhere); Ctrl+key as the fallback.</summary>
-    private static bool Matches(List<KeyGesture>? gestures, KeyEventArgs e, Key fallbackKey) =>
-        gestures is { Count: > 0 }
-            ? gestures.Any(gesture => gesture.Matches(e))
-            : e.Key == fallbackKey && e.KeyModifiers == KeyModifiers.Control;
 
     protected override void OnTextInput(TextInputEventArgs e)
     {

@@ -26,8 +26,9 @@ public partial class Keypad : UserControl
     public static readonly StyledProperty<bool> ShowPfKeysProperty =
         AvaloniaProperty.Register<Keypad, bool>(nameof(ShowPfKeys), true);
 
-    /// <summary>The table the tooltips describe. Defaults to the built-in keymap; nothing binds it yet, since no
-    /// keypad key depends on the one thing that varies the default (the backspace choice). The hook for #18.</summary>
+    /// <summary>The table the tooltips describe. Defaults to the built-in keymap; SessionWindow sets it to the
+    /// window's composed map (the profile's Backspace choice under the user's keymap.json, #18) on open and on
+    /// every change.</summary>
     public static readonly StyledProperty<Keymap> KeymapProperty =
         AvaloniaProperty.Register<Keypad, Keymap>(nameof(Keymap), DefaultKeymap.Create(destructiveBackspace: true));
 

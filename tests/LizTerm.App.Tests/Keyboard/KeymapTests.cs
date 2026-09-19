@@ -118,4 +118,15 @@ public class KeymapTests
         Assert.True(Map.TryMap(new KeyChord(Key.Escape), out var original));
         Assert.Equal(TerminalKey.Attn, original);
     }
+
+    [Fact]
+    public void Without_removes_a_chord_from_both_tables()
+    {
+        var map = Map.Without([new KeyChord(Key.Home, KeyModifiers.Control), new KeyChord(Key.OemOpenBrackets, KeyModifiers.Control)]);
+
+        Assert.False(map.TryMap(new KeyChord(Key.Home, KeyModifiers.Control), out _));
+        Assert.False(map.TryText(new KeyChord(Key.OemOpenBrackets, KeyModifiers.Control), out _));
+        Assert.True(map.TryMap(new KeyChord(Key.D2, KeyModifiers.Alt), out var pa2));
+        Assert.Equal(TerminalKey.PA2, pa2);
+    }
 }

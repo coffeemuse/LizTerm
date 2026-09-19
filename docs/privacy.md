@@ -33,6 +33,7 @@ Everything lives under one root — `AppPaths.ConfigRoot()`, which is
 | Settings | `settings.json` | Preferences only | default |
 | Tags | `tags.json` | Tag names and colours | default |
 | Recent hosts | `recent-hosts.json` | Hosts typed into Quick Connect | default |
+| Keymap | `keymap.json` | Keyboard bindings | default |
 | CA file | temp, per session | Public certificates | `0600` |
 
 **LizTerm never writes a password anywhere.** The only one it handles is the mvsMF REST sign-in: `SignInHolder`
@@ -97,7 +98,7 @@ So field-based redaction would protect the case that is already half-safe, and m
 
 ## Known gaps
 
-- **`profiles/`, `settings.json`, `tags.json` and `recent-hosts.json` are created with default permissions**
+- **`profiles/`, `settings.json`, `tags.json`, `recent-hosts.json` and `keymap.json` are created with default permissions**
   (`0755` directories, `0644` files). They hold no passwords, but they do hold host names, LU names, userids and
   notes. Lower severity than a wire log, and not yet fixed — `AppPaths.EnsureDirectory` is there to build on.
 - **A password echoed into a *visible* field is in the inbound screen lines**, and no redaction reaches it
