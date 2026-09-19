@@ -117,7 +117,7 @@ public sealed class MvsmfFileService : IHostFileService
             throw new HostFileException(HostFileErrorKind.InvalidRequest, error);
         var what = dataset.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        var query = request.NamePattern is { } given ? $"?pattern={EscapeName(given.Trim().ToUpperInvariant())}" : "";
+        var query = request.NamePattern is { } given ? $"?pattern={EscapeQueryValue(given.Trim().ToUpperInvariant())}" : "";
         query += Start(request, query.Length == 0 ? "?" : "&");
         using var response = await SendAsync(
             () => ListRequest(DatasetPath(dataset) + "/member" + query, request, attributes: false), what, idle, cancellationToken);
@@ -129,8 +129,25 @@ public sealed class MvsmfFileService : IHostFileService
 
     /// <summary>A continued page names the entry it follows. <c>start=</c> is inclusive on mvsMF and z/OSMF alike,
     /// so the page asks for one item more than its size and <see cref="Page"/> drops the repeat.</summary>
+    // mvsMF-compat: paging — start= is inclusive, so ListRequest asks for one more than the page and Page drops the
+    // repeat, or cuts the page to size when that name is gone.
     private static string Start(HostListRequest request, string separator) =>
-        request.Continuation is { } after ? $"{separator}start={EscapeName(after)}" : "";
+        request.Continuation is { } after ? $"{separator}start={EscapeQueryValue(after)}" : "";
+
+    /// <summary>A query value the host must read back exactly: a pattern, or a continuation that is whatever name
+    /// the host last answered, checked by nobody. Everything a query cannot carry raw is percent-encoded; <c>*</c>
+    /// stays, since it is the pattern wildcard and the host takes it as it is.</summary>
+    private static string EscapeQueryValue(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var b in Encoding.UTF8.GetBytes(value))
+        {
+            var c = (char)b;
+            if (char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_' or '~' or '*' or '$' or '@') builder.Append(c);
+            else builder.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
+        }
+        return builder.ToString();
+    }
 
     private HttpRequestMessage ListRequest(string relative, HostListRequest request, bool attributes)
     {

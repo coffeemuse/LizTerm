@@ -50,7 +50,7 @@ public class MvsmfListTests
     }
 
     [Fact]
-    public async Task A_dataset_page_carries_the_limit_and_the_next_page_starts_after_its_last_name()
+    public async Task Paging_so_a_continued_page_asks_for_one_more_and_drops_the_repeat()
     {
         var handler = new RecordedHandler().Then("login-200")
             .Then(HttpStatusCode.OK, """{"items":[{"dsname":"A.B"},{"dsname":"A.C"}],"returnedRows":2,"moreRows":true}""")
@@ -77,6 +77,18 @@ public class MvsmfListTests
         Assert.Equal(new[] { "A.F" }, third.Entries.Select(e => e.Name));
         Assert.True(third.IsComplete);
         Assert.Equal("/zosmf/restfiles/ds?dslevel=A.**&start=A.E", handler.Requests[3].Uri.PathAndQuery);
+    }
+
+    [Fact]
+    public async Task A_continuation_the_host_answered_goes_back_with_everything_a_query_cannot_carry_escaped()
+    {
+        var handler = new RecordedHandler().Then("login-200").Then(HttpStatusCode.OK, """{"items":[{"member":"A&B C"},{"member":"AB#"}],"returnedRows":2}""");
+        using var service = Service(handler);
+
+        var page = await service.ListMembersAsync(HostPath.ForDataset("SYS1.LINKLIB"), new HostListRequest(MaxItems: 2, Continuation: "A&B C", NamePattern: "A*"), TestContext.Current.CancellationToken);
+
+        Assert.Equal("/zosmf/restfiles/ds/SYS1.LINKLIB/member?pattern=A*&start=A%26B%20C", handler.Requests[1].Uri.PathAndQuery);
+        Assert.Equal(new[] { "AB#" }, page.Entries.Select(e => e.Name));
     }
 
     [Fact]

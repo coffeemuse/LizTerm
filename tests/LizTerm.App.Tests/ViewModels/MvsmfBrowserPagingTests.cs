@@ -110,6 +110,37 @@ public class MvsmfBrowserPagingTests
     }
 
     [Fact]
+    public async Task A_member_filter_on_a_complete_list_reads_wildcards_as_the_host_would()
+    {
+        var t = Paged();
+        await t.ChooseAsync("MVSCE02.LOAD");
+        var requests = t.Host.ListRequests.Count;
+
+        await t.FilterMembersAsync("pr*");
+        Assert.Equal(new[] { "PROG" }, t.Vm.VisibleMembers.Select(m => m.Name));
+        await t.FilterMembersAsync("p%g");
+        Assert.Empty(t.Vm.VisibleMembers);
+        await t.FilterMembersAsync("p%%g");
+        Assert.Equal(new[] { "PROG" }, t.Vm.VisibleMembers.Select(m => m.Name));
+
+        Assert.Equal(requests, t.Host.ListRequests.Count);
+    }
+
+    [Fact]
+    public async Task Load_more_continues_past_a_last_member_the_host_has_lost_meanwhile()
+    {
+        var t = Paged();
+        await t.ChooseAsync("MVSCE02.BIG");
+        Assert.Equal(new[] { "ALLOC", "COMPILE" }, t.Vm.Members.Select(m => m.Name));
+        t.Host.Members["MVSCE02.BIG"].Remove("COMPILE");
+
+        await t.LoadMoreMembersAsync();
+
+        Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO", "LINK" }, t.Vm.Members.Select(m => m.Name));
+        Assert.True(t.Vm.HasMoreMembers);
+    }
+
+    [Fact]
     public async Task A_member_filter_on_a_partial_list_is_the_hosts_work()
     {
         var t = Paged();
@@ -126,7 +157,7 @@ public class MvsmfBrowserPagingTests
         Assert.Equal(new HostListRequest(MaxItems: 2, Continuation: "COMPILE", NamePattern: "*L*"), t.Host.ListRequests[^1]);
         Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO", "LINK" }, t.Vm.VisibleMembers.Select(m => m.Name));
         Assert.False(t.Vm.HasMoreMembers);
-        Assert.Equal("MVSCE02.BIG · 4 members", t.Vm.MembersHeader);
+        Assert.Equal("MVSCE02.BIG · 4 matching", t.Vm.MembersHeader);
 
         await t.FilterMembersAsync("");
 

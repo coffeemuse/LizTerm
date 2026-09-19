@@ -63,7 +63,7 @@ Entries marked *log only* change nothing in the code.
   unless `X-IBM-Attributes: base` is sent.
 - **LizTerm:** sends `X-IBM-Attributes: base` on every dataset list, which mvsMF ignores and z/OSMF needs.
 
-### `paging` (log only)
+### `paging`
 
 - **Docs and source:** `X-IBM-Max-Items` caps a page and `start` names its first entry, **inclusive**, on the
   dataset list and the member list; a partial page carries `moreRows: true` and a complete one no `moreRows` at
@@ -171,7 +171,7 @@ Entries the 1.0.0-dev baseline needed and 1.1.0 does not. Each code entry was re
   `LtpaToken2` cookie, and sends it (never `Authorization`) on every request; the tag is gone from the code.
 - `no-www-authenticate`: a 401 now carries `WWW-Authenticate`.
 - `dataset-list-morerows-false`: `moreRows` is now absent on a complete list, as the source says. The refusal of a
-  `moreRows: true` on a list asked for whole stays as plain code (`paging`).
+  `moreRows: true` on a list asked for whole stays, under `paging`.
 - `member-list-ignores-max-items`, `dataset-list-ignores-start` and, on 2026-09-18 once the browser paged, the
   `no-paging` entry that merged them: the host honours `start` and `X-IBM-Max-Items`, and LizTerm uses them
   (`paging`).

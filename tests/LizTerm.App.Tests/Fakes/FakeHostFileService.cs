@@ -160,8 +160,9 @@ public sealed class FakeHostFileService : IHostFileService
 
     public void Dispose() => Disposed = true;
 
-    /// <summary>Pages the way a host does: the pattern narrows, the continuation (the last name of the page before)
-    /// skips, and the limit cuts, with the last name handed back while anything is left.</summary>
+    /// <summary>Pages the way the backend over a host does: the pattern narrows, the continuation (the last name of
+    /// the page before) skips past that name, or resumes at the next one when it has gone meanwhile, and the limit
+    /// cuts, with the last name handed back while anything is left.</summary>
     private HostFileListing PageOf(IEnumerable<HostFileEntry> all, HostListRequest request)
     {
         ListRequests.Add(request);
@@ -171,7 +172,11 @@ public sealed class FakeHostFileService : IHostFileService
             var regex = new Regex("^" + Regex.Escape(pattern.ToUpperInvariant()).Replace("\\*", ".*").Replace("%", ".") + "$");
             list = list.Where(e => regex.IsMatch(e.Name)).ToList();
         }
-        if (request.Continuation is { } after) list = list.SkipWhile(e => e.Name != after).Skip(1).ToList();
+        if (request.Continuation is { } after)
+        {
+            var at = list.FindIndex(e => e.Name == after);
+            list = at >= 0 ? list.Skip(at + 1).ToList() : list.SkipWhile(e => string.CompareOrdinal(e.Name, after) < 0).ToList();
+        }
         if (request.MaxItems > 0 && list.Count > request.MaxItems)
             return new HostFileListing(list.Take(request.MaxItems).ToList(), list[request.MaxItems - 1].Name);
         return new HostFileListing(list, null);

@@ -63,8 +63,9 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   and `Binary` hold contents keyed by `HostPath.ToString()`. `Calls` records `list:<pattern>`, `members:<dsn>`,
   `readtext:<path>`, `readbinary:<path>`, `writetext:<path>:<lines>`, `writebinary:<path>`, `delete:<path>`,
   `info` and `signout`; a `Failures` entry under the same key, without the line count, makes that call throw.
-  `ListRequests` keeps each list call's `HostListRequest`, and the fake pages the way a host does (the pattern
-  narrows, the continuation is the last name of the page before, the limit cuts). `StoreTransform`
+  `ListRequests` keeps each list call's `HostListRequest`, and the fake pages the way the backend does over a host
+  (the pattern narrows, the continuation is the last name of the page before and resumes at the next name when
+  that one has gone, the limit cuts). `StoreTransform`
   ((path, lines) → what is stored) plays a host that alters what a text write keeps, for a read-back that differs.
   `Gate` holds every call after it is logged (a call still honours its token), `MaxConcurrent` is the most calls seen running at
   once, and `Disposed` says whether the service was released. The operations take a lock the test cannot: seed

@@ -26,6 +26,8 @@ public sealed partial class MvsmfBrowserViewModel
     /// <summary>True once an unfiltered member listing came back complete: the filter can then narrow it here.</summary>
     private bool _allMembersLoaded;
     private CancellationTokenSource? _filterDebounce;
+    private readonly object _idleLock = new();
+    private TaskCompletionSource? _idle;
 
     [ObservableProperty] private bool _hasMoreDatasets;
 
@@ -84,10 +86,13 @@ public sealed partial class MvsmfBrowserViewModel
     /// filter is typed, the first page of the host's matches instead.</summary>
     private async Task LoadMembersCoreAsync(DatasetRow row, CancellationToken token)
     {
-        _allMembersLoaded = false;
         await LoadMemberPageAsync(row, null, token);
         if (ReferenceEquals(SelectedDataset, row) && !_allMembersLoaded && TryHostPattern(out var pattern) && pattern is not null)
+        {
+            // A keystroke that arrived during the first page is applied here; its own listing would only repeat this one.
+            CancelHostFilter();
             await LoadMemberPageAsync(row, pattern, token);
+        }
     }
 
     private async Task LoadMemberPageAsync(DatasetRow row, string? pattern, CancellationToken token)
@@ -162,7 +167,7 @@ public sealed partial class MvsmfBrowserViewModel
         try
         {
             await Task.Delay(FilterDelay, debounce.Token);
-            while (IsBusy) await Task.Delay(25, debounce.Token);
+            if (WhenIdle() is { } idle) await idle.WaitAsync(debounce.Token);
         }
         catch (OperationCanceledException)
         {
@@ -174,6 +179,28 @@ public sealed partial class MvsmfBrowserViewModel
         }
         if (_disposed || SelectedDataset is not { IsPartitioned: true } row || _allMembersLoaded) return;
         if (!TryHostPattern(out var pattern)) return;
+        // The operation waited out may have listed this very pattern (a dataset's own load applies the filter).
+        if (pattern == _memberPattern) return;
         await RunExclusiveAsync(token => LoadMemberPageAsync(row, pattern, token), () => LoadMembersAsync(SelectedDataset));
+    }
+
+    /// <summary>Null while nothing runs; otherwise a task that completes when the running operation ends, so a
+    /// waiting filter never polls.</summary>
+    private Task? WhenIdle()
+    {
+        lock (_idleLock)
+        {
+            if (!IsBusy) return null;
+            return (_idle ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+        }
+    }
+
+    private void SignalIdle()
+    {
+        lock (_idleLock)
+        {
+            _idle?.TrySetResult();
+            _idle = null;
+        }
     }
 }

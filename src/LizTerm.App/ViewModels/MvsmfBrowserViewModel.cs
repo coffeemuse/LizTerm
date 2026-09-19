@@ -108,7 +108,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         : "Choose a dataset on the left.";
 
     public string MembersHeader => SelectedDataset is { IsPartitioned: true } dataset
-        ? $"{dataset.Name} · {Plural(Members.Count, "member")}{(HasMoreMembers ? " shown, more on the host" : "")}"
+        ? $"{dataset.Name} · {(_memberPattern is null ? Plural(Members.Count, "member") : $"{Members.Count} matching")}{(HasMoreMembers ? " shown, more on the host" : "")}"
         : "";
 
     /// <summary>Binary transfers to fixed-length records are padded to whole records (compatibility log,
@@ -147,7 +147,11 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         else ScheduleHostFilter();
     }
 
-    partial void OnIsBusyChanged(bool value) => NotifyCommands();
+    partial void OnIsBusyChanged(bool value)
+    {
+        NotifyCommands();
+        if (!value) SignalIdle();
+    }
 
     /// <summary>Off while a review is open: a listing clears the chosen dataset the review belongs to.</summary>
     [RelayCommand(CanExecute = nameof(CanChooseDataset))]
@@ -187,20 +191,22 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         VisibleMembers.Clear();
         _memberContinuation = null;
         _memberPattern = null;
+        _allMembersLoaded = false;
         HasMoreMembers = false;
         SetSelectedMembers([]);
         OnPropertyChanged(nameof(MembersHeader));
     }
 
-    /// <summary>The filter narrows the rows here only while the whole library is loaded; otherwise the host has
-    /// already applied it and every loaded member is a match.</summary>
+    /// <summary>The filter narrows the rows here only while the whole library is loaded, read as the host would read
+    /// it (<c>*TEXT*</c>, with its wildcards); otherwise the host has already applied it and every loaded member is
+    /// a match.</summary>
     private void RefreshVisibleMembers()
     {
         VisibleMembers.Clear();
-        var filter = _allMembersLoaded ? MemberFilter.Trim() : "";
+        var pattern = _allMembersLoaded && MemberFilter.Trim() is { Length: > 0 } text ? $"*{text}*" : null;
         foreach (var member in Members)
         {
-            if (filter.Length == 0 || member.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) VisibleMembers.Add(member);
+            if (pattern is null || HostPath.MemberPatternMatches(pattern, member.Name)) VisibleMembers.Add(member);
         }
     }
 

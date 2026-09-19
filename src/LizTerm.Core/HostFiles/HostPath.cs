@@ -2,6 +2,8 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Text.RegularExpressions;
+
 namespace LizTerm.Core.HostFiles;
 
 public enum HostPathKind { Dataset, Member }
@@ -126,6 +128,15 @@ public sealed record HostPath
                 return $"A member filter cannot contain '{c}'.";
         }
         return null;
+    }
+
+    /// <summary>Whether <paramref name="name"/> matches <paramref name="pattern"/> the way the host reads a member
+    /// pattern (<c>*</c> any run of characters, <c>%</c> exactly one), case and surrounding blanks ignored, so a
+    /// filter applied here means the same as one sent to the host.</summary>
+    public static bool MemberPatternMatches(string pattern, string name)
+    {
+        var regex = "^" + Regex.Escape(Fold(pattern)).Replace("\\*", ".*").Replace("%", ".") + "$";
+        return Regex.IsMatch(Fold(name), regex);
     }
 
     public override string ToString() => Member is null ? Dataset : $"{Dataset}({Member})";
