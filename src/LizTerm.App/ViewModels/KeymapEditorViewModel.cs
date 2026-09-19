@@ -3,7 +3,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LizTerm.App.Keyboard;
 using LizTerm.Core.Session;
 
@@ -41,13 +44,51 @@ public sealed class KeymapEditorViewModel : ObservableObject, IDisposable
         Rows = new ObservableCollection<KeymapRow>(Order.Select(key => NewRow(new KeymapAction.SendKey(key))));
         AddNewTextRows();
         keymap.Changed += OnKeymapChanged;
+        ResetCommand = new RelayCommand(keymap.ResetToDefaults);
+        keymap.PropertyChanged += OnKeymapPropertyChanged;
     }
 
     public ObservableCollection<KeymapRow> Rows { get; }
 
-    public void Dispose() => _keymap.Changed -= OnKeymapChanged;
+    public ICommand ResetCommand { get; }
+
+    /// <summary>The last save's failure, the same message every session window's banner shows.</summary>
+    public string? SaveError => _keymap.LastSaveError;
+    public bool HasSaveError => SaveError is not null;
+
+    public bool HasUnreadable => _keymap.UnreadableEntries > 0;
+
+    /// <summary>What the tab tells someone whose keymap.json holds entries this build skipped: they are safe, and
+    /// Reset is what discards them.</summary>
+    public string? UnreadableNote => _keymap.UnreadableEntries switch
+    {
+        0 => null,
+        1 => "1 entry in keymap.json could not be read. It is kept as written, and Reset to defaults removes it.",
+        var n => $"{n} entries in keymap.json could not be read. They are kept as written, and Reset to defaults removes them.",
+    };
+
+    public void Dispose()
+    {
+        _keymap.Changed -= OnKeymapChanged;
+        _keymap.PropertyChanged -= OnKeymapPropertyChanged;
+    }
 
     private KeymapRow NewRow(KeymapAction target) => new(target, _keymap, _hotkeys, _format);
+
+    private void OnKeymapPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(KeymapViewModel.LastSaveError):
+                OnPropertyChanged(nameof(SaveError));
+                OnPropertyChanged(nameof(HasSaveError));
+                break;
+            case nameof(KeymapViewModel.UnreadableEntries):
+                OnPropertyChanged(nameof(UnreadableNote));
+                OnPropertyChanged(nameof(HasUnreadable));
+                break;
+        }
+    }
 
     private void OnKeymapChanged(object? sender, EventArgs e)
     {
