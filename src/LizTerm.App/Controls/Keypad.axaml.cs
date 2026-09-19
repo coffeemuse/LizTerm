@@ -147,7 +147,7 @@ public partial class Keypad : UserControl
     /// keymap is reversed once for all 36 buttons rather than once per button.</summary>
     private void Describe(Keymap keymap)
     {
-        var chords = keymap.Keys.ToLookup(pair => pair.Value, pair => pair.Key);
+        var chords = KeymapHints.ByKey(keymap);
         foreach (var button in _banks.SelectMany(bank => bank))
         {
             ToolTip.SetTip(button, KeymapHints.Describe(chords[(TerminalKey)button.Tag!]));

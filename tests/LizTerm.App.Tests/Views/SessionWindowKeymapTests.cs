@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.VisualTree;
 using LizTerm.App.Controls;
 using LizTerm.App.Keyboard;
+using LizTerm.App.Menus;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -21,14 +22,15 @@ namespace LizTerm.App.Tests.Views;
 /// keymap and pushes it to the screen and the keypad, on open and on every change.</summary>
 public class SessionWindowKeymapTests
 {
-    private static (SessionWindow Window, FakeEmulatorSession Session, TerminalScreen Screen) Show(bool destructiveBackspace, KeymapViewModel? keymap)
+    private static (SessionWindow Window, FakeEmulatorSession Session, TerminalScreen Screen) Show(
+        bool destructiveBackspace, KeymapViewModel? keymap, bool isMacOS = false)
     {
         var session = new FakeEmulatorSession
         {
             Profile = new SessionProfile { Name = "TSO", Host = "tk5.local", Port = 3270, DestructiveBackspace = destructiveBackspace },
         };
         var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard());
-        var window = new SessionWindow(MenuStyle.InWindow, isMacOS: false) { DataContext = vm };
+        var window = new SessionWindow(MenuStyle.InWindow, isMacOS) { DataContext = vm };
         if (keymap is not null) window.AttachKeymap(keymap);
         window.Show();
         var screen = window.FindControl<TerminalScreen>("Screen")!;
@@ -42,12 +44,8 @@ public class SessionWindowKeymapTests
         return window.FindControl<Keypad>("KeypadPanel")!.GetVisualDescendants().OfType<Button>().First(b => Equals(b.Tag, key));
     }
 
-    /// <summary>A Keys item by the key it sends, never by header: the header carries the keystroke hint and follows
-    /// the keymap. This window is InWindow (see Show above), so ApplyMenuStyle has already removed the top-level
-    /// "_Keys" native item from NativeMenu.GetMenu(window).Items by the time a test can look — the same emptying
-    /// A_style_change_on_an_open_window_empties_and_refills_the_same_native_menu asserts with Assert.Empty — and a
-    /// fresh MenuLookup search from out here can no longer reach it. SessionWindow.KeysRow is the seam that still
-    /// can, because it is the reference CaptureKeysRows captured before the stash.</summary>
+    /// <summary>A Keys item by the key it sends, never by header, through the seam that reaches a native item
+    /// stashed under InWindow (the menu notes in src/LizTerm.App/CLAUDE.md say why a MenuLookup cannot).</summary>
     private static (NativeMenuItem Native, MenuItem Classic) KeysItems(SessionWindow window, TerminalKey key) => window.KeysRow(key);
 
     [AvaloniaFact]
@@ -134,6 +132,26 @@ public class SessionWindowKeymapTests
         Assert.Equal(native.Header, classic.Header as string);
         Assert.Null(native.Gesture);
         Assert.Null(classic.InputGesture);
+    }
+
+    /// <summary>The other half of the InWindow guarantee: a rebind made while the native items were stashed is what
+    /// the exported menu shows once a style change puts them back, read through the menu root as the platform
+    /// would, not through the seam.</summary>
+    [AvaloniaFact]
+    public void A_rebind_made_under_InWindow_is_on_the_exported_Keys_menu_after_a_switch_to_Native()
+    {
+        var keymap = new KeymapViewModel();
+        var (window, _, screen) = Show(destructiveBackspace: true, keymap, isMacOS: true);
+        Assert.Empty(NativeMenu.GetMenu(window)!.Items);
+        keymap.Bind(new KeyChord(Key.F9, KeyModifiers.Alt), new KeymapAction.SendKey(TerminalKey.PA1));
+
+        ((SessionViewModel)window.DataContext!).Settings.MenuStyle = MenuStyle.Native;
+
+        var exported = MenuLookup.Item(NativeMenu.GetMenu(window), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
+            .Single(item => Equals(item.CommandParameter, TerminalKey.PA1));
+        Assert.Equal("PA1  " + KeymapHints.Describe(screen.Keymap, TerminalKey.PA1), exported.Header);
+        Assert.Contains("F9", exported.Header);
+        Assert.Null(exported.Gesture);
     }
 
     /// <summary>A key the user has taken every chord away from keeps its bare name, on both menus, and gets its hint

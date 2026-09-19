@@ -441,9 +441,10 @@ one. The in-window Edit > Preferences... *names* the same chord on macOS through
 handler, and it works under every style because the application menu is there under every style. The exported Edit >
 Preferences... is hidden on macOS and carries no `Gesture`, so it installs no second key equivalent.
 
-The Keys items show their keystrokes in **header text**, `PA2  Alt+2 or Ctrl+Home` (#23): `Menus/KeysMenuHints.Header`
-joins the declared name and `KeymapHints.Describe`'s line, and `SessionWindow.ApplyKeymap` writes it onto the native
-item and the classic item together, from the rows `CaptureKeysRows` paired at construction, on every keymap change.
+The Keys items show their keystrokes in **header text**, `PA2  Alt+2 or Ctrl+Home` (#23): `KeymapHints.Label` joins
+the declared name and `KeymapHints.Describe`'s line over `KeymapHints.ByKey`, the one reversal of the keymap the
+keypad reads too, and `SessionWindow.ApplyKeymap` writes it onto the native item and the classic item together, from
+the rows `CaptureKeysRows` paired at construction, on every keymap change.
 Never a `Gesture` (a key equivalent that steals the keystroke from the screen), and never a classic `InputGesture`
 either: the two menus would then differ, and the parity walk would fail, correctly. A null format is the platform's
 wording, the keypad tooltips' own, so on macOS the hint is glyphs. Tests find a Keys item by the key it sends, never

@@ -107,8 +107,6 @@ public partial class SessionWindow : Window, ISessionHost
             ShowPlatformGestures();
             Screen.Focus();
         };
-        // The headers are never bare: the default keymap until a data context or an attached keymap composes another.
-        ApplyKeymap();
     }
 
     private MenuStyle _menuStyle;
@@ -612,10 +610,10 @@ public partial class SessionWindow : Window, ISessionHost
         var map = _keymap?.Compose(destructive) ?? DefaultKeymap.Create(destructive);
         Screen.Keymap = map;
         KeypadPanel.Keymap = map;
-        var chords = map.Keys.ToLookup(pair => pair.Value, pair => pair.Key);
+        var chords = KeymapHints.ByKey(map);
         foreach (var (native, classic, name, key) in _keysRows)
         {
-            var header = KeysMenuHints.Header(name, chords[key]);
+            var header = KeymapHints.Label(name, chords[key]);
             native.Header = header;
             classic.Header = header;
         }
@@ -718,20 +716,21 @@ public partial class SessionWindow : Window, ISessionHost
             throw new InvalidOperationException($"The native Keys menu declares {native.Count} items and the classic one {classic.Count}.");
         foreach (var (nativeItem, classicItem) in native.Zip(classic))
         {
-            var key = (TerminalKey)nativeItem.CommandParameter!;
+            if (nativeItem.CommandParameter is not TerminalKey key)
+                throw new InvalidOperationException($"Keys > {nativeItem.Header} sends no TerminalKey.");
             if (!Equals(classicItem.CommandParameter, key))
                 throw new InvalidOperationException($"Keys > {nativeItem.Header} sends {key} natively and {classicItem.CommandParameter} in the window.");
             _keysRows.Add((nativeItem, classicItem, nativeItem.Header!, key));
         }
     }
 
-    /// <summary>Test seam (#23): the Keys menu's captured native/classic pair for the key it sends. Under InWindow,
-    /// ApplyMenuStyle removes the top-level "_Keys" item from NativeMenu.GetMenu(this).Items entirely (Assert.Empty
-    /// in A_style_change_on_an_open_window_empties_and_refills_the_same_native_menu shows the same emptying), so a
-    /// fresh MenuLookup search from outside the window can no longer reach it once construction has run — only the
-    /// reference CaptureKeysRows captured before the stash still can. _keysRows is where that reference lives.</summary>
-    internal (NativeMenuItem Native, MenuItem Classic) KeysRow(TerminalKey key) =>
-        _keysRows.Where(row => row.Key == key).Select(row => (row.Native, row.Classic)).Single();
+    /// <summary>Test seam (#23): the captured pair for the key it sends, reachable under InWindow where a MenuLookup
+    /// from the menu root is not (the menu notes in CLAUDE.md say why).</summary>
+    internal (NativeMenuItem Native, MenuItem Classic) KeysRow(TerminalKey key)
+    {
+        var row = _keysRows.Single(row => row.Key == key);
+        return (row.Native, row.Classic);
+    }
 
     /// <summary>Brings the session, then puts every mark back: both renderers write IsChecked before the click
     /// arrives, and bringing the session that is already current raises no Changed to rebuild them (Keys &gt;
