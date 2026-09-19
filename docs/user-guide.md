@@ -215,6 +215,9 @@ some keyboards type characters such as @. Everything else can be bound, Escape a
 Backspace follows the profile's Backspace setting until you bind it here. The two Backspace rows are the two things
 it can do: erase the character to the left, or move the cursor left.
 
+The last rows, **Type ¬** and **Type ¢**, are the keys that type a character rather than send a 3270 key. You can move
+or remove their keys the same way, and a text binding added by hand to `keymap.json` gets a row of its own.
+
 ## Mouse, selection and clipboard
 
 - Click to move the cursor.

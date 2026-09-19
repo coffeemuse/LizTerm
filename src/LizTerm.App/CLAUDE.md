@@ -169,7 +169,9 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `SettingsViewModel` explicitly, `ShowPreferences(SettingsViewModel)`'s shape, so tests never touch the network or
   the real settings file.
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
-  `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
+  `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel`, and optionally a
+  `KeymapViewModel`, is the test seam: passing no keymap gives the window an in-memory one, which is what keeps
+  `keymap.json` untouched by every test that does not care about it.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.
 - **The window is five tabs** — General, Display, Bell, Window, Keyboard — on a `TabControl` named `Tabs`, each tab a
   `StackPanel` of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short
@@ -178,9 +180,10 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   itself is the most recent (#107's Updates toggle, with #108's Splash screen row above it, in the order both happen
   at launch), and #79's logging is next. The size is fixed rather than `SizeToContent`, because
   only the selected tab is measured and a window sized to its content would change height on every tab switch; the Window tab is the tallest and sets the height.
-  `FindControl` reaches a control on an unselected tab (the name scope is the window's), so the tests never select
-  a tab first. Keyboard is the one tab that is not rows of grids: `Views/KeyboardTab` is a `UserControl` whose data
-  context is a `KeymapEditorViewModel`, not the window's `SettingsViewModel`, so the constructor sets it and
+  `FindControl` reaches a control on an unselected tab (the name scope is the window's), so the tests never select a
+  tab first — except to reach the Keyboard tab's rows through the visual tree, which a `TabControl` hosts only while
+  that tab is selected. Keyboard is the one tab that is not rows of grids: `Views/KeyboardTab` is a `UserControl` whose
+  data context is a `KeymapEditorViewModel`, not the window's `SettingsViewModel`, so the constructor sets it and
   `OnClosed` disposes it (the editor listens to the process's keymap for as long as it exists). Being a `UserControl`
   it has a name scope of its own: the window finds `KeyboardPanel`, and the tab's own parts are found through the
   tab. It scrolls, so it did not change the fixed 520 by 446.
@@ -239,7 +242,7 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - `Keymap` (`Keyboard/`) is an immutable table of `KeyChord(Key, Modifiers, Tap)` to `TerminalKey`, built by
   `DefaultKeymap.Create(destructiveBackspace)` (two cached instances) from Vista TN3270's defaults, cross-checked
   against wc3270 in the M2 hardening spec, section 6.2. `docs/user-guide.md` has the full table, and
-  `UserGuideKeyboardTableTests` fails when the two drift.
+  `UserGuideKeyboardTableTests` fails when the two drift, holding the guide's table to `DefaultKeymap` as chord sets.
   `KeymapOverlay` (`Keyboard/`) is the user's `keymap.json` parsed (`KeymapStore` and `KeymapFile` in Core hold it as
   strings; `ChordSyntax` and `KeymapAction` read them), composed over the profile's default with `Without` then `With`.
   `KeymapViewModel` is the process's one live copy, write-through like `SettingsViewModel`;
@@ -257,8 +260,11 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   Tab and a slot armed on focus would trap a keyboard user; armed, it captures Escape, Tab and Enter like any other
   chord, and a Ctrl key pressed and released alone through its own `ModifierTapDetector`. It also swallows the
   *release* of a key it captured (`_consumed`), because `Button` activates on a Space release whatever happened to
-  the press, so binding Space would have disarmed the slot and its own release armed it straight back.
-  `UserGuideKeyboardTableTests` holds the guide's Keyboard table to `DefaultKeymap` as chord sets.
+  the press, so binding Space would have disarmed the slot and its own release armed it straight back. It remembers
+  the key that armed it (`_armedBy`) and ignores that key until its release, because `Button` activates from the Enter
+  *press*: the slot is armed with Enter still down, and the OS auto-repeat's next press would bind the 3270 Enter key
+  to whatever row the user was only opening. The click and Space paths need no such rule, since neither leaves a key
+  held when the slot arms.
   The control's `Keymap` property holds the table in force; `SessionWindow.ApplyKeymap` sets it, and the keypad's,
   from the profile's Backspace choice under the user's overlay.
 - Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's `PlatformHotkeyConfiguration` puts Ctrl+Insert into

@@ -348,4 +348,23 @@ public class KeymapEditorViewModelTests : IDisposable
         Assert.Contains(nameof(KeymapEditorViewModel.HasSaveError), raised);
         Assert.Equal(["Alt+F9", "Alt+1"], Texts(Row(editor, "PA1")));
     }
+
+    /// <summary>Dispose drops the PropertyChanged subscription as well as Changed: the keymap outlives the tab, so a
+    /// failed save after the window closed must announce nothing to a disposed editor.</summary>
+    [Fact]
+    public void A_disposed_editor_is_told_nothing_by_a_later_failed_save()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var keymap = new KeymapViewModel(new KeymapStore(FilePath));
+        var editor = new KeymapEditorViewModel(keymap, () => PlatformHotkeys.Fallback, Words);
+        editor.Dispose();
+        var raised = new List<string?>();
+        editor.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        keymap.Bind(new KeyChord(Key.F9, KeyModifiers.Alt), new KeymapAction.SendKey(TerminalKey.PA1));
+
+        Assert.StartsWith("Could not save the keymap", keymap.LastSaveError);
+        Assert.Empty(raised);
+    }
 }

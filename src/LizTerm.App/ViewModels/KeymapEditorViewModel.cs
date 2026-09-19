@@ -13,8 +13,10 @@ using LizTerm.Core.Session;
 namespace LizTerm.App.ViewModels;
 
 /// <summary>The Keyboard tab's data (editable keymap spec §5.3): a row per action over KeymapViewModel's queries.
-/// It never reads the keymap's dictionary; that is the seam a chord-centric view would sit on. Subscribed to the
-/// process's KeymapViewModel for as long as the tab is open: Dispose it when the window closes. UI thread only.</summary>
+/// It never reads the overlay's entries; that is the seam a chord-centric view would sit on. The one thing it reads by
+/// table is which texts the composed map types (AddNewTextRows), because a row per text action is exactly that list.
+/// Subscribed to the process's KeymapViewModel for as long as the tab is open: Dispose it when the window closes,
+/// which drops Changed and PropertyChanged both. UI thread only.</summary>
 public sealed class KeymapEditorViewModel : ObservableObject, IDisposable
 {
     /// <summary>The spec's order. Both Backspace actions sit where the spec's one Backspace row does.</summary>

@@ -42,8 +42,9 @@
   </UserControl.Styles>
   <DockPanel>
     <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
-      <!-- Hidden until a save fails; the session windows show the same message in their banners. -->
-      <TextBlock x:Name="SaveErrorText" Text="{Binding SaveError}" IsVisible="{Binding HasSaveError}"
+      <!-- Hidden until a save fails; the session windows show the same message in their banners. Named for the keymap
+           rather than SaveErrorText, which is the Preferences window's own settings failure, in the same window. -->
+      <TextBlock x:Name="KeymapSaveErrorText" Text="{Binding SaveError}" IsVisible="{Binding HasSaveError}"
                  Foreground="#FF8080" TextWrapping="Wrap" />
       <TextBlock x:Name="UnreadableText" Classes="hint" Text="{Binding UnreadableNote}" IsVisible="{Binding HasUnreadable}" />
       <Button x:Name="ResetButton" Content="Reset to defaults" Command="{Binding ResetCommand}" />

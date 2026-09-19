@@ -19,7 +19,13 @@ namespace LizTerm.App.Controls;
 /// The control knows nothing about keymaps: the handler is the row's.
 /// The release of a key the slot captured is swallowed too (<c>_consumed</c>): <see cref="Button"/> activates on the
 /// Space *release*, whatever happened to the press, so binding Space disarmed the slot and its own release armed it
-/// straight back again.</summary>
+/// straight back again.
+/// The key that armed the slot is remembered (<c>_armedBy</c>) and ignored until it is released, because
+/// <see cref="Button"/> activates from the Enter *press*: the slot is armed while Enter is still down, and the OS
+/// auto-repeat's next press would otherwise be captured as the chord Enter — binding the 3270 Enter key to whatever
+/// row the user was only opening. A fresh press of the same key after its release is a chord like any other. Neither
+/// the click-armed nor the Space-armed slot needs the rule: a click is no key at all, and Space arms on its release,
+/// so in both cases nothing is being held down when the slot becomes armed.</summary>
 public sealed class ChordCaptureBox : Button
 {
     public const string IdleText = "Add";
@@ -33,6 +39,7 @@ public sealed class ChordCaptureBox : Button
     private DispatcherTimer? _expiry;
     private string? _message;
     private Key? _consumed;
+    private Key? _armedBy;
 
     public ChordCaptureBox()
     {
@@ -70,6 +77,15 @@ public sealed class ChordCaptureBox : Button
         if (!IsArmed)
         {
             base.OnKeyDown(e);
+            // Button activates from the Enter press, so a slot armed by this very event is armed with its key still
+            // down. Remember it, and the auto-repeat below is ignored rather than captured.
+            if (IsArmed) _armedBy = e.Key;
+            return;
+        }
+        if (_armedBy == e.Key)
+        {
+            // The OS auto-repeat of the key that armed the slot: handled, and nothing offered, until it is released.
+            e.Handled = true;
             return;
         }
         e.Handled = true;
@@ -81,6 +97,14 @@ public sealed class ChordCaptureBox : Button
 
     protected override void OnKeyUp(KeyEventArgs e)
     {
+        // The release of the key that armed the slot belongs to that activation, so it is swallowed and clears the
+        // rule above: the next press of the same key is a chord like any other.
+        if (_armedBy == e.Key)
+        {
+            _armedBy = null;
+            e.Handled = true;
+            return;
+        }
         // The release of a captured key belongs to that capture, armed or not: it is never a tap (the press cleared
         // the tap candidate) and it must not reach Button, which activates on the Space release.
         if (_consumed == e.Key)
@@ -104,11 +128,23 @@ public sealed class ChordCaptureBox : Button
         base.OnLostFocus(e);
     }
 
+    /// <summary>A DispatcherTimer runs whether or not its control is on screen, so a note still showing when the tab
+    /// is torn down would leave one behind, holding this control alive until it fires. Losing focus gets there first
+    /// in every path the tests can drive — a note only ever shows on a focused slot, and losing focus clears it — so
+    /// no test fails without these two lines; they are the belt to that braces.</summary>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _expiry?.Stop();
+        _expiry = null;
+        base.OnDetachedFromVisualTree(e);
+    }
+
     private void Arm()
     {
         IsArmed = true;
         _taps.Reset();
         _consumed = null;
+        _armedBy = null;
         Show(null, expires: false);
         Focus();
     }
@@ -117,6 +153,10 @@ public sealed class ChordCaptureBox : Button
     {
         IsArmed = false;
         _taps.Reset();
+        // A refusal leaves the refused key consumed; disarming before its release (a click elsewhere) would otherwise
+        // leave the slot owing a swallow, and the next Space activation on it would be eaten.
+        _consumed = null;
+        _armedBy = null;
         Show(null, expires: false);
     }
 

@@ -263,7 +263,11 @@ public class PreferencesWindowTests
     /// What a tab is given is the window under one row of tab headers, and the height of that row rather than of the
     /// whole strip is deliberate: the headless text stub advances every glyph by the font size (98 px for "General"
     /// at 14 px, about twice a real font), so the five headers wrap to a second row here and nowhere else, and a tab
-    /// measured against that would be held to a height the app never imposes.</summary>
+    /// measured against that would be held to a height the app never imposes.
+    /// Keyboard's own turn cannot fail: that tab scrolls, so what is measured is the control's own height, which the
+    /// layout has already fitted to the space it was given. It is still walked, because a tab that stopped scrolling
+    /// would then be measured like the rest. The floor below is what keeps the arithmetic honest for the four that can
+    /// fail: a header row measuring 0, or a tab given no space at all, would otherwise pass every turn.</summary>
     [AvaloniaFact]
     public void Every_tab_fits_the_fixed_size()
     {
@@ -274,8 +278,11 @@ public class PreferencesWindowTests
         {
             tabs.SelectedIndex = i;
             window.UpdateLayout();
-            var available = tabs.Bounds.Height - tabs.Items.Cast<TabItem>().Max(tab => tab.Bounds.Height)
-                            - tabs.Padding.Top - tabs.Padding.Bottom;
+            var headerRow = tabs.Items.Cast<TabItem>().Max(tab => tab.Bounds.Height);
+            var available = tabs.Bounds.Height - headerRow - tabs.Padding.Top - tabs.Padding.Bottom;
+            Assert.True(headerRow >= 36, $"a header row of {headerRow} is not a measured tab header");
+            Assert.True(available > 0 && available < tabs.Bounds.Height,
+                        $"tab {i} is given {available} of the tab control's {tabs.Bounds.Height}");
             // Keyboard (#18) is the one tab that is not rows of grids: it is a KeyboardTab with a scroller inside,
             // so what has to fit is the control itself rather than a last row nothing could scroll to.
             var content = (Control)((TabItem)tabs.SelectedItem!).Content!;
@@ -289,10 +296,10 @@ public class PreferencesWindowTests
     /// <summary>The tabs are the window's structure: General first (#107 — not about the screen, the bell, or
     /// the window's own chrome), then Display, Bell and Window in that order, the last read top of the window to
     /// bottom (menu bar, status bar, keypad), and Keyboard last (#18), the one tab holding no SettingsViewModel
-    /// setting at all. Every control keeps its name, so the other tests here find it whichever tab is
-    /// selected.</summary>
+    /// setting at all. Five tabs, in these words, in this order: this is the one test that says so. Every control
+    /// keeps its name, so the other tests here find it whichever tab is selected.</summary>
     [AvaloniaFact]
-    public void The_settings_sit_on_general_display_bell_and_window_tabs_in_that_order()
+    public void The_settings_sit_on_general_display_bell_window_and_keyboard_tabs_in_that_order()
     {
         var (window, _) = Show();
         var tabs = window.FindControl<TabControl>("Tabs")!;
@@ -457,16 +464,6 @@ public class PreferencesWindowTests
 
         settings.ShowTagsInStatusBar = false;
         Assert.False(box.IsChecked);
-    }
-
-    [AvaloniaFact]
-    public void The_tabs_are_five_and_Keyboard_is_last()
-    {
-        var (window, _) = Show();
-
-        var headers = window.FindControl<TabControl>("Tabs")!.Items.OfType<TabItem>().Select(tab => tab.Header).ToList();
-
-        Assert.Equal(["General", "Display", "Bell", "Window", "Keyboard"], headers);
     }
 
     /// <summary>The tab's data context is its own KeymapEditorViewModel over the keymap the window was given, not

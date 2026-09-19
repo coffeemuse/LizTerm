@@ -20,13 +20,25 @@ using LizTerm.Core.Settings;
 namespace LizTerm.App.Tests.Views;
 
 /// <summary>The Keyboard tab on its own, in a bare window (PreferencesWindowTests covers it inside Preferences).</summary>
-public class KeyboardTabTests
+public class KeyboardTabTests : IDisposable
 {
     private static readonly KeyGestureFormatInfo Words = new(new Dictionary<Key, string>());
 
-    private static (Window Window, KeyboardTab Tab, KeymapEditorViewModel Editor, KeymapViewModel Keymap) Show()
+    /// <summary>Only the two note tests write a file, and they write it here: nothing in this class may reach the
+    /// user's own keymap.json, so every other test's keymap is the in-memory one.</summary>
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "lizterm-tests-" + Guid.NewGuid().ToString("N"));
+
+    private string FilePath => Path.Combine(_dir, "keymap.json");
+
+    public void Dispose()
     {
-        var keymap = new KeymapViewModel();
+        if (Directory.Exists(_dir)) Directory.Delete(_dir, recursive: true);
+    }
+
+    private static (Window Window, KeyboardTab Tab, KeymapEditorViewModel Editor, KeymapViewModel Keymap) Show(
+        KeymapViewModel? keymap = null)
+    {
+        keymap ??= new KeymapViewModel();
         var editor = new KeymapEditorViewModel(keymap, () => PlatformHotkeys.Fallback, Words);
         var tab = new KeyboardTab { DataContext = editor };
         var window = new Window { Width = 520, Height = 400, Content = tab };
@@ -134,6 +146,7 @@ public class KeyboardTabTests
     {
         var (window, tab, _, keymap) = Show();
         keymap.Unbind(new KeyChord(Key.D2, KeyModifiers.Alt));
+        Assert.Null(keymap.ActionOf(new KeyChord(Key.D2, KeyModifiers.Alt)));
 
         Click(window, tab.FindControl<Button>("ResetButton")!);
 
@@ -145,8 +158,46 @@ public class KeyboardTabTests
     {
         var (_, tab, _, _) = Show();
 
-        Assert.False(tab.FindControl<TextBlock>("SaveErrorText")!.IsVisible);
+        Assert.False(tab.FindControl<TextBlock>("KeymapSaveErrorText")!.IsVisible);
         Assert.False(tab.FindControl<TextBlock>("UnreadableText")!.IsVisible);
+    }
+
+    /// <summary>The shown half of the same pair, through the view: a keymap.json holding an entry this build skipped
+    /// puts the note on screen with the editor's words.</summary>
+    [AvaloniaFact]
+    public void The_unreadable_note_shows_under_the_list_when_the_file_holds_an_entry_this_build_skipped()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, """{"bindings": {"Bogus+Home": "PA1"}}""");
+        var (_, tab, _, _) = Show(new KeymapViewModel(new KeymapStore(FilePath)));
+
+        var note = tab.FindControl<TextBlock>("UnreadableText")!;
+
+        Assert.True(note.IsVisible);
+        Assert.Equal("1 entry in keymap.json could not be read. It is kept as written, and Reset to defaults removes it.",
+                     note.Text);
+    }
+
+    /// <summary>A chord captured in the tab over a file that cannot be written puts the save failure on screen, which
+    /// is the whole point of the banner: the change stands in memory and the user is told it did not reach the file.</summary>
+    [AvaloniaFact]
+    public void A_failed_save_shows_its_message_under_the_list()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var (window, tab, editor, _) = Show(new KeymapViewModel(new KeymapStore(FilePath)));
+        var error = tab.FindControl<TextBlock>("KeymapSaveErrorText")!;
+        Assert.False(error.IsVisible);
+        var slot = SlotOf(RowContainer(tab, editor, "PA1"));
+        slot.Focus();
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.F9, RawInputModifiers.Alt);
+        window.UpdateLayout();
+
+        Assert.True(error.IsVisible);
+        Assert.StartsWith("Could not save the keymap", error.Text);
     }
 
     /// <summary>The whole route (#18): a chord captured in the tab inside a real Preferences window reaches an open
