@@ -132,6 +132,8 @@ public partial class MvsmfBrowserWindow : Window
             if (_focusBefore is not { } target || _watched is not { HasConfirmation: false } vm) return;
             if (forget && vm.IsBusy) return;
             if (FocusManager?.GetFocusedElement() is Control { IsEffectivelyVisible: true, IsEffectivelyEnabled: true }) return;
+            // The pane it was in may have closed (the form after a Create); the filter box is where the window opens.
+            if (!target.IsEffectivelyVisible) target = FilterBox;
             var (item, index) = (_focusedItemBefore, _focusedIndexBefore);
             if (forget)
             {

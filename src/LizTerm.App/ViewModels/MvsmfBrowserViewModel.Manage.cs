@@ -188,6 +188,7 @@ public sealed partial class MvsmfBrowserViewModel
             await SelectAsync(row, token);
             StatusText = $"✓ {what}.";
         }
+        else if (HasMoreDatasets) StatusText = $"✓ {what} (not on the first page of {_listedPattern}; load more datasets or narrow the filter).";
         else StatusText = $"✓ {what} (not shown by the filter {_listedPattern}).";
     }
 

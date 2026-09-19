@@ -49,12 +49,17 @@ public sealed class EtagMemory
     {
         lock (_lock)
         {
+            // The host refused nothing, so nothing stood at the new name: a stamp left there is a stale one.
             if (from.Kind == HostPathKind.Member)
             {
-                if (_stamps.Remove(from.ToString(), out var stamp)) _stamps[to.ToString()] = stamp;
+                var had = _stamps.Remove(from.ToString(), out var stamp);
+                _stamps.Remove(to.ToString());
+                if (had) _stamps[to.ToString()] = stamp!;
                 return;
             }
-            foreach (var key in KeysUnder(from.Dataset))
+            var moving = KeysUnder(from.Dataset);
+            foreach (var stale in KeysUnder(to.Dataset)) _stamps.Remove(stale);
+            foreach (var key in moving)
             {
                 var stamp = _stamps[key];
                 _stamps.Remove(key);

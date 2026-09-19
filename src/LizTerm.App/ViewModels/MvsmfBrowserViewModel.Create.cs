@@ -39,6 +39,10 @@ public sealed partial class MvsmfBrowserViewModel
     [RelayCommand(CanExecute = nameof(CanNewDataset))]
     private void NewDataset()
     {
+        // A banner's Retry belongs to the operation that failed, and nothing else runs while the form is open.
+        _retry = null;
+        ErrorText = null;
+        OnPropertyChanged(nameof(CanRetry));
         Form.Message = null;
         Form.Name = FirstQualifier(Filter) is { } hlq ? hlq + "." : "";
         if (SelectedDataset is { } dataset) Form.PrefillFrom(dataset.Attributes);
@@ -75,7 +79,13 @@ public sealed partial class MvsmfBrowserViewModel
 
     private async Task CreateCoreAsync(Action<Func<Task>> retryWith, CancellationToken token)
     {
-        if (!IsCreating || !Form.CanCreate) return;
+        if (!IsCreating) return;
+        if (!Form.CanCreate)
+        {
+            // A Retry after the form was edited into an invalid state.
+            StatusText = "✗ Fix the fields marked ✗ first.";
+            return;
+        }
         var path = HostPath.ForDataset(Form.Name);
         var allocation = Form.Allocation;
         Form.Message = null;

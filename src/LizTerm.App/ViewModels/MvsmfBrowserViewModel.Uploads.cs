@@ -205,9 +205,9 @@ public sealed partial class MvsmfBrowserViewModel
                     var outcome = await _connection.RunAsync(service =>
                     {
                         started = true;
-                        return HostFileTransfer.UploadTextAsync(service, path, check, verify, stamp, token);
+                        return HostFileTransfer.UploadTextAsync(service, path, check, verify, stamp, token,
+                            written: etag => _access.Etags.Remember(path, etag));
                     });
-                    _access.Etags.Remember(path, outcome.Etag);
                     row.Status = Describe(outcome);
                     row.HostCopyDiffers = outcome.Verification == UploadVerification.Differs;
                 }
@@ -326,8 +326,8 @@ public sealed partial class MvsmfBrowserViewModel
         {
             if (check is not null)
             {
-                var outcome = await _connection.RunAsync(service => HostFileTransfer.UploadTextAsync(service, dataset.Path, check, verify, stamp, token));
-                _access.Etags.Remember(dataset.Path, outcome.Etag);
+                var outcome = await _connection.RunAsync(service => HostFileTransfer.UploadTextAsync(service, dataset.Path, check, verify, stamp, token,
+                    written: etag => _access.Etags.Remember(dataset.Path, etag)));
                 StatusText = outcome.Verification == UploadVerification.Differs
                     ? $"{Describe(outcome)} — {dataset.Name}"
                     : $"✓ Uploaded {name} to {dataset.Name}.";

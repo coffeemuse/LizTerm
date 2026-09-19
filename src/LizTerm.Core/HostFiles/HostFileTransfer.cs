@@ -79,13 +79,16 @@ public static class HostFileTransfer
     /// <summary>Sends text that passed its check and, with <paramref name="verify"/>, reads it back and compares.
     /// <paramref name="ifMatch"/> is the stamp the target must still hold (see <see cref="IHostFileService.WriteTextAsync"/>).
     /// The outcome carries the write's stamp, not the read-back's: the write's is the one the host promises for
-    /// the next <c>ifMatch</c>.</summary>
+    /// the next <c>ifMatch</c>. <paramref name="written"/> is told the write's stamp the moment the host has
+    /// accepted it, before any read-back, so a read-back that fails or is cancelled cannot lose it.</summary>
     /// <exception cref="InvalidOperationException">The check found errors.</exception>
     public static async Task<UploadOutcome> UploadTextAsync(IHostFileService service, HostPath path,
-        TextUploadResult checkedText, bool verify, string? ifMatch = null, CancellationToken cancellationToken = default)
+        TextUploadResult checkedText, bool verify, string? ifMatch = null, CancellationToken cancellationToken = default,
+        Action<string?>? written = null)
     {
         if (!checkedText.CanUpload) throw new InvalidOperationException("The text did not pass its upload check.");
         var etag = await service.WriteTextAsync(path, checkedText.Lines, ifMatch, cancellationToken);
+        written?.Invoke(etag);
         if (!verify) return new UploadOutcome(UploadVerification.NotChecked, null, etag);
         // Without the stamp: the write's is the one that matters, and asking would cost the host another pass.
         var stored = await service.ReadTextAsync(path, cancellationToken: cancellationToken);
