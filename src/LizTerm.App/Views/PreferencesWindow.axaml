@@ -6,6 +6,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LizTerm.App.ViewModels"
+        xmlns:views="using:LizTerm.App.Views"
         x:Class="LizTerm.App.Views.PreferencesWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Preferences" Width="520" Height="446" CanResize="False"
@@ -13,11 +14,12 @@
   <!-- Every control applies the moment it changes, to every open session window: the data context is the
        process's one SettingsViewModel. No OK or Cancel, only Done.
 
-       Four tabs, each the profile editor's grid (a 120 px label column, controls on the right). A short enum is
+       Five tabs, each the profile editor's grid (a 120 px label column, controls on the right). A short enum is
        one horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. The size
        is fixed rather than SizeToContent: only the selected tab is measured, so a window sized to its content
        would change height on every tab switch. The Window tab is the tallest and sets the height. A new setting
-       joins the tab it belongs to; a new area (logging, keyboard) is a new tab. -->
+       joins the tab it belongs to; a new area (logging) is a new tab. The Keyboard tab is the exception to the
+       rows-of-grids shape: a KeyboardTab with its own data context. -->
   <Window.Styles>
     <Style Selector="TabItem">
       <Setter Property="FontSize" Value="14" />
@@ -162,6 +164,10 @@
             </StackPanel>
           </Grid>
         </StackPanel>
+      </TabItem>
+      <TabItem Header="Keyboard">
+        <!-- Its own data context, the KeymapEditorViewModel the constructor builds (#18). -->
+        <views:KeyboardTab x:Name="KeyboardPanel" />
       </TabItem>
     </TabControl>
   </DockPanel>

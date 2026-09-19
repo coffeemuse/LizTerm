@@ -11,9 +11,11 @@ using Avalonia.Input.Platform;
 using Avalonia.VisualTree;
 using LizTerm.App.Controls;
 using LizTerm.App.Keyboard;
+using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 using LizTerm.Core.Session;
+using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.Views;
 
@@ -48,6 +50,14 @@ public class KeyboardTabTests
     }
 
     private static ChordCaptureBox SlotOf(Control container) => container.GetVisualDescendants().OfType<ChordCaptureBox>().Single();
+
+    /// <summary>SessionWindowKeymapTests' helper, whose own copy is private to that class: the keypad builds its
+    /// buttons on the first show, so the layout has to have run.</summary>
+    private static Button KeypadButton(SessionWindow window, TerminalKey key)
+    {
+        window.UpdateLayout();
+        return window.FindControl<Keypad>("KeypadPanel")!.GetVisualDescendants().OfType<Button>().First(b => Equals(b.Tag, key));
+    }
 
     [AvaloniaFact]
     public void There_is_a_row_and_a_slot_for_every_action()
@@ -137,5 +147,46 @@ public class KeyboardTabTests
 
         Assert.False(tab.FindControl<TextBlock>("SaveErrorText")!.IsVisible);
         Assert.False(tab.FindControl<TextBlock>("UnreadableText")!.IsVisible);
+    }
+
+    /// <summary>The whole route (#18): a chord captured in the tab inside a real Preferences window reaches an open
+    /// session window's screen and its keypad tooltips, because both edit the one process keymap — and Preferences
+    /// stays open, since nothing here closes it.</summary>
+    [AvaloniaFact]
+    public void A_binding_made_in_the_tab_reaches_an_open_session_window_the_screen_and_the_keypad()
+    {
+        var keymap = new KeymapViewModel();
+        var session = new FakeEmulatorSession
+        {
+            Profile = new SessionProfile { Name = "TSO", Host = "tk5.local", Port = 3270 },
+        };
+        var sessionWindow = new SessionWindow(MenuStyle.InWindow, isMacOS: false);
+        sessionWindow.AttachKeymap(keymap);
+        sessionWindow.DataContext = new SessionViewModel(session, action => action(), new FakeTextClipboard());
+        sessionWindow.Show();
+        // The keypad is off by default and builds its buttons on the first show (keypad spec §2.1), so its tooltips
+        // exist only once it is visible.
+        ((SessionViewModel)sessionWindow.DataContext).Settings.Keypad = true;
+
+        var preferences = new PreferencesWindow(new SettingsViewModel(), keymap, systemAlertAvailable: true, menuStyleChoosable: true);
+        preferences.Show();
+        var tabs = preferences.FindControl<TabControl>("Tabs")!;
+        // A TabControl hosts only the selected tab's content, so the rows are in the visual tree only once Keyboard
+        // is the tab on screen — which is what a user does before touching it anyway.
+        tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(item => Equals(item.Header, "Keyboard"));
+        preferences.UpdateLayout();
+        var tab = preferences.FindControl<KeyboardTab>("KeyboardPanel")!;
+        var editor = (KeymapEditorViewModel)tab.DataContext!;
+        var slot = SlotOf(RowContainer(tab, editor, "PA1"));
+        slot.Focus();
+        preferences.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        preferences.KeyReleaseQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        preferences.KeyPressQwerty(PhysicalKey.Home, RawInputModifiers.Control);
+
+        var screen = sessionWindow.FindControl<TerminalScreen>("Screen")!;
+        Assert.True(screen.Keymap.TryMap(new KeyChord(Key.Home, KeyModifiers.Control), out var key));
+        Assert.Equal(TerminalKey.PA1, key);
+        Assert.Contains("Home", (string)ToolTip.GetTip(KeypadButton(sessionWindow, TerminalKey.PA1))!);
+        Assert.True(preferences.IsVisible);
     }
 }

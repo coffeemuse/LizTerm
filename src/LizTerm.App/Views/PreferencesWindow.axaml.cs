@@ -4,6 +4,8 @@
 
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
+using LizTerm.App.Keyboard;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Settings;
 
@@ -13,19 +15,32 @@ namespace LizTerm.App.Views;
 /// App.ShowPreferences is the route (settings spec §5).</summary>
 public partial class PreferencesWindow : Window
 {
+    private readonly KeymapEditorViewModel _keyboard;
+
     /// <summary>Design-time only, in the full shape.</summary>
-    public PreferencesWindow() : this(new SettingsViewModel(), systemAlertAvailable: true, menuStyleChoosable: true) { }
+    public PreferencesWindow() : this(new SettingsViewModel(), new KeymapViewModel(), systemAlertAvailable: true, menuStyleChoosable: true) { }
 
     /// <summary>Whether the system alert can ring here, and whether the menu style is a choice at all, are both
     /// arguments (App passes its ringer's CanRing and the platform), so a test can see every shape of the window
-    /// on any machine.</summary>
-    internal PreferencesWindow(SettingsViewModel settings, bool systemAlertAvailable, bool menuStyleChoosable)
+    /// on any machine. The keymap is the process's one (App.Keymap) or, in a test, an in-memory one.</summary>
+    internal PreferencesWindow(SettingsViewModel settings, KeymapViewModel keymap, bool systemAlertAvailable, bool menuStyleChoosable)
     {
         InitializeComponent();
         DataContext = settings;
         BellSoundSystemAlert.IsEnabled = systemAlertAvailable;
         BellSoundNote.IsVisible = !systemAlertAvailable;
         MenuStyleGroup.IsVisible = menuStyleChoosable;
+        // The reserved gestures are asked at each capture, as TerminalScreen asks at each key, so they are the
+        // platform's answer for this window and never a copy taken before it had a platform.
+        _keyboard = new KeymapEditorViewModel(keymap, () => PlatformHotkeys.From(this.GetPlatformSettings()?.HotkeyConfiguration));
+        KeyboardPanel.DataContext = _keyboard;
+    }
+
+    /// <summary>The editor listens to the process's keymap for as long as the tab exists.</summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        _keyboard.Dispose();
+        base.OnClosed(e);
     }
 
     private SettingsViewModel Settings => (SettingsViewModel)DataContext!;
