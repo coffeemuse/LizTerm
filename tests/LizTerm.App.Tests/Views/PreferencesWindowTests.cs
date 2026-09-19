@@ -308,7 +308,27 @@ public class PreferencesWindowTests
         Assert.Equal(0, tabs.SelectedIndex);
         Assert.Same(tabs.Items.Cast<TabItem>().First(), window.FindControl<CheckBox>("ShowSplashBox")!.FindLogicalAncestorOfType<TabItem>());
         Assert.Same(tabs.Items.Cast<TabItem>().First(), window.FindControl<CheckBox>("CheckForUpdatesBox")!.FindLogicalAncestorOfType<TabItem>());
+        Assert.Same(tabs.Items.Cast<TabItem>().First(), window.FindControl<CheckBox>("ConfirmCloseBox")!.FindLogicalAncestorOfType<TabItem>());
         Assert.Same(window.FindControl<RadioButton>("CrosshairNone"), tabs.Items.Cast<TabItem>().ElementAt(1).FindLogicalDescendantOfType<RadioButton>());
+    }
+
+    /// <summary>By a real click, as the splash box: the close confirmation (#151) is on by default and sits on the
+    /// tab the window opens on, so a press that lands proves it is there and enabled.</summary>
+    [AvaloniaFact]
+    public void Clicking_the_confirm_close_box_sets_the_shared_settings()
+    {
+        var (window, settings) = Show();
+        var box = window.FindControl<CheckBox>("ConfirmCloseBox")!;
+        Assert.True(box.IsChecked);
+        window.UpdateLayout();
+        var centre = box.TranslatePoint(new Point(box.Bounds.Width / 2, box.Bounds.Height / 2), window)!.Value;
+
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
+        Assert.False(settings.ConfirmCloseWhileConnected);
+
+        settings.ConfirmCloseWhileConnected = true;
+        Assert.True(box.IsChecked);
     }
 
     /// <summary>By a real click, for the check-for-updates box's reason: the splash box (#108) is on by default and

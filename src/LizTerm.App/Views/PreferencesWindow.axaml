@@ -49,7 +49,7 @@
            a setting that is not about the screen, the bell, or the window's own chrome belongs (#107), and it is
            where the next such setting goes too, rather than reopening the question of where it belongs. -->
       <TabItem Header="General">
-        <!-- Rows in the order they happen at launch: the splash, then the update check. -->
+        <!-- Rows in the order they happen: the splash, then the update check, then closing. -->
         <StackPanel Spacing="12">
           <Grid Classes="settings" ColumnDefinitions="120,*">
             <TextBlock Text="Splash screen" />
@@ -61,6 +61,12 @@
             <TextBlock Text="Updates" />
             <CheckBox x:Name="CheckForUpdatesBox" Grid.Column="1" Content="Automatically check for updates on launch"
                       IsChecked="{Binding CheckForUpdatesAutomatically, Mode=TwoWay}" />
+          </Grid>
+          <Grid Classes="settings" ColumnDefinitions="120,*">
+            <TextBlock Text="Closing" />
+            <!-- One switch for both askers (#151): a window's close and Quit. -->
+            <CheckBox x:Name="ConfirmCloseBox" Grid.Column="1" Content="Ask before closing a window or quitting while a session is connected"
+                      IsChecked="{Binding ConfirmCloseWhileConnected, Mode=TwoWay}" />
           </Grid>
         </StackPanel>
       </TabItem>

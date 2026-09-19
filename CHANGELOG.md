@@ -5,6 +5,13 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **A connected session is not closed by accident.** Closing a session window while its session is connected, or
+  quitting with connected sessions, now asks first. **Keep Connected**, the default, leaves everything as it was;
+  **Disconnect** closes the window, or **Disconnect and Quit** quits. A window that is not connected closes without
+  a question. A system logout or shutdown skips the question where the system tells LizTerm it is one; macOS does
+  not, so there a logout with connected sessions asks too, and macOS cancels the logout until you answer.
+  **Preferences > General > Closing** turns the question off
+  ([#151](https://github.com/coffeemuse/LizTerm/issues/151)).
 - **Keyboard bindings.** **Preferences > Keyboard** lists every 3270 key with the keys that send it: add a key by
   pressing it, remove one with its **×**, move one to another row, or reset to the defaults. LizTerm refuses the keys
   it needs itself, such as Copy and Paste or a plain letter, and says why. Your changes are kept in `keymap.json`

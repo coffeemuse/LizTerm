@@ -154,6 +154,17 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Whether a session window's close, and Quit, ask first while a session is connected (#151). On by
+    /// default; the row in Preferences is the way out for someone who closes sessions all day.</summary>
+    public bool ConfirmCloseWhileConnected
+    {
+        get => Current.ConfirmCloseWhileConnected;
+        set
+        {
+            if (Current.ConfirmCloseWhileConnected != value) Apply(nameof(ConfirmCloseWhileConnected), s => s with { ConfirmCloseWhileConnected = value });
+        }
+    }
+
     /// <summary>The exact release version the user chose "Skip This Version" for, or null (#107). Not bound to
     /// any Preferences control: App writes it from the update dialog's Skip button. Storing the version string,
     /// not a bool, is what makes a later release un-suppressed for free.</summary>
