@@ -158,8 +158,8 @@ you work in another, such as an operator console. It is not remembered: a new wi
 
 ## Keyboard
 
-The default layout follows Vista TN3270, cross-checked against wc3270. To change a binding, edit `keymap.json` by
-hand; see [Where LizTerm keeps its files](#where-lizterm-keeps-its-files).
+The table below is the default layout. It follows Vista TN3270, cross-checked against wc3270. You can change any
+binding in **Preferences > Keyboard**; see [Changing a binding](#changing-a-binding) below the table.
 
 | Key | 3270 key |
 |---|---|
@@ -195,6 +195,31 @@ The session switcher is Cmd+K on macOS and Ctrl+K elsewhere; see [Several sessio
 The **Keys** menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, Insert,
 PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. The on-screen keypad
 (**View > Keypad > Show the Keypad**) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.
+
+### Changing a binding
+
+**Preferences > Keyboard** lists every 3270 key with the keys that send it. Changes apply at once, to every open
+session window, and the keypad's tooltips follow them.
+
+- **Add a key**: click **Add** on the row, or Tab to it and press Enter or Space, then press the key you want. A tap
+  of Left or Right Ctrl is captured the same way: press and release the Ctrl key on its own. To stop without adding
+  anything, press **Escape** twice, or click **Cancel** beside the slot. To add the Escape key itself, press Escape
+  and then Enter.
+- **Remove a key**: click the **×** on its chip.
+- **Move a key**: add it to another row. It leaves the row it was on, and the slot says where it came from.
+- **Reset to defaults** puts back the table above and clears every change you made.
+
+LizTerm will not bind a key it needs, and says why in the slot: the platform's Copy, Paste and Select All shortcuts,
+Find and Switch Session; any key with Cmd, or the Windows key; a letter, digit, punctuation mark or Space on its own
+or with Shift, which would stop you typing it; and, on Windows and Linux, Ctrl+Alt with one of those, which is how
+some keyboards type characters such as @; and Caps Lock, Num Lock and Scroll Lock. Everything else can be bound,
+Tab included, and Escape by pressing Escape and then Enter.
+
+Backspace follows the profile's Backspace setting until you bind it here. The two Backspace rows are the two things
+it can do: erase the character to the left, or move the cursor left.
+
+The last rows, **Type ¬** and **Type ¢**, are the keys that type a character rather than send a 3270 key. You can move
+or remove their keys the same way, and a text binding added by hand to `keymap.json` gets a row of its own.
 
 ## Mouse, selection and clipboard
 
@@ -502,7 +527,7 @@ window itself.
 **Preferences...** is in the LizTerm application menu on macOS (Cmd-comma). It is also at the bottom of the
 **Edit** menu wherever a session window draws its menu inside the window: always on Windows and Linux, and on macOS
 under **Inside the window** or **Both**. Changes apply as you make them, to every open session window. The settings
-sit on four tabs:
+sit on five tabs:
 
 **General**
 
@@ -534,6 +559,12 @@ sit on four tabs:
   View > Keypad submenu carries both of the same settings. **Show PF1 to PF24**, on by default, is here only: turn
   it off when your keyboard's F-keys are enough, and the keypad keeps just PA1 to Field Mark.
 
+**Keyboard**
+
+- One row for each 3270 key, with the keys that send it and an **Add** slot. See [Changing a binding](#changing-a-binding).
+- **Reset to defaults** clears every change. The tab also says how many entries in `keymap.json` it could not read,
+  and keeps them as written.
+
 ## Where LizTerm keeps its files
 
 | System | Folder |
@@ -551,9 +582,10 @@ name; deleting it loses only the colours, because the tag names themselves live 
 colours the next time LizTerm starts. `recent-hosts.json` holds the hosts Quick Connect remembers; deleting it
 empties the drop-down.
 
-`keymap.json` holds your keyboard bindings, only the ones that differ from the table under
-[Keyboard](#keyboard). Each entry is a chord, such as `Ctrl+Home`, `Shift+F1` or `Tap:LeftCtrl`, set to a 3270 key
-name such as `PA1`, to `{"text": "¬"}` for text to type, or to `null` to take that key away:
+`keymap.json` holds your keyboard bindings, written by Preferences > Keyboard, only the ones that differ from the
+table under [Keyboard](#keyboard). You can edit it by hand too, in this form: each entry is a chord, such as
+`Ctrl+Home`, `Shift+F1` or `Tap:LeftCtrl`, set to a 3270 key name such as `PA1`, to `{"text": "¬"}` for text to
+type, or to `null` to take that key away:
 
 ```json
 {
@@ -569,9 +601,10 @@ are `Enter`, `Clear`, `PF1` to `PF24`, `PA1` to `PA3`, `Attn`, `SysReq`, `Reset`
 `EraseInput`, `Delete`, `Backspace`, `Erase`, `Insert`, `Dup`, `FieldMark`, `Newline`, `Up`, `Down`, `Left` and `Right`,
 spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default; a file that
 is not valid JSON (a trailing comma, a comment, the same chord twice) is skipped as a whole, and every default
-applies. LizTerm reads the file once, when the first session window opens, so restart it after editing by hand.
-Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless the file binds `Back`
-itself. The file is not checked against what you type: binding a plain letter takes that key away from typing. The
+applies. LizTerm reads the file once, when the first session window or Preferences opens, so restart it after
+editing by hand. Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless
+the file binds `Back` itself. A hand edit is not checked against what you type: binding a plain letter takes that
+key away from typing, which Preferences > Keyboard would have refused. The
 platform's Copy, Paste and Select All shortcuts, Find and Switch Session are handled before the keymap, so a binding
 on one of those chords does nothing. Only `Tap:LeftCtrl` and `Tap:RightCtrl` are taps; a tap sends a key or types
 text like any other chord.
@@ -585,7 +618,6 @@ text like any other chord.
   the pin.
 - **TLS hosts that rely on SNI** (several TLS sites sharing one address) cannot be verified, because the
   underlying x3270 engine does not send a server name ([#12](https://github.com/coffeemuse/LizTerm/issues/12)).
-- **No in-app keymap editor yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)): bindings are changed by hand in `keymap.json`; see [Keyboard](#keyboard).
 - **No printer sessions or scripting.**
 - **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). Older mvsMF builds
   are not supported (see [Signing in](#signing-in)). It can't submit jobs or browse the z/OS UNIX file system.

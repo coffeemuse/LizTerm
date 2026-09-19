@@ -9,9 +9,11 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
+using LizTerm.App.Keyboard;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
+using LizTerm.Core.Session;
 using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Tests.Views;
@@ -19,12 +21,14 @@ namespace LizTerm.App.Tests.Views;
 public class PreferencesWindowTests
 {
     /// <summary>The platform answer defaults to the full shape, the one that ships on macOS and Windows, so the
-    /// radio tests exercise an enabled radio on every CI runner; the Linux shape is asked for by name.</summary>
+    /// radio tests exercise an enabled radio on every CI runner; the Linux shape is asked for by name. The keymap
+    /// defaults to an in-memory one, so no test here touches keymap.json.</summary>
     private static (PreferencesWindow Window, SettingsViewModel Settings) Show(
-        SettingsViewModel? settings = null, bool systemAlertAvailable = true, bool menuStyleChoosable = true)
+        SettingsViewModel? settings = null, bool systemAlertAvailable = true, bool menuStyleChoosable = true,
+        KeymapViewModel? keymap = null)
     {
         settings ??= new SettingsViewModel();
-        var window = new PreferencesWindow(settings, systemAlertAvailable, menuStyleChoosable);
+        var window = new PreferencesWindow(settings, keymap ?? new KeymapViewModel(), systemAlertAvailable, menuStyleChoosable);
         window.Show();
         return (window, settings);
     }
@@ -255,7 +259,15 @@ public class PreferencesWindowTests
     }
 
     /// <summary>The fixed height has to hold the tallest tab: a row past it is cut off under the Done bar, and there
-    /// is no scroll bar to reach it. Found in the running app for #105, whose PF keys box was cut in half.</summary>
+    /// is no scroll bar to reach it. Found in the running app for #105, whose PF keys box was cut in half.
+    /// What a tab is given is the window under one row of tab headers, and the height of that row rather than of the
+    /// whole strip is deliberate: the headless text stub advances every glyph by the font size (98 px for "General"
+    /// at 14 px, about twice a real font), so the five headers wrap to a second row here and nowhere else, and a tab
+    /// measured against that would be held to a height the app never imposes.
+    /// Keyboard's own turn cannot fail: that tab scrolls, so what is measured is the control's own height, which the
+    /// layout has already fitted to the space it was given. It is still walked, because a tab that stopped scrolling
+    /// would then be measured like the rest. The floor below is what keeps the arithmetic honest for the four that can
+    /// fail: a header row measuring 0, or a tab given no space at all, would otherwise pass every turn.</summary>
     [AvaloniaFact]
     public void Every_tab_fits_the_fixed_size()
     {
@@ -266,25 +278,33 @@ public class PreferencesWindowTests
         {
             tabs.SelectedIndex = i;
             window.UpdateLayout();
-            var rows = (Panel)((TabItem)tabs.SelectedItem!).Content!;
-            var last = rows.Children.Last(row => row.IsVisible);
-            var bottom = last.TranslatePoint(new Point(0, last.Bounds.Height), tabs)!.Value.Y;
+            var headerRow = tabs.Items.Cast<TabItem>().Max(tab => tab.Bounds.Height);
+            var available = tabs.Bounds.Height - headerRow - tabs.Padding.Top - tabs.Padding.Bottom;
+            Assert.True(headerRow >= 36, $"a header row of {headerRow} is not a measured tab header");
+            Assert.True(available > 0 && available < tabs.Bounds.Height,
+                        $"tab {i} is given {available} of the tab control's {tabs.Bounds.Height}");
+            // Keyboard (#18) is the one tab that is not rows of grids: it is a KeyboardTab with a scroller inside,
+            // so what has to fit is the control itself rather than a last row nothing could scroll to.
+            var content = (Control)((TabItem)tabs.SelectedItem!).Content!;
+            var last = content is Panel rows ? rows.Children.Last(row => row.IsVisible) : content;
+            var used = last.TranslatePoint(new Point(0, last.Bounds.Height), content)!.Value.Y;
 
-            Assert.True(bottom <= tabs.Bounds.Height, $"tab {i} ends at {bottom}, below the tab control's {tabs.Bounds.Height}");
+            Assert.True(used <= available, $"tab {i} needs {used} of the {available} a tab is given");
         }
     }
 
     /// <summary>The tabs are the window's structure: General first (#107 — not about the screen, the bell, or
     /// the window's own chrome), then Display, Bell and Window in that order, the last read top of the window to
-    /// bottom (menu bar, status bar, keypad). Every control keeps its name, so the other tests here find it
-    /// whichever tab is selected.</summary>
+    /// bottom (menu bar, status bar, keypad), and Keyboard last (#18), the one tab holding no SettingsViewModel
+    /// setting at all. Five tabs, in these words, in this order: this is the one test that says so. Every control
+    /// keeps its name, so the other tests here find it whichever tab is selected.</summary>
     [AvaloniaFact]
-    public void The_settings_sit_on_general_display_bell_and_window_tabs_in_that_order()
+    public void The_settings_sit_on_general_display_bell_window_and_keyboard_tabs_in_that_order()
     {
         var (window, _) = Show();
         var tabs = window.FindControl<TabControl>("Tabs")!;
 
-        Assert.Equal(["General", "Display", "Bell", "Window"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header!));
+        Assert.Equal(["General", "Display", "Bell", "Window", "Keyboard"], tabs.Items.Cast<TabItem>().Select(t => (string)t.Header!));
         Assert.Equal(0, tabs.SelectedIndex);
         Assert.Same(tabs.Items.Cast<TabItem>().First(), window.FindControl<CheckBox>("ShowSplashBox")!.FindLogicalAncestorOfType<TabItem>());
         Assert.Same(tabs.Items.Cast<TabItem>().First(), window.FindControl<CheckBox>("CheckForUpdatesBox")!.FindLogicalAncestorOfType<TabItem>());
@@ -444,5 +464,65 @@ public class PreferencesWindowTests
 
         settings.ShowTagsInStatusBar = false;
         Assert.False(box.IsChecked);
+    }
+
+    /// <summary>The tab's data context is its own KeymapEditorViewModel over the keymap the window was given, not
+    /// the SettingsViewModel everything else here binds, and it follows that keymap while the window is open.</summary>
+    [AvaloniaFact]
+    public void The_Keyboard_tab_edits_the_keymap_it_was_given()
+    {
+        var keymap = new KeymapViewModel();
+        var (window, _) = Show(keymap: keymap);
+        var tab = window.FindControl<KeyboardTab>("KeyboardPanel")!;
+
+        var editor = Assert.IsType<KeymapEditorViewModel>(tab.DataContext);
+
+        keymap.Unbind(new KeyChord(Key.D2, KeyModifiers.Alt));
+
+        Assert.Equal([new KeyChord(Key.Home, KeyModifiers.Control)],
+                     editor.Rows.Single(row => row.Title == "PA2").Chips.Select(chip => chip.Chord));
+    }
+
+    /// <summary>The editor subscribes to the process's keymap, which outlives the window, so the window disposes it
+    /// on close; a Preferences opened and closed all day would otherwise leave a listener behind each time.</summary>
+    [AvaloniaFact]
+    public void Closing_the_window_stops_its_editor_following_the_keymap()
+    {
+        var keymap = new KeymapViewModel();
+        var (window, _) = Show(keymap: keymap);
+        var editor = (KeymapEditorViewModel)window.FindControl<KeyboardTab>("KeyboardPanel")!.DataContext!;
+        var pa1 = editor.Rows.Single(row => row.Title == "PA1");
+        Assert.Single(pa1.Chips);
+
+        window.Close();
+        keymap.Bind(new KeyChord(Key.F9, KeyModifiers.Alt), new KeymapAction.SendKey(TerminalKey.PA1));
+
+        Assert.Single(pa1.Chips);
+    }
+
+    /// <summary>The seam's keymap is optional for the same reason its settings object is an argument: a test that
+    /// does not care about the keymap never opens keymap.json. Asserting the type and not merely that something is
+    /// there is the point: a KeyboardTab sets no data context of its own, so a window that never set one would hand
+    /// the tab its own SettingsViewModel by inheritance and a null check would pass.</summary>
+    [AvaloniaFact]
+    public void Preferences_opened_through_the_seam_gets_an_in_memory_keymap()
+    {
+        var app = (App)Application.Current!;
+        var window = app.ShowPreferences(new SettingsViewModel());
+        try
+        {
+            var editor = Assert.IsType<KeymapEditorViewModel>(window.FindControl<KeyboardTab>("KeyboardPanel")!.DataContext);
+
+            // In memory, so it holds every default and a change through it raises no save error at all.
+            Assert.NotEmpty(editor.Rows);
+            editor.Rows.Single(row => row.Title == "PA1").TryCapture(new KeyChord(Key.F9, KeyModifiers.Alt));
+            Assert.Null(editor.SaveError);
+            Assert.Equal([new KeyChord(Key.F9, KeyModifiers.Alt), new KeyChord(Key.D1, KeyModifiers.Alt)],
+                         editor.Rows.Single(row => row.Title == "PA1").Chips.Select(chip => chip.Chord));
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 }

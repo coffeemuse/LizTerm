@@ -36,6 +36,9 @@ public class KeymapPolicyTests
         { "windows", Key.OemOpenBrackets, KeyModifiers.Shift, "This would take away typing that character" },
         { "windows", Key.NumPad5, KeyModifiers.None, "This would take away typing that character" },
         { "mac", Key.OemMinus, KeyModifiers.None, "This would take away typing that character" },
+        { "windows", Key.CapsLock, KeyModifiers.None, "Caps Lock, Num Lock and Scroll Lock change the keyboard's state and cannot be bound" },
+        { "mac", Key.NumLock, KeyModifiers.Shift, "Caps Lock, Num Lock and Scroll Lock change the keyboard's state and cannot be bound" },
+        { "windows", Key.Scroll, KeyModifiers.Control, "Caps Lock, Num Lock and Scroll Lock change the keyboard's state and cannot be bound" },
     };
 
     [Theory]

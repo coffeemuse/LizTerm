@@ -77,7 +77,8 @@ public abstract record KeymapVerdict
 
 /// <summary>Editable keymap spec §4: what the Keyboard tab will not bind. The platform gestures the screen checks
 /// first, because a binding there would never fire; any Cmd or Windows-key chord, because the menu bar or the
-/// system sees it first; and a printable key with no modifier, Shift alone, or, off macOS, Ctrl+Alt (AltGr on
+/// system sees it first; the three lock keys, which change the keyboard's state whatever else they do (an armed slot
+/// would otherwise bind a Caps Lock hit by habit); and a printable key with no modifier, Shift alone, or, off macOS, Ctrl+Alt (AltGr on
 /// Windows and Linux), because there would be no way to type that character afterwards. Everything else is
 /// allowed: a chord another action holds moves (the tab says from where), and unbinding a default is silent. "Printable" is decided by the Key value alone, not by asking
 /// the platform what it would type: the answer has to be the same in a test as on a Mac.</summary>
@@ -96,6 +97,8 @@ public static class KeymapPolicy
     public static KeymapVerdict Check(KeyChord chord, PlatformHotkeys hotkeys)
     {
         if (chord.Tap) return KeymapVerdict.Allowed.Instance;
+        if (chord.Key is Key.CapsLock or Key.NumLock or Key.Scroll)
+            return new KeymapVerdict.Refused("Caps Lock, Num Lock and Scroll Lock change the keyboard's state and cannot be bound");
         switch (hotkeys.Classify(chord.Key, chord.Modifiers))
         {
             case ReservedGesture.Copy: return Reserved("Copy");

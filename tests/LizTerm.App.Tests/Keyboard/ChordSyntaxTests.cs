@@ -91,4 +91,16 @@ public class ChordSyntaxTests
             Assert.Equal(chord, back);
         }
     }
+
+    [Theory]
+    [InlineData(Key.LeftCtrl, true)]
+    [InlineData(Key.RightShift, true)]
+    [InlineData(Key.LeftAlt, true)]
+    [InlineData(Key.LWin, true)]
+    [InlineData(Key.Home, false)]
+    [InlineData(Key.A, false)]
+    public void IsModifierKey_names_the_keys_that_are_only_modifiers(Key key, bool expected)
+    {
+        Assert.Equal(expected, ChordSyntax.IsModifierKey(key));
+    }
 }

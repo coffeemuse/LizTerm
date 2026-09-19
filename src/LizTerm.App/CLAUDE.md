@@ -169,17 +169,24 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `SettingsViewModel` explicitly, `ShowPreferences(SettingsViewModel)`'s shape, so tests never touch the network or
   the real settings file.
 - `App.ShowPreferences` is the one route to `PreferencesWindow`: modeless, unowned, one at a time in
-  `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel` is the test seam.
+  `_preferences` the way About is in `_about`. The internal overload taking a `SettingsViewModel`, and optionally a
+  `KeymapViewModel`, is the test seam: passing no keymap gives the window an in-memory one, which is what keeps
+  `keymap.json` untouched by every test that does not care about it.
   The window's crosshair radios are one-way check marks plus Click handlers, exactly the View menu's shape.
-- **The window is four tabs** — General, Display, Bell, Window — on a `TabControl` named `Tabs`, each tab a
+- **The window is five tabs** — General, Display, Bell, Window, Keyboard — on a `TabControl` named `Tabs`, each tab a
   `StackPanel` of rows, each row its own `Grid` with a 120 px label column (the profile editor's shape). A short
   enum is one horizontal row of radios; only the menu bar keeps a stack, because its labels are sentences. A new
   setting joins the tab it belongs to (#78's theme and cursor go in Display); a new area is a new tab — General
   itself is the most recent (#107's Updates toggle, with #108's Splash screen row above it, in the order both happen
-  at launch), and #79's logging and #18's keyboard are next. The size is fixed rather than `SizeToContent`, because
+  at launch), and #79's logging is next. The size is fixed rather than `SizeToContent`, because
   only the selected tab is measured and a window sized to its content would change height on every tab switch; the Window tab is the tallest and sets the height.
-  `FindControl` reaches a control on an unselected tab (the name scope is the window's), so the tests never select
-  a tab first.
+  `FindControl` reaches a control on an unselected tab (the name scope is the window's), so the tests never select a
+  tab first — except to reach the Keyboard tab's rows through the visual tree, which a `TabControl` hosts only while
+  that tab is selected. Keyboard is the one tab that is not rows of grids: `Views/KeyboardTab` is a `UserControl` whose
+  data context is a `KeymapEditorViewModel`, not the window's `SettingsViewModel`, so the constructor sets it and
+  `OnClosed` disposes it (the editor listens to the process's keymap for as long as it exists). Being a `UserControl`
+  it has a name scope of its own: the window finds `KeyboardPanel`, and the tab's own parts are found through the
+  tab. It scrolls, so it did not change the fixed 520 by 446.
 - The Preferences **Keypad** row is a two-way `KeypadBox` for `Settings.Keypad` plus the two dock radios over
   `KeypadDockConverter`, the Crosshair shape. Both settings are also on the View > Keypad submenu (#71); the row
   stays because Preferences is where a user goes looking for settings, and both doors write the same properties.
@@ -234,12 +241,37 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   dispatch path for them.
 - `Keymap` (`Keyboard/`) is an immutable table of `KeyChord(Key, Modifiers, Tap)` to `TerminalKey`, built by
   `DefaultKeymap.Create(destructiveBackspace)` (two cached instances) from Vista TN3270's defaults, cross-checked
-  against wc3270 in the M2 hardening spec, section 6.2. `docs/user-guide.md` has the full table; keep it in step.
+  against wc3270 in the M2 hardening spec, section 6.2. `docs/user-guide.md` has the full table, and
+  `UserGuideKeyboardTableTests` fails when the two drift, holding the guide's table to `DefaultKeymap` as chord sets.
   `KeymapOverlay` (`Keyboard/`) is the user's `keymap.json` parsed (`KeymapStore` and `KeymapFile` in Core hold it as
   strings; `ChordSyntax` and `KeymapAction` read them), composed over the profile's default with `Without` then `With`.
   `KeymapViewModel` is the process's one live copy, write-through like `SettingsViewModel`;
-  `SessionWindow.AttachKeymap` composes it for the screen and the keypad on every change. `KeymapPolicy` is what the
-  Keyboard tab (#18, PR 2) refuses, with the reason.
+  `SessionWindow.AttachKeymap` composes it for the screen and the keypad on every change.
+  `KeymapPolicy` is what the Keyboard tab refuses, with the reason. The tab is `KeymapEditorViewModel` (a
+  `KeymapRow` per action, a `KeymapChip` per chord, all answered from `KeymapViewModel`'s `ChordsFor`/`ActionOf`,
+  never its dictionary) laid out by `Views/KeyboardTab`. A row's `TryCapture` calls `KeymapPolicy.Check` before every
+  `Bind`, which is what keeps a Cmd chord out of the file, and answers the slot with a `CaptureResult`. There are two
+  Backspace rows because `TerminalKey` has two Backspace actions. A "Type ¬" row stays for the tab's life once shown.
+  A row's chips are in `KeymapHints.Ordered`'s order, the keypad tooltips' own (so a PA1 row reads Alt+F9 before
+  Alt+1 once both are bound).
+  `Controls/ChordCaptureBox` is the Add slot, a `Button` subclass: it needs `StyleKeyOverride => typeof(Button)` or
+  it has no template, which also means a style selector cannot name it (the tab styles the `chord-slot` class and
+  `:armed` pseudo-class). It is armed by a click or Enter or Space and not by focus, because an armed slot swallows
+  Tab and a slot armed on focus would trap a keyboard user; armed, it captures Tab and Enter like any other chord,
+  and a Ctrl key pressed and released alone through its own `ModifierTapDetector`. Plain Escape is the keyboard's
+  way out (`_escapePending`): once, the slot says "Escape again cancels, Enter binds Escape" and waits; twice, it
+  disarms with nothing bound; Enter after it binds Escape itself, which is Attn's default and so has to stay
+  bindable; any other key binds that key. Escape with a modifier is an ordinary chord. It also swallows the
+  *release* of a key it captured (`_consumed`), because `Button` activates on a Space release whatever happened to
+  the press, so binding Space would have disarmed the slot and its own release armed it straight back. It remembers
+  the key that armed it (`_armedBy`) and ignores that key until its release, because `Button` activates from the Enter
+  *press*: the slot is armed with Enter still down, and the OS auto-repeat's next press would bind the 3270 Enter key
+  to whatever row the user was only opening. The click and Space paths need no such rule, since neither leaves a key
+  held when the slot arms. The mirror holds after a capture: while the captured key is still down its auto-repeat is
+  ignored by the idle slot too (a bound Enter would otherwise re-arm it), and losing focus clears both records.
+  A Cancel button sits beside the armed slot (`IsVisible` bound to the slot's `IsArmed`, a direct property for that
+  reason; not focusable, and `KeyboardTab.OnCancelClick` calls `Cancel()` then gives the slot the focus back). It is
+  the mouse exit; Escape twice is the keyboard's.
   The control's `Keymap` property holds the table in force; `SessionWindow.ApplyKeymap` sets it, and the keypad's,
   from the profile's Backspace choice under the user's overlay.
 - Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's `PlatformHotkeyConfiguration` puts Ctrl+Insert into

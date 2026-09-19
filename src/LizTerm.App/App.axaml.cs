@@ -327,11 +327,11 @@ public partial class App : Application
     /// <summary>The one route to Preferences, for the macOS application menu and a session's Edit item alike.
     /// Modeless and unowned so the user keeps working while it is open, and one at a time: a second request
     /// activates the first. Works with only the picker open, since the settings live on the app.</summary>
-    public void ShowPreferences() => ShowPreferences(Settings);
+    public void ShowPreferences() => ShowPreferences(Settings, Keymap);
 
-    /// <summary>The rule with the settings object as an argument, so a test can exercise it without the real
-    /// settings file.</summary>
-    internal PreferencesWindow ShowPreferences(SettingsViewModel settings)
+    /// <summary>The rule with the settings and the keymap as arguments, so a test can exercise it without the real
+    /// files; a null keymap is an in-memory one, so a test that does not care never opens keymap.json.</summary>
+    internal PreferencesWindow ShowPreferences(SettingsViewModel settings, KeymapViewModel? keymap = null)
     {
         if (_preferences is { } showing)
         {
@@ -340,6 +340,7 @@ public partial class App : Application
         }
         var window = new PreferencesWindow(
             settings,
+            keymap ?? new KeymapViewModel(),
             _bellRinger.CanRing(BellSound.SystemAlert),
             MenuStrategy.MenuStyleChoosable(OperatingSystem.IsMacOS()));
         _preferences = window;

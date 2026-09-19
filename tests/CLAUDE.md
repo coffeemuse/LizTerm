@@ -39,7 +39,19 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   A window built without `AttachKeymap` composes the profile's default and never changes it; one that needs a failing
   keymap save points a `KeymapStore` at a temp file holding `not json`.
 - Drive the Preferences radios by raising `Button.ClickEvent`; assigning `IsChecked` only proves the one-way
-  binding renders.
+  binding renders. That works because they carry Click *handlers*: in Avalonia 12 a raised `ClickEvent` never runs a
+  `Command`, which `Button` invokes from `OnClick()`, so a command-bound button (Reset to defaults, a chip's ×) needs
+  a real headless `MouseDown`/`MouseUp` with the control scrolled into view first (`KeyboardTabTests.Click`).
+- A `TabControl` hosts only the selected tab's content, so a test that reaches the Keyboard tab's rows through the
+  visual tree selects the Keyboard tab first. `FindControl` by name still reaches an unselected tab, but only within
+  one name scope: the window finds `KeyboardPanel`, and `RowList` and the rest are found through that `KeyboardTab`.
+- The headless text stub advances every glyph by about the font size, roughly twice a real font, so Preferences' five
+  tab headers wrap to a second row there and nowhere else. `PreferencesWindowTests.Every_tab_fits_the_fixed_size`
+  measures a tab against the window under *one* header row's height for that reason.
+- A Keyboard tab test finds a row's slot with `RowList.ContainerFromIndex` then `GetVisualDescendants().OfType<ChordCaptureBox>()`,
+  focuses it, arms it with Enter (press and release), and presses the chord to bind with `KeyPressQwerty`. Use a chord
+  every platform accepts (`Alt+F9`, or a plain `A` for a refusal): the headless platform's hotkey configuration is not
+  ours to assert. Editor tests pass an explicit `KeyGestureFormatInfo` and a `Func<PlatformHotkeys>`.
 - `KeymapHintsTests` format every expectation with an explicit `KeyGestureFormatInfo` (Avalonia's common key names,
   the default modifier words): the headless platform registers a format of its own, and what it says is not ours to
   assert. Keypad buttons are driven by raising `Button.ClickEvent`, or by a headless mouse press at the button's
