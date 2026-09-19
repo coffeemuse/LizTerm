@@ -23,6 +23,14 @@ public enum HostFileErrorKind
     ServerError,
     /// <summary>No connection, a dropped connection, or no data for too long.</summary>
     Unreachable,
+    /// <summary>A write's <c>ifMatch</c> no longer matched: the target changed since it was read. Nothing was
+    /// written.</summary>
+    Conflict,
+    /// <summary>A rename onto a member that already exists.</summary>
+    AlreadyExists,
+    /// <summary>A create the host could not allocate: the name may exist, there may be no space, or the caller
+    /// may not be authorized. Some hosts cannot say which.</summary>
+    CannotAllocate,
 }
 
 /// <summary>A host outcome that is not success. <see cref="Exception.Message"/> is plain words fit to show;

@@ -25,6 +25,8 @@ public sealed class MvsmfFileService : IHostFileService
     internal static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
     private const int CopyBufferSize = 81920;
     private const string SessionCookie = "LtpaToken2";
+    private const string ReturnEtagHeader = "X-IBM-Return-Etag";
+    private const string JsonContentType = "application/json";
     private static readonly string ProductVersion = typeof(MvsmfFileService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
     private readonly HttpClient _http;
@@ -191,30 +193,44 @@ public sealed class MvsmfFileService : IHostFileService
     private static int? Number(string? value) =>
         int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
 
-    public async Task<IReadOnlyList<string>> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
         var what = path.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        using var response = await SendAsync(() => Get(path, "text"), what, idle, cancellationToken);
+        using var response = await SendAsync(() => Get(path, "text", withEtag), what, idle, cancellationToken);
         using var body = new MemoryStream();
         await CopyBodyAsync(response, body, idle, progress, what, cancellationToken);
         // mvsMF-compat: text-read-keeps-trailing-blanks — fixed records arrive padded; HostFileTransfer trims them.
-        return SplitRecords(body.GetBuffer().AsSpan(0, (int)body.Length));
+        return new HostTextRead(SplitRecords(body.GetBuffer().AsSpan(0, (int)body.Length)), withEtag ? EtagOf(response) : null);
     }
 
-    public async Task<long> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
         var what = path.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        using var response = await SendAsync(() => Get(path, "binary"), what, idle, cancellationToken);
-        return await CopyBodyAsync(response, destination, idle, progress, what, cancellationToken);
+        using var response = await SendAsync(() => Get(path, "binary", withEtag), what, idle, cancellationToken);
+        var bytes = await CopyBodyAsync(response, destination, idle, progress, what, cancellationToken);
+        return new HostBinaryRead(bytes, withEtag ? EtagOf(response) : null);
     }
 
-    private HttpRequestMessage Get(HostPath path, string dataType)
+    private HttpRequestMessage Get(HostPath path, string dataType, bool withEtag)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, Url(DatasetPath(path)));
         request.Headers.Add("X-IBM-Data-Type", dataType);
+        // mvsMF-compat: etag — the stamp comes only when asked for, and asking costs the host a second full pass over
+        // the member, so only a read whose caller may write back asks (a download); the verify read-back does not.
+        if (withEtag) request.Headers.Add(ReturnEtagHeader, "true");
         return request;
+    }
+
+    /// <summary>The <c>ETag</c> header's value as the host sent it, surrounding blanks trimmed, null when absent or
+    /// empty. Quotes and a <c>W/</c> prefix stay: the value is never parsed, only echoed back as <c>If-Match</c>, so
+    /// a host that quotes its stamps (RFC 7232) gets its own text back, and one that does not (mvsMF) does too.</summary>
+    internal static string? EtagOf(HttpResponseMessage response)
+    {
+        if (!response.Headers.TryGetValues("ETag", out var values)) return null;
+        var value = values.FirstOrDefault()?.Trim();
+        return string.IsNullOrEmpty(value) ? null : value;
     }
 
     /// <summary>One string per record: records end in LF, and a CR is data.</summary>
@@ -226,26 +242,68 @@ public sealed class MvsmfFileService : IHostFileService
         return lines;
     }
 
-    public Task WriteTextAsync(HostPath path, IReadOnlyList<string> lines, CancellationToken cancellationToken = default) =>
-        PutAsync(path, EncodeText(lines), "text", "text/plain", cancellationToken);
+    public Task<string?> WriteTextAsync(HostPath path, IReadOnlyList<string> lines, string? ifMatch = null, CancellationToken cancellationToken = default) =>
+        PutAsync(path, EncodeText(lines), "text", "text/plain", ifMatch, cancellationToken);
 
-    public async Task WriteBinaryAsync(HostPath path, Stream source, CancellationToken cancellationToken = default)
+    public async Task<string?> WriteBinaryAsync(HostPath path, Stream source, string? ifMatch = null, CancellationToken cancellationToken = default)
     {
         // Held in memory so the repeat after a 401 can send the same bytes.
         using var copy = new MemoryStream();
         await source.CopyToAsync(copy, cancellationToken);
-        await PutAsync(path, copy.ToArray(), "binary", "application/octet-stream", cancellationToken);
+        return await PutAsync(path, copy.ToArray(), "binary", "application/octet-stream", ifMatch, cancellationToken);
+    }
+
+    public async Task CreateDatasetAsync(HostPath dataset, DatasetAllocation allocation, CancellationToken cancellationToken = default)
+    {
+        if (dataset.Kind != HostPathKind.Dataset) throw new ArgumentException("Only a dataset can be created.", nameof(dataset));
+        if (allocation.Problems() is { Count: > 0 } problems)
+            throw new ArgumentException(string.Join(" ", problems.Values), nameof(allocation));
+        var what = dataset.ToString();
+        var partitioned = allocation.Organization == DatasetOrganization.Partitioned;
+        var body = JsonSerializer.SerializeToUtf8Bytes(new MvsmfAllocation(
+            partitioned ? "PO" : "PS",
+            allocation.FoldedRecfm,
+            allocation.Lrecl,
+            allocation.Blksize,
+            allocation.Unit == SpaceUnit.Cylinders ? "CYL" : "TRK",
+            allocation.Primary,
+            allocation.Secondary,
+            partitioned ? allocation.DirectoryBlocks : null), MvsmfJsonContext.Default.MvsmfAllocation);
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        // mvsMF-compat: create-failure-is-one-500 — the host answers every allocation failure the same way;
+        // MvsmfErrors maps it to CannotAllocate, whose sentence names the three possible causes.
+        using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Post, Url(DatasetPath(dataset)))
+        {
+            Content = new ByteArrayContent(body) { Headers = { ContentType = new MediaTypeHeaderValue(JsonContentType) } },
+        }, what, idle, cancellationToken);
+    }
+
+    public async Task RenameAsync(HostPath from, string newName, CancellationToken cancellationToken = default)
+    {
+        // ForMember and ForDataset fold the name and throw ArgumentException for one the rules refuse, so nothing
+        // the host would fold differently is ever sent.
+        var target = from.Kind == HostPathKind.Member ? HostPath.ForMember(from.Dataset, newName) : HostPath.ForDataset(newName);
+        var what = $"Rename {from} to {(from.Kind == HostPathKind.Member ? target.Member : target.Dataset)}";
+        var body = JsonSerializer.SerializeToUtf8Bytes(
+            new MvsmfRename("rename", new MvsmfRenameSource(from.Dataset, from.Member)), MvsmfJsonContext.Default.MvsmfRename);
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        // mvsMF-compat: put-json-is-rename — this is the one PUT that sends application/json, and it is a rename
+        // on purpose: the new name is the URL, the old one the body. A write never sends this content type.
+        // mvsMF-compat: rename-target-exists-400 — a member rename onto an existing name is 400 reason 7.
+        using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Put, Url(DatasetPath(target)))
+        {
+            Content = new ByteArrayContent(body) { Headers = { ContentType = new MediaTypeHeaderValue(JsonContentType) } },
+        }, what, idle, cancellationToken);
     }
 
     public async Task DeleteAsync(HostPath path, CancellationToken cancellationToken = default)
     {
-        if (path.Kind != HostPathKind.Member) throw new NotSupportedException("Deleting a whole dataset is not supported in this release.");
         var what = path.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
         using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Delete, Url(DatasetPath(path))), what, idle, cancellationToken);
     }
 
-    private async Task PutAsync(HostPath path, byte[] body, string dataType, string contentType, CancellationToken cancellationToken)
+    private async Task<string?> PutAsync(HostPath path, byte[] body, string dataType, string contentType, string? ifMatch, CancellationToken cancellationToken)
     {
         var what = path.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
@@ -258,8 +316,15 @@ public sealed class MvsmfFileService : IHostFileService
                 Content = new ByteArrayContent(body) { Headers = { ContentType = new MediaTypeHeaderValue(contentType) } },
             };
             request.Headers.Add("X-IBM-Data-Type", dataType);
+            // mvsMF-compat: etag — the stamp of the member as written is the one the next If-Match must carry (the
+            // pre-save stamp fails), so every write asks for it. If-Match goes exactly as the host gave it, through
+            // TryAddWithoutValidation: Add would parse the value as an entity tag and refuse mvsMF's unquoted one.
+            // Its result says only whether the header name is allowed on a request, which If-Match always is.
+            request.Headers.Add(ReturnEtagHeader, "true");
+            if (ifMatch is { Length: > 0 }) request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
             return request;
         }, what, idle, cancellationToken);
+        return EtagOf(response);
     }
 
     /// <summary>The wire form of text: each line, then LF, in ISO-8859-1.</summary>

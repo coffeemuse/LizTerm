@@ -27,7 +27,7 @@ public sealed class HostFileTransferTests : IDisposable
             new DownloadOptions(HostTransferMode.Text, LineEnding: "\n"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("//JES2    PROC\n\n//  END\n", await File.ReadAllTextAsync(Local("jes2.txt"), TestContext.Current.CancellationToken));
-        Assert.Equal(24, written);
+        Assert.Equal(24, written.BytesWritten);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class HostFileTransferTests : IDisposable
         var written = await HostFileTransfer.DownloadAsync(_host, Jes2, Local("jes2.bin"),
             new DownloadOptions(HostTransferMode.Binary), cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(3, written);
+        Assert.Equal(3, written.BytesWritten);
         Assert.Equal(new byte[] { 0x61, 0x61, 0xD1 }, await File.ReadAllBytesAsync(Local("jes2.bin"), TestContext.Current.CancellationToken));
     }
 
@@ -102,9 +102,9 @@ public sealed class HostFileTransferTests : IDisposable
         _host.StoreTransform = lines => [.. lines.Select(l => l.PadRight(80))];
         var checkedText = HostFileTransfer.CheckTextFile(await WriteLocal("up.jcl", "//A JOB\n\n//B\n"), Fb80);
 
-        var outcome = await HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: true, TestContext.Current.CancellationToken);
+        var outcome = await HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: true, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(UploadOutcome.Matches, outcome);
+        Assert.Equal(UploadVerification.Matches, outcome.Verification);
         Assert.Equal(new[] { "writetext:SYS1.PROCLIB(JES2):3", "readtext:SYS1.PROCLIB(JES2)" }, _host.Calls);
     }
 
@@ -114,9 +114,9 @@ public sealed class HostFileTransferTests : IDisposable
         _host.StoreTransform = lines => [.. lines.Where(l => l.Length > 0)];
         var checkedText = HostFileTransfer.CheckTextFile(await WriteLocal("up.jcl", "//A JOB\n\n//B\n"), Fb80);
 
-        var outcome = await HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: true, TestContext.Current.CancellationToken);
+        var outcome = await HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: true, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(new UploadOutcome(UploadVerification.Differs, 2), outcome);
+        Assert.Equal((UploadVerification.Differs, 2), (outcome.Verification, outcome.DiffersAtLine));
     }
 
     [Fact]
@@ -124,9 +124,9 @@ public sealed class HostFileTransferTests : IDisposable
     {
         var checkedText = HostFileTransfer.CheckTextFile(await WriteLocal("up.jcl", "//A JOB\n"), Fb80);
 
-        var outcome = await HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: false, TestContext.Current.CancellationToken);
+        var outcome = await HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: false, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(UploadOutcome.NotChecked, outcome);
+        Assert.Equal(UploadVerification.NotChecked, outcome.Verification);
         Assert.Equal(new[] { "writetext:SYS1.PROCLIB(JES2):1" }, _host.Calls);
     }
 
@@ -136,7 +136,7 @@ public sealed class HostFileTransferTests : IDisposable
         var checkedText = HostFileTransfer.CheckTextFile(await WriteLocal("long.txt", new string('X', 81)), Fb80);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: true, TestContext.Current.CancellationToken));
+            HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: true, cancellationToken: TestContext.Current.CancellationToken));
         Assert.Empty(_host.Calls);
     }
 
@@ -146,9 +146,59 @@ public sealed class HostFileTransferTests : IDisposable
         var source = Local("load.bin");
         await File.WriteAllBytesAsync(source, [1, 2, 3], TestContext.Current.CancellationToken);
 
-        await HostFileTransfer.UploadBinaryAsync(_host, Jes2, source, TestContext.Current.CancellationToken);
+        await HostFileTransfer.UploadBinaryAsync(_host, Jes2, source, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(new byte[] { 1, 2, 3 }, _host.Binary[Jes2.ToString()]);
+    }
+
+    [Fact]
+    public async Task A_download_returns_the_stamp_the_host_gave()
+    {
+        _host.Text[Jes2.ToString()] = ["A"];
+        _host.Etags[Jes2.ToString()] = "stamp-7";
+
+        var result = await HostFileTransfer.DownloadAsync(_host, Jes2, Local("a.txt"),
+            new DownloadOptions(HostTransferMode.Text), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("stamp-7", result.Etag);
+        Assert.Equal(new[] { "readtext:SYS1.PROCLIB(JES2):etag" }, _host.Calls);
+    }
+
+    [Fact]
+    public async Task A_download_of_an_unstamped_member_returns_no_stamp()
+    {
+        _host.Binary[Jes2.ToString()] = [1];
+
+        var result = await HostFileTransfer.DownloadAsync(_host, Jes2, Local("a.bin"),
+            new DownloadOptions(HostTransferMode.Binary), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Null(result.Etag);
+        Assert.Equal(new[] { "readbinary:SYS1.PROCLIB(JES2):etag" }, _host.Calls);
+    }
+
+    [Fact]
+    public async Task An_upload_passes_the_stamp_on_and_returns_the_new_one()
+    {
+        var checkedText = HostFileTransfer.CheckTextFile(await WriteLocal("up.jcl", "//A JOB\n"), Fb80);
+
+        var outcome = await HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: false, ifMatch: "stamp-1", TestContext.Current.CancellationToken);
+        var binary = await HostFileTransfer.UploadBinaryAsync(_host, Jes2, await WriteLocal("up.bin", "x"), ifMatch: "stamp-2", TestContext.Current.CancellationToken);
+
+        Assert.Equal(new[] { "stamp-1", "stamp-2" }, _host.IfMatches);
+        Assert.Equal("write-1", outcome.Etag);
+        Assert.Equal("write-2", binary);
+    }
+
+    [Fact]
+    public async Task A_verified_upload_keeps_the_write_stamp_and_reads_back_without_asking_for_one()
+    {
+        // The read-back's stamp would be discarded, and asking for it costs the host another pass over the member.
+        var checkedText = HostFileTransfer.CheckTextFile(await WriteLocal("up.jcl", "//A JOB\n"), Fb80);
+
+        var outcome = await HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: true, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("write-1", outcome.Etag);
+        Assert.Equal(new[] { "writetext:SYS1.PROCLIB(JES2):1", "readtext:SYS1.PROCLIB(JES2)" }, _host.Calls);
     }
 
     [Theory]

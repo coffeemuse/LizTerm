@@ -70,6 +70,14 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   `Gate` holds every call after it is logged (a call still honours its token), `MaxConcurrent` is the most calls seen running at
   once, and `Disposed` says whether the service was released. The operations take a lock the test cannot: seed
   everything before the view model runs, and read the log through `CallsSnapshot()` while calls may be running.
+  It also plays the manage contract, failing the way the host does: every write stamps its path `stamp-N`
+  (`Etags`, returned by writes and by reads asked `withEtag`; `IfMatches` keeps each write's `ifMatch`), and a
+  write whose `ifMatch` is not the current stamp is `Conflict`; `create:<dsn>` adds a dataset with the
+  allocation's attributes (`CannotAllocate` when the name exists); `rename:<from>:<new>` moves a member with its
+  content and stamp (`NotFound`, `AlreadyExists`) or a dataset with everything under it (`ServerError` reason 8
+  onto an existing name); `delete:<path>` removes a member, or a dataset with everything under it, and is
+  `NotFound` when there is nothing to remove. A create or rename the local rules refuse throws
+  `ArgumentException` before it is logged, as the backend does.
   Core.Tests has a smaller fake of the same name for `HostFileTransfer` (see "Core tests").
 - `BrowserTestHost` (`ViewModels/`) builds an `MvsmfBrowserViewModel` over a `FakeHostFileService` seeded by
   `Standard` (a PDS of three members, a load library, a sequential dataset and a `DA` dataset) or `Large` (those
@@ -134,6 +142,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 - `SettingsStoreTests` uses a temp directory per test like `ProfileStoreTests`; `SettingsLayersTests` needs no disk.
 - `FakeHostFileService` (`HostFiles/`) is an in-memory host keyed by `HostPath.ToString()`, with `StoreTransform` to
   play a host that alters what it stores and `ReadFailure` / `BytesBeforeFailure` for a read that dies part-way.
+  Every write stamps its path `write-N` (`Etags`) and records its `ifMatch` (`IfMatches`); a read logs `:etag`
+  when it asked for the stamp and gets one only then; create and rename are logged only.
 
 ## mvsMF backend tests
 

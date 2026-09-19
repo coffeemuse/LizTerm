@@ -8,7 +8,8 @@ using LizTerm.Core.HostFiles;
 namespace LizTerm.Integration.Tests;
 
 /// <summary>Runs only when LIZTERM_MVSMF_URL, LIZTERM_MVSMF_USER, LIZTERM_MVSMF_PASSWORD and
-/// LIZTERM_MVSMF_SCRATCH_PDS are all set. Writes, verifies and deletes the member LIZITEST in the scratch PDS. The
+/// LIZTERM_MVSMF_SCRATCH_PDS are all set. Writes, verifies and deletes the member LIZITEST in the scratch PDS, and
+/// allocates, renames and deletes datasets named &lt;user&gt;.LIZITEST.T&lt;hhmmss&gt; and .R&lt;hhmmss&gt;. The
 /// two <see cref="Connect"/> tests leave their one session to the host's idle timeout, as the browser does when the
 /// app is killed.</summary>
 public class LiveMvsmfTests
@@ -107,8 +108,8 @@ public class LiveMvsmfTests
             var checkedText = HostFileTransfer.CheckTextFile(local, target);
             Assert.True(checkedText.CanUpload, string.Join(" | ", checkedText.Errors.Select(e => e.Message)));
 
-            var outcome = await HostFileTransfer.UploadTextAsync(service, path, checkedText, verify: true, ct);
-            Assert.Equal(UploadOutcome.Matches, outcome);
+            var outcome = await HostFileTransfer.UploadTextAsync(service, path, checkedText, verify: true, cancellationToken: ct);
+            Assert.Equal(UploadVerification.Matches, outcome.Verification);
 
             var members = (await service.ListMembersAsync(HostPath.ForDataset(live.ScratchPds), HostListRequest.All, ct)).Entries;
             Assert.Contains(members, m => m.Name == ScratchMember);
@@ -138,6 +139,70 @@ public class LiveMvsmfTests
             catch (HostFileException)
             {
                 // Already gone, which is the expected case.
+            }
+        }
+    }
+
+    /// <summary>Create, stamp, rename and delete under the test user's own HLQ, which RAKF grants in full; both
+    /// names are deleted on the way out whatever happened.</summary>
+    [Fact(Timeout = LiveTimeout)]
+    public async Task Creates_renames_and_deletes_a_scratch_dataset_with_etag_checks()
+    {
+        var live = Require();
+        var ct = TestContext.Current.CancellationToken;
+        using var service = Connect(live);
+        var suffix = DateTime.UtcNow.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        var created = HostPath.ForDataset($"{live.Credentials.Userid}.LIZITEST.T{suffix}");
+        var renamed = HostPath.ForDataset($"{live.Credentials.Userid}.LIZITEST.R{suffix}");
+        try
+        {
+            await service.CreateDatasetAsync(created,
+                new DatasetAllocation(DatasetOrganization.Partitioned, "FB", 80, 3120, SpaceUnit.Tracks, 1, 1, 1), ct);
+            var listed = Assert.Single((await service.ListDatasetsAsync(created.Dataset, HostListRequest.All, ct)).Entries);
+            Assert.Equal("PO", listed.Attributes!.Dsorg);
+            Assert.Equal("FB", listed.Attributes.Recfm);
+            Assert.Equal(80, listed.Attributes.Lrecl);
+
+            var member = created.WithMember("ONE");
+            var first = await service.WriteTextAsync(member, ["//ONE JOB (ACCT),LIZTERM"], cancellationToken: ct);
+            Assert.NotNull(first);
+            var read = await service.ReadTextAsync(member, withEtag: true, cancellationToken: ct);
+            Assert.Equal(first, read.Etag);
+            Assert.Null((await service.ReadTextAsync(member, cancellationToken: ct)).Etag);
+
+            var second = await service.WriteTextAsync(member, ["//ONE JOB (ACCT),LIZTERM", "//*"], ifMatch: read.Etag, ct);
+            Assert.NotNull(second);
+            Assert.NotEqual(first, second);
+            var conflict = await Assert.ThrowsAsync<HostFileException>(() => service.WriteTextAsync(member, ["//X"], ifMatch: first, ct));
+            Assert.Equal(HostFileErrorKind.Conflict, conflict.Kind);
+            Assert.Equal(2, (await service.ReadTextAsync(member, cancellationToken: ct)).Lines.Count);
+
+            await service.RenameAsync(member, "TWO", ct);
+            Assert.Equal(new[] { "TWO" }, (await service.ListMembersAsync(created, HostListRequest.All, ct)).Entries.Select(e => e.Name));
+            var exists = await Assert.ThrowsAsync<HostFileException>(() => service.RenameAsync(created.WithMember("TWO"), "TWO", ct));
+            Assert.Equal(HostFileErrorKind.AlreadyExists, exists.Kind);
+
+            await service.RenameAsync(created, renamed.Dataset, ct);
+            Assert.Empty((await service.ListDatasetsAsync(created.Dataset, HostListRequest.All, ct)).Entries);
+            Assert.Equal(new[] { "TWO" }, (await service.ListMembersAsync(renamed, HostListRequest.All, ct)).Entries.Select(e => e.Name));
+
+            await service.DeleteAsync(renamed, ct);
+            Assert.Empty((await service.ListDatasetsAsync(renamed.Dataset, HostListRequest.All, ct)).Entries);
+            var gone = await Assert.ThrowsAsync<HostFileException>(() => service.DeleteAsync(renamed, ct));
+            Assert.Equal(HostFileErrorKind.NotFound, gone.Kind);
+        }
+        finally
+        {
+            foreach (var name in new[] { created, renamed })
+            {
+                try
+                {
+                    await service.DeleteAsync(name, CancellationToken.None);
+                }
+                catch (HostFileException)
+                {
+                    // Not there, which is the expected case.
+                }
             }
         }
     }

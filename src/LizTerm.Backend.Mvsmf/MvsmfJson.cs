@@ -38,6 +38,27 @@ internal sealed record MvsmfError(
     [property: JsonPropertyName("reason")] int? Reason,
     [property: JsonPropertyName("message")] string? Message);
 
+/// <summary>A create's body. <c>dirblk</c> is sent for a partitioned dataset only; the host ignores it otherwise,
+/// and leaving it out keeps the sequential body what the docs show.</summary>
+internal sealed record MvsmfAllocation(
+    [property: JsonPropertyName("dsorg")] string Dsorg,
+    [property: JsonPropertyName("recfm")] string Recfm,
+    [property: JsonPropertyName("lrecl")] int Lrecl,
+    [property: JsonPropertyName("blksize")] int Blksize,
+    [property: JsonPropertyName("alcunit")] string Alcunit,
+    [property: JsonPropertyName("primary")] int Primary,
+    [property: JsonPropertyName("secondary")] int Secondary,
+    [property: JsonPropertyName("dirblk"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Dirblk);
+
+/// <summary>A rename's body: the old name; the new one is in the URL. <c>member</c> is absent for a dataset.</summary>
+internal sealed record MvsmfRename(
+    [property: JsonPropertyName("request")] string Request,
+    [property: JsonPropertyName("from-dataset")] MvsmfRenameSource FromDataset);
+
+internal sealed record MvsmfRenameSource(
+    [property: JsonPropertyName("dsn")] string Dsn,
+    [property: JsonPropertyName("member"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Member);
+
 internal sealed class LenientStringConverter : JsonConverter<string?>
 {
     public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => reader.TokenType switch
@@ -62,4 +83,6 @@ internal sealed class LenientStringConverter : JsonConverter<string?>
 [JsonSerializable(typeof(MvsmfDatasetList))]
 [JsonSerializable(typeof(MvsmfMemberList))]
 [JsonSerializable(typeof(MvsmfError))]
+[JsonSerializable(typeof(MvsmfAllocation))]
+[JsonSerializable(typeof(MvsmfRename))]
 internal partial class MvsmfJsonContext : JsonSerializerContext;
