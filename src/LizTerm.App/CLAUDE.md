@@ -257,8 +257,11 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `Controls/ChordCaptureBox` is the Add slot, a `Button` subclass: it needs `StyleKeyOverride => typeof(Button)` or
   it has no template, which also means a style selector cannot name it (the tab styles the `chord-slot` class and
   `:armed` pseudo-class). It is armed by a click or Enter or Space and not by focus, because an armed slot swallows
-  Tab and a slot armed on focus would trap a keyboard user; armed, it captures Escape, Tab and Enter like any other
-  chord, and a Ctrl key pressed and released alone through its own `ModifierTapDetector`. It also swallows the
+  Tab and a slot armed on focus would trap a keyboard user; armed, it captures Tab and Enter like any other chord,
+  and a Ctrl key pressed and released alone through its own `ModifierTapDetector`. Plain Escape is the keyboard's
+  way out (`_escapePending`): once, the slot says "Escape again cancels, Enter binds Escape" and waits; twice, it
+  disarms with nothing bound; Enter after it binds Escape itself, which is Attn's default and so has to stay
+  bindable; any other key binds that key. Escape with a modifier is an ordinary chord. It also swallows the
   *release* of a key it captured (`_consumed`), because `Button` activates on a Space release whatever happened to
   the press, so binding Space would have disarmed the slot and its own release armed it straight back. It remembers
   the key that armed it (`_armedBy`) and ignores that key until its release, because `Button` activates from the Enter
@@ -268,7 +271,7 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   ignored by the idle slot too (a bound Enter would otherwise re-arm it), and losing focus clears both records.
   A Cancel button sits beside the armed slot (`IsVisible` bound to the slot's `IsArmed`, a direct property for that
   reason; not focusable, and `KeyboardTab.OnCancelClick` calls `Cancel()` then gives the slot the focus back). It is
-  the mouse exit: an armed slot captures Tab, so a keyboard-only user's exit is still a chord the row already holds.
+  the mouse exit; Escape twice is the keyboard's.
   The control's `Keymap` property holds the table in force; `SessionWindow.ApplyKeymap` sets it, and the keypad's,
   from the profile's Backspace choice under the user's overlay.
 - Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's `PlatformHotkeyConfiguration` puts Ctrl+Insert into

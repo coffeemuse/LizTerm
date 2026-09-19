@@ -154,7 +154,7 @@ public class ChordCaptureBoxTests
     }
 
     [AvaloniaFact]
-    public void Escape_Tab_and_Enter_are_capturable_and_neither_move_focus_nor_close_the_window()
+    public void Shift_Escape_Tab_and_Enter_are_capturable_and_neither_move_focus_nor_close_the_window()
     {
         var (window, box, _, _, offered) = Show(Refuse);
         var done = new Button { Content = "Done", IsDefault = true, IsCancel = true };
@@ -163,17 +163,81 @@ public class ChordCaptureBoxTests
         ((StackPanel)window.Content!).Children.Add(done);
         Arm(window);
 
-        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.Shift);
         window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
         window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.Shift);
         window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
 
         Assert.Equal(
-            [new KeyChord(Key.Escape), new KeyChord(Key.Tab), new KeyChord(Key.Tab, KeyModifiers.Shift), new KeyChord(Key.Enter)],
+            [new KeyChord(Key.Escape, KeyModifiers.Shift), new KeyChord(Key.Tab), new KeyChord(Key.Tab, KeyModifiers.Shift), new KeyChord(Key.Enter)],
             offered);
         Assert.True(box.IsFocused);
         Assert.True(window.IsVisible);
         Assert.Equal(0, doneClicks);
+    }
+
+    /// <summary>The keyboard's way out: the first Escape binds nothing and says what comes next, the second disarms,
+    /// and neither reaches the window's Cancel button or moves the focus.</summary>
+    [AvaloniaFact]
+    public void Escape_once_waits_and_says_so_and_Escape_twice_cancels()
+    {
+        var (window, box, _, _, offered) = Show();
+        var done = new Button { Content = "Done", IsDefault = true, IsCancel = true };
+        var doneClicks = 0;
+        done.Click += (_, _) => doneClicks++;
+        ((StackPanel)window.Content!).Children.Add(done);
+        Arm(window);
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        Assert.True(box.IsArmed);
+        Assert.Equal("Escape again cancels, Enter binds Escape", box.Text);
+        Assert.Empty(offered);
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+
+        Assert.False(box.IsArmed);
+        Assert.Equal("Add", box.Text);
+        Assert.Empty(offered);
+        Assert.True(box.IsFocused);
+        Assert.True(window.IsVisible);
+        Assert.Equal(0, doneClicks);
+    }
+
+    /// <summary>Escape is Attn's default, so it has to stay bindable: Enter after Escape is the chord Escape.</summary>
+    [AvaloniaFact]
+    public void Escape_then_Enter_binds_Escape_itself()
+    {
+        var (window, box, _, _, offered) = Show();
+        Arm(window);
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.Equal([new KeyChord(Key.Escape)], offered);
+        Assert.False(box.IsArmed);
+    }
+
+    [AvaloniaFact]
+    public void Escape_then_another_key_binds_that_key_and_forgets_the_Escape()
+    {
+        var (window, box, _, _, offered) = Show();
+        Arm(window);
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.F9, RawInputModifiers.Alt);
+
+        Assert.Equal([new KeyChord(Key.F9, KeyModifiers.Alt)], offered);
+        Assert.False(box.IsArmed);
+
+        // The forgotten Escape does not linger: armed again, one Escape is a first Escape.
+        Arm(window);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        Assert.True(box.IsArmed);
+        Assert.Equal("Escape again cancels, Enter binds Escape", box.Text);
     }
 
     [AvaloniaFact]

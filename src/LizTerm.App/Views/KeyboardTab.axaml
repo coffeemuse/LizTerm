@@ -58,8 +58,8 @@
                                           AutomationProperties.Name="{Binding AddName}" />
                 <!-- The way out of an armed slot that binds nothing. Shown only while the slot is armed, to its left so
                      the slot stays under the pointer that armed it. Not focusable, and the click hands the focus back
-                     to the slot, now idle, so a keyboard user who reached for the mouse can Tab on. An armed slot
-                     captures Tab, so this is a mouse exit; a keyboard-only user's exit is a chord the row already holds. -->
+                     to the slot, now idle, so a keyboard user who reached for the mouse can Tab on. The keyboard's own
+                     way out is Escape twice, the slot's rule. -->
                 <Button DockPanel.Dock="Right" Classes="cancel" Content="Cancel" Focusable="False"
                         IsVisible="{Binding #Slot.IsArmed}" Click="OnCancelClick"
                         AutomationProperties.Name="{Binding CancelName}" />

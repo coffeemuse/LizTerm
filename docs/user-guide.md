@@ -202,8 +202,9 @@ PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. T
 session window, and the keypad's tooltips follow them.
 
 - **Add a key**: click **Add** on the row, or Tab to it and press Enter or Space, then press the key you want. A tap
-  of Left or Right Ctrl is captured the same way: press and release the Ctrl key on its own. **Cancel**, beside the
-  slot while it waits, stops without adding anything.
+  of Left or Right Ctrl is captured the same way: press and release the Ctrl key on its own. To stop without adding
+  anything, press **Escape** twice, or click **Cancel** beside the slot. To add the Escape key itself, press Escape
+  and then Enter.
 - **Remove a key**: click the **×** on its chip.
 - **Move a key**: add it to another row. It leaves the row it was on, and the slot says where it came from.
 - **Reset to defaults** puts back the table above and clears every change you made.
@@ -212,7 +213,7 @@ LizTerm will not bind a key it needs, and says why in the slot: the platform's C
 Find and Switch Session; any key with Cmd, or the Windows key; a letter, digit, punctuation mark or Space on its own
 or with Shift, which would stop you typing it; and, on Windows and Linux, Ctrl+Alt with one of those, which is how
 some keyboards type characters such as @; and Caps Lock, Num Lock and Scroll Lock. Everything else can be bound,
-Escape and Tab included.
+Tab included, and Escape by pressing Escape and then Enter.
 
 Backspace follows the profile's Backspace setting until you bind it here. The two Backspace rows are the two things
 it can do: erase the character to the left, or move the cursor left.

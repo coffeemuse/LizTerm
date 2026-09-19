@@ -15,7 +15,10 @@ namespace LizTerm.App.Controls;
 /// arms it. Armed, it captures the next chord: a key with its modifiers, or a Ctrl key pressed and released alone
 /// as a tap (its own <see cref="ModifierTapDetector"/>, the screen's rule), and offers it to
 /// <see cref="CaptureHandler"/>. Accepted disarms; refused stays armed with the reason as its text. Focus loss, a
-/// second click or the row's Cancel button (<see cref="Cancel"/>) disarms. Escape and Tab are chords like the rest, since both are bindable.
+/// second click or the row's Cancel button (<see cref="Cancel"/>) disarms. Tab is a chord like the rest, since it is
+/// bindable. Plain Escape is the keyboard's way out, and is bindable too (it is Attn's default): pressed once the slot
+/// says what comes next and waits (<c>_escapePending</c>); pressed again it disarms with nothing bound; Enter after it
+/// binds Escape itself; any other key binds that key. Escape with a modifier is an ordinary chord.
 /// The control knows nothing about keymaps: the handler is the row's.
 /// The release of a key the slot captured is swallowed too (<c>_consumed</c>): <see cref="Button"/> activates on the
 /// Space *release*, whatever happened to the press, so binding Space disarmed the slot and its own release armed it
@@ -30,6 +33,7 @@ public sealed class ChordCaptureBox : Button
 {
     public const string IdleText = "Add";
     public const string ArmedText = "Press a key";
+    public const string EscapeText = "Escape again cancels, Enter binds Escape";
 
     public static readonly StyledProperty<Func<KeyChord, CaptureResult>?> CaptureHandlerProperty =
         AvaloniaProperty.Register<ChordCaptureBox, Func<KeyChord, CaptureResult>?>(nameof(CaptureHandler));
@@ -40,6 +44,7 @@ public sealed class ChordCaptureBox : Button
     private string? _message;
     private Key? _consumed;
     private Key? _armedBy;
+    private bool _escapePending;
 
     public ChordCaptureBox()
     {
@@ -112,8 +117,26 @@ public sealed class ChordCaptureBox : Button
         e.Handled = true;
         _taps.KeyDown(e.Key);
         if (e.Key == Key.None || ChordSyntax.IsModifierKey(e.Key)) return;
+        if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None)
+        {
+            if (_escapePending)
+            {
+                // The second Escape: out, with nothing bound. Its release is still this slot's to swallow.
+                Disarm();
+                _consumed = e.Key;
+                return;
+            }
+            _consumed = e.Key;
+            _escapePending = true;
+            Show(EscapeText, expires: false);
+            return;
+        }
         _consumed = e.Key;
-        Offer(new KeyChord(e.Key, e.KeyModifiers));
+        var chord = _escapePending && e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None
+            ? new KeyChord(Key.Escape)
+            : new KeyChord(e.Key, e.KeyModifiers);
+        _escapePending = false;
+        Offer(chord);
     }
 
     protected override void OnKeyUp(KeyEventArgs e)
@@ -169,6 +192,7 @@ public sealed class ChordCaptureBox : Button
         _taps.Reset();
         _consumed = null;
         _armedBy = null;
+        _escapePending = false;
         Show(null, expires: false);
         Focus();
     }
@@ -181,12 +205,14 @@ public sealed class ChordCaptureBox : Button
         // leave the slot owing a swallow, and the next Space activation on it would be eaten.
         _consumed = null;
         _armedBy = null;
+        _escapePending = false;
         Show(null, expires: false);
     }
 
     private void Offer(KeyChord chord)
     {
         var result = CaptureHandler?.Invoke(chord) ?? new CaptureResult(false, null);
+        _escapePending = false;
         if (result.Accepted)
         {
             IsArmed = false;
