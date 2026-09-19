@@ -16,6 +16,7 @@ using LizTerm.App.Keyboard;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
 using LizTerm.App.ViewModels;
+using LizTerm.Core.Session;
 using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Views;
@@ -47,6 +48,7 @@ public partial class SessionWindow : Window, ISessionHost
         _nativeKeepOnTop = MenuLookup.Item(_nativeWindowMenu, "_Keep on Top")!;
         _nativeSessionsSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().Last();
         _nativeMvsmfBrowser = MenuLookup.Item(NativeMenu.GetMenu(this), "_File", "mvsMF _Browser...")!;
+        CaptureKeysRows();
         RebuildSessionRows();
         // The screen's events call the view model's methods, not its commands: each method carries its own guard,
         // and a keystroke must never be dropped for arriving while the previous one's round trip is still open.
@@ -105,6 +107,8 @@ public partial class SessionWindow : Window, ISessionHost
             ShowPlatformGestures();
             Screen.Focus();
         };
+        // The headers are never bare: the default keymap until a data context or an attached keymap composes another.
+        ApplyKeymap();
     }
 
     private MenuStyle _menuStyle;
@@ -138,6 +142,11 @@ public partial class SessionWindow : Window, ISessionHost
 
     /// <summary>The generated session rows, both renderers' items with the session each stands for.</summary>
     private readonly List<(NativeMenuItem Native, MenuItem Classic, SessionEntry Entry)> _sessionRows = [];
+
+    /// <summary>Every Keys item on both menus with the name it was declared with and the key it sends, paired in
+    /// declaration order at construction (the parity test holds the two menus to the same order). ApplyKeymap
+    /// writes each pair's headers from the keymap in force, so the menu says what the keyboard does (#23).</summary>
+    private readonly List<(NativeMenuItem Native, MenuItem Classic, string Name, TerminalKey Key)> _keysRows = [];
 
     /// <summary>The SettingsViewModel this window follows for live style changes, so a data-context swap can
     /// unsubscribe from the old one — the same shape as _bellSource below.</summary>
@@ -594,13 +603,22 @@ public partial class SessionWindow : Window, ISessionHost
     private void OnKeymapChanged(object? sender, EventArgs e) => ApplyKeymap();
 
     /// <summary>The map in force for this window: the profile's Backspace choice under the user's keymap.json. Set
-    /// on the screen and on the keypad, whose tooltips follow it (keypad spec §4.4).</summary>
+    /// on the screen and on the keypad, whose tooltips follow it (keypad spec §4.4), and written into every Keys
+    /// item's header on both menus (editable keymap spec §6.2): the keymap is reversed once for the 22 items, as
+    /// the keypad reverses it once for its 36 buttons. A null format is the platform's own wording, the tooltips'.</summary>
     private void ApplyKeymap()
     {
         var destructive = ViewModel?.Profile.DestructiveBackspace ?? true;
         var map = _keymap?.Compose(destructive) ?? DefaultKeymap.Create(destructive);
         Screen.Keymap = map;
         KeypadPanel.Keymap = map;
+        var chords = map.Keys.ToLookup(pair => pair.Value, pair => pair.Key);
+        foreach (var (native, classic, name, key) in _keysRows)
+        {
+            var header = KeysMenuHints.Header(name, chords[key]);
+            native.Header = header;
+            classic.Header = header;
+        }
     }
 
     /// <summary>Cmd/Ctrl+K from the screen, and Window &gt; Switch Session... (Task 7).</summary>
@@ -686,6 +704,34 @@ public partial class SessionWindow : Window, ISessionHost
         _nativeSessionsSeparator.IsVisible = _sessionRows.Count > 0;
         SessionsSeparator.IsVisible = _sessionRows.Count > 0;
     }
+
+    /// <summary>Pairs the declared Keys items of the two menus, the native side found through the declared submenu
+    /// (which survives InWindow's stashing of the top-level items, as _nativeWindowMenu does) and the classic side
+    /// through KeysMenuItem. A menu whose items differ in count or key is a declaration error and throws here, at
+    /// construction, rather than writing one menu's hint onto the other's item.</summary>
+    private void CaptureKeysRows()
+    {
+        var native = MenuLookup.Item(NativeMenu.GetMenu(this), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
+            .Where(item => item is not NativeMenuItemSeparator).ToList();
+        var classic = KeysMenuItem.Items.OfType<MenuItem>().ToList();
+        if (native.Count != classic.Count)
+            throw new InvalidOperationException($"The native Keys menu declares {native.Count} items and the classic one {classic.Count}.");
+        foreach (var (nativeItem, classicItem) in native.Zip(classic))
+        {
+            var key = (TerminalKey)nativeItem.CommandParameter!;
+            if (!Equals(classicItem.CommandParameter, key))
+                throw new InvalidOperationException($"Keys > {nativeItem.Header} sends {key} natively and {classicItem.CommandParameter} in the window.");
+            _keysRows.Add((nativeItem, classicItem, nativeItem.Header!, key));
+        }
+    }
+
+    /// <summary>Test seam (#23): the Keys menu's captured native/classic pair for the key it sends. Under InWindow,
+    /// ApplyMenuStyle removes the top-level "_Keys" item from NativeMenu.GetMenu(this).Items entirely (Assert.Empty
+    /// in A_style_change_on_an_open_window_empties_and_refills_the_same_native_menu shows the same emptying), so a
+    /// fresh MenuLookup search from outside the window can no longer reach it once construction has run — only the
+    /// reference CaptureKeysRows captured before the stash still can. _keysRows is where that reference lives.</summary>
+    internal (NativeMenuItem Native, MenuItem Classic) KeysRow(TerminalKey key) =>
+        _keysRows.Where(row => row.Key == key).Select(row => (row.Native, row.Classic)).Single();
 
     /// <summary>Brings the session, then puts every mark back: both renderers write IsChecked before the click
     /// arrives, and bringing the session that is already current raises no Changed to rebuild them (Keys &gt;

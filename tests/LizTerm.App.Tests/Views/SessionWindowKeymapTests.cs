@@ -42,6 +42,14 @@ public class SessionWindowKeymapTests
         return window.FindControl<Keypad>("KeypadPanel")!.GetVisualDescendants().OfType<Button>().First(b => Equals(b.Tag, key));
     }
 
+    /// <summary>A Keys item by the key it sends, never by header: the header carries the keystroke hint and follows
+    /// the keymap. This window is InWindow (see Show above), so ApplyMenuStyle has already removed the top-level
+    /// "_Keys" native item from NativeMenu.GetMenu(window).Items by the time a test can look — the same emptying
+    /// A_style_change_on_an_open_window_empties_and_refills_the_same_native_menu asserts with Assert.Empty — and a
+    /// fresh MenuLookup search from out here can no longer reach it. SessionWindow.KeysRow is the seam that still
+    /// can, because it is the reference CaptureKeysRows captured before the stash.</summary>
+    private static (NativeMenuItem Native, MenuItem Classic) KeysItems(SessionWindow window, TerminalKey key) => window.KeysRow(key);
+
     [AvaloniaFact]
     public void A_window_without_a_keymap_follows_the_profiles_Backspace_choice()
     {
@@ -104,5 +112,49 @@ public class SessionWindowKeymapTests
 
         Assert.True(screen.Keymap.TryMap(new KeyChord(Key.Home, KeyModifiers.Control), out var key));
         Assert.Equal(TerminalKey.PA2, key);
+    }
+
+    /// <summary>Editable keymap spec §6.2 and §7.2: a rebind reaches the Keys menu's header text on both renderers.
+    /// The window is InWindow, so the native top-level items are stashed out of the menu while this runs, and the
+    /// Keys items still have to follow, because a later switch to Native puts those same objects back.</summary>
+    [AvaloniaFact]
+    public void A_rebind_reaches_the_Keys_menu_headers_on_both_menus()
+    {
+        var keymap = new KeymapViewModel();
+        var (window, _, screen) = Show(destructiveBackspace: true, keymap);
+        var (native, classic) = KeysItems(window, TerminalKey.PA1);
+        Assert.Equal("PA1  " + KeymapHints.Describe(screen.Keymap, TerminalKey.PA1), native.Header);
+        Assert.Equal(native.Header, classic.Header as string);
+        Assert.DoesNotContain("F9", native.Header);
+
+        keymap.Bind(new KeyChord(Key.F9, KeyModifiers.Alt), new KeymapAction.SendKey(TerminalKey.PA1));
+
+        Assert.Equal("PA1  " + KeymapHints.Describe(screen.Keymap, TerminalKey.PA1), native.Header);
+        Assert.Contains("F9", native.Header);
+        Assert.Equal(native.Header, classic.Header as string);
+        Assert.Null(native.Gesture);
+        Assert.Null(classic.InputGesture);
+    }
+
+    /// <summary>A key the user has taken every chord away from keeps its bare name, on both menus, and gets its hint
+    /// back on Reset.</summary>
+    [AvaloniaFact]
+    public void A_key_left_with_no_chord_keeps_its_bare_name_on_the_Keys_menu()
+    {
+        var keymap = new KeymapViewModel();
+        var (window, _, _) = Show(destructiveBackspace: true, keymap);
+        var (native, classic) = KeysItems(window, TerminalKey.PA3);
+        Assert.StartsWith("PA3  ", native.Header);
+
+        keymap.Unbind(new KeyChord(Key.D3, KeyModifiers.Alt));
+        keymap.Unbind(new KeyChord(Key.PageUp, KeyModifiers.Control));
+
+        Assert.Equal("PA3", native.Header);
+        Assert.Equal("PA3", classic.Header);
+
+        keymap.ResetToDefaults();
+
+        Assert.StartsWith("PA3  ", native.Header);
+        Assert.Equal(native.Header, classic.Header as string);
     }
 }
