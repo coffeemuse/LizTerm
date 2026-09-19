@@ -110,6 +110,32 @@ public class KeyboardTabTests : IDisposable
         Assert.False(slot.IsArmed);
     }
 
+    /// <summary>The way out that binds nothing (#18): Cancel is beside the slot only while it is armed, and a click on
+    /// it disarms, leaves the keymap alone and leaves the focus on the slot, so Tab moves on from there.</summary>
+    [AvaloniaFact]
+    public void A_Cancel_button_beside_an_armed_slot_disarms_it_and_binds_nothing()
+    {
+        var (window, tab, editor, keymap) = Show();
+        var row = RowContainer(tab, editor, "PA1");
+        var slot = SlotOf(row);
+        var cancel = row.GetVisualDescendants().OfType<Button>().Single(button => Equals(button.Content, "Cancel"));
+        Assert.False(cancel.IsVisible);
+        slot.Focus();
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        window.UpdateLayout();
+        Assert.True(cancel.IsVisible);
+        Assert.Equal("Cancel adding a key to PA1", Avalonia.Automation.AutomationProperties.GetName(cancel));
+        var before = keymap.Compose(destructiveBackspace: true);
+
+        Click(window, cancel);
+
+        Assert.False(slot.IsArmed);
+        Assert.False(cancel.IsVisible);
+        Assert.True(slot.IsFocused);
+        Assert.Same(before, keymap.Compose(destructiveBackspace: true));
+    }
+
     [AvaloniaFact]
     public void A_refused_chord_shows_the_reason_in_the_slot()
     {

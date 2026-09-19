@@ -14,8 +14,8 @@ namespace LizTerm.App.Controls;
 /// through it (an armed-on-focus slot would swallow Tab and trap a keyboard user); a click, or Enter or Space,
 /// arms it. Armed, it captures the next chord: a key with its modifiers, or a Ctrl key pressed and released alone
 /// as a tap (its own <see cref="ModifierTapDetector"/>, the screen's rule), and offers it to
-/// <see cref="CaptureHandler"/>. Accepted disarms; refused stays armed with the reason as its text. Focus loss or a
-/// second click disarms. Escape and Tab are chords like the rest, since both are bindable.
+/// <see cref="CaptureHandler"/>. Accepted disarms; refused stays armed with the reason as its text. Focus loss, a
+/// second click or the row's Cancel button (<see cref="Cancel"/>) disarms. Escape and Tab are chords like the rest, since both are bindable.
 /// The control knows nothing about keymaps: the handler is the row's.
 /// The release of a key the slot captured is swallowed too (<c>_consumed</c>): <see cref="Button"/> activates on the
 /// Space *release*, whatever happened to the press, so binding Space disarmed the slot and its own release armed it
@@ -58,7 +58,21 @@ public sealed class ChordCaptureBox : Button
         set => SetValue(CaptureHandlerProperty, value);
     }
 
-    public bool IsArmed { get; private set; }
+    public static readonly DirectProperty<ChordCaptureBox, bool> IsArmedProperty =
+        AvaloniaProperty.RegisterDirect<ChordCaptureBox, bool>(nameof(IsArmed), box => box.IsArmed);
+
+    private bool _isArmed;
+
+    /// <summary>Read-only, and a property a binding can follow: the row's Cancel button shows while it is true.</summary>
+    public bool IsArmed
+    {
+        get => _isArmed;
+        private set => SetAndRaise(IsArmedProperty, ref _isArmed, value);
+    }
+
+    /// <summary>The way out that binds nothing, for the row's Cancel button. The slot keeps its focus, so a keyboard
+    /// user who reached for the mouse can Tab on from it.</summary>
+    public void Cancel() => Disarm();
 
     /// <summary>How long an accepted note ("Moved from PA2") shows before the slot reads Add again.</summary>
     public TimeSpan MessageDuration { get; set; } = TimeSpan.FromSeconds(3);

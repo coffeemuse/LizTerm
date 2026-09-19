@@ -202,7 +202,8 @@ PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. T
 session window, and the keypad's tooltips follow them.
 
 - **Add a key**: click **Add** on the row, or Tab to it and press Enter or Space, then press the key you want. A tap
-  of Left or Right Ctrl is captured the same way: press and release the Ctrl key on its own.
+  of Left or Right Ctrl is captured the same way: press and release the Ctrl key on its own. **Cancel**, beside the
+  slot while it waits, stops without adding anything.
 - **Remove a key**: click the **×** on its chip.
 - **Move a key**: add it to another row. It leaves the row it was on, and the slot says where it came from.
 - **Reset to defaults** puts back the table above and clears every change you made.

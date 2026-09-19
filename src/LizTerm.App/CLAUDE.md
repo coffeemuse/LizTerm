@@ -266,6 +266,9 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   to whatever row the user was only opening. The click and Space paths need no such rule, since neither leaves a key
   held when the slot arms. The mirror holds after a capture: while the captured key is still down its auto-repeat is
   ignored by the idle slot too (a bound Enter would otherwise re-arm it), and losing focus clears both records.
+  A Cancel button sits beside the armed slot (`IsVisible` bound to the slot's `IsArmed`, a direct property for that
+  reason; not focusable, and `KeyboardTab.OnCancelClick` calls `Cancel()` then gives the slot the focus back). It is
+  the mouse exit: an armed slot captures Tab, so a keyboard-only user's exit is still a chord the row already holds.
   The control's `Keymap` property holds the table in force; `SessionWindow.ApplyKeymap` sets it, and the keypad's,
   from the profile's Backspace choice under the user's overlay.
 - Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's `PlatformHotkeyConfiguration` puts Ctrl+Insert into

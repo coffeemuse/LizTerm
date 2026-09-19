@@ -16,14 +16,16 @@
   <!-- TextBlock.hint is PreferencesWindow's style: a window's styles reach the tab it hosts, so it is not repeated. -->
   <UserControl.Styles>
     <!-- ChordCaptureBox is a Button under another type, so it is styled by class, not by type. -->
-    <Style Selector="Button.chord-slot">
-      <Setter Property="MinWidth" Value="84" />
-      <Setter Property="MaxWidth" Value="180" />
+    <Style Selector="Button.chord-slot, Button.cancel">
       <Setter Property="MinHeight" Value="24" />
       <Setter Property="Padding" Value="8,0" />
       <Setter Property="FontSize" Value="12" />
       <Setter Property="VerticalAlignment" Value="Top" />
       <Setter Property="Margin" Value="6,0,0,4" />
+    </Style>
+    <Style Selector="Button.chord-slot">
+      <Setter Property="MinWidth" Value="84" />
+      <Setter Property="MaxWidth" Value="180" />
     </Style>
     <Style Selector="Button.chord-slot:armed">
       <Setter Property="BorderThickness" Value="2" />
@@ -52,8 +54,15 @@
             <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto" Margin="0,4">
               <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" Margin="0,3,8,0" TextWrapping="Wrap" />
               <DockPanel Grid.Column="1">
-                <controls:ChordCaptureBox DockPanel.Dock="Right" CaptureHandler="{Binding CaptureHandler}"
+                <controls:ChordCaptureBox x:Name="Slot" DockPanel.Dock="Right" CaptureHandler="{Binding CaptureHandler}"
                                           AutomationProperties.Name="{Binding AddName}" />
+                <!-- The way out of an armed slot that binds nothing. Shown only while the slot is armed, to its left so
+                     the slot stays under the pointer that armed it. Not focusable, and the click hands the focus back
+                     to the slot, now idle, so a keyboard user who reached for the mouse can Tab on. An armed slot
+                     captures Tab, so this is a mouse exit; a keyboard-only user's exit is a chord the row already holds. -->
+                <Button DockPanel.Dock="Right" Classes="cancel" Content="Cancel" Focusable="False"
+                        IsVisible="{Binding #Slot.IsArmed}" Click="OnCancelClick"
+                        AutomationProperties.Name="{Binding CancelName}" />
                 <ItemsControl ItemsSource="{Binding Chips}">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>

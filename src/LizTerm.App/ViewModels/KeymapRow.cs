@@ -34,6 +34,7 @@ public sealed class KeymapRow : ObservableObject
         _format = format;
         Title = TitleOf(target);
         AddName = "Add a key to " + Title;
+        CancelName = "Cancel adding a key to " + Title;
         Note = target is KeymapAction.SendKey { Key: TerminalKey.Erase or TerminalKey.Backspace } ? BackspaceNote : null;
         CaptureHandler = TryCapture;
         Refresh();
@@ -44,6 +45,9 @@ public sealed class KeymapRow : ObservableObject
 
     /// <summary>The slot's accessible name; "Add" alone is one of forty.</summary>
     public string AddName { get; }
+
+    /// <summary>The Cancel button's accessible name, beside the armed slot.</summary>
+    public string CancelName { get; }
 
     public string? Note { get; }
     public bool HasNote => Note is not null;

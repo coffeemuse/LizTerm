@@ -283,6 +283,36 @@ public class ChordCaptureBoxTests
     }
 
     [AvaloniaFact]
+    public void Cancel_disarms_binds_nothing_and_keeps_the_focus()
+    {
+        var (window, box, _, _, offered) = Show();
+        Arm(window);
+
+        box.Cancel();
+
+        Assert.False(box.IsArmed);
+        Assert.Equal("Add", box.Text);
+        Assert.True(box.IsFocused);
+        Assert.Empty(offered);
+    }
+
+    /// <summary>The row's Cancel button binds its visibility to it, so it has to notify.</summary>
+    [AvaloniaFact]
+    public void IsArmed_is_a_property_a_binding_can_follow()
+    {
+        var (window, box, _, _, _) = Show();
+        var mirror = new TextBlock();
+        mirror.Bind(Visual.IsVisibleProperty, box.GetObservable(ChordCaptureBox.IsArmedProperty));
+        Assert.False(mirror.IsVisible);
+
+        Arm(window);
+        Assert.True(mirror.IsVisible);
+
+        box.Cancel();
+        Assert.False(mirror.IsVisible);
+    }
+
+    [AvaloniaFact]
     public void An_idle_slot_lets_Tab_move_focus_on()
     {
         var (window, box, _, after, offered) = Show();
