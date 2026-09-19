@@ -31,11 +31,12 @@ public sealed partial class MvsmfBrowserViewModel
     private Task RenameMemberAsync() =>
         SelectedDataset is { } dataset && _selectedMembers is [var member] ? RenameMemberAsync(dataset, member) : Task.CompletedTask;
 
-    /// <summary>A retry asks again about the same member: the failure changed nothing.</summary>
+    /// <summary>A retry before the host has renamed asks again about the same member; once it has, only the listing
+    /// is retried (RunThenListAsync).</summary>
     private Task RenameMemberAsync(DatasetRow dataset, MemberRow member) =>
-        RunExclusiveAsync(token => RenameMemberCoreAsync(dataset, member, token), () => RenameMemberAsync(dataset, member));
+        RunThenListAsync((retryWith, token) => RenameMemberCoreAsync(dataset, member, retryWith, token), () => RenameMemberAsync(dataset, member));
 
-    private async Task RenameMemberCoreAsync(DatasetRow dataset, MemberRow member, CancellationToken token)
+    private async Task RenameMemberCoreAsync(DatasetRow dataset, MemberRow member, Action<Func<Task>> retryWith, CancellationToken token)
     {
         var question = new ConfirmationRequest($"Rename {member.Name} in {dataset.Name} to:", "Rename",
             input: member.Name, inputRule: HostPath.MemberNameError);
@@ -60,13 +61,24 @@ public sealed partial class MvsmfBrowserViewModel
             return;
         }
         _access.Etags.Move(member.Path, to);
+        retryWith(() => ShowRenamedMemberAsync(dataset, member.Name, to));
+        await ShowRenamedMemberAsync(dataset, member.Name, to, token);
+    }
+
+    /// <summary>The second half of a member rename, and its own retry: the host has already renamed, so only the
+    /// listing is asked again.</summary>
+    private Task ShowRenamedMemberAsync(DatasetRow dataset, string oldName, HostPath to) =>
+        RunExclusiveAsync(token => ShowRenamedMemberAsync(dataset, oldName, to, token), () => ShowRenamedMemberAsync(dataset, oldName, to));
+
+    private async Task ShowRenamedMemberAsync(DatasetRow dataset, string oldName, HostPath to, CancellationToken token)
+    {
         await LoadMembersCoreAsync(dataset, token);
         if (ReferenceEquals(SelectedDataset, dataset) && VisibleMembers.FirstOrDefault(row => row.Name == to.Member) is { } renamed)
         {
             SetSelectedMembers([renamed]);
             SelectMemberRequested?.Invoke(renamed);
         }
-        StatusText = $"✓ Renamed {member.Name} to {to.Member}.";
+        StatusText = $"✓ Renamed {oldName} to {to.Member}.";
     }
 
     // ---- dataset rename ----

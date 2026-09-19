@@ -126,6 +126,29 @@ public class MvsmfBrowserManageTests
     }
 
     [Fact]
+    public async Task A_listing_that_fails_after_a_member_rename_retries_only_the_listing()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ChooseAsync("MVSCE02.CNTL");
+        t.Select("HELLO");
+        t.Host.Failures["members:MVSCE02.CNTL"] = new HostFileException(HostFileErrorKind.Unreachable, "cannot reach the host (refused).");
+
+        var renaming = t.Vm.RenameMemberCommand.ExecuteAsync(null);
+        Answer(await AskedAsync(t, renaming), "HELLO2");
+        await renaming;
+        Assert.True(t.Vm.CanRetry);
+
+        t.Host.Failures.Clear();
+        await t.Vm.RetryCommand.ExecuteAsync(null);
+
+        Assert.False(t.Vm.HasError);
+        Assert.Equal(1, t.Host.CallsSnapshot().Count(c => c.StartsWith("rename:")));
+        Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO2" }, t.Vm.Members.Select(m => m.Name));
+        Assert.Equal(new[] { "HELLO2" }, t.Vm.SelectedMembers.Select(m => m.Name));
+        Assert.Equal("✓ Renamed HELLO to HELLO2.", t.Vm.StatusText);
+    }
+
+    [Fact]
     public async Task Rename_member_needs_exactly_one_member_of_a_pds()
     {
         var t = BrowserTestHost.Create();
