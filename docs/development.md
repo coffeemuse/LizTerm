@@ -144,7 +144,7 @@ tools/build-app-icons.sh
 | `LIZTERM_TEST_USER`, `LIZTERM_TEST_PASSWORD` | Additionally enable the IND$FILE round-trip test. |
 | `LIZTERM_MVSMF_URL` | The mvsMF base, for example `http://host:8080/zosmf`; with the three below, enables the live mvsMF tests. |
 | `LIZTERM_MVSMF_USER`, `LIZTERM_MVSMF_PASSWORD` | Credentials for the live mvsMF tests and for `tools/record-mvsmf-fixture.sh`. |
-| `LIZTERM_MVSMF_SCRATCH_PDS` | A PDS the live mvsMF tests may write the member `LIZITEST` into and delete it from. |
+| `LIZTERM_MVSMF_SCRATCH_PDS` | A PDS the live mvsMF tests may write the member `LIZITEST` into and delete it from. The tests also allocate and delete datasets named `<LIZTERM_MVSMF_USER>.LIZITEST.*`, under the user's own high-level qualifier. |
 | `LIZTERM_TEST_BELL` | Any non-blank value runs the system-alert ring test on macOS and Windows, where it is audible; unset, it skips there. On Linux the ring is a no-op and the test always runs. |
 | `LIZTERM_REQUIRE_ENGINE` | Any non-blank value makes the engine smoke test fail, instead of skip, when the test output has no bundled engine. CI sets it; leave it unset locally. |
 
@@ -178,10 +178,11 @@ rather than exporting them on a command line.
 
 Set all four `LIZTERM_MVSMF_*` variables. The tests sign in, read the server information, list the scratch PDS,
 upload a small text member through the same checks the app uses, verify and download it, delete it, sign out and
-check the host refuses the ended session; probe `/info` anonymously; and make one sign-in attempt with a wrong
-password. That wrong-password test fails one sign-in per run; on a host whose security product revokes a userid
-after failed attempts, point it at a userid that can take that. Keep them with the other live-test variables, in
-the file outside the repository that you `source`.
+check the host refuses the ended session; create a small PDS under the user's own qualifier, write a member, check
+the host's stamp (a stale one is refused), rename the member and the dataset, and delete it; probe `/info`
+anonymously; and make one sign-in attempt with a wrong password. That wrong-password test fails one sign-in per
+run; on a host whose security product revokes a userid after failed attempts, point it at a userid that can take
+that. Keep them with the other live-test variables, in the file outside the repository that you `source`.
 
 ### Replay fixtures
 
