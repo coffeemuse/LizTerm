@@ -504,7 +504,9 @@ public class PreferencesWindowTests
     }
 
     /// <summary>The seam's keymap is optional for the same reason its settings object is an argument: a test that
-    /// does not care about the keymap never opens keymap.json.</summary>
+    /// does not care about the keymap never opens keymap.json. Asserting the type and not merely that something is
+    /// there is the point: a KeyboardTab sets no data context of its own, so a window that never set one would hand
+    /// the tab its own SettingsViewModel by inheritance and a null check would pass.</summary>
     [AvaloniaFact]
     public void Preferences_opened_through_the_seam_gets_an_in_memory_keymap()
     {
@@ -512,7 +514,14 @@ public class PreferencesWindowTests
         var window = app.ShowPreferences(new SettingsViewModel());
         try
         {
-            Assert.NotNull(window.FindControl<KeyboardTab>("KeyboardPanel")!.DataContext);
+            var editor = Assert.IsType<KeymapEditorViewModel>(window.FindControl<KeyboardTab>("KeyboardPanel")!.DataContext);
+
+            // In memory, so it holds every default and a change through it raises no save error at all.
+            Assert.NotEmpty(editor.Rows);
+            editor.Rows.Single(row => row.Title == "PA1").TryCapture(new KeyChord(Key.F9, KeyModifiers.Alt));
+            Assert.Null(editor.SaveError);
+            Assert.Equal([new KeyChord(Key.F9, KeyModifiers.Alt), new KeyChord(Key.D1, KeyModifiers.Alt)],
+                         editor.Rows.Single(row => row.Title == "PA1").Chips.Select(chip => chip.Chord));
         }
         finally
         {
