@@ -31,7 +31,7 @@ public sealed class KeymapViewModel : ObservableObject
 
     /// <summary>The differences as this process sees them. Another process's later write is seen at the next
     /// launch; KeymapStore.Update keeps that process's entries, this object keeps its own view.</summary>
-    public KeymapOverlay Overlay { get; private set; }
+    internal KeymapOverlay Overlay { get; private set; }
 
     /// <summary>After every Bind, Unbind and ResetToDefaults, before the save.</summary>
     public event EventHandler? Changed;

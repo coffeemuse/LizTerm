@@ -34,7 +34,12 @@ public sealed record PlatformHotkeys(
     public static PlatformHotkeys From(PlatformHotkeyConfiguration? configuration) =>
         configuration is null
             ? Fallback
-            : new(configuration.Copy, configuration.Paste, configuration.SelectAll, configuration.CommandModifiers);
+            : new(OrFallback(configuration.Copy, Fallback.Copy), OrFallback(configuration.Paste, Fallback.Paste),
+                  OrFallback(configuration.SelectAll, Fallback.SelectAll), configuration.CommandModifiers);
+
+    /// <summary>TerminalScreen.Matches falls back to Ctrl+key when the platform lists nothing; so does this.</summary>
+    private static IReadOnlyList<KeyGesture> OrFallback(IReadOnlyList<KeyGesture> gestures, IReadOnlyList<KeyGesture> fallback) =>
+        gestures.Count > 0 ? gestures : fallback;
 }
 
 /// <summary>The answer to "may this chord be bound": Allowed, or Refused with the reason the tab shows verbatim.</summary>

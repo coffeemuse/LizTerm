@@ -12,7 +12,7 @@ namespace LizTerm.Core.Settings;
 /// Update, one parser, and a write through a sibling temp file renamed over the target.</summary>
 internal static class JsonFiles
 {
-    /// <summary>Indented, and with the relaxed encoder: these are files a user reads and edits by hand, so a chord such as Ctrl+Home and a text such as ¬ are written as themselves rather than as \u002B and \u00AC, which is what the default encoder writes. Both forms read back identically; only the file's looks differ.</summary>
+    /// <summary>Indented, and with the relaxed encoder: these are files a user reads and edits by hand, so a chord such as Ctrl+Home and a text such as ¬ are written as themselves rather than as \u002B and \u00AC, which is what the default encoder writes. Both forms read back identically; only the file's looks differ. settings.json's one string, the skipped update version, contains nothing either encoder escapes.</summary>
     public static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     /// <summary>The file as a JSON object, or null when it is missing, unreadable, not JSON or not an object.</summary>

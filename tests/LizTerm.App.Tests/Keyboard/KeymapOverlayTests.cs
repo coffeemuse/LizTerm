@@ -145,6 +145,20 @@ public class KeymapOverlayTests
     }
 
     [Fact]
+    public void A_chord_whose_spelling_never_parses_back_is_written_once()
+    {
+        var cmdK = new KeyChord(Key.K, KeyModifiers.Meta);
+        var saved = KeymapOverlay.Empty.Bind(cmdK, Pa1).ToFile();
+        var reloaded = KeymapOverlay.Parse(saved);
+        Assert.Equal(1, reloaded.IgnoredCount);
+
+        var file = reloaded.Bind(cmdK, Pa1).ToFile();
+
+        Assert.Equal(new KeymapEntry.SendKey("PA1"), file.Bindings["Cmd+K"]);
+        Assert.Single(file.Bindings);
+    }
+
+    [Fact]
     public void Two_spellings_of_one_chord_are_one_entry_and_the_later_wins()
     {
         var overlay = KeymapOverlay.Parse(File("""{"ctrl+home": "PA1", "Ctrl+Home": "PA3"}"""));

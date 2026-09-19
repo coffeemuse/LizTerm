@@ -503,9 +503,11 @@ name such as <code>PA1</code>, to <code>{"text": "¬"}</code> for text to type, 
   }
 }
 </code></pre>
-<p>Key names are Avalonia's (<code>Home</code>, <code>PageUp</code>, <code>D1</code> for the 1 key, <code>OemOpenBrackets</code> for <code>[</code>); a chord LizTerm cannot
-read is left alone and does nothing. Deleting the file restores the defaults. Backspace follows the profile's
-Backspace setting unless the file binds <code>Back</code> itself.</p>
+<p>Key names are Avalonia's (<code>Home</code>, <code>PageUp</code>, <code>D1</code> for the 1 key, <code>OemOpenBrackets</code> for <code>[</code>); an entry LizTerm cannot
+read is skipped, and that key keeps its default. Deleting the file restores the defaults. Backspace follows the
+profile's Backspace setting unless the file binds <code>Back</code> itself. The file is not checked: binding a plain letter or
+the platform's Copy shortcut takes that key away from typing or copying. Only <code>Tap:LeftCtrl</code> and <code>Tap:RightCtrl</code> are
+taps.</p>
 <h2 id="known-limitations">Known limitations</h2>
 <ul>
 <li><strong>Unsigned Windows builds.</strong> Windows SmartScreen warns about the app the first time you open it; the

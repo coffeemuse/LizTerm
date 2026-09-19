@@ -534,9 +534,11 @@ name such as `PA1`, to `{"text": "¬"}` for text to type, or to `null` to take t
 }
 ```
 
-Key names are Avalonia's (`Home`, `PageUp`, `D1` for the 1 key, `OemOpenBrackets` for `[`); a chord LizTerm cannot
-read is left alone and does nothing. Deleting the file restores the defaults. Backspace follows the profile's
-Backspace setting unless the file binds `Back` itself.
+Key names are Avalonia's (`Home`, `PageUp`, `D1` for the 1 key, `OemOpenBrackets` for `[`); an entry LizTerm cannot
+read is skipped, and that key keeps its default. Deleting the file restores the defaults. Backspace follows the
+profile's Backspace setting unless the file binds `Back` itself. The file is not checked: binding a plain letter or
+the platform's Copy shortcut takes that key away from typing or copying. Only `Tap:LeftCtrl` and `Tap:RightCtrl` are
+taps.
 
 ## Known limitations
 

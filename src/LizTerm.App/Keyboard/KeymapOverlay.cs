@@ -25,7 +25,8 @@ public sealed class KeymapOverlay
     public IReadOnlyDictionary<KeyChord, KeymapAction> Entries { get; }
 
     /// <summary>The file's entries this build left alone: unparsable chords and key names in Bindings, values of
-    /// the wrong shape in Unreadable. Written back as they were.</summary>
+    /// the wrong shape in Unreadable. Written back as they were, unless ToFile finds the user has since bound that
+    /// chord.</summary>
     public KeymapFile Ignored { get; }
 
     public int IgnoredCount => Ignored.Bindings.Count + Ignored.Unreadable.Count;
@@ -50,13 +51,19 @@ public sealed class KeymapOverlay
         return new(entries, new KeymapFile(ignored, file.Unreadable));
     }
 
-    /// <summary>Entries in the canonical spelling, then the ignored ones except any whose spelling names a chord the
-    /// entries already hold, because a chord that parsed but whose action did not is ignored under a spelling that
-    /// can collide with the canonical one.</summary>
-    public KeymapFile ToFile() =>
-        new(Entries.Select(e => KeyValuePair.Create(ChordSyntax.Format(e.Key), e.Value.ToEntry()))
-            .Concat(Ignored.Bindings.Where(pair => !(ChordSyntax.TryParse(pair.Key, out var chord) && Entries.ContainsKey(chord)))),
-            Ignored.Unreadable);
+    /// <summary>Entries in the canonical spelling, then the ignored ones, except any whose spelling the entries
+    /// already use or names a chord the entries hold: a chord that parsed but whose action did not is ignored under
+    /// a spelling that can collide with the canonical one, and a chord whose spelling never parses back (a Cmd
+    /// chord, which the tab refuses but a caller could bind) would otherwise be written twice. ToFile never throws,
+    /// whatever was bound.</summary>
+    public KeymapFile ToFile()
+    {
+        var formatted = Entries.ToDictionary(e => ChordSyntax.Format(e.Key), e => e.Value.ToEntry());
+        var carried = Ignored.Bindings.Where(pair =>
+            !formatted.ContainsKey(pair.Key)
+            && !(ChordSyntax.TryParse(pair.Key, out var chord) && Entries.ContainsKey(chord)));
+        return new KeymapFile(formatted.Concat(carried), Ignored.Unreadable);
+    }
 
     /// <summary>With <paramref name="chord"/> doing <paramref name="action"/>; an entry that says what the
     /// baseline already says is dropped instead, Back excepted.</summary>

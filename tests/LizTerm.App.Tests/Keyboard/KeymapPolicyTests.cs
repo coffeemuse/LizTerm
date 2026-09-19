@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using LizTerm.App.Keyboard;
 
 namespace LizTerm.App.Tests.Keyboard;
@@ -80,6 +81,25 @@ public class KeymapPolicyTests
     public void A_missing_platform_configuration_is_the_screens_fallback()
     {
         Assert.Same(PlatformHotkeys.Fallback, PlatformHotkeys.From(null));
+    }
+
+    [Fact]
+    public void An_empty_platform_list_falls_back_to_Ctrl_as_the_screen_does()
+    {
+        // PlatformHotkeyConfiguration's constructors are all [PrivateApi]: public in IL, so
+        // Activator.CreateInstance reaches one, but no external `new` binds to it. Its gesture lists
+        // are then cleared by hand to reproduce a platform that answers nothing, the case From must
+        // still cover.
+        var configuration = Activator.CreateInstance<PlatformHotkeyConfiguration>();
+        configuration.Copy = [];
+        configuration.Paste = [];
+        configuration.SelectAll = [];
+        configuration.CommandModifiers = KeyModifiers.Control;
+
+        var hotkeys = PlatformHotkeys.From(configuration);
+
+        Assert.Equal(new KeymapVerdict.Refused("LizTerm uses this for Copy"),
+            KeymapPolicy.Check(new KeyChord(Key.C, KeyModifiers.Control), hotkeys));
     }
 
     private static PlatformHotkeys Hotkeys(string platform) => platform == "mac" ? PlatformHotkeys.MacOS : PlatformHotkeys.Fallback;
