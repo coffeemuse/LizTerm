@@ -62,6 +62,7 @@ public class KeymapPolicyTests
         { "mac", Key.F, KeyModifiers.Control },
         { "mac", Key.K, KeyModifiers.Control },
         { "mac", Key.Home, KeyModifiers.Control },
+        { "mac", Key.Q, KeyModifiers.Control | KeyModifiers.Alt },
     };
 
     [Theory]

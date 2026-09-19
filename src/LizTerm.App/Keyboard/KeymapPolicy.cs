@@ -77,9 +77,9 @@ public abstract record KeymapVerdict
 
 /// <summary>Editable keymap spec §4: what the Keyboard tab will not bind. The platform gestures the screen checks
 /// first, because a binding there would never fire; any Cmd or Windows-key chord, because the menu bar or the
-/// system sees it first; and a printable key with no modifier, Shift alone, or Ctrl+Alt (AltGr on Windows and
-/// Linux), because there would be no way to type that character afterwards. Everything else is allowed: a chord another action holds moves (the tab says
-/// from where), and unbinding a default is silent. "Printable" is decided by the Key value alone, not by asking
+/// system sees it first; and a printable key with no modifier, Shift alone, or, off macOS, Ctrl+Alt (AltGr on
+/// Windows and Linux), because there would be no way to type that character afterwards. Everything else is
+/// allowed: a chord another action holds moves (the tab says from where), and unbinding a default is silent. "Printable" is decided by the Key value alone, not by asking
 /// the platform what it would type: the answer has to be the same in a test as on a Mac.</summary>
 public static class KeymapPolicy
 {
@@ -113,8 +113,10 @@ public static class KeymapPolicy
         if (Printable.Contains(chord.Key) && chord.Modifiers is KeyModifiers.None or KeyModifiers.Shift)
             return new KeymapVerdict.Refused("This would take away typing that character");
         // AltGr arrives as Ctrl+Alt on Windows and Linux, and types a character on many layouts (Ctrl+Alt+Q is @ on a
-        // German one).
-        if (Printable.Contains(chord.Key) && chord.Modifiers.HasFlag(KeyModifiers.Control) && chord.Modifiers.HasFlag(KeyModifiers.Alt))
+        // German one). macOS has no AltGr: Ctrl+Option+letter types nothing there, so it stays a chord. The platform
+        // is told apart the way the Cmd wording is, by which key the platform calls its command modifier.
+        if (Printable.Contains(chord.Key) && !hotkeys.CommandModifiers.HasFlag(KeyModifiers.Meta)
+            && chord.Modifiers.HasFlag(KeyModifiers.Control) && chord.Modifiers.HasFlag(KeyModifiers.Alt))
             return new KeymapVerdict.Refused("AltGr types this character on some keyboards");
         return KeymapVerdict.Allowed.Instance;
     }
