@@ -12,6 +12,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using LizTerm.App.Controls;
+using LizTerm.App.Keyboard;
 using LizTerm.App.Menus;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
@@ -96,6 +97,13 @@ public class NativeMenuTests
     private static NativeMenuItem KeypadItem(SessionWindow window, string header) =>
         MenuLookup.Item(Item(window, "_View", "_Keypad").Menu, header)
         ?? throw new InvalidOperationException($"no native menu item _View > _Keypad > {header}");
+
+    /// <summary>A Keys item by the key it sends (#23): the header carries the keystroke hint and follows the keymap,
+    /// so "Insert" is a prefix of what the item reads, not the whole of it.</summary>
+    private static NativeMenuItem KeysItem(SessionWindow window, TerminalKey key) =>
+        MenuLookup.Item(NativeMenu.GetMenu(window), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
+            .SingleOrDefault(item => Equals(item.CommandParameter, key))
+        ?? throw new InvalidOperationException($"no native menu item _Keys > {key}");
 
     [AvaloniaFact]
     public void The_window_menu_has_the_same_six_top_level_menus_as_the_classic_one()
@@ -914,15 +922,47 @@ public class NativeMenuTests
 
     /// <summary>#16: both are mapped in ActionMap and were reachable only from C#. The menu is the whole fix —
     /// keymap chords are a separate decision, since any chord has to clear the copy/paste/select-all gestures
-    /// TerminalScreen checks before the keymap.</summary>
+    /// TerminalScreen checks before the keymap. Neither has a default chord, so under the default keymap each reads
+    /// its bare name (#23): the "no chord" case, on the real window.</summary>
     [AvaloniaFact]
     public void Keys_menu_offers_Dup_and_FieldMark()
     {
         var (window, _, _, _) = Show();
-        foreach (var header in new[] { "Dup", "Field Mark" })
+
+        Assert.NotNull(KeysItem(window, TerminalKey.Dup).Command);
+        Assert.NotNull(KeysItem(window, TerminalKey.FieldMark).Command);
+        Assert.Equal("Dup", KeysItem(window, TerminalKey.Dup).Header);
+        Assert.Equal("Field Mark", KeysItem(window, TerminalKey.FieldMark).Header);
+    }
+
+    /// <summary>#23: every Keys item names the keystrokes that send it, in its header text and never in a gesture (a
+    /// native gesture is a key equivalent that would take the keystroke from the screen; see
+    /// Only_edit_and_two_window_items_carry_gestures), in both menus alike so the parity walk stays a real guard.
+    /// The expectation is computed with the window's own keymap and the platform's own wording, exactly as the
+    /// window computes the header, because the headless platform's key names are not ours to assert.</summary>
+    [AvaloniaFact]
+    public void Every_keys_item_carries_its_keystrokes_in_its_header_on_both_menus()
+    {
+        var (window, _, _, _) = Show();
+        var map = window.FindControl<TerminalScreen>("Screen")!.Keymap;
+        var native = MenuLookup.Item(NativeMenu.GetMenu(window), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
+            .Where(item => item is not NativeMenuItemSeparator).ToList();
+        var classic = window.FindControl<MenuItem>("KeysMenuItem")!.Items.OfType<MenuItem>().ToList();
+        Assert.Equal(native.Count, classic.Count);
+        Assert.Equal(22, native.Count);
+
+        foreach (var (nativeItem, classicItem) in native.Zip(classic))
         {
-            Assert.NotNull(Item(window, "_Keys", header).Command);
+            var key = (TerminalKey)nativeItem.CommandParameter!;
+            var hint = KeymapHints.Describe(map, key);
+            if (hint is not null) Assert.EndsWith("  " + hint, nativeItem.Header);
+            else Assert.DoesNotContain("  ", nativeItem.Header);
+            Assert.Equal(nativeItem.Header, classicItem.Header as string);
+            Assert.Null(nativeItem.Gesture);
+            Assert.Null(classicItem.InputGesture);
         }
+        Assert.Equal("PA2  " + KeymapHints.Describe(map, TerminalKey.PA2), KeysItem(window, TerminalKey.PA2).Header);
+        Assert.Equal("Insert  " + KeymapHints.Describe(map, TerminalKey.Insert), KeysItem(window, TerminalKey.Insert).Header);
     }
 
     /// <summary>#111: Insert was on the Insert key alone, which Apple's keyboards do not have. The Keys menu is the
@@ -932,7 +972,7 @@ public class NativeMenuTests
     {
         var (window, _, session, _) = Show();
 
-        ((INativeMenuItemExporterEventsImplBridge)Item(window, "_Keys", "Insert")).RaiseClicked();
+        ((INativeMenuItemExporterEventsImplBridge)KeysItem(window, TerminalKey.Insert)).RaiseClicked();
 
         Assert.Equal(["key:Insert"], session.Calls);
     }
@@ -943,7 +983,7 @@ public class NativeMenuTests
     public void Keys_menu_insert_is_checked_while_the_host_reports_insert_mode_on_both_menus()
     {
         var (window, _, session, _) = Show();
-        var native = Item(window, "_Keys", "Insert");
+        var native = KeysItem(window, TerminalKey.Insert);
         var classic = window.FindControl<MenuItem>("InsertMenuItem");
         Assert.NotNull(classic);
         Assert.Equal(MenuItemToggleType.CheckBox, native.ToggleType);
@@ -969,7 +1009,7 @@ public class NativeMenuTests
     public void Clicking_keys_menu_insert_leaves_the_check_mark_to_the_host_on_both_menus()
     {
         var (window, _, session, _) = Show();
-        var native = Item(window, "_Keys", "Insert");
+        var native = KeysItem(window, TerminalKey.Insert);
         var classic = window.FindControl<MenuItem>("InsertMenuItem");
         Assert.NotNull(classic);
 
