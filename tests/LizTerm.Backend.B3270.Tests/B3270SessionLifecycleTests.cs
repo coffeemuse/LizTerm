@@ -19,6 +19,14 @@ public class B3270SessionLifecycleTests
         Assert.Equal(["-json", "-utf8", "-model", "3279-3-E", "-codepage", "bracket", "-set", "nopSeconds=60"], B3270Session.BuildArguments(Profile));
     }
 
+    /// <summary>A mono profile starts the engine as a 3278, which is what makes it tell the host IBM-3278-n-E
+    /// and report intensity without colour (#123).</summary>
+    [Fact]
+    public void BuildArguments_starts_a_mono_profile_as_a_3278()
+    {
+        Assert.Equal(["-json", "-utf8", "-model", "3278-3-E", "-codepage", "bracket", "-set", "nopSeconds=60"], B3270Session.BuildArguments(Profile with { Display = TerminalDisplay.Mono }));
+    }
+
     [Fact]
     public async Task Start_spawns_with_arguments_and_waits_for_hello()
     {

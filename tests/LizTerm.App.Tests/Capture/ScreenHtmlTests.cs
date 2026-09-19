@@ -65,6 +65,21 @@ public class ScreenHtmlTests
         Assert.Contains("background:#000000", html);
     }
 
+    /// <summary>A capture of a mono session matches what was on screen: the phosphor on black, whatever colour the
+    /// cells carry, with reverse video swapping the two (#123).</summary>
+    [Fact]
+    public void A_mono_capture_is_the_phosphor_on_black_and_reverses_the_two()
+    {
+        var html = ScreenHtml.Render(One("READY", HostColor.Green, HostColor.Blue), monochrome: true);
+        Assert.Contains("color:" + ScreenHtml.PhosphorHex, html);
+        Assert.Contains("background:#000000", html);
+        Assert.DoesNotContain("#5C8AFF", html);
+
+        var reversed = ScreenHtml.Render(One("READY", HostColor.Green, HostColor.Blue, CellRendition.Reverse), monochrome: true);
+        Assert.Contains("color:#000000", reversed);
+        Assert.Contains("background:" + ScreenHtml.PhosphorHex, reversed);
+    }
+
     [Fact]
     public void Highlight_becomes_bold_rather_than_a_lightened_colour()
     {

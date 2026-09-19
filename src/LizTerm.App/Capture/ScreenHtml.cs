@@ -22,11 +22,16 @@ public static class ScreenHtml
     /// `&lt;meta charset="utf-8"&gt;` is what a browser actually looks for when sniffing a local file's encoding,
     /// so this is the one place that pins it down. The clipboard path stays on <see cref="Render"/>: a bare
     /// fragment is what belongs inside a document that already has its own encoding.</summary>
-    public static string RenderDocument(ScreenSnapshot snapshot) =>
-        $"<!doctype html>\n<meta charset=\"utf-8\">\n{Render(snapshot)}";
+    public static string RenderDocument(ScreenSnapshot snapshot, bool monochrome = false) =>
+        $"<!doctype html>\n<meta charset=\"utf-8\">\n{Render(snapshot, monochrome)}";
+
+    /// <summary>The mono phosphor as a CSS hex colour, the one <see cref="Palette.Phosphor"/> the screen draws.</summary>
+    public static string PhosphorHex { get; } = Hex(Palette.Phosphor);
 
     /// <summary>One `pre` block, one line per row, one `span` per run of identically-styled cells.</summary>
-    public static string Render(ScreenSnapshot snapshot)
+    /// <param name="monochrome">A mono (3278) session: every run is the phosphor on black, reverse video swapped,
+    /// whatever colour the cells carry, so the capture matches the screen (#123).</param>
+    public static string Render(ScreenSnapshot snapshot, bool monochrome = false)
     {
         var sb = new StringBuilder();
         sb.Append("<pre style=\"font-family:monospace;background:#000000;padding:8px\">");
@@ -41,7 +46,7 @@ public static class ScreenHtml
                 var start = column;
                 var style = cells[column];
                 while (column < cells.Length && cells[column].SameStyleAs(style)) column++;
-                AppendRun(sb, snapshot.GetText(row, start, column - start), style);
+                AppendRun(sb, snapshot.GetText(row, start, column - start), style, monochrome);
             }
         }
 
@@ -49,12 +54,10 @@ public static class ScreenHtml
         return sb.ToString();
     }
 
-    private static void AppendRun(StringBuilder sb, string text, in Cell style)
+    private static void AppendRun(StringBuilder sb, string text, in Cell style, bool monochrome)
     {
-        var reverse = style.Rendition.HasFlag(CellRendition.Reverse);
-        var foreground = Resolve(reverse ? style.Background : style.Foreground, HostColor.NeutralWhite);
-        var background = Resolve(reverse ? style.Foreground : style.Background, HostColor.NeutralBlack);
-
+        // The same rule the screen draws with, so a capture never disagrees with what was on it.
+        var (foreground, background) = CellColors.Colors(style, monochrome);
         sb.Append("<span style=\"color:").Append(Hex(foreground))
           .Append(";background:").Append(Hex(background));
 
@@ -69,14 +72,7 @@ public static class ScreenHtml
         sb.Append("</span>");
     }
 
-    private static HostColor Resolve(HostColor color, HostColor fallback) =>
-        color == HostColor.Default ? fallback : color;
-
-    private static string Hex(HostColor color)
-    {
-        var c = Palette.ColorOf(color);
-        return $"#{c.R:X2}{c.G:X2}{c.B:X2}";
-    }
+    private static string Hex(Avalonia.Media.Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
     private static void Escape(StringBuilder sb, string text)
     {

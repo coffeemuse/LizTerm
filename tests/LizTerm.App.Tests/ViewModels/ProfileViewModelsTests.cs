@@ -28,6 +28,7 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal("23", vm.PortText);
         Assert.Equal(2, vm.Model);
         Assert.True(vm.Extended);
+        Assert.Equal(TerminalDisplay.Color, vm.Display);
         Assert.Equal("cp037", vm.CodePage);
         Assert.True(vm.DestructiveBackspace);
         vm.UseTls = true;
@@ -59,9 +60,27 @@ public class ProfileViewModelsTests : IDisposable
     [Fact]
     public void Editor_round_trips_an_existing_profile()
     {
-        var original = new SessionProfile { Name = "TK5", Host = "mvs", Port = 3270, UseTls = true, VerifyCertificate = false, Model = 5, Extended = false, CodePage = "bracket", LuName = "LU1", DestructiveBackspace = true, PinnedCertificate = new CertificatePin("8C:13", "CN=mvs", "pem") };
+        var original = new SessionProfile { Name = "TK5", Host = "mvs", Port = 3270, UseTls = true, VerifyCertificate = false, Model = 5, Extended = false, Display = TerminalDisplay.Mono, CodePage = "bracket", LuName = "LU1", DestructiveBackspace = true, PinnedCertificate = new CertificatePin("8C:13", "CN=mvs", "pem") };
         var vm = new ProfileEditorViewModel(original);
         Assert.Equal(original, vm.TryBuild());
+    }
+
+    /// <summary>The drop-down names both the look and the terminal it makes the host see, so a user who knows
+    /// only one of the two words finds it. Choosing a row writes the enum TryBuild saves (#123).</summary>
+    [Fact]
+    public void Editor_offers_colour_and_mono_and_saves_the_choice()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "x", Host = "h" };
+        Assert.Equal(["Colour (3279)", "Mono (3278)"], vm.DisplayChoices.Select(c => c.ToString()));
+        Assert.Equal(TerminalDisplay.Color, vm.SelectedDisplayChoice.Display);
+        vm.SelectedDisplayChoice = vm.DisplayChoices[1];
+        Assert.Equal(TerminalDisplay.Mono, vm.Display);
+        Assert.Equal(TerminalDisplay.Mono, vm.TryBuild()!.Display);
+        vm.Display = TerminalDisplay.Color;
+        Assert.Same(vm.DisplayChoices[0], vm.SelectedDisplayChoice);
+        // A value outside the enum shows as Colour rather than throwing when the drop-down binds.
+        vm.Display = (TerminalDisplay)7;
+        Assert.Same(vm.DisplayChoices[0], vm.SelectedDisplayChoice);
     }
 
     [Fact]

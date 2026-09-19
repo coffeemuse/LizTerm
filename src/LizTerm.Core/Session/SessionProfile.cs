@@ -15,6 +15,10 @@ namespace LizTerm.Core.Session;
 /// Independent of <paramref name="VerifyCertificate"/>: a pinned profile verifies, against the pin only;
 /// verification off ignores the pin without removing it (spec 3.1).</param>
 /// <param name="Model">3278/3279 model number, 2 through 5.</param>
+/// <param name="Display">Colour (a 3279, the default) or mono (a 3278). Written by name, like the settings enums, so a
+/// reordering of <see cref="TerminalDisplay"/> can never change a saved meaning, and a name this build does not know
+/// reads as colour rather than costing the file (<see cref="TerminalDisplayJsonConverter"/>). Independent of
+/// <paramref name="Extended"/>: <c>3278-n-E</c> is a valid b3270 model.</param>
 /// <param name="DestructiveBackspace">When true (the default, as in x3270's and wc3270's own base keymaps and Vista
 /// TN3270), the Backspace key erases the character to the left of the cursor (x3270's Erase action); when false it
 /// only moves the cursor left (BackSpace). The editor writes the field explicitly, so a saved choice survives.</param>
@@ -51,6 +55,7 @@ public sealed record SessionProfile(
     CertificatePin? PinnedCertificate = null,
     int Model = 2,
     bool Extended = true,
+    [property: JsonConverter(typeof(TerminalDisplayJsonConverter))] TerminalDisplay Display = TerminalDisplay.Color,
     string CodePage = "cp037",
     string? LuName = null,
     bool DestructiveBackspace = true,

@@ -57,6 +57,13 @@ The traces come from the x3270 source distribution (BSD-3-Clause, Copyright Paul
   proves is that the buffer ends up resized end-to-end and the UI needs no change (#30), not which of the two
   indications does the resizing.
 
+- `mono-3278-opening.jsonl`: raw b3270 4.5ga6 stdout of a `-model 3278-2-E` connect to the same MVS/CE host on
+  2026-09-18, from `Open` to `Quit` on the Hercules opening screen, no logon. What it pins for #123: a mono
+  terminal's `screen-mode` says `color:false`, the host is told `IBM-3278-2-E`, and no screen update ever carries
+  an `fg`, only `gr` (`highlight,selectable`), so after replay every cell still holds the fill the `screen-mode`
+  resize put there. That is the reason the mono renderer draws the phosphor without reading a cell's colour. The
+  address was replaced with `mvsce.test`.
+
 ## gateway-pinned-login.jsonl
 
 Inbound side of `LiveHostTests.A_pinned_certificate_verifies_and_a_decoy_pin_fails` against the TLS gateway

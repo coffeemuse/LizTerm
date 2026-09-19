@@ -9,8 +9,8 @@ namespace LizTerm.Core.Session;
 /// bar cannot drift apart, and so App never has to name the backend to render it.</summary>
 public static class TerminalType
 {
-    /// <summary>For example <c>3279-2-E</c>. The 3279 family is colour; the -E suffix is the extended data
-    /// stream. "Model 2" on its own is ambiguous in a way this is not.</summary>
+    /// <summary>For example <c>3279-2-E</c>. The 3279 family is colour and the 3278 family mono; the -E suffix is
+    /// the extended data stream, valid on both. "Model 2" on its own is ambiguous in a way this is not.</summary>
     public static string For(SessionProfile profile) =>
-        $"3279-{profile.Model}{(profile.Extended ? "-E" : "")}";
+        $"{(profile.Display == TerminalDisplay.Mono ? "3278" : "3279")}-{profile.Model}{(profile.Extended ? "-E" : "")}";
 }

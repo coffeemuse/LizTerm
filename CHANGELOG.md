@@ -5,6 +5,9 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **Mono terminals.** A profile can now be a **Mono (3278)** as well as a **Colour (3279)**: the host is told it is a
+  3278 and the screen is drawn in a green phosphor, brighter where the host intensifies. Choose it in the profile
+  editor's Terminal tab, beside Model ([#123](https://github.com/coffeemuse/LizTerm/issues/123)).
 - **mvsMF Browser (feature preview).** On MVS 3.8j hosts running [mvsMF](https://github.com/mvslovers/mvsmf) 1.1.0
   or later, a second way to move files beside IND$FILE: sign in once per session window, then list, download,
   upload and delete. It is not yet complete and there are likely bugs. See the user guide's

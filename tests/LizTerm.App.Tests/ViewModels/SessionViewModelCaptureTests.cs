@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using LizTerm.App.Capture;
 using LizTerm.App.Files;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.ViewModels;
@@ -36,6 +37,25 @@ public class SessionViewModelCaptureTests
         var name = SessionViewModel.ScreenFileName("a/b c", new DateTime(2026, 9, 9, 1, 2, 3), "html");
 
         Assert.Equal("screen-a_b_c-20260909-010203.html", name);
+    }
+
+    /// <summary>Both captures follow the profile, so a mono session's capture is green like its screen (#123).</summary>
+    [Fact]
+    public async Task A_mono_session_copies_and_saves_the_phosphor()
+    {
+        var (vm, session, clipboard) = Build();
+        session.Profile = session.Profile with { Display = TerminalDisplay.Mono };
+        Assert.True(vm.Monochrome);
+
+        await vm.CopyScreenAsHtmlAsync();
+        Assert.Contains("color:" + ScreenHtml.PhosphorHex, clipboard.Text);
+        Assert.DoesNotContain("#50FF50", clipboard.Text);
+
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".html");
+        await vm.SaveScreenAsync(new FakeFilePicker { Result = path });
+        var written = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.Contains("color:" + ScreenHtml.PhosphorHex, written);
+        File.Delete(path);
     }
 
     [Fact]

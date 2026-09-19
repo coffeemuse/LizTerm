@@ -154,6 +154,8 @@
             <!-- 280 matches the Code page drop-down. -->
             <StackPanel Grid.Column="1" Spacing="4">
               <ComboBox x:Name="ModelBox" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding SelectedModelChoice}" Width="280" />
+              <!-- Colour (3279) or Mono (3278). Extended applies to both: 3278-n-E is a valid b3270 model. -->
+              <ComboBox x:Name="DisplayBox" ItemsSource="{Binding DisplayChoices}" SelectedItem="{Binding SelectedDisplayChoice}" Width="280" />
               <CheckBox Content="Extended data stream" IsChecked="{Binding Extended}" />
             </StackPanel>
           </Grid>

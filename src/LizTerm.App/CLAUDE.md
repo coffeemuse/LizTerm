@@ -213,6 +213,16 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   does not use b3270's own `CROSSHAIR` toggle: the engine has no display, and routing a display preference through a
   child process would only make the crosshair unavailable while disconnected.
 - It raises `KeyRequested`, `TextEntered` and `CellClicked`, which `SessionWindow` wires to the view model.
+- **Colours are decided in `Rendering/CellColors`, not in the control** (#123). `Monochrome` (a styled property the
+  window binds from `SessionViewModel.Monochrome`, that is `Profile.Display == TerminalDisplay.Mono`) makes every run
+  and the cursor block `Palette.Phosphor`, brighter for Highlight, reverse video a phosphor block with black text,
+  and no other background; the cell's own colour is never read. The underline and the cursor follow the same
+  rule, and on a reversed cell the cursor takes the cell's other colour (`CursorBlock`/`CursorGlyph`), or it would
+  paint exactly the block already there. That is deliberate: b3270 sends no `fg` for a 3278
+  (`mono-3278-opening.jsonl`), so what a cell carries is only the last erase's fill, and the `screen-mode` resize
+  fills `Blue`. The backend leaves that fill alone. Changing `Monochrome` drops the run plan, since the runs bake
+  brushes in and are keyed only by snapshot and geometry (`TerminalScreenMonochromeTests`). `Palette.Phosphor` is
+  the one value for #78's themes to override.
 
 ### Keyboard
 
@@ -690,7 +700,10 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   deliberately does not use b3270's `PrintText(html)`: that would add a member to `IEmulatorSession` for a feature
   that needs no engine, would only work while connected, and would emit the engine's colours rather than the ones
   the user is looking at.
-- `Render` emits one `<pre>` of `<span>` runs segmented by `Cell.SameStyleAs`, the renderer's own predicate.
+- `Render` emits one `<pre>` of `<span>` runs segmented by `Cell.SameStyleAs`, the renderer's own predicate. Both
+  entry points take `monochrome`, which the view model passes from `Monochrome`, and each run's colour pair comes
+  from `CellColors.Colors`, the rule the screen draws with, so a mono session's capture is the phosphor on black like
+  its screen (`ScreenHtml.PhosphorHex`), reverse video swapped, whatever the cells carry.
   `RenderDocument` wraps the same fragment with `<meta charset="utf-8">`, for files only: a saved `.html` has nothing
   else to declare its encoding, and the keymap types non-ASCII characters (`¬`, `¢`) that would come back as
   mojibake. Copy Screen as HTML always uses the bare `Render` fragment, since it is pasted into a document that has
