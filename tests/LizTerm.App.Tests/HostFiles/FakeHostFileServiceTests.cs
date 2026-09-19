@@ -49,8 +49,8 @@ public class FakeHostFileServiceTests
         var token = TestContext.Current.CancellationToken;
         var host = new FakeHostFileService();
         host.Failures["list:SYS1.**"] = new HostFileException(HostFileErrorKind.Unreachable, "down");
-        await Assert.ThrowsAsync<HostFileException>(() => host.ListDatasetsAsync("SYS1.**", token));
-        Assert.Empty(await host.ListDatasetsAsync("OTHER.**", token));
+        await Assert.ThrowsAsync<HostFileException>(() => host.ListDatasetsAsync("SYS1.**", HostListRequest.All, token));
+        Assert.Empty((await host.ListDatasetsAsync("OTHER.**", HostListRequest.All, token)).Entries);
     }
 
     [Fact]

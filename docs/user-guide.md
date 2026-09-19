@@ -326,8 +326,17 @@ datasets with their **NAME**, **DSORG**, **RECFM** and **LRECL**. VSAM and direc
 as **(not supported)**: nothing can be downloaded from or uploaded to them.
 
 Choosing a partitioned dataset (a PDS) lists its members on the right, where **Filter members** narrows the list as
-you type and you can select several members at once. For a sequential dataset, **Download…** and **Upload…** act on
-the dataset itself.
+you type and you can select several members at once. In the filter, `*` stands for any run of characters and `%`
+for exactly one, so `IEF*` keeps the members starting with IEF. For a sequential dataset, **Download…** and
+**Upload…** act on the dataset itself.
+
+Long lists arrive 500 entries at a time. When the host has more, the status line says so (**500 datasets shown,
+more on the host**), the member header shows a plus (**500+ members**), and a **Load more** button appears under
+the list; each press adds the next 500. On such a library the host does the narrowing: what you type in **Filter
+members** is sent to it, after a short pause, and the members shown are every match, again 500 at a time; the
+header then counts matches (**40 matching**) rather than members. Download, Upload and Delete act on the members
+that are shown, but an upload always checks the whole library before replacing a member, whether or not its page
+is loaded.
 
 **Mode** chooses **Text**, which converts between EBCDIC and your computer's characters, or **Binary**, which copies
 bytes unchanged. **Binary** is chosen for you on an undefined-length (`RECFM=U`) dataset, such as a load library.
@@ -523,6 +532,5 @@ empties the drop-down.
 - **No keymap editing yet** ([#18](https://github.com/coffeemuse/LizTerm/issues/18)).
 - **No printer sessions or scripting.**
 - **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). Older mvsMF builds
-  are not supported (see [Signing in](#signing-in)). Very long dataset or member lists arrive in one piece, with no
-  paging. It
-  can't create, rename or delete datasets, submit jobs, or browse the z/OS UNIX file system.
+  are not supported (see [Signing in](#signing-in)). It can't create, rename or delete datasets, submit jobs, or
+  browse the z/OS UNIX file system.

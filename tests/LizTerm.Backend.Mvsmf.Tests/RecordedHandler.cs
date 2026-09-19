@@ -7,7 +7,7 @@ using System.Text;
 
 namespace LizTerm.Backend.Mvsmf.Tests;
 
-internal sealed record RecordedRequest(HttpMethod Method, Uri Uri, string? Authorization, string? Cookie, string? Csrf, string? DataType, string? ContentType, byte[]? Body, IReadOnlyList<string> HeaderNames)
+internal sealed record RecordedRequest(HttpMethod Method, Uri Uri, string? Authorization, string? Cookie, string? Csrf, string? DataType, string? ContentType, byte[]? Body, IReadOnlyList<string> HeaderNames, IReadOnlyDictionary<string, string> Headers)
 {
     public string BodyText => Body is null ? "" : Encoding.Latin1.GetString(Body);
 }
@@ -45,7 +45,8 @@ internal sealed class RecordedHandler : HttpMessageHandler
             request.Headers.TryGetValues("X-IBM-Data-Type", out var types) ? string.Join(",", types) : null,
             request.Content?.Headers.ContentType?.ToString(),
             body,
-            [.. request.Headers.Select(h => h.Key)]));
+            [.. request.Headers.Select(h => h.Key)],
+            request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value), StringComparer.OrdinalIgnoreCase)));
         if (_responses.Count == 0) throw new InvalidOperationException($"No response queued for {request.Method} {request.RequestUri}");
         return await _responses.Dequeue()(request, cancellationToken);
     }

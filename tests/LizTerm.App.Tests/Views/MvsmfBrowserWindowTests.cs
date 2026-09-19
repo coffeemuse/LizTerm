@@ -10,6 +10,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using LizTerm.App.Tests.Fakes;
 using LizTerm.App.Tests.ViewModels;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
@@ -18,9 +19,10 @@ namespace LizTerm.App.Tests.Views;
 
 public class MvsmfBrowserWindowTests
 {
-    private static (MvsmfBrowserWindow Window, BrowserTestHost T) Show(string? userid = "MVSCE02")
+    private static (MvsmfBrowserWindow Window, BrowserTestHost T) Show(string? userid = "MVSCE02",
+        Action<FakeHostFileService>? seed = null, int pageSize = 500)
     {
-        var t = BrowserTestHost.Create(userid);
+        var t = BrowserTestHost.Create(userid, seed, pageSize);
         var window = new MvsmfBrowserWindow { DataContext = t.Vm };
         window.Show();
         window.Activate();
@@ -43,6 +45,30 @@ public class MvsmfBrowserWindowTests
         Assert.Equal(4, Named<ListBox>(window, "DatasetList").ItemCount);
         Assert.True(Named<TextBlock>(window, "ChooseHint").IsVisible);
         Assert.True(window.CanResize);
+    }
+
+    [AvaloniaFact]
+    public async Task Load_more_buttons_show_only_while_the_host_has_more()
+    {
+        var (window, t) = Show(seed: BrowserTestHost.Large, pageSize: 2);
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 2, "the first page");
+        var moreDatasets = Named<Button>(window, "LoadMoreDatasetsButton");
+        var moreMembers = Named<Button>(window, "LoadMoreMembersButton");
+        Assert.True(moreDatasets.IsVisible);
+        Assert.Equal("Load more datasets", moreDatasets.Content);
+
+        await t.ChooseAsync("MVSCE02.BIG");
+        Assert.True(moreMembers.IsVisible);
+        Assert.Equal("Load more members", moreMembers.Content);
+
+        moreMembers.Command!.Execute(null);
+        await Wait.UntilAsync(() => t.Vm.Members.Count == 4, "the second page of members");
+        await t.LoadMoreMembersAsync();
+        Assert.False(moreMembers.IsVisible);
+
+        while (t.Vm.HasMoreDatasets) await t.LoadMoreDatasetsAsync();
+        Assert.False(moreDatasets.IsVisible);
+        Assert.Equal(9, Named<ListBox>(window, "DatasetList").ItemCount);
     }
 
     /// <summary>The strip reads as a caution banner: dark text, the guide link included, on yellow.</summary>

@@ -107,9 +107,18 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         ? $"{dataset.Name} cannot be opened in this release (DSORG {(dataset.Dsorg.Length > 0 ? dataset.Dsorg : "unknown")})."
         : "Choose a dataset on the left.";
 
+    /// <summary>Short, since it shares a line with the filter box: a plus marks a list the host has more of, and the
+    /// status line (<see cref="MembersStatus"/>) says so in words.</summary>
     public string MembersHeader => SelectedDataset is { IsPartitioned: true } dataset
-        ? $"{dataset.Name} · {Plural(Members.Count, "member")}"
+        ? $"{dataset.Name} · {(HasMoreMembers ? $"{Members.Count}+ {(_memberPattern is null ? "members" : "matching")}" : MembersCount())}"
         : "";
+
+    private string MembersCount() => _memberPattern is null ? Plural(Members.Count, "member") : $"{Members.Count} matching";
+
+    /// <summary>The status line after a member listing: the count, the pattern the host applied, and whether it
+    /// has more.</summary>
+    private string MembersStatus() =>
+        MembersCount() + (_memberPattern is { } pattern ? " " + pattern : "") + (HasMoreMembers ? " shown, more on the host" : "");
 
     /// <summary>Binary transfers to fixed-length records are padded to whole records (compatibility log,
     /// binary-fixed-padding), so the bar says so while it applies.</summary>
@@ -128,8 +137,10 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     partial void OnSelectedDatasetChanged(DatasetRow? value)
     {
-        // A pending retry belongs to the dataset it failed on; Retry must never act on another one.
+        // A pending retry belongs to the dataset it failed on; Retry must never act on another one. So does a
+        // filter keystroke still waiting to reach the host: the new dataset's own load applies the filter.
         _retry = null;
+        CancelHostFilter();
         OnPropertyChanged(nameof(CanRetry));
         // A review belongs to the dataset it was opened on; the window disables the list while one is open. Closed
         // before the mode changes, so the old review is not rechecked against the new dataset. A running upload keeps
@@ -139,9 +150,17 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _ = LoadMembersAsync(value);
     }
 
-    partial void OnMemberFilterChanged(string value) => RefreshVisibleMembers();
+    partial void OnMemberFilterChanged(string value)
+    {
+        if (_allMembersLoaded || SelectedDataset is not { IsPartitioned: true }) RefreshVisibleMembers();
+        else ScheduleHostFilter();
+    }
 
-    partial void OnIsBusyChanged(bool value) => NotifyCommands();
+    partial void OnIsBusyChanged(bool value)
+    {
+        NotifyCommands();
+        if (!value) SignalIdle();
+    }
 
     /// <summary>Off while a review is open: a listing clears the chosen dataset the review belongs to.</summary>
     [RelayCommand(CanExecute = nameof(CanChooseDataset))]
@@ -158,11 +177,14 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         }
         var pattern = Filter.Trim().ToUpperInvariant();
         StatusText = $"⟳ Listing {pattern}…";
-        var entries = await _connection.RunAsync(service => service.ListDatasetsAsync(pattern, token));
+        var listing = await _connection.RunAsync(service => service.ListDatasetsAsync(pattern, new HostListRequest(PageSize), token));
         SelectedDataset = null;
         Datasets.Clear();
-        foreach (var entry in entries) Datasets.Add(new DatasetRow(entry));
-        StatusText = Plural(entries.Count, "dataset");
+        foreach (var entry in listing.Entries) Datasets.Add(new DatasetRow(entry));
+        _listedPattern = pattern;
+        _datasetContinuation = listing.Continuation;
+        HasMoreDatasets = !listing.IsComplete;
+        StatusText = DatasetsStatus();
     }
 
     private Task LoadMembersAsync(DatasetRow? row)
@@ -172,39 +194,28 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         return RunExclusiveAsync(token => LoadMembersCoreAsync(row, token), () => LoadMembersAsync(SelectedDataset));
     }
 
-    /// <summary>Also used inside other operations (after an upload or a delete), which already hold the busy flag.
-    /// Returns what the host listed, whether or not the list still shows <paramref name="row"/>.</summary>
-    private async Task<IReadOnlyList<HostFileEntry>> LoadMembersCoreAsync(DatasetRow row, CancellationToken token)
-    {
-        StatusText = $"⟳ Listing members of {row.Name}…";
-        var entries = await _connection.RunAsync(service => service.ListMembersAsync(row.Path, token));
-        if (!ReferenceEquals(SelectedDataset, row)) return entries;
-        ClearMembers();
-        foreach (var entry in entries)
-        {
-            if (HostPath.MemberNameError(entry.Name) is null) Members.Add(new MemberRow(row.Name, entry.Name));
-        }
-        RefreshVisibleMembers();
-        OnPropertyChanged(nameof(MembersHeader));
-        StatusText = MembersHeader;
-        return entries;
-    }
-
     private void ClearMembers()
     {
         Members.Clear();
         VisibleMembers.Clear();
+        _memberContinuation = null;
+        _memberPattern = null;
+        _allMembersLoaded = false;
+        HasMoreMembers = false;
         SetSelectedMembers([]);
         OnPropertyChanged(nameof(MembersHeader));
     }
 
+    /// <summary>The filter narrows the rows here only while the whole library is loaded, read as the host would read
+    /// it (<c>*TEXT*</c>, with its wildcards); otherwise the host has already applied it and every loaded member is
+    /// a match.</summary>
     private void RefreshVisibleMembers()
     {
         VisibleMembers.Clear();
-        var filter = MemberFilter.Trim();
+        var pattern = _allMembersLoaded && MemberFilter.Trim() is { Length: > 0 } text ? $"*{text}*" : null;
         foreach (var member in Members)
         {
-            if (filter.Length == 0 || member.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)) VisibleMembers.Add(member);
+            if (pattern is null || HostPath.MemberPatternMatches(pattern, member.Name)) VisibleMembers.Add(member);
         }
     }
 
@@ -316,6 +327,8 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         StartUploadCommand.NotifyCanExecuteChanged();
         CloseReviewCommand.NotifyCanExecuteChanged();
         DeleteCommand.NotifyCanExecuteChanged();
+        LoadMoreDatasetsCommand.NotifyCanExecuteChanged();
+        LoadMoreMembersCommand.NotifyCanExecuteChanged();
     }
 
     public void Dispose()
@@ -323,6 +336,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         if (_disposed) return;
         _disposed = true;
         _access.PinSaveFailed -= OnPinSaveFailed;
+        _filterDebounce?.Cancel();
         _cts?.Cancel();
         Confirmation?.CancelCommand.Execute(null);
         _connection.Dispose();

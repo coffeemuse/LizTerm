@@ -20,6 +20,7 @@ build: a changed fixture is a changed behaviour.
 | `ds-list-sys1` | `GET restfiles/ds?dslevel=SYS1.**` |
 | `ds-list-empty` | `GET restfiles/ds?dslevel=NOSUCH.HLQ` |
 | `members-proclib` | `GET restfiles/ds/SYS1.PROCLIB/member` |
+| `members-maclib-page` | `GET restfiles/ds/SYS1.MACLIB/member` with `X-IBM-Max-Items: 3` — three of 742 members, `moreRows: true` |
 | `members-missing-dataset` | `GET restfiles/ds/<hlq>.NOSUCH/member` — 404, reason 4 |
 | `members-not-partitioned` | `GET restfiles/ds/<a sequential dataset>/member` — 400, reason 1 |
 | `read-text-jes2` | `GET restfiles/ds/SYS1.PROCLIB(JES2)`, text |

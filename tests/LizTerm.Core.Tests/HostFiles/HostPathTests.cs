@@ -72,4 +72,26 @@ public class HostPathTests
     [InlineData("AAAAAAAA.BBBBBBBB.CCCCCCCC.DDDDDDDD.EEEEEEEE.*", "A filter is at most 44 characters.")]
     public void Checks_dataset_filters(string pattern, string? expected) =>
         Assert.Equal(expected, HostPath.DatasetPatternError(pattern));
+
+    [Theory]
+    [InlineData("jes2*", null)]
+    [InlineData("*JES*", null)]
+    [InlineData("JES2%%%%", null)]
+    [InlineData("", "Enter a member filter.")]
+    [InlineData("JES 2", "A member filter cannot contain ' '.")]
+    [InlineData("A.B", "A member filter cannot contain '.'.")]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "A member filter is at most 44 characters.")]
+    public void Checks_member_filters(string pattern, string? expected) =>
+        Assert.Equal(expected, HostPath.MemberPatternError(pattern));
+
+    [Theory]
+    [InlineData("IEF*", "IEFBR14", true)]
+    [InlineData("ief*", "IEFBR14", true)]
+    [InlineData("*BR*", "IEFBR14", true)]
+    [InlineData("IEF%%14", "IEFBR14", true)]
+    [InlineData("IEF%14", "IEFBR14", false)]
+    [InlineData("IEF", "IEFBR14", false)]
+    [InlineData("*A.B*", "IEFBR14", false)]
+    public void Matches_member_filters_as_the_host_does(string pattern, string name, bool expected) =>
+        Assert.Equal(expected, HostPath.MemberPatternMatches(pattern, name));
 }

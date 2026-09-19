@@ -2,6 +2,8 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Text.RegularExpressions;
+
 namespace LizTerm.Core.HostFiles;
 
 public enum HostPathKind { Dataset, Member }
@@ -110,6 +112,31 @@ public sealed record HostPath
                 return $"A filter cannot contain '{c}'.";
         }
         return null;
+    }
+
+    /// <summary>Why <paramref name="pattern"/> cannot filter a member list, or null when it can. <c>*</c> matches any
+    /// run of characters and <c>%</c> exactly one; a pattern without either names one member. The host refuses a
+    /// pattern of 45 characters or more, so the limit is the dataset name's rather than the member name's.</summary>
+    public static string? MemberPatternError(string pattern)
+    {
+        var folded = Fold(pattern);
+        if (folded.Length == 0) return "Enter a member filter.";
+        if (folded.Length > MaxDatasetLength) return $"A member filter is at most {MaxDatasetLength} characters.";
+        foreach (var c in folded)
+        {
+            if (!IsNameStart(c) && !char.IsAsciiDigit(c) && c is not ('*' or '%'))
+                return $"A member filter cannot contain '{c}'.";
+        }
+        return null;
+    }
+
+    /// <summary>Whether <paramref name="name"/> matches <paramref name="pattern"/> the way the host reads a member
+    /// pattern (<c>*</c> any run of characters, <c>%</c> exactly one), case and surrounding blanks ignored, so a
+    /// filter applied here means the same as one sent to the host.</summary>
+    public static bool MemberPatternMatches(string pattern, string name)
+    {
+        var regex = "^" + Regex.Escape(Fold(pattern)).Replace("\\*", ".*").Replace("%", ".") + "$";
+        return Regex.IsMatch(Fold(name), regex);
     }
 
     public override string ToString() => Member is null ? Dataset : $"{Dataset}({Member})";

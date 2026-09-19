@@ -95,48 +95,96 @@ public sealed class MvsmfFileService : IHostFileService
     private static HostServerInfo ToServerInfo((string? Version, string? System) fields) =>
         new("mvsMF", fields.Version ?? "unknown", fields.System ?? "unknown");
 
-    public async Task<IReadOnlyList<HostFileEntry>> ListDatasetsAsync(string pattern, CancellationToken cancellationToken = default)
+    public async Task<HostFileListing> ListDatasetsAsync(string pattern, HostListRequest request, CancellationToken cancellationToken = default)
     {
         if (HostPath.DatasetPatternError(pattern) is { } error) throw new HostFileException(HostFileErrorKind.InvalidRequest, error);
         const string what = "Dataset list";
         var filter = pattern.Trim().ToUpperInvariant();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        // mvsMF-compat: no-paging — start and X-IBM-Max-Items work since mvsMF 1.1.0, but LizTerm asks for the whole
-        // list with neither (paging is #144).
+        // mvsMF-compat: attributes-header-ignored — mvsMF answers with the base attributes whether or not they are
+        // asked for; z/OSMF answers names only without X-IBM-Attributes: base, so it is always sent.
         using var response = await SendAsync(
-            () => new HttpRequestMessage(HttpMethod.Get, Url($"restfiles/ds?dslevel={EscapeName(filter)}")), what, idle, cancellationToken);
+            () => ListRequest($"restfiles/ds?dslevel={EscapeName(filter)}{Start(request, "&")}", request, attributes: true),
+            what, idle, cancellationToken);
         var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfDatasetList, what, idle, cancellationToken);
-        RequireComplete(list.MoreRows, what);
-        return [.. (list.Items ?? Enumerable.Empty<MvsmfDataset>()).Where(d => !string.IsNullOrWhiteSpace(d.Dsname)).Select(ToEntry)];
+        return Page((list.Items ?? []).Where(d => !string.IsNullOrWhiteSpace(d.Dsname)).Select(ToEntry), list.MoreRows, request, what);
     }
 
-    public async Task<IReadOnlyList<HostFileEntry>> ListMembersAsync(HostPath dataset, CancellationToken cancellationToken = default)
+    public async Task<HostFileListing> ListMembersAsync(HostPath dataset, HostListRequest request, CancellationToken cancellationToken = default)
     {
         if (dataset.Kind != HostPathKind.Dataset) throw new ArgumentException("Only a dataset has members.", nameof(dataset));
+        if (request.NamePattern is { } namePattern && HostPath.MemberPatternError(namePattern) is { } error)
+            throw new HostFileException(HostFileErrorKind.InvalidRequest, error);
         var what = dataset.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        // mvsMF-compat: no-paging — as for datasets: whole list, no X-IBM-Max-Items (paging is #144).
+        var query = request.NamePattern is { } given ? $"?pattern={EscapeQueryValue(given.Trim().ToUpperInvariant())}" : "";
+        query += Start(request, query.Length == 0 ? "?" : "&");
         using var response = await SendAsync(
-            () => new HttpRequestMessage(HttpMethod.Get, Url(DatasetPath(dataset) + "/member")), what, idle, cancellationToken);
+            () => ListRequest(DatasetPath(dataset) + "/member" + query, request, attributes: false), what, idle, cancellationToken);
         var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfMemberList, what, idle, cancellationToken);
-        RequireComplete(list.MoreRows, what);
-        return [.. (list.Items ?? Enumerable.Empty<MvsmfMember>())
+        return Page((list.Items ?? [])
             .Where(m => !string.IsNullOrWhiteSpace(m.Member))
-            .Select(m => new HostFileEntry(m.Member!.Trim(), HostFileEntryKind.Member))];
+            .Select(m => new HostFileEntry(m.Member!.Trim(), HostFileEntryKind.Member)), list.MoreRows, request, what);
+    }
+
+    /// <summary>A continued page names the entry it follows. <c>start=</c> is inclusive on mvsMF and z/OSMF alike,
+    /// so the page asks for one item more than its size and <see cref="Page"/> drops the repeat.</summary>
+    // mvsMF-compat: paging — start= is inclusive, so ListRequest asks for one more than the page and Page drops the
+    // repeat, or cuts the page to size when that name is gone.
+    private static string Start(HostListRequest request, string separator) =>
+        request.Continuation is { } after ? $"{separator}start={EscapeQueryValue(after)}" : "";
+
+    /// <summary>A query value the host must read back exactly: a pattern, or a continuation that is whatever name
+    /// the host last answered, checked by nobody. Everything a query cannot carry raw is percent-encoded; <c>*</c>
+    /// stays, since it is the pattern wildcard and the host takes it as it is.</summary>
+    private static string EscapeQueryValue(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var b in Encoding.UTF8.GetBytes(value))
+        {
+            var c = (char)b;
+            if (char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_' or '~' or '*' or '$' or '@') builder.Append(c);
+            else builder.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
+        }
+        return builder.ToString();
+    }
+
+    private HttpRequestMessage ListRequest(string relative, HostListRequest request, bool attributes)
+    {
+        var message = new HttpRequestMessage(HttpMethod.Get, Url(relative));
+        if (attributes) message.Headers.Add("X-IBM-Attributes", "base");
+        if (request.MaxItems > 0)
+        {
+            var asked = request.Continuation is null ? request.MaxItems : request.MaxItems + 1;
+            message.Headers.Add("X-IBM-Max-Items", asked.ToString(CultureInfo.InvariantCulture));
+        }
+        return message;
+    }
+
+    /// <summary>Cuts a host answer to the page that was asked for. Without a limit, a true <c>moreRows</c> means the
+    /// host returned only part of the list: refuse it.</summary>
+    private static HostFileListing Page(IEnumerable<HostFileEntry> entries, bool? moreRows, HostListRequest request, string what)
+    {
+        var page = entries.ToList();
+        if (request.Continuation is { } after && page.Count > 0 && page[0].Name == after) page.RemoveAt(0);
+        var more = moreRows == true;
+        if (request.MaxItems <= 0)
+        {
+            if (more) throw new HostFileException(HostFileErrorKind.ServerError, $"{what}: the host returned only part of the list.");
+            return new HostFileListing(page, null);
+        }
+        if (page.Count > request.MaxItems)
+        {
+            page.RemoveRange(request.MaxItems, page.Count - request.MaxItems);
+            more = true;
+        }
+        return new HostFileListing(page, more && page.Count > 0 ? page[^1].Name : null);
     }
 
     private static HostFileEntry ToEntry(MvsmfDataset dataset) => new(
         dataset.Dsname!.Trim(),
         HostFileEntryKind.Dataset,
         new DatasetAttributes(Blank(dataset.Dsorg), Blank(dataset.Recfm), Number(dataset.Lrecl), Number(dataset.Blksz), Blank(dataset.Vol)));
-
-    /// <summary>No item limit is ever sent (<c>no-paging</c>), so a true <c>moreRows</c> means the host returned only
-    /// part of the list: refuse it.</summary>
-    private static void RequireComplete(bool? moreRows, string what)
-    {
-        if (moreRows == true)
-            throw new HostFileException(HostFileErrorKind.ServerError, $"{what}: the host returned only part of the list.");
-    }
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 

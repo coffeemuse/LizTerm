@@ -113,6 +113,8 @@
           <TextBlock Classes="header" Grid.Column="2" Text="RECFM" />
           <TextBlock Classes="header" Grid.Column="3" Text="LRECL" />
         </Grid>
+        <Button x:Name="LoadMoreDatasetsButton" DockPanel.Dock="Bottom" Content="Load more datasets" Margin="8,4"
+                HorizontalAlignment="Left" Command="{Binding LoadMoreDatasetsCommand}" IsVisible="{Binding HasMoreDatasets}" />
         <ListBox x:Name="DatasetList" ItemsSource="{Binding Datasets}" SelectedItem="{Binding SelectedDataset}"
                  SelectionMode="Single" IsEnabled="{Binding CanChooseDataset}">
           <ListBox.ItemTemplate>
@@ -141,12 +143,15 @@
           <DockPanel DockPanel.Dock="Top" Margin="8,4">
             <TextBox x:Name="MemberFilterBox" DockPanel.Dock="Right" Width="140" Text="{Binding MemberFilter}"
                      PlaceholderText="Filter members" />
-            <TextBlock x:Name="MemberHeader" Text="{Binding MembersHeader}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock x:Name="MemberHeader" Text="{Binding MembersHeader}" FontWeight="SemiBold" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
           </DockPanel>
           <Grid DockPanel.Dock="Top" ColumnDefinitions="110,*" Margin="8,4">
             <TextBlock Classes="header" Text="MEMBER" />
             <TextBlock Classes="header" Grid.Column="1" Text="STATUS" />
           </Grid>
+          <Button x:Name="LoadMoreMembersButton" DockPanel.Dock="Bottom" Content="Load more members" Margin="8,4"
+                  HorizontalAlignment="Left" Command="{Binding LoadMoreMembersCommand}" IsVisible="{Binding HasMoreMembers}" />
           <ListBox x:Name="MemberList" ItemsSource="{Binding VisibleMembers}" SelectionMode="Multiple"
                    IsEnabled="{Binding IsIdle}">
             <ListBox.ItemTemplate>

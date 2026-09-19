@@ -62,17 +62,22 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 - `FakeHostFileService` (`Fakes/`) is an in-memory mvsMF: `AddDataset` seeds `Datasets` and `Members`, and `Text`
   and `Binary` hold contents keyed by `HostPath.ToString()`. `Calls` records `list:<pattern>`, `members:<dsn>`,
   `readtext:<path>`, `readbinary:<path>`, `writetext:<path>:<lines>`, `writebinary:<path>`, `delete:<path>`,
-  `info` and `signout`; a `Failures` entry under the same key, without the line count, makes that call throw. `StoreTransform`
+  `info` and `signout`; a `Failures` entry under the same key, without the line count, makes that call throw.
+  `ListRequests` keeps each list call's `HostListRequest`, and the fake pages the way the backend does over a host
+  (the pattern narrows, the continuation is the last name of the page before and resumes at the next name when
+  that one has gone, the limit cuts). `StoreTransform`
   ((path, lines) → what is stored) plays a host that alters what a text write keeps, for a read-back that differs.
   `Gate` holds every call after it is logged (a call still honours its token), `MaxConcurrent` is the most calls seen running at
   once, and `Disposed` says whether the service was released. The operations take a lock the test cannot: seed
   everything before the view model runs, and read the log through `CallsSnapshot()` while calls may be running.
   Core.Tests has a smaller fake of the same name for `HostFileTransfer` (see "Core tests").
 - `BrowserTestHost` (`ViewModels/`) builds an `MvsmfBrowserViewModel` over a `FakeHostFileService` seeded by
-  `Standard` (a PDS of three members, a load library, a sequential dataset and a `DA` dataset), with the fake
-  prompts and picker, a `HostFileAccess` that cannot remember a pin, and `GuideOpened` counting the guide link.
-  `ChooseAsync` lists if nothing is listed yet and selects a dataset, waiting for its member list; `Select` sets
-  the member selection the window would push.
+  `Standard` (a PDS of three members, a load library, a sequential dataset and a `DA` dataset) or `Large` (those
+  plus a PDS of five members and four more datasets, for paging at `pageSize: 2`), with the fake prompts and picker,
+  a `HostFileAccess` that cannot remember a pin, a 20 ms filter delay, and `GuideOpened` counting the guide link.
+  `ChooseAsync` lists if nothing is listed yet, loads more pages until the dataset shows, and selects it, waiting
+  for its member list; `Select` sets the member selection the window would push; `FilterMembersAsync` types a
+  member filter and waits out the host-side listing it may start.
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
   `src/LizTerm.App/CLAUDE.md` say why.
 - Session switching tests seed a `SessionList` with `TestSessions`. `Create(name, ...)` builds an entry over a
