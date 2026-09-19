@@ -166,8 +166,9 @@ public class LiveMvsmfTests
             var member = created.WithMember("ONE");
             var first = await service.WriteTextAsync(member, ["//ONE JOB (ACCT),LIZTERM"], cancellationToken: ct);
             Assert.NotNull(first);
-            var read = await service.ReadTextAsync(member, cancellationToken: ct);
+            var read = await service.ReadTextAsync(member, withEtag: true, cancellationToken: ct);
             Assert.Equal(first, read.Etag);
+            Assert.Null((await service.ReadTextAsync(member, cancellationToken: ct)).Etag);
 
             var second = await service.WriteTextAsync(member, ["//ONE JOB (ACCT),LIZTERM", "//*"], ifMatch: read.Etag, ct);
             Assert.NotNull(second);

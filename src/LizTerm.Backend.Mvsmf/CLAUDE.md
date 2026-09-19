@@ -37,10 +37,13 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
   present for a member rename and absent for a dataset. Writes send only `text/plain` or `application/octet-stream`
   (`put-json-is-rename`). A member rename onto an existing name is 400 reason 7 (`AlreadyExists`,
   `rename-target-exists-400`); a dataset rename onto one is the host's 500 reason 8, a server error quoting it.
-- **The stamp (`etag`).** Every read and write sends `X-IBM-Return-Etag: true` and returns the `ETag` header as
-  bare text (`EtagOf`: quotes and `W/` stripped, never parsed further). A write's `ifMatch` goes out as
-  `If-Match` verbatim, and a 412 is `Conflict`. The stamp of the member as written is the PUT's answer, not the
-  pre-save one, so every write asks for it.
+- **The stamp (`etag`).** A read sends `X-IBM-Return-Etag: true` only with `withEtag` (a download asks; the verify
+  read-back does not: the stamp costs the host a second pass over the member); every write sends it, since the
+  stamp of the member as written is the PUT's answer, not the pre-save one. `EtagOf` returns the `ETag` header as
+  the host sent it, blanks trimmed and nothing else removed, so a quoted stamp goes back quoted. A write's `ifMatch`
+  goes out as `If-Match` verbatim through `TryAddWithoutValidation` (`Add` would parse it as an entity tag and
+  refuse mvsMF's unquoted one; the bool it returns is about the header name, not the value), and a 412 is
+  `Conflict`.
 - **A create posts the allocation as JSON** (`MvsmfAllocation`: `dsorg` `PS`/`PO`, `recfm` folded, `alcunit`
   `TRK`/`CYL`, `dirblk` only for `PO`) after `DatasetAllocation.Problems()` passes. The host answers every
   allocation failure with the same 500, category 8, rc 900 (`create-failure-is-one-500`), mapped to

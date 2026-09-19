@@ -13,6 +13,9 @@ public class HostFileMessagesTests
     [InlineData(HostFileErrorKind.NotFound, null, null, "X(Y): not found.", "Not found.")]
     [InlineData(HostFileErrorKind.CannotOpen, 3, null, "x", "Not found, not authorized, or cannot be opened.")]
     [InlineData(HostFileErrorKind.NotAuthorized, 0, null, "x", "Not authorized.")]
+    [InlineData(HostFileErrorKind.Conflict, 10, "The resource was modified since the supplied ETag was created", "A.B(C): changed on the host since it was read.", "Changed on the host since you downloaded it.")]
+    [InlineData(HostFileErrorKind.AlreadyExists, 7, "Rename target already exists", "Rename A.B(ONE) to TWO: a member of that name already exists.", "Rename A.B(ONE) to TWO: a member of that name already exists.")]
+    [InlineData(HostFileErrorKind.CannotAllocate, 7, "Dynamic allocation Error", "x", "The host could not allocate it: it may already exist, there may be no space, or you may not be authorized.")]
     [InlineData(HostFileErrorKind.InvalidRequest, 1, "Dataset or member name too long", "x", "The host refused the request: Dataset or member name too long")]
     [InlineData(HostFileErrorKind.InvalidRequest, null, null, "x", "The host refused the request.")]
     [InlineData(HostFileErrorKind.Unauthenticated, null, null, "Sign-in was cancelled.", "Sign-in was cancelled.")]
@@ -46,6 +49,9 @@ public class HostFileMessagesTests
             HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.NotAuthorized, "x")));
         Assert.Equal("Not found, not authorized, or cannot be opened.",
             HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.CannotOpen, "x", 3, "Cannot open dataset for writing")));
+        // A conflict is refused before anything is written, so nothing may be partly written.
+        Assert.Equal("Changed on the host since you downloaded it.",
+            HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.Conflict, "x", 10)));
     }
 
     [Fact]

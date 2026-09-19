@@ -52,11 +52,13 @@ public class FakeHostFileServiceTests
         var one = HostPath.ForMember("A.CNTL", "ONE");
 
         var first = await host.WriteTextAsync(one, ["X"], cancellationToken: token);
-        var read = await host.ReadTextAsync(one, cancellationToken: token);
+        var read = await host.ReadTextAsync(one, withEtag: true, cancellationToken: token);
+        var unasked = await host.ReadTextAsync(one, cancellationToken: token);
         var second = await host.WriteTextAsync(one, ["Y"], ifMatch: first, token);
 
         Assert.Equal("stamp-1", first);
         Assert.Equal("stamp-1", read.Etag);
+        Assert.Null(unasked.Etag);
         Assert.Equal("stamp-2", second);
         var ex = await Assert.ThrowsAsync<HostFileException>(() => host.WriteTextAsync(one, ["Z"], ifMatch: first, token));
         Assert.Equal(HostFileErrorKind.Conflict, ex.Kind);
@@ -84,6 +86,56 @@ public class FakeHostFileServiceTests
         var ex = await Assert.ThrowsAsync<HostFileException>(() => host.CreateDatasetAsync(pds, allocation, token));
         Assert.Equal(HostFileErrorKind.CannotAllocate, ex.Kind);
         Assert.Equal(new[] { "create:A.NEW", "create:A.NEW" }, host.CallsSnapshot());
+    }
+
+    [Fact]
+    public async Task A_create_or_rename_the_local_rules_refuse_is_thrown_before_it_is_logged()
+    {
+        // As the backend, which refuses both before anything is sent.
+        var token = TestContext.Current.CancellationToken;
+        var host = new FakeHostFileService();
+        host.AddDataset("A.CNTL", members: ["ONE"]);
+        var allocation = new DatasetAllocation(DatasetOrganization.Partitioned, "FB", 80, 3120, SpaceUnit.Tracks, 1, 1, 2);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => host.CreateDatasetAsync(HostPath.ForDataset("A.NEW"), allocation with { Primary = 0 }, token));
+        await Assert.ThrowsAsync<ArgumentException>(() => host.CreateDatasetAsync(HostPath.ForMember("A.NEW", "X"), allocation, token));
+        await Assert.ThrowsAsync<ArgumentException>(() => host.RenameAsync(HostPath.ForMember("A.CNTL", "ONE"), "TOOLONGNAME", token));
+        await Assert.ThrowsAsync<ArgumentException>(() => host.RenameAsync(HostPath.ForDataset("A.CNTL"), "A.B(C)", token));
+
+        Assert.Empty(host.CallsSnapshot());
+        Assert.Equal(new[] { "ONE" }, host.Members["A.CNTL"]);
+    }
+
+    [Fact]
+    public async Task Deleting_what_is_not_there_is_not_found()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var host = new FakeHostFileService();
+        host.AddDataset("A.CNTL", members: ["ONE"]);
+
+        var member = await Assert.ThrowsAsync<HostFileException>(() => host.DeleteAsync(HostPath.ForMember("A.CNTL", "TWO"), token));
+        var dataset = await Assert.ThrowsAsync<HostFileException>(() => host.DeleteAsync(HostPath.ForDataset("A.GONE"), token));
+
+        Assert.Equal((HostFileErrorKind.NotFound, 5), (member.Kind, member.Reason));
+        Assert.Equal((HostFileErrorKind.NotFound, 4), (dataset.Kind, dataset.Reason));
+        Assert.Equal(new[] { "ONE" }, host.Members["A.CNTL"]);
+        Assert.Equal(new[] { "delete:A.CNTL(TWO)", "delete:A.GONE" }, host.CallsSnapshot());
+    }
+
+    [Fact]
+    public async Task A_dataset_rename_onto_an_existing_name_is_the_hosts_500()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var host = new FakeHostFileService();
+        host.AddDataset("A.CNTL", members: ["ONE"]);
+        host.AddDataset("A.JCL", members: ["TWO"]);
+
+        var ex = await Assert.ThrowsAsync<HostFileException>(() => host.RenameAsync(HostPath.ForDataset("A.CNTL"), "A.JCL", token));
+
+        Assert.Equal((HostFileErrorKind.ServerError, 8), (ex.Kind, ex.Reason));
+        Assert.Equal("Rename A.CNTL to A.JCL: Rename operation failed (reason 8).", ex.Message);
+        Assert.Equal(new[] { "A.CNTL", "A.JCL" }, host.Datasets.Select(d => d.Name));
+        Assert.Equal(new[] { "ONE" }, host.Members["A.CNTL"]);
     }
 
     [Fact]

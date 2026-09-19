@@ -155,12 +155,15 @@ Entries marked *log only* change nothing in the code.
 - **Observed (2026-09-19):** 1.1.0 does all of it. The stamp is 16 hex digits, unquoted, the same for a text and
   a binary read, and a read after a write answers the write's stamp (`read-etag`, `write-etag-204`, `write-412`;
   the live round trip checks the write-then-read equality). The stamp costs the host a second full read of the
-  member (`dataset_etag` in `dsapi.c` opens and reads it), so every read and write LizTerm makes now does that
-  work twice on the host; and an `If-Match` on a member that no longer exists answers 412, not 404, so a member
+  member (`dataset_etag` in `dsapi.c` opens and reads it), so a read that asks for it does that work twice on
+  the host; and an `If-Match` on a member that no longer exists answers 412, not 404, so a member
   deleted since it was read reads as "changed".
-- **LizTerm:** every read and write asks for the stamp and hands it back as bare text (quotes and `W/` stripped,
-  never parsed further); a write sends the caller's `ifMatch` as `If-Match` verbatim, and a 412 is
-  `HostFileErrorKind.Conflict`. The browser's use of it is in the user guide.
+- **LizTerm:** a read asks for the stamp only when its caller may write back (`withEtag`: a download does; the
+  verify read-back after an upload does not), so the host's second pass is paid once per download rather than on
+  every read; every write asks, since the write's answer is the stamp the next `If-Match` needs. The value is kept
+  as the host sent it, quotes or `W/` included and never parsed, so a host that quotes its entity tags gets its own
+  text back; a write sends the caller's `ifMatch` as `If-Match` verbatim, and a 412 is `HostFileErrorKind.Conflict`.
+  Nothing in the app sends an `ifMatch` yet.
 
 ### `create-failure-is-one-500`
 

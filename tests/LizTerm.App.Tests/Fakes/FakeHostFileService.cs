@@ -10,7 +10,10 @@ namespace LizTerm.App.Tests.Fakes;
 /// <summary>An in-memory mvsMF for the App tests. Every call is logged as "op:target" — list:&lt;pattern&gt;,
 /// members:&lt;dsn&gt;, readtext:&lt;path&gt;, readbinary:&lt;path&gt;, writetext:&lt;path&gt;:&lt;lines&gt;,
 /// writebinary:&lt;path&gt;, delete:&lt;path&gt;, create:&lt;dsn&gt;, rename:&lt;from&gt;:&lt;new&gt;, info, signout — and a
-/// <see cref="Failures"/> entry under the same key (without the line count) makes that call throw.</summary>
+/// <see cref="Failures"/> entry under the same key (without the line count) makes that call throw. It fails the way
+/// the host does: a read or delete of what is not there is <see cref="HostFileErrorKind.NotFound"/>, a create or
+/// rename the local rules refuse throws <see cref="ArgumentException"/> before it is logged, and a stale
+/// <c>ifMatch</c> is <see cref="HostFileErrorKind.Conflict"/>.</summary>
 public sealed class FakeHostFileService : IHostFileService
 {
     private readonly object _lock = new();
@@ -91,7 +94,7 @@ public sealed class FakeHostFileService : IHostFileService
         finally { Leave(); }
     }
 
-    public async Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"readtext:{path}", $"readtext:{path}", cancellationToken);
         try
@@ -101,7 +104,7 @@ public sealed class FakeHostFileService : IHostFileService
             lock (_lock)
             {
                 lines = Text.TryGetValue(path.ToString(), out var found) ? [.. found] : throw Missing(path);
-                etag = Etags.GetValueOrDefault(path.ToString());
+                etag = withEtag ? Etags.GetValueOrDefault(path.ToString()) : null;
             }
             progress?.Report(lines.Sum(l => l.Length + 1));
             return new HostTextRead(lines, etag);
@@ -109,7 +112,7 @@ public sealed class FakeHostFileService : IHostFileService
         finally { Leave(); }
     }
 
-    public async Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"readbinary:{path}", $"readbinary:{path}", cancellationToken);
         try
@@ -119,7 +122,7 @@ public sealed class FakeHostFileService : IHostFileService
             lock (_lock)
             {
                 bytes = Binary.TryGetValue(path.ToString(), out var found) ? found : throw Missing(path);
-                etag = Etags.GetValueOrDefault(path.ToString());
+                etag = withEtag ? Etags.GetValueOrDefault(path.ToString()) : null;
             }
             await destination.WriteAsync(bytes, cancellationToken);
             progress?.Report(bytes.Length);
@@ -164,6 +167,10 @@ public sealed class FakeHostFileService : IHostFileService
 
     public async Task CreateDatasetAsync(HostPath dataset, DatasetAllocation allocation, CancellationToken cancellationToken = default)
     {
+        // As the backend: refused by the local rules before anything is sent, so nothing is logged.
+        if (dataset.Kind != HostPathKind.Dataset) throw new ArgumentException("Only a dataset can be created.", nameof(dataset));
+        if (allocation.Problems() is { Count: > 0 } problems)
+            throw new ArgumentException(string.Join(" ", problems.Values), nameof(allocation));
         await EnterAsync($"create:{dataset}", $"create:{dataset}", cancellationToken);
         try
         {
@@ -182,13 +189,15 @@ public sealed class FakeHostFileService : IHostFileService
 
     public async Task RenameAsync(HostPath from, string newName, CancellationToken cancellationToken = default)
     {
+        // As the backend: a new name the rules refuse throws ArgumentException before anything is sent or logged.
+        var target = from.Kind == HostPathKind.Member ? HostPath.ForMember(from.Dataset, newName) : HostPath.ForDataset(newName);
         await EnterAsync($"rename:{from}:{newName}", $"rename:{from}:{newName}", cancellationToken);
         try
         {
             lock (_lock)
             {
-                if (from.Member is { } member) RenameMember(from, member, HostPath.ForMember(from.Dataset, newName));
-                else RenameDataset(from, HostPath.ForDataset(newName));
+                if (from.Member is { } member) RenameMember(from, member, target);
+                else RenameDataset(from, target);
             }
         }
         finally { Leave(); }
@@ -201,16 +210,20 @@ public sealed class FakeHostFileService : IHostFileService
         {
             lock (_lock)
             {
+                // Nothing to remove is the host's 404 (Missing: reason 5 for a member, 4 for a dataset).
                 if (path.Member is { } member)
                 {
-                    if (Members.TryGetValue(path.Dataset, out var names)) names.Remove(member);
-                    Forget(path.ToString());
+                    var listed = Members.TryGetValue(path.Dataset, out var names) && names.Remove(member);
+                    var held = Forget(path.ToString());
+                    if (!listed && !held) throw Missing(path);
                 }
                 else
                 {
-                    Datasets.RemoveAll(d => d.Name == path.Dataset);
-                    Members.Remove(path.Dataset);
-                    foreach (var key in KeysUnder(path.Dataset)) Forget(key);
+                    var listed = Datasets.RemoveAll(d => d.Name == path.Dataset) > 0;
+                    listed |= Members.Remove(path.Dataset);
+                    var keys = KeysUnder(path.Dataset);
+                    foreach (var key in keys) Forget(key);
+                    if (!listed && keys.Count == 0) throw Missing(path);
                 }
             }
         }
@@ -267,6 +280,10 @@ public sealed class FakeHostFileService : IHostFileService
     {
         var index = Datasets.FindIndex(d => d.Name == from.Dataset);
         if (index < 0) throw new HostFileException(HostFileErrorKind.NotFound, $"Rename {from} to {to.Dataset}: not found.", 4);
+        // The host does not check the new name first: IDCAMS ALTER refuses it, and the answer is the rename
+        // failure's own 500, reason 8, a server error quoting it (rename-target-exists-400 in the compatibility log).
+        if (Datasets.Any(d => d.Name == to.Dataset))
+            throw new HostFileException(HostFileErrorKind.ServerError, $"Rename {from} to {to.Dataset}: Rename operation failed (reason 8).", 8, "Rename operation failed");
         Datasets[index] = Datasets[index] with { Name = to.Dataset };
         if (Members.Remove(from.Dataset, out var names)) Members[to.Dataset] = names;
         // KeysUnder includes the dataset's own key (a sequential dataset's content), so one loop moves everything.
@@ -285,12 +302,8 @@ public sealed class FakeHostFileService : IHostFileService
         if (Etags.Remove(from, out var etag)) Etags[to] = etag;
     }
 
-    private void Forget(string key)
-    {
-        Text.Remove(key);
-        Binary.Remove(key);
-        Etags.Remove(key);
-    }
+    /// <summary>Drops every content and stamp entry under <paramref name="key"/>; true when there was one.</summary>
+    private bool Forget(string key) => Text.Remove(key) | Binary.Remove(key) | Etags.Remove(key);
 
     private void AddMember(HostPath path)
     {
@@ -298,7 +311,7 @@ public sealed class FakeHostFileService : IHostFileService
             names.Add(member);
     }
 
-    private static HostFileException Missing(HostPath path) => new(HostFileErrorKind.NotFound, $"{path}: not found.", 5);
+    private static HostFileException Missing(HostPath path) => new(HostFileErrorKind.NotFound, $"{path}: not found.", path.Member is null ? 4 : 5);
 
     private async Task EnterAsync(string call, string failureKey, CancellationToken token)
     {

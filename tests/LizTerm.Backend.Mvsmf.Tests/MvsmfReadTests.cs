@@ -68,7 +68,7 @@ public class MvsmfReadTests
         using var destination = new MemoryStream();
         var progress = new ListProgress();
 
-        var count = (await service.ReadBinaryAsync(Jes2, destination, progress, TestContext.Current.CancellationToken)).Bytes;
+        var count = (await service.ReadBinaryAsync(Jes2, destination, progress, cancellationToken: TestContext.Current.CancellationToken)).Bytes;
 
         var expected = Fixture.Body("read-binary-jes2");
         Assert.Equal(expected, destination.ToArray());

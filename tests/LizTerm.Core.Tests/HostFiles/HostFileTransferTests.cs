@@ -161,6 +161,7 @@ public sealed class HostFileTransferTests : IDisposable
             new DownloadOptions(HostTransferMode.Text), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("stamp-7", result.Etag);
+        Assert.Equal(new[] { "readtext:SYS1.PROCLIB(JES2):etag" }, _host.Calls);
     }
 
     [Fact]
@@ -172,6 +173,7 @@ public sealed class HostFileTransferTests : IDisposable
             new DownloadOptions(HostTransferMode.Binary), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Null(result.Etag);
+        Assert.Equal(new[] { "readbinary:SYS1.PROCLIB(JES2):etag" }, _host.Calls);
     }
 
     [Fact]
@@ -188,8 +190,9 @@ public sealed class HostFileTransferTests : IDisposable
     }
 
     [Fact]
-    public async Task A_verified_upload_keeps_the_write_stamp_not_the_read_back_one()
+    public async Task A_verified_upload_keeps_the_write_stamp_and_reads_back_without_asking_for_one()
     {
+        // The read-back's stamp would be discarded, and asking for it costs the host another pass over the member.
         var checkedText = HostFileTransfer.CheckTextFile(await WriteLocal("up.jcl", "//A JOB\n"), Fb80);
 
         var outcome = await HostFileTransfer.UploadTextAsync(_host, Jes2, checkedText, verify: true, cancellationToken: TestContext.Current.CancellationToken);

@@ -7,7 +7,8 @@ using LizTerm.Core.HostFiles;
 namespace LizTerm.Core.Tests.HostFiles;
 
 /// <summary>An in-memory host keyed by <see cref="HostPath.ToString"/>. Every write stamps its target
-/// <c>write-N</c> (<see cref="Etags"/>) and records the <c>ifMatch</c> it was given (<see cref="IfMatches"/>).</summary>
+/// <c>write-N</c> (<see cref="Etags"/>) and records the <c>ifMatch</c> it was given (<see cref="IfMatches"/>); a
+/// read logs <c>:etag</c> when it asked for the stamp, and gets one only then.</summary>
 internal sealed class FakeHostFileService : IHostFileService
 {
     private int _writes;
@@ -34,19 +35,19 @@ internal sealed class FakeHostFileService : IHostFileService
     public Task<HostFileListing> ListMembersAsync(HostPath dataset, HostListRequest request, CancellationToken cancellationToken = default) =>
         Task.FromResult(new HostFileListing([], null));
 
-    public Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
-        Calls.Add($"readtext:{path}");
+        Calls.Add($"readtext:{path}{(withEtag ? ":etag" : "")}");
         cancellationToken.ThrowIfCancellationRequested();
         if (ReadFailure is not null) throw ReadFailure;
         var lines = Text[path.ToString()];
         progress?.Report(lines.Sum(l => l.Length + 1));
-        return Task.FromResult(new HostTextRead(lines, Etags.GetValueOrDefault(path.ToString())));
+        return Task.FromResult(new HostTextRead(lines, withEtag ? Etags.GetValueOrDefault(path.ToString()) : null));
     }
 
-    public async Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
-        Calls.Add($"readbinary:{path}");
+        Calls.Add($"readbinary:{path}{(withEtag ? ":etag" : "")}");
         if (ReadFailure is not null)
         {
             await destination.WriteAsync(new byte[BytesBeforeFailure], cancellationToken);
@@ -55,7 +56,7 @@ internal sealed class FakeHostFileService : IHostFileService
         var bytes = Binary[path.ToString()];
         await destination.WriteAsync(bytes, cancellationToken);
         progress?.Report(bytes.Length);
-        return new HostBinaryRead(bytes.Length, Etags.GetValueOrDefault(path.ToString()));
+        return new HostBinaryRead(bytes.Length, withEtag ? Etags.GetValueOrDefault(path.ToString()) : null);
     }
 
     public Task<string?> WriteTextAsync(HostPath path, IReadOnlyList<string> lines, string? ifMatch = null, CancellationToken cancellationToken = default)

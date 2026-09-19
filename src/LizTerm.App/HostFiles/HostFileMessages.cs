@@ -17,6 +17,9 @@ public static class HostFileMessages
             HostFileErrorKind.NotFound => "Not found.",
             HostFileErrorKind.CannotOpen => "Not found, not authorized, or cannot be opened.",
             HostFileErrorKind.NotAuthorized => "Not authorized.",
+            HostFileErrorKind.Conflict => "Changed on the host since you downloaded it.",
+            HostFileErrorKind.AlreadyExists => host.Message,
+            HostFileErrorKind.CannotAllocate => "The host could not allocate it: it may already exist, there may be no space, or you may not be authorized.",
             HostFileErrorKind.InvalidRequest => host.ServerMessage is { Length: > 0 } said
                 ? $"The host refused the request: {said}"
                 : "The host refused the request.",
@@ -32,7 +35,8 @@ public static class HostFileMessages
         _ => ex.Message,
     };
 
-    /// <summary>The host does not roll back a failed write (spec §5.3), so a failure that can happen mid-write says so.</summary>
+    /// <summary>The host does not roll back a failed write (spec §5.3), so a failure that can happen mid-write says so.
+    /// A <see cref="HostFileErrorKind.Conflict"/> is refused before anything is written, so it does not.</summary>
     public static string DescribeUploadFailure(Exception ex) => DescribeUploadFailure(ex, dataset: false);
 
     /// <summary>As <see cref="DescribeUploadFailure(Exception)"/>; <paramref name="dataset"/> names a sequential

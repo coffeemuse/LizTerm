@@ -21,12 +21,15 @@ public interface IHostFileService : IDisposable
     /// <see cref="HostFileErrorKind.InvalidRequest"/>.</summary>
     Task<HostFileListing> ListMembersAsync(HostPath dataset, HostListRequest request, CancellationToken cancellationToken = default);
 
-    /// <summary>The records as lines, trailing blanks as the host sent them, with the host's stamp of the content
-    /// when it gives one. <paramref name="progress"/> reports bytes received.</summary>
-    Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
+    /// <summary>The records as lines, trailing blanks as the host sent them. With <paramref name="withEtag"/>, the
+    /// host's stamp of the content comes too, when it gives one; a stamp can cost the host a second pass over the
+    /// content, so only a read whose caller may write back should ask. <paramref name="progress"/> reports bytes
+    /// received.</summary>
+    Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default);
 
-    /// <summary>Copies the record bytes to <paramref name="destination"/>; returns the byte count and the stamp.</summary>
-    Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
+    /// <summary>Copies the record bytes to <paramref name="destination"/>; returns the byte count and, with
+    /// <paramref name="withEtag"/>, the stamp, as <see cref="ReadTextAsync"/>.</summary>
+    Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default);
 
     /// <summary>Replaces the dataset's or member's records, creating a member that does not exist. Every line must
     /// already have passed <see cref="TextUploadCheck"/>. With <paramref name="ifMatch"/>, the stamp an earlier

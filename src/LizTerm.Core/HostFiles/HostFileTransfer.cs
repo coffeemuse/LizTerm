@@ -49,12 +49,12 @@ public static class HostFileTransfer
             {
                 if (options.Mode == HostTransferMode.Binary)
                 {
-                    var read = await service.ReadBinaryAsync(path, stream, progress, cancellationToken);
+                    var read = await service.ReadBinaryAsync(path, stream, progress, withEtag: true, cancellationToken);
                     (written, etag) = (read.Bytes, read.Etag);
                 }
                 else
                 {
-                    var read = await service.ReadTextAsync(path, progress, cancellationToken);
+                    var read = await service.ReadTextAsync(path, progress, withEtag: true, cancellationToken);
                     var bytes = Utf8NoMark.GetBytes(FormatText(read.Lines, options));
                     await stream.WriteAsync(bytes, cancellationToken);
                     (written, etag) = (bytes.Length, read.Etag);
@@ -87,7 +87,8 @@ public static class HostFileTransfer
         if (!checkedText.CanUpload) throw new InvalidOperationException("The text did not pass its upload check.");
         var etag = await service.WriteTextAsync(path, checkedText.Lines, ifMatch, cancellationToken);
         if (!verify) return new UploadOutcome(UploadVerification.NotChecked, null, etag);
-        var stored = await service.ReadTextAsync(path, null, cancellationToken);
+        // Without the stamp: the write's is the one that matters, and asking would cost the host another pass.
+        var stored = await service.ReadTextAsync(path, cancellationToken: cancellationToken);
         return FirstDifference(checkedText.Lines, stored.Lines) is { } line
             ? new UploadOutcome(UploadVerification.Differs, line, etag)
             : new UploadOutcome(UploadVerification.Matches, null, etag);

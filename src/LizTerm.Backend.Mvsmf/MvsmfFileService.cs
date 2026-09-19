@@ -193,44 +193,44 @@ public sealed class MvsmfFileService : IHostFileService
     private static int? Number(string? value) =>
         int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
 
-    public async Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
         var what = path.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        using var response = await SendAsync(() => Get(path, "text"), what, idle, cancellationToken);
+        using var response = await SendAsync(() => Get(path, "text", withEtag), what, idle, cancellationToken);
         using var body = new MemoryStream();
         await CopyBodyAsync(response, body, idle, progress, what, cancellationToken);
         // mvsMF-compat: text-read-keeps-trailing-blanks — fixed records arrive padded; HostFileTransfer trims them.
-        return new HostTextRead(SplitRecords(body.GetBuffer().AsSpan(0, (int)body.Length)), EtagOf(response));
+        return new HostTextRead(SplitRecords(body.GetBuffer().AsSpan(0, (int)body.Length)), withEtag ? EtagOf(response) : null);
     }
 
-    public async Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<HostBinaryRead> ReadBinaryAsync(HostPath path, Stream destination, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
         var what = path.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        using var response = await SendAsync(() => Get(path, "binary"), what, idle, cancellationToken);
+        using var response = await SendAsync(() => Get(path, "binary", withEtag), what, idle, cancellationToken);
         var bytes = await CopyBodyAsync(response, destination, idle, progress, what, cancellationToken);
-        return new HostBinaryRead(bytes, EtagOf(response));
+        return new HostBinaryRead(bytes, withEtag ? EtagOf(response) : null);
     }
 
-    private HttpRequestMessage Get(HostPath path, string dataType)
+    private HttpRequestMessage Get(HostPath path, string dataType, bool withEtag)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, Url(DatasetPath(path)));
         request.Headers.Add("X-IBM-Data-Type", dataType);
-        // mvsMF-compat: etag — the stamp comes only when asked for; it costs the host a second pass over the member.
-        request.Headers.Add(ReturnEtagHeader, "true");
+        // mvsMF-compat: etag — the stamp comes only when asked for, and asking costs the host a second full pass over
+        // the member, so only a read whose caller may write back asks (a download); the verify read-back does not.
+        if (withEtag) request.Headers.Add(ReturnEtagHeader, "true");
         return request;
     }
 
-    /// <summary>The <c>ETag</c> header's value as bare text: quotes and a weak-validator prefix removed, blanks
-    /// trimmed, null when absent or empty. Never parsed beyond that: it is echoed back as <c>If-Match</c>.</summary>
+    /// <summary>The <c>ETag</c> header's value as the host sent it, surrounding blanks trimmed, null when absent or
+    /// empty. Quotes and a <c>W/</c> prefix stay: the value is never parsed, only echoed back as <c>If-Match</c>, so
+    /// a host that quotes its stamps (RFC 7232) gets its own text back, and one that does not (mvsMF) does too.</summary>
     internal static string? EtagOf(HttpResponseMessage response)
     {
         if (!response.Headers.TryGetValues("ETag", out var values)) return null;
-        var value = values.FirstOrDefault()?.Trim() ?? "";
-        if (value.StartsWith("W/", StringComparison.OrdinalIgnoreCase)) value = value[2..].Trim();
-        value = value.Trim('"').Trim();
-        return value.Length > 0 ? value : null;
+        var value = values.FirstOrDefault()?.Trim();
+        return string.IsNullOrEmpty(value) ? null : value;
     }
 
     /// <summary>One string per record: records end in LF, and a CR is data.</summary>
@@ -317,10 +317,11 @@ public sealed class MvsmfFileService : IHostFileService
             };
             request.Headers.Add("X-IBM-Data-Type", dataType);
             // mvsMF-compat: etag — the stamp of the member as written is the one the next If-Match must carry (the
-            // pre-save stamp fails), so every write asks for it. If-Match goes as the host gave it, unquoted.
+            // pre-save stamp fails), so every write asks for it. If-Match goes exactly as the host gave it, through
+            // TryAddWithoutValidation: Add would parse the value as an entity tag and refuse mvsMF's unquoted one.
+            // Its result says only whether the header name is allowed on a request, which If-Match always is.
             request.Headers.Add(ReturnEtagHeader, "true");
-            if (ifMatch is { Length: > 0 } && !request.Headers.TryAddWithoutValidation("If-Match", ifMatch))
-                throw new HostFileException(HostFileErrorKind.InvalidRequest, $"{what}: the host's stamp cannot be sent back.");
+            if (ifMatch is { Length: > 0 }) request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
             return request;
         }, what, idle, cancellationToken);
         return EtagOf(response);
