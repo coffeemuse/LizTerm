@@ -79,12 +79,14 @@ public sealed class KeymapViewModel : ObservableObject
 
     public void ResetToDefaults() => Apply(overlay => overlay.Cleared());
 
+    /// <summary>In memory first, then the notifications, then the write. The notifications sit in a try/finally for the reason SettingsViewModel's do: a subscriber that throws must not cost the user the save. The count is announced only when it moved.</summary>
     private void Apply(Func<KeymapOverlay, KeymapOverlay> change)
     {
+        var before = UnreadableEntries;
         Overlay = change(Overlay);
-        OnPropertyChanged(nameof(UnreadableEntries));
         try
         {
+            if (UnreadableEntries != before) OnPropertyChanged(nameof(UnreadableEntries));
             Changed?.Invoke(this, EventArgs.Empty);
         }
         finally

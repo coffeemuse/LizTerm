@@ -110,4 +110,15 @@ public class KeymapViewModelTests : IDisposable
         Assert.Equal(0, vm.UnreadableEntries);
         Assert.Contains(nameof(KeymapViewModel.UnreadableEntries), notified);
     }
+
+    [Fact]
+    public void A_throwing_Changed_subscriber_does_not_cost_the_save()
+    {
+        var vm = new KeymapViewModel(new KeymapStore(FilePath));
+        vm.Changed += (_, _) => throw new InvalidOperationException("subscriber");
+
+        Assert.Throws<InvalidOperationException>(() => vm.Bind(CtrlHome, Pa1));
+
+        Assert.Equal(new KeymapEntry.SendKey("PA1"), new KeymapStore(FilePath).Load().Bindings["Ctrl+Home"]);
+    }
 }
