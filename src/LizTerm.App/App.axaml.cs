@@ -211,6 +211,7 @@ public partial class App : Application
         _sessions.Add(entry);
         window.AttachSessions(_sessions, entry);
         window.AttachKeymap(Keymap);
+        window.AttachClosePrompt(new AvaloniaClosePrompt(window), QuitGuard);
         if (!string.IsNullOrWhiteSpace(profile.HostFilesUrl))
         {
             // A saved profile can keep a certificate the user trusts; an ad hoc one has nowhere to put it.
@@ -267,18 +268,34 @@ public partial class App : Application
         // picker would otherwise be answered with Quit() -> Shutdown(), a second DoShutdown re-entered inside the
         // first, which fires Exit twice.
         var shutdownClose = false;
-        _picker.Closing += (_, e) => shutdownClose = ShutdownPolicy.IsShutdown(e.CloseReason);
+        _picker.Closing += (_, e) =>
+        {
+            // Held with the session windows while a Quit is being questioned (#151), so Keep Connected leaves it
+            // open too; the reason is read only for a close that is going through.
+            if (QuitGuard.Holds(e.CloseReason)) { e.Cancel = true; return; }
+            shutdownClose = ShutdownPolicy.IsShutdown(e.CloseReason);
+        };
         _picker.Closed += (_, _) => { if (ShutdownPolicy.UserClosedLastWindow(_quitting, shutdownClose, _sessions.Count)) { /* picker closed with the X: treat as quit */ Quit(); } };
         KeepOnTopWithSessions(_picker);
         _picker.Show();
     }
 
     private bool _quitting;
+    private QuitGuard? _quitGuard;
 
+    /// <summary>The process's one Quit guard (#151), over its session list and settings. Lazy for the reason
+    /// Settings is: the headless test lifetime never runs OnFrameworkInitializationCompleted.</summary>
+    private QuitGuard QuitGuard => _quitGuard ??= new QuitGuard(_sessions, () => Settings.ConfirmCloseWhileConnected,
+        entry => new AvaloniaClosePrompt((Window)entry.Host), Quit);
+
+    /// <summary>TryShutdown, not Shutdown: the forced one closes every window past its Closing, so neither a
+    /// running transfer's refusal nor the Quit guard's question (#151) could hold it. A refused shutdown leaves
+    /// the app running, so the flag that keeps the picker shut during a quit is taken back.</summary>
     public void Quit()
     {
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop) return;
         _quitting = true;
-        (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
+        if (!desktop.TryShutdown()) _quitting = false;
     }
 
     /// <summary>The application menu fires with no owner of its own: ShowAboutAsync takes the active window.

@@ -58,6 +58,12 @@ since this release — <a href="https://github.com/coffeemuse/LizTerm/blob/main/
 <p>LizTerm opens on the <strong>Sessions</strong> list. Select a saved profile and choose <strong>Connect</strong>, or use <strong>New...</strong>,
 <strong>Edit...</strong> and <strong>Delete</strong> to manage them. Each session opens in its own window. Closing the last session window
 brings the list back; closing the list with no sessions open quits.</p>
+<p>Closing a window whose session is still connected asks first, so a stray click on the close button or a Cmd/Ctrl+W
+meant for something else does not end a live session: <strong>Keep Connected</strong> (the default, and Escape) leaves the
+window and the session as they were, and <strong>Disconnect</strong> closes the window. Quitting with one or more sessions
+connected asks once, for all of them, and <strong>Keep Connected</strong> leaves every window open. A window that is not
+connected closes without a question, and <strong>Disconnect</strong> in the menu never asks. Turn the question off under
+<strong>Closing</strong> in <a href="#preferences">Preferences</a>.</p>
 <p>Right-click a profile (on macOS, Control-click or a two-finger tap) for <strong>Connect</strong>, <strong>Edit...</strong> and <strong>Mark as
 FAVORITE</strong>, which stars it without opening the editor. On a starred profile the same entry reads <strong>Remove from
 FAVORITE</strong>. A profile already carrying 8 tags has no room for FAVORITE until you remove one.</p>
@@ -497,6 +503,8 @@ time LizTerm starts.</li>
 never interrupts you unless there is something new, and skipping a version keeps it quiet only until the next
 one is published. Help &gt; Check for Updates... works either way. A check is one request to GitHub
 (<code>api.github.com</code>) that sends LizTerm's version number and nothing about your profiles or sessions.</li>
+<li><strong>Closing</strong> — whether closing a session window, or quitting, asks first while a session is connected (on by
+default). Off, a connected window closes at once and Quit disconnects everything without a word.</li>
 </ul>
 <p><strong>Display</strong></p>
 <ul>

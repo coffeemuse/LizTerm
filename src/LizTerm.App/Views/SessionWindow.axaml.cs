@@ -15,6 +15,7 @@ using LizTerm.App.HostFiles;
 using LizTerm.App.Keyboard;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
+using LizTerm.App.Startup;
 using LizTerm.App.ViewModels;
 using LizTerm.Core.Settings;
 
@@ -592,6 +593,69 @@ public partial class SessionWindow : Window, ISessionHost
     }
 
     private void OnKeymapChanged(object? sender, EventArgs e) => ApplyKeymap();
+
+    private IClosePrompt? _closePrompt;
+    private QuitGuard? _quitGuard;
+    private bool _closeConfirmed;
+    private bool _closePromptOpen;
+
+    /// <summary>Gives this window the question it asks before closing while connected (#151), and the process's
+    /// Quit guard, which it consults when the close is a Quit's. Called by App once, before Show(). A window built
+    /// without them, as most tests build it, closes as it always did.</summary>
+    internal void AttachClosePrompt(IClosePrompt prompt, QuitGuard? quitGuard = null)
+    {
+        if (_closePrompt is not null) throw new InvalidOperationException("This window already has a close prompt.");
+        _closePrompt = prompt;
+        _quitGuard = quitGuard;
+    }
+
+    /// <summary>Closing is synchronous, so a close that needs the question is cancelled here and repeated from
+    /// <see cref="ConfirmCloseAsync"/> once Disconnect is chosen. The owned File Transfer dialog's refusal has
+    /// already happened by now (ShouldCancelClose asks the children first), so a running transfer's cancel-first
+    /// rule keeps winning and the question never stacks on it. A shutdown close never asks the window's question
+    /// (ClosePolicy): a Quit's is the guard's, asked once for every session, and an OS shutdown's is nobody's.
+    /// The guard's arm cannot be reached from a headless test, which is why QuitGuardTests take the reason
+    /// directly.</summary>
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (_quitGuard is { } guard && guard.Holds(e.CloseReason))
+        {
+            e.Cancel = true;
+            return;
+        }
+        if (_closePrompt is not null && ViewModel is { } vm
+            && ClosePolicy.ConfirmsWindowClose(e.CloseReason, vm.IsConnected, vm.Settings.ConfirmCloseWhileConnected, _closeConfirmed))
+        {
+            e.Cancel = true;
+            // A second close while the question is up (Cmd+W again, say) asks nothing more; the one answer decides.
+            if (!_closePromptOpen) _ = ConfirmCloseAsync(_closePrompt, vm);
+            return;
+        }
+        base.OnClosing(e);
+    }
+
+    private async Task ConfirmCloseAsync(IClosePrompt prompt, SessionViewModel vm)
+    {
+        _closePromptOpen = true;
+        try
+        {
+            if (!await prompt.ConfirmAsync(ClosePromptRequest.ForWindow(vm.Profile.Name))) return;
+        }
+        catch
+        {
+            // A prompt that failed to open answered nothing, and nothing is the safe answer.
+            return;
+        }
+        finally
+        {
+            _closePromptOpen = false;
+        }
+        // For this one attempt only: Close() runs OnClosing synchronously, and if something else refuses this
+        // close (a transfer started meanwhile), the next attempt must ask again.
+        _closeConfirmed = true;
+        try { Close(); }
+        finally { _closeConfirmed = false; }
+    }
 
     /// <summary>The map in force for this window: the profile's Backspace choice under the user's keymap.json. Set
     /// on the screen and on the keypad, whose tooltips follow it (keypad spec §4.4).</summary>

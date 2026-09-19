@@ -203,6 +203,22 @@ public class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void The_close_confirmation_writes_through_and_skips_an_unchanged_value()
+    {
+        var settings = new SettingsViewModel(new SettingsStore(FilePath));
+        var changes = Changes(settings);
+
+        settings.ConfirmCloseWhileConnected = true;
+        Assert.Empty(changes);
+        Assert.False(File.Exists(FilePath));
+
+        settings.ConfirmCloseWhileConnected = false;
+
+        Assert.Equal(["ConfirmCloseWhileConnected"], changes);
+        Assert.False(new SettingsViewModel(new SettingsStore(FilePath)).ConfirmCloseWhileConnected);
+    }
+
+    [Fact]
     public void The_splash_flag_writes_through_and_skips_an_unchanged_value()
     {
         var settings = new SettingsViewModel(new SettingsStore(FilePath));

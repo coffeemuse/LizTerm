@@ -100,6 +100,19 @@ public class SettingsStoreTests : IDisposable
         Assert.False(ReadFile()["checkForUpdatesAutomatically"]!.GetValue<bool>());
     }
 
+    /// <summary>The close confirmation (#151): on by default, so a settings file from before it still asks, and
+    /// turning it off is what writes the key.</summary>
+    [Fact]
+    public void The_close_confirmation_round_trips_and_defaults_on()
+    {
+        Assert.True(Store.Load().ConfirmCloseWhileConnected);
+
+        Store.Update(s => s with { ConfirmCloseWhileConnected = false });
+
+        Assert.False(Store.Load().ConfirmCloseWhileConnected);
+        Assert.False(ReadFile()["confirmCloseWhileConnected"]!.GetValue<bool>());
+    }
+
     /// <summary>The splash flag (#108): on by default, so a settings file from before it still shows the splash, and
     /// turning it off is what writes the key.</summary>
     [Fact]
