@@ -9,7 +9,7 @@ against disagree, and what LizTerm does about each. When a newer mvsMF is availa
 | | |
 |---|---|
 | Reported version | `zosmf_full_version: 1.1.0` (`zosmf_version: 1`) |
-| Host | MVS/CE, HTTPD, probed 2026-09-18 |
+| Host | MVS/CE, HTTPD, probed 2026-09-18; the manage operations recorded 2026-09-19 |
 | Source read alongside | mvsMF at commit `cf4d6d5` (1.1.1-dev, after the 1.1.0 release of 2026-09-14), `src/`, `docs/endpoints/`, `samplib/` and `CHANGELOG.md` |
 | Previous baseline | `1.0.0-dev`, probed 2026-09-16; the entries it needed are under *Resolved on 1.1.0* |
 | Minimum supported | 1.1.0 — see the user guide's "Signing in" |
@@ -131,7 +131,8 @@ Entries marked *log only* change nothing in the code.
 
 - **Source and docs:** a `PUT` with `Content-Type: application/json` and `"request":"rename"` is a rename
   (`docs/endpoints/datasets/authorization.md`), not a write.
-- **LizTerm:** writes send only `text/plain` or `application/octet-stream`.
+- **LizTerm:** `RenameAsync` is the one method that sends `application/json` on a `PUT`, on purpose; writes send
+  only `text/plain` or `application/octet-stream`, pinned by `Put_json_is_rename_so_no_write_ever_sends_json`.
 
 ### `binary-fixed-padding` (log only)
 
@@ -144,12 +145,35 @@ Entries marked *log only* change nothing in the code.
   unimplemented for writes (mvsMF #361, #245), and the binary write path mis-frames V records (#244).
 - **LizTerm:** offers Text and Binary only.
 
-### `etag-unused` (log only)
+### `etag`
 
-- **Source and observed:** `X-IBM-Return-Etag: true` returns an `ETag` (none is sent without the header), and a
-  wrong `If-Match` answers 412 `{"category":6,"reason":10,"message":"The resource was modified since the supplied
-  ETag was created"}`. (1.0.0-dev returned no ETag.)
-- **LizTerm:** no conflict detection in the preview; the header is not requested.
+- **Docs and source:** `X-IBM-Return-Etag: true` returns an `ETag` on a read and on a write (none is sent without
+  the header); `If-Match` on a write is checked before the member is opened, and a mismatch is 412
+  `{"category":6,"rc":8,"reason":10,"message":"The resource was modified since the supplied ETag was created"}`
+  with nothing written. The stamp of the member *as written* is what the PUT answers, and it is what the next
+  `If-Match` must carry: the pre-save stamp fails, because the write normalises what it stores.
+- **Observed (2026-09-19):** 1.1.0 does all of it. The stamp is 16 hex digits, unquoted, the same for a text and
+  a binary read, and a read after a write answers the write's stamp (`read-etag`, `write-etag-204`, `write-412`;
+  the live round trip checks the write-then-read equality).
+- **LizTerm:** every read and write asks for the stamp and hands it back as bare text (quotes and `W/` stripped,
+  never parsed further); a write sends the caller's `ifMatch` as `If-Match` verbatim, and a 412 is
+  `HostFileErrorKind.Conflict`. The browser's use of it is in the user guide.
+
+### `create-failure-is-one-500` (log only)
+
+- **Source and observed:** `POST restfiles/ds/{name}` answers every allocation failure — the name already exists,
+  no space, a DCB the volume cannot hold, no authority — with the same
+  `500 {"category":8,"rc":900,"reason":7,"message":"Dynamic allocation Error"}`, byte for byte what real z/OSMF
+  sends (mvsMF #317, #329; `create-dynalloc-500` is the "already exists" case). A missing field is 400 reason 3.
+- **LizTerm:** reports it as `CannotAllocate`, whose sentence names the three causes, since the host cannot.
+
+### `rename-target-exists-400` (log only)
+
+- **Source and observed:** a member rename (`PUT …({new})` with the JSON rename body) onto a name that exists is
+  400 reason 7 "Rename target already exists" (`rename-member-exists`); a missing source is 404 reason 5. A
+  *dataset* rename onto an existing name is not checked first: IDCAMS ALTER refuses it and the host answers 500
+  reason 8 "Rename operation failed", the same as any other rename failure.
+- **LizTerm:** the member case is `AlreadyExists`; the dataset case is a server error quoting the host.
 
 ### `hash-in-names-untested` (log only)
 
