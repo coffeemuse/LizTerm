@@ -174,7 +174,8 @@ shows <strong>Quick Connect</strong> under its name.</p>
 <p><strong>Window &gt; Keep on Top</strong> keeps that window above other applications' windows, for a session you want in view while
 you work in another, such as an operator console. It is not remembered: a new window starts without it.</p>
 <h2 id="keyboard">Keyboard</h2>
-<p>The default layout follows Vista TN3270, cross-checked against wc3270. It cannot be changed yet.</p>
+<p>The default layout follows Vista TN3270, cross-checked against wc3270. To change a binding, edit <code>keymap.json</code> by
+hand; see <a href="#where-lizterm-keeps-its-files">Where LizTerm keeps its files</a>.</p>
 <table>
 <thead>
 <tr><th>Key</th><th>3270 key</th></tr>
@@ -492,6 +493,19 @@ the ones you have changed, so deleting it puts everything back to the defaults. 
 name; deleting it loses only the colours, because the tag names themselves live in the profiles and are given fresh
 colours the next time LizTerm starts. <code>recent-hosts.json</code> holds the hosts Quick Connect remembers; deleting it
 empties the drop-down.</p>
+<p><code>keymap.json</code> holds your keyboard bindings, only the ones that differ from the table under
+<a href="#keyboard">Keyboard</a>. Each entry is a chord, such as <code>Ctrl+Home</code>, <code>Shift+F1</code> or <code>Tap:LeftCtrl</code>, set to a 3270 key
+name such as <code>PA1</code>, to <code>{"text": "¬"}</code> for text to type, or to <code>null</code> to take that key away:</p>
+<pre><code>{
+  "bindings": {
+    "Ctrl+Home": "PA1",
+    "Alt+2": null
+  }
+}
+</code></pre>
+<p>Key names are Avalonia's (<code>Home</code>, <code>PageUp</code>, <code>D1</code> for the 1 key, <code>OemOpenBrackets</code> for <code>[</code>); a chord LizTerm cannot
+read is left alone and does nothing. Deleting the file restores the defaults. Backspace follows the profile's
+Backspace setting unless the file binds <code>Back</code> itself.</p>
 <h2 id="known-limitations">Known limitations</h2>
 <ul>
 <li><strong>Unsigned Windows builds.</strong> Windows SmartScreen warns about the app the first time you open it; the

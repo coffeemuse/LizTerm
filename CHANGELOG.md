@@ -5,6 +5,9 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **Keyboard bindings.** A `keymap.json` beside `settings.json` changes what a key sends, and the on-screen keypad's
+  tooltips follow it. Hand-edited for now; the user guide's "Where LizTerm keeps its files" has the format
+  ([#18](https://github.com/coffeemuse/LizTerm/issues/18)).
 - **Mono terminals.** A profile can now be a **Mono (3278)** as well as a **Colour (3279)**: the host is told it is a
   3278 and the screen is drawn in a green phosphor, brighter where the host intensifies. Choose it in the profile
   editor's Terminal tab, beside Model ([#123](https://github.com/coffeemuse/LizTerm/issues/123)).

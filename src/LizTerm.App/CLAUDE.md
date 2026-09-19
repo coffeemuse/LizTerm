@@ -235,8 +235,13 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - `Keymap` (`Keyboard/`) is an immutable table of `KeyChord(Key, Modifiers, Tap)` to `TerminalKey`, built by
   `DefaultKeymap.Create(destructiveBackspace)` (two cached instances) from Vista TN3270's defaults, cross-checked
   against wc3270 in the M2 hardening spec, section 6.2. `docs/user-guide.md` has the full table; keep it in step.
-  `Keymap.With` is the seam for future user remapping, and nothing else about remapping exists. The control's
-  `DestructiveBackspace` property (default true, bound to the profile) picks the table.
+  `KeymapOverlay` (`Keyboard/`) is the user's `keymap.json` parsed (`KeymapStore` and `KeymapFile` in Core hold it as
+  strings; `ChordSyntax` and `KeymapAction` read them), composed over the profile's default with `Without` then `With`.
+  `KeymapViewModel` is the process's one live copy, write-through like `SettingsViewModel`;
+  `SessionWindow.AttachKeymap` composes it for the screen and the keypad on every change. `KeymapPolicy` is what the
+  Keyboard tab (#18, PR 2) refuses, with the reason.
+  The control's `Keymap` property holds the table in force; `SessionWindow.ApplyKeymap` sets it, and the keypad's,
+  from the profile's Backspace choice under the user's overlay.
 - Vista's Ctrl+Insert for PA1 is not in the table: Avalonia's `PlatformHotkeyConfiguration` puts Ctrl+Insert into
   Copy on every platform, the Meta-based macOS table included, and platform gestures are checked first. PA1 is
   reached through Alt+1 or the Keys menu.

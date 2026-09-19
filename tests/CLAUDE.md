@@ -36,6 +36,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   the headless `MouseDown`/`MouseMove`/`MouseUp` helpers, and read `TerminalScreen.Selection` directly. View-model
   tests use plain `[Fact]` with `FakeEmulatorSession`. A view model built without a `SettingsViewModel` gets an
   in-memory one; a test that needs a failing save points a `SettingsStore` at a temp file holding `not json`.
+  A window built without `AttachKeymap` composes the profile's default and never changes it; one that needs a failing
+  keymap save points a `KeymapStore` at a temp file holding `not json`.
 - Drive the Preferences radios by raising `Button.ClickEvent`; assigning `IsChecked` only proves the one-way
   binding renders.
 - `KeymapHintsTests` format every expectation with an explicit `KeyGestureFormatInfo` (Avalonia's common key names,

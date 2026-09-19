@@ -158,7 +158,8 @@ you work in another, such as an operator console. It is not remembered: a new wi
 
 ## Keyboard
 
-The default layout follows Vista TN3270, cross-checked against wc3270. It cannot be changed yet.
+The default layout follows Vista TN3270, cross-checked against wc3270. To change a binding, edit `keymap.json` by
+hand; see [Where LizTerm keeps its files](#where-lizterm-keeps-its-files).
 
 | Key | 3270 key |
 |---|---|
@@ -519,6 +520,23 @@ the ones you have changed, so deleting it puts everything back to the defaults. 
 name; deleting it loses only the colours, because the tag names themselves live in the profiles and are given fresh
 colours the next time LizTerm starts. `recent-hosts.json` holds the hosts Quick Connect remembers; deleting it
 empties the drop-down.
+
+`keymap.json` holds your keyboard bindings, only the ones that differ from the table under
+[Keyboard](#keyboard). Each entry is a chord, such as `Ctrl+Home`, `Shift+F1` or `Tap:LeftCtrl`, set to a 3270 key
+name such as `PA1`, to `{"text": "¬"}` for text to type, or to `null` to take that key away:
+
+```json
+{
+  "bindings": {
+    "Ctrl+Home": "PA1",
+    "Alt+2": null
+  }
+}
+```
+
+Key names are Avalonia's (`Home`, `PageUp`, `D1` for the 1 key, `OemOpenBrackets` for `[`); a chord LizTerm cannot
+read is left alone and does nothing. Deleting the file restores the defaults. Backspace follows the profile's
+Backspace setting unless the file binds `Back` itself.
 
 ## Known limitations
 
