@@ -193,13 +193,14 @@ elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+
 The session switcher is Cmd+K on macOS and Ctrl+K elsewhere; see [Several sessions](#several-sessions).
 
 The **Keys** menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, Insert,
-PA1 to PA3, and PF13 to PF24. Insert has a check mark while insert mode is on. The on-screen keypad
+PA1 to PA3, and PF13 to PF24. Each item also shows the keys that send it, following your bindings, so the menu is
+the place to look one up. Insert has a check mark while insert mode is on. The on-screen keypad
 (**View > Keypad > Show the Keypad**) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.
 
 ### Changing a binding
 
 **Preferences > Keyboard** lists every 3270 key with the keys that send it. Changes apply at once, to every open
-session window, and the keypad's tooltips follow them.
+session window, and the keypad's tooltips and the **Keys** menu follow them.
 
 - **Add a key**: click **Add** on the row, or Tab to it and press Enter or Space, then press the key you want. A tap
   of Left or Right Ctrl is captured the same way: press and release the Ctrl key on its own. To stop without adding

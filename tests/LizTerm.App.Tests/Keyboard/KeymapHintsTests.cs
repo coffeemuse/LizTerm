@@ -109,4 +109,32 @@ public class KeymapHintsTests
         Assert.Equal("Alt+2", KeymapHints.Describe(new KeyChord(Key.D2, KeyModifiers.Alt), Words));
         Assert.Equal("a tap of Right Ctrl", KeymapHints.Describe(KeyChord.TapOf(Key.RightCtrl), Words));
     }
+
+    /// <summary>The one reversal every caller reads: each key's chords, and nothing for a key nothing maps.</summary>
+    [Fact]
+    public void ByKey_reverses_the_table()
+    {
+        var byKey = KeymapHints.ByKey(Map);
+
+        Assert.Equal([new KeyChord(Key.D2, KeyModifiers.Alt), new KeyChord(Key.Home, KeyModifiers.Control)],
+            KeymapHints.Ordered(byKey[TerminalKey.PA2]));
+        Assert.Empty(byKey[TerminalKey.Dup]);
+    }
+
+    /// <summary>Editable keymap spec §6.2: a Keys item's header is its name, two spaces, then the tooltip's own
+    /// line for that key; a key with no chord keeps its bare name.</summary>
+    [Fact]
+    public void A_label_is_the_name_two_spaces_and_the_tooltips_line()
+    {
+        Assert.Equal("PA2  Alt+2 or Ctrl+Home", KeymapHints.Label("PA2", KeymapHints.ByKey(Map)[TerminalKey.PA2], Words));
+        Assert.Equal("Attn  Escape", KeymapHints.Label("Attn", KeymapHints.ByKey(Map)[TerminalKey.Attn], Words));
+        Assert.Equal("Insert  " + Hint(TerminalKey.Insert), KeymapHints.Label("Insert", KeymapHints.ByKey(Map)[TerminalKey.Insert], Words));
+    }
+
+    [Fact]
+    public void A_label_with_no_chord_is_the_bare_name()
+    {
+        Assert.Equal("Field Mark", KeymapHints.Label("Field Mark", KeymapHints.ByKey(Map)[TerminalKey.FieldMark], Words));
+        Assert.Equal("Dup", KeymapHints.Label("Dup", [], Words));
+    }
 }

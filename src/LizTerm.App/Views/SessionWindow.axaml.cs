@@ -16,6 +16,7 @@ using LizTerm.App.Keyboard;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
 using LizTerm.App.ViewModels;
+using LizTerm.Core.Session;
 using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Views;
@@ -47,6 +48,7 @@ public partial class SessionWindow : Window, ISessionHost
         _nativeKeepOnTop = MenuLookup.Item(_nativeWindowMenu, "_Keep on Top")!;
         _nativeSessionsSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().Last();
         _nativeMvsmfBrowser = MenuLookup.Item(NativeMenu.GetMenu(this), "_File", "mvsMF _Browser...")!;
+        CaptureKeysRows();
         RebuildSessionRows();
         // The screen's events call the view model's methods, not its commands: each method carries its own guard,
         // and a keystroke must never be dropped for arriving while the previous one's round trip is still open.
@@ -138,6 +140,11 @@ public partial class SessionWindow : Window, ISessionHost
 
     /// <summary>The generated session rows, both renderers' items with the session each stands for.</summary>
     private readonly List<(NativeMenuItem Native, MenuItem Classic, SessionEntry Entry)> _sessionRows = [];
+
+    /// <summary>Every Keys item on both menus with the name it was declared with and the key it sends, paired in
+    /// declaration order at construction (the parity test holds the two menus to the same order). ApplyKeymap
+    /// writes each pair's headers from the keymap in force, so the menu says what the keyboard does (#23).</summary>
+    private readonly List<(NativeMenuItem Native, MenuItem Classic, string Name, TerminalKey Key)> _keysRows = [];
 
     /// <summary>The SettingsViewModel this window follows for live style changes, so a data-context swap can
     /// unsubscribe from the old one — the same shape as _bellSource below.</summary>
@@ -594,13 +601,22 @@ public partial class SessionWindow : Window, ISessionHost
     private void OnKeymapChanged(object? sender, EventArgs e) => ApplyKeymap();
 
     /// <summary>The map in force for this window: the profile's Backspace choice under the user's keymap.json. Set
-    /// on the screen and on the keypad, whose tooltips follow it (keypad spec §4.4).</summary>
+    /// on the screen and on the keypad, whose tooltips follow it (keypad spec §4.4), and written into every Keys
+    /// item's header on both menus (editable keymap spec §6.2): the keymap is reversed once for the 22 items, as
+    /// the keypad reverses it once for its 36 buttons. A null format is the platform's own wording, the tooltips'.</summary>
     private void ApplyKeymap()
     {
         var destructive = ViewModel?.Profile.DestructiveBackspace ?? true;
         var map = _keymap?.Compose(destructive) ?? DefaultKeymap.Create(destructive);
         Screen.Keymap = map;
         KeypadPanel.Keymap = map;
+        var chords = KeymapHints.ByKey(map);
+        foreach (var (native, classic, name, key) in _keysRows)
+        {
+            var header = KeymapHints.Label(name, chords[key]);
+            native.Header = header;
+            classic.Header = header;
+        }
     }
 
     /// <summary>Cmd/Ctrl+K from the screen, and Window &gt; Switch Session... (Task 7).</summary>
@@ -685,6 +701,35 @@ public partial class SessionWindow : Window, ISessionHost
         // Nothing collapses a trailing separator, so it goes when there is nothing under it.
         _nativeSessionsSeparator.IsVisible = _sessionRows.Count > 0;
         SessionsSeparator.IsVisible = _sessionRows.Count > 0;
+    }
+
+    /// <summary>Pairs the declared Keys items of the two menus, the native side found through the declared submenu
+    /// (which survives InWindow's stashing of the top-level items, as _nativeWindowMenu does) and the classic side
+    /// through KeysMenuItem. A menu whose items differ in count or key is a declaration error and throws here, at
+    /// construction, rather than writing one menu's hint onto the other's item.</summary>
+    private void CaptureKeysRows()
+    {
+        var native = MenuLookup.Item(NativeMenu.GetMenu(this), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
+            .Where(item => item is not NativeMenuItemSeparator).ToList();
+        var classic = KeysMenuItem.Items.OfType<MenuItem>().ToList();
+        if (native.Count != classic.Count)
+            throw new InvalidOperationException($"The native Keys menu declares {native.Count} items and the classic one {classic.Count}.");
+        foreach (var (nativeItem, classicItem) in native.Zip(classic))
+        {
+            if (nativeItem.CommandParameter is not TerminalKey key)
+                throw new InvalidOperationException($"Keys > {nativeItem.Header} sends no TerminalKey.");
+            if (!Equals(classicItem.CommandParameter, key))
+                throw new InvalidOperationException($"Keys > {nativeItem.Header} sends {key} natively and {classicItem.CommandParameter} in the window.");
+            _keysRows.Add((nativeItem, classicItem, nativeItem.Header!, key));
+        }
+    }
+
+    /// <summary>Test seam (#23): the captured pair for the key it sends, reachable under InWindow where a MenuLookup
+    /// from the menu root is not (the menu notes in CLAUDE.md say why).</summary>
+    internal (NativeMenuItem Native, MenuItem Classic) KeysRow(TerminalKey key)
+    {
+        var row = _keysRows.Single(row => row.Key == key);
+        return (row.Native, row.Classic);
     }
 
     /// <summary>Brings the session, then puts every mark back: both renderers write IsChecked before the click
