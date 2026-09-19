@@ -79,7 +79,7 @@ public sealed partial class MvsmfBrowserViewModel
         HasMoreMembers = !listing.IsComplete;
         RefreshVisibleMembers();
         OnPropertyChanged(nameof(MembersHeader));
-        StatusText = MembersHeader;
+        StatusText = MembersStatus();
     }
 
     /// <summary>The first page of <paramref name="row"/>'s members, unfiltered; then, if the host has more and a
@@ -108,7 +108,7 @@ public sealed partial class MvsmfBrowserViewModel
         HasMoreMembers = !listing.IsComplete;
         RefreshVisibleMembers();
         OnPropertyChanged(nameof(MembersHeader));
-        StatusText = MembersHeader;
+        StatusText = MembersStatus();
     }
 
     private void AddMembers(DatasetRow row, IEnumerable<HostFileEntry> entries)

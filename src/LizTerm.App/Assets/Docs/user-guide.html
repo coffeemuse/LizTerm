@@ -325,11 +325,12 @@ you type and you can select several members at once. In the filter, <code>*</cod
 for exactly one, so <code>IEF*</code> keeps the members starting with IEF. For a sequential dataset, <strong>Download…</strong> and
 <strong>Upload…</strong> act on the dataset itself.</p>
 <p>Long lists arrive 500 entries at a time. When the host has more, the status line says so (<strong>500 datasets shown,
-more on the host</strong>) and a <strong>Load more</strong> button appears under the list; each press adds the next 500. On such a
-library the host does the narrowing: what you type in <strong>Filter members</strong> is sent to it, after a short pause, and
-the members shown are every match, again 500 at a time; the header then counts matches (<strong>40 matching</strong>) rather
-than members. Download, Upload and Delete act on the members that are shown, but an upload always checks the whole
-library before replacing a member, whether or not its page is loaded.</p>
+more on the host</strong>), the member header shows a plus (<strong>500+ members</strong>), and a <strong>Load more</strong> button appears under
+the list; each press adds the next 500. On such a library the host does the narrowing: what you type in <strong>Filter
+members</strong> is sent to it, after a short pause, and the members shown are every match, again 500 at a time; the
+header then counts matches (<strong>40 matching</strong>) rather than members. Download, Upload and Delete act on the members
+that are shown, but an upload always checks the whole library before replacing a member, whether or not its page
+is loaded.</p>
 <p><strong>Mode</strong> chooses <strong>Text</strong>, which converts between EBCDIC and your computer's characters, or <strong>Binary</strong>, which copies
 bytes unchanged. <strong>Binary</strong> is chosen for you on an undefined-length (<code>RECFM=U</code>) dataset, such as a load library.</p>
 <p>The keyboard reaches everything. In the member list, <strong>Enter</strong> downloads the selection, and <strong>Delete</strong> or

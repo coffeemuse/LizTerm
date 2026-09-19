@@ -64,7 +64,7 @@ public class MvsmfBrowserViewModelTests
         Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO" }, t.Vm.Members.Select(m => m.Name));
         Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO" }, t.Vm.VisibleMembers.Select(m => m.Name));
         Assert.Equal("MVSCE02.CNTL · 3 members", t.Vm.MembersHeader);
-        Assert.Equal("MVSCE02.CNTL · 3 members", t.Vm.StatusText);
+        Assert.Equal("3 members", t.Vm.StatusText);
         Assert.True(t.Vm.ShowMembers);
         Assert.False(t.Vm.ShowSequentialNote);
         Assert.False(t.Vm.ShowChooseHint);

@@ -330,11 +330,12 @@ for exactly one, so `IEF*` keeps the members starting with IEF. For a sequential
 **Upload…** act on the dataset itself.
 
 Long lists arrive 500 entries at a time. When the host has more, the status line says so (**500 datasets shown,
-more on the host**) and a **Load more** button appears under the list; each press adds the next 500. On such a
-library the host does the narrowing: what you type in **Filter members** is sent to it, after a short pause, and
-the members shown are every match, again 500 at a time; the header then counts matches (**40 matching**) rather
-than members. Download, Upload and Delete act on the members that are shown, but an upload always checks the whole
-library before replacing a member, whether or not its page is loaded.
+more on the host**), the member header shows a plus (**500+ members**), and a **Load more** button appears under
+the list; each press adds the next 500. On such a library the host does the narrowing: what you type in **Filter
+members** is sent to it, after a short pause, and the members shown are every match, again 500 at a time; the
+header then counts matches (**40 matching**) rather than members. Download, Upload and Delete act on the members
+that are shown, but an upload always checks the whole library before replacing a member, whether or not its page
+is loaded.
 
 **Mode** chooses **Text**, which converts between EBCDIC and your computer's characters, or **Binary**, which copies
 bytes unchanged. **Binary** is chosen for you on an undefined-length (`RECFM=U`) dataset, such as a load library.

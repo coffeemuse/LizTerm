@@ -77,8 +77,8 @@ public class MvsmfBrowserPagingTests
 
         Assert.Equal(new[] { "ALLOC", "COMPILE" }, t.Vm.Members.Select(m => m.Name));
         Assert.True(t.Vm.HasMoreMembers);
-        Assert.Equal("MVSCE02.BIG · 2 members shown, more on the host", t.Vm.MembersHeader);
-        Assert.Equal(t.Vm.MembersHeader, t.Vm.StatusText);
+        Assert.Equal("MVSCE02.BIG · 2+ members", t.Vm.MembersHeader);
+        Assert.Equal("2 members shown, more on the host", t.Vm.StatusText);
 
         await t.LoadMoreMembersAsync();
 
@@ -91,6 +91,7 @@ public class MvsmfBrowserPagingTests
         Assert.Equal(5, t.Vm.Members.Count);
         Assert.False(t.Vm.HasMoreMembers);
         Assert.Equal("MVSCE02.BIG · 5 members", t.Vm.MembersHeader);
+        Assert.Equal("5 members", t.Vm.StatusText);
     }
 
     [Fact]
@@ -151,6 +152,8 @@ public class MvsmfBrowserPagingTests
         Assert.Equal(new HostListRequest(MaxItems: 2, NamePattern: "*L*"), t.Host.ListRequests[^1]);
         Assert.Equal(new[] { "ALLOC", "COMPILE" }, t.Vm.VisibleMembers.Select(m => m.Name));
         Assert.True(t.Vm.HasMoreMembers);
+        Assert.Equal("MVSCE02.BIG · 2+ matching", t.Vm.MembersHeader);
+        Assert.Equal("2 matching *L* shown, more on the host", t.Vm.StatusText);
 
         await t.LoadMoreMembersAsync();
 
@@ -158,6 +161,7 @@ public class MvsmfBrowserPagingTests
         Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO", "LINK" }, t.Vm.VisibleMembers.Select(m => m.Name));
         Assert.False(t.Vm.HasMoreMembers);
         Assert.Equal("MVSCE02.BIG · 4 matching", t.Vm.MembersHeader);
+        Assert.Equal("4 matching *L*", t.Vm.StatusText);
 
         await t.FilterMembersAsync("");
 

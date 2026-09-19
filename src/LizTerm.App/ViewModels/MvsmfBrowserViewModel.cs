@@ -107,9 +107,18 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         ? $"{dataset.Name} cannot be opened in this release (DSORG {(dataset.Dsorg.Length > 0 ? dataset.Dsorg : "unknown")})."
         : "Choose a dataset on the left.";
 
+    /// <summary>Short, since it shares a line with the filter box: a plus marks a list the host has more of, and the
+    /// status line (<see cref="MembersStatus"/>) says so in words.</summary>
     public string MembersHeader => SelectedDataset is { IsPartitioned: true } dataset
-        ? $"{dataset.Name} · {(_memberPattern is null ? Plural(Members.Count, "member") : $"{Members.Count} matching")}{(HasMoreMembers ? " shown, more on the host" : "")}"
+        ? $"{dataset.Name} · {(HasMoreMembers ? $"{Members.Count}+ {(_memberPattern is null ? "members" : "matching")}" : MembersCount())}"
         : "";
+
+    private string MembersCount() => _memberPattern is null ? Plural(Members.Count, "member") : $"{Members.Count} matching";
+
+    /// <summary>The status line after a member listing: the count, the pattern the host applied, and whether it
+    /// has more.</summary>
+    private string MembersStatus() =>
+        MembersCount() + (_memberPattern is { } pattern ? " " + pattern : "") + (HasMoreMembers ? " shown, more on the host" : "");
 
     /// <summary>Binary transfers to fixed-length records are padded to whole records (compatibility log,
     /// binary-fixed-padding), so the bar says so while it applies.</summary>
