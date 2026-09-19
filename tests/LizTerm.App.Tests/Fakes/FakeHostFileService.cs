@@ -256,11 +256,12 @@ public sealed class FakeHostFileService : IHostFileService
     }
 
     /// <summary>A dataset pattern as the host reads it: <c>**</c> any run of qualifiers, <c>*</c> any run within a
-    /// qualifier, <c>%</c> one character; case ignored.</summary>
+    /// qualifier, <c>%</c> one character; case ignored on both sides, since a real host reads dataset names that
+    /// way too (an entry seeded in lower case still matches an upper-case pattern).</summary>
     private static Func<HostFileEntry, bool> DatasetPattern(string pattern)
     {
         var regex = new Regex("^" + Regex.Escape(pattern.Trim().ToUpperInvariant())
-            .Replace("\\*\\*", ".*").Replace("\\*", "[^.]*").Replace("%", "[^.]") + "$");
+            .Replace("\\*\\*", ".*").Replace("\\*", "[^.]*").Replace("%", "[^.]") + "$", RegexOptions.IgnoreCase);
         return entry => regex.IsMatch(entry.Name);
     }
 

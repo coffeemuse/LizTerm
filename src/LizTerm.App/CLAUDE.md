@@ -860,8 +860,13 @@ Preferences... is hidden on macOS and carries no `Gesture`, so it installs no se
   `SelectedDataset` inside a running operation starts no member load of its own (`RunExclusiveAsync` ignores a
   second operation). `RunThenListAsync` swaps the retry to the listing once the host has done the first half of a
   rename or a create, so Retry after a failed listing never repeats it: a member rename pairs it with
-  `ShowRenamedMemberAsync`, a dataset rename or a create with `ShowAfterChangeAsync`. The delete-dataset question
-  carries the loaded member count, with a plus while the host has more or a host-side member filter is in force.
+  `ShowRenamedMemberAsync`, a dataset rename or a create with `ShowAfterChangeAsync`. When the filter in the box is
+  one the rules would refuse (an emptied box, say), the host has already done its part and the list cannot be asked
+  again until the filter is fixed, so `ShowAfterChangeAsync` drops the gone row (the old row for a rename, none for
+  a create) instead of leaving it stale and reports `⚠ … The list was not refreshed: …` rather than re-listing. The
+  delete-dataset question carries the loaded member count only when a member listing for the dataset landed (with a
+  plus while the host has more or a host-side member filter is in force); one that never listed — cancelled, failed
+  — reads as a bare "a partitioned dataset", never as "0 members".
 - **Create** (`Create.cs`, `NewDatasetFormViewModel`): the form is one instance per window, so the space values it
   was last sent with are kept; opening it prefills type and DCB from the chosen dataset and the name from the
   filter's first qualifier. Every field is a string; a numeric field that is not a whole number is checked as

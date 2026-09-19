@@ -105,8 +105,8 @@ public sealed partial class MvsmfBrowserViewModel
         await _connection.RunAsync(service => service.RenameAsync(from, to.Dataset, token));
         _access.Etags.Move(from, to);
         var what = $"Renamed {from} to {to}";
-        retryWith(() => ListAgainAsync(to.Dataset, what));
-        await ShowAfterChangeAsync(to.Dataset, what, token);
+        retryWith(() => ListAgainAsync(to.Dataset, what, dataset));
+        await ShowAfterChangeAsync(to.Dataset, what, dataset, token);
     }
 
     // ---- dataset delete ----
@@ -134,17 +134,20 @@ public sealed partial class MvsmfBrowserViewModel
         StatusText = $"✓ Deleted {dataset.Name}.";
     }
 
-    /// <summary>The name, and what it is: a partitioned dataset with its loaded member count (a plus while the host
-    /// has more, or while a host-side member filter is in force, since the count is then of matches), a sequential
-    /// dataset, or the bare name for an organisation the browser cannot open.</summary>
+    /// <summary>The name, and what it is: a partitioned dataset with its loaded member count when a member listing
+    /// for it landed (a plus while the host has more, or while a host-side member filter is in force, since the
+    /// count is then of matches), a partitioned dataset with no count when none landed (cancelled or failed, so
+    /// <see cref="Members"/> is empty and would otherwise read as "0 members" — an empty library, not an unlisted
+    /// one), a sequential dataset, or the bare name for an organisation the browser cannot open.</summary>
     private string DescribeForDelete(DatasetRow dataset)
     {
-        if (dataset.IsPartitioned && ReferenceEquals(SelectedDataset, dataset))
+        if (dataset.IsPartitioned && ReferenceEquals(SelectedDataset, dataset) && (_allMembersLoaded || HasMoreMembers || _memberPattern is not null))
         {
             var count = HasMoreMembers || _memberPattern is not null ? $"{Members.Count}+ members" : Plural(Members.Count, "member");
             return $"{dataset.Name}, a partitioned dataset with {count}";
         }
-        return dataset.IsSequential ? $"{dataset.Name}, a sequential dataset" : dataset.Name;
+        return dataset.IsPartitioned ? $"{dataset.Name}, a partitioned dataset"
+            : dataset.IsSequential ? $"{dataset.Name}, a sequential dataset" : dataset.Name;
     }
 
     // ---- shared ----
@@ -158,13 +161,27 @@ public sealed partial class MvsmfBrowserViewModel
         return RunExclusiveAsync(token => work(next => retry = next, token), () => retry());
     }
 
-    private Task ListAgainAsync(string name, string what) =>
-        RunExclusiveAsync(token => ShowAfterChangeAsync(name, what, token), () => ListAgainAsync(name, what));
+    private Task ListAgainAsync(string name, string what, DatasetRow? gone) =>
+        RunExclusiveAsync(token => ShowAfterChangeAsync(name, what, gone, token), () => ListAgainAsync(name, what, gone));
 
-    /// <summary>After a dataset is renamed or created: the filter is listed again, the dataset is chosen if the
-    /// listing shows it, and the status line says what happened, adding that the filter hides it when it does.</summary>
-    private async Task ShowAfterChangeAsync(string name, string what, CancellationToken token)
+    /// <summary>After a dataset is renamed or created: if the filter in the box is one the rules would refuse (an
+    /// emptied box, say), the host has already done its part and the list cannot be asked again until the filter is
+    /// fixed, so <paramref name="gone"/> — the old row for a rename, null for a create — is dropped rather than left
+    /// stale, and the line says what did and did not happen. Otherwise the filter is listed again, the dataset is
+    /// chosen if the listing shows it, and the status line says what happened, adding that the filter hides it when
+    /// it does.</summary>
+    private async Task ShowAfterChangeAsync(string name, string what, DatasetRow? gone, CancellationToken token)
     {
+        if (HostPath.DatasetPatternError(Filter) is { } problem)
+        {
+            if (gone is not null)
+            {
+                if (ReferenceEquals(SelectedDataset, gone)) SelectedDataset = null;
+                Datasets.Remove(gone);
+            }
+            StatusText = $"⚠ {what}. The list was not refreshed: {problem}";
+            return;
+        }
         await ListCoreAsync(token);
         if (Datasets.FirstOrDefault(row => row.Name == name) is { } row)
         {

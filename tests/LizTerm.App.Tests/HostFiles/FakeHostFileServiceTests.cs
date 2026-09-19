@@ -218,10 +218,11 @@ public class FakeHostFileServiceTests
         host.AddDataset("A.JCL");
         host.AddDataset("A.X.CNTL");
         host.AddDataset("B.CNTL");
+        host.AddDataset("c.cntl");
 
         Assert.Equal(new[] { "A.CNTL", "A.JCL", "A.X.CNTL" }, (await host.ListDatasetsAsync("A.**", HostListRequest.All, token)).Entries.Select(e => e.Name));
         Assert.Equal(new[] { "A.CNTL", "A.JCL" }, (await host.ListDatasetsAsync("a.*", HostListRequest.All, token)).Entries.Select(e => e.Name));
-        Assert.Equal(new[] { "A.CNTL", "B.CNTL" }, (await host.ListDatasetsAsync("%.CNTL", HostListRequest.All, token)).Entries.Select(e => e.Name));
+        Assert.Equal(new[] { "A.CNTL", "B.CNTL", "c.cntl" }, (await host.ListDatasetsAsync("%.CNTL", HostListRequest.All, token)).Entries.Select(e => e.Name));
         Assert.Empty((await host.ListDatasetsAsync("OTHER.**", HostListRequest.All, token)).Entries);
     }
 }

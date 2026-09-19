@@ -237,4 +237,19 @@ public class MvsmfBrowserCreateTests
         await t.Vm.RetryCommand.ExecuteAsync(null);
         Assert.Equal(1, t.Host.CallsSnapshot().Count(c => c == "create:MVSCE02.NEW"));
     }
+
+    [Fact]
+    public async Task Create_with_a_filter_the_rules_refuse_says_so()
+    {
+        var t = await OpenedAsync();
+        t.Vm.Form.Name = "MVSCE02.NEW";
+        t.Vm.Filter = "";
+
+        await t.Vm.CreateCommand.ExecuteAsync(null);
+
+        Assert.False(t.Vm.IsCreating);
+        Assert.Equal(1, t.Host.CallsSnapshot().Count(c => c.StartsWith("list:")));
+        Assert.Equal("MVSCE02.CNTL", t.Vm.SelectedDataset?.Name);
+        Assert.Equal("⚠ Created MVSCE02.NEW. The list was not refreshed: Enter a dataset filter.", t.Vm.StatusText);
+    }
 }

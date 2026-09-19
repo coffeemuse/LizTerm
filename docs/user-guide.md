@@ -382,7 +382,7 @@ sent. A member that differs is marked **⚠ Uploaded, but the host copy differs 
 If you downloaded a member in this window and it has changed on the host since, the browser says so before
 replacing it: **Replace anyway** writes your copy over the change, **Skip** leaves the member alone. The check
 covers only members downloaded or uploaded through this browser window; anything else is replaced as before, and
-a sequential dataset is checked the same way.
+a sequential dataset is checked the same way, with **Cancel** in place of **Skip**.
 
 A sequential dataset takes one file at a time. After the checks, the browser asks before replacing the dataset's
 contents.

@@ -335,4 +335,55 @@ public class MvsmfBrowserManageTests
         Assert.Equal("MVSCE02.CNTL", t.Vm.SelectedDataset?.Name);
         Assert.Equal(4, t.Vm.Datasets.Count);
     }
+
+    [Fact]
+    public async Task Delete_dataset_gives_no_count_when_the_members_never_listed()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ListAsync();
+        t.Host.Failures["members:MVSCE02.CNTL"] = new HostFileException(HostFileErrorKind.ServerError, "x", 3);
+        await t.ChooseAsync("MVSCE02.CNTL");
+        Assert.Empty(t.Vm.Members);
+
+        var deleting = t.Vm.DeleteDatasetCommand.ExecuteAsync(null);
+        var question = await AskedAsync(t, deleting);
+        Assert.Equal("Delete MVSCE02.CNTL, a partitioned dataset? This cannot be undone.", question.Message);
+        question.CancelCommand.Execute(null);
+        await deleting;
+    }
+
+    [Fact]
+    public async Task Delete_dataset_says_plus_while_a_host_side_member_filter_is_in_force()
+    {
+        var t = BrowserTestHost.Create(seed: BrowserTestHost.Large, pageSize: 2);
+        await t.ChooseAsync("MVSCE02.BIG");
+        await t.FilterMembersAsync("LINK");
+        Assert.Equal(new[] { "LINK" }, t.Vm.Members.Select(m => m.Name));
+        Assert.False(t.Vm.HasMoreMembers);
+
+        var deleting = t.Vm.DeleteDatasetCommand.ExecuteAsync(null);
+        var question = await AskedAsync(t, deleting);
+        Assert.Equal("Delete MVSCE02.BIG, a partitioned dataset with 1+ members? This cannot be undone.", question.Message);
+        question.CancelCommand.Execute(null);
+        await deleting;
+    }
+
+    [Fact]
+    public async Task Rename_dataset_with_a_filter_the_rules_refuse_drops_the_old_row_and_says_so()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ChooseAsync("MVSCE02.CNTL");
+        t.Vm.Filter = "";
+
+        var renaming = t.Vm.RenameDatasetCommand.ExecuteAsync(null);
+        Answer(await AskedAsync(t, renaming), "MVSCE02.JCL");
+        await renaming;
+
+        Assert.Contains("rename:MVSCE02.CNTL:MVSCE02.JCL", t.Host.CallsSnapshot());
+        Assert.Equal(1, t.Host.CallsSnapshot().Count(c => c.StartsWith("list:")));
+        Assert.DoesNotContain(t.Vm.Datasets, d => d.Name == "MVSCE02.CNTL");
+        Assert.Null(t.Vm.SelectedDataset);
+        Assert.Empty(t.Vm.Members);
+        Assert.Equal("⚠ Renamed MVSCE02.CNTL to MVSCE02.JCL. The list was not refreshed: Enter a dataset filter.", t.Vm.StatusText);
+    }
 }
