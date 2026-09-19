@@ -15,6 +15,9 @@ internal static class MvsmfErrors
 {
     private const int DatasetCategory = 6;
     private const int SecurityCategory = 4;
+    private const int AllocationCategory = 8;
+    private const int AllocationRc = 900;
+    private const int RenameTargetExistsReason = 7;
 
     public static HostFileException FromResponse(HttpStatusCode status, byte[] body, string what)
     {
@@ -35,6 +38,14 @@ internal static class MvsmfErrors
         // mvsMF-compat: authorization-is-500 — a refused open is 500, category 4, rc 8, reason 0 ("LMOPEN error").
         if (category == SecurityCategory && rc == 8 && reason == 0) return HostFileErrorKind.NotAuthorized;
         if (status == HttpStatusCode.Forbidden) return HostFileErrorKind.NotAuthorized;
+        // mvsMF-compat: create-failure-is-one-500 — every allocation failure (the name exists, no space, a DCB the
+        // volume cannot hold, no authority) is the same 500, category 8, rc 900, byte for byte what z/OSMF sends.
+        if (category == AllocationCategory && rc == AllocationRc) return HostFileErrorKind.CannotAllocate;
+        // mvsMF-compat: etag — a stale If-Match is 412 reason 10 and nothing is written.
+        if (status == HttpStatusCode.PreconditionFailed) return HostFileErrorKind.Conflict;
+        // mvsMF-compat: rename-target-exists-400 — a member rename onto an existing name is 400 reason 7.
+        if (status == HttpStatusCode.BadRequest && category == DatasetCategory && reason == RenameTargetExistsReason)
+            return HostFileErrorKind.AlreadyExists;
         if (status == HttpStatusCode.BadRequest) return HostFileErrorKind.InvalidRequest;
         return HostFileErrorKind.ServerError;
     }
@@ -45,6 +56,9 @@ internal static class MvsmfErrors
         HostFileErrorKind.NotFound => $"{what}: not found.",
         HostFileErrorKind.CannotOpen => $"{what}: {Quote(error?.Message) ?? "cannot be opened"}.",
         HostFileErrorKind.NotAuthorized => $"{what}: not authorized.",
+        HostFileErrorKind.CannotAllocate => $"{what}: the host could not allocate it (it may already exist, there may be no space, or you may not be authorized).",
+        HostFileErrorKind.Conflict => $"{what}: changed on the host since it was read.",
+        HostFileErrorKind.AlreadyExists => $"{what}: a member of that name already exists.",
         HostFileErrorKind.InvalidRequest => $"{what}: the host refused the request ({error?.Message ?? "bad request"}).",
         _ => (Quote(error?.Message), error?.Reason) switch
         {

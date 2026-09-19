@@ -27,7 +27,7 @@ public class MvsmfReadTests
         var handler = new RecordedHandler().Then("login-200").Then("read-text-jes2");
         using var service = Service(handler);
 
-        var lines = await service.ReadTextAsync(Jes2, cancellationToken: TestContext.Current.CancellationToken);
+        var lines = (await service.ReadTextAsync(Jes2, cancellationToken: TestContext.Current.CancellationToken)).Lines;
 
         // The recording has five spaces before PROC.
         Assert.StartsWith("//JES2     PROC M=JES2PM00,", lines[0]);
@@ -42,14 +42,14 @@ public class MvsmfReadTests
     public async Task Text_body_is_latin1()
     {
         using var service = Service(Answering([0x41, 0xAC, 0xA2, 0x42, 0x0A]));
-        Assert.Equal(new[] { "A¬¢B" }, await service.ReadTextAsync(Jes2, cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(new[] { "A¬¢B" }, (await service.ReadTextAsync(Jes2, cancellationToken: TestContext.Current.CancellationToken)).Lines);
     }
 
     [Fact]
     public async Task Text_read_keeps_trailing_blanks_and_blank_records()
     {
         using var service = Service(Answering("AB  \n\nC\n"u8.ToArray()));
-        Assert.Equal(new[] { "AB  ", "", "C" }, await service.ReadTextAsync(Jes2, cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(new[] { "AB  ", "", "C" }, (await service.ReadTextAsync(Jes2, cancellationToken: TestContext.Current.CancellationToken)).Lines);
     }
 
     [Theory]
@@ -68,7 +68,7 @@ public class MvsmfReadTests
         using var destination = new MemoryStream();
         var progress = new ListProgress();
 
-        var count = await service.ReadBinaryAsync(Jes2, destination, progress, TestContext.Current.CancellationToken);
+        var count = (await service.ReadBinaryAsync(Jes2, destination, progress, TestContext.Current.CancellationToken)).Bytes;
 
         var expected = Fixture.Body("read-binary-jes2");
         Assert.Equal(expected, destination.ToArray());

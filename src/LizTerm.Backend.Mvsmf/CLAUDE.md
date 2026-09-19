@@ -32,7 +32,19 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
 - **Every workaround carries `// mvsMF-compat: <tag>`** matching an entry in `docs/mvsmf-compatibility.md`, and a
   test named after the tag pins it. Add all three together, and read that log before changing any behaviour that
   looks odd: it is probably deliberate.
-- **Never send `Content-Type: application/json` on a `PUT`.** mvsMF treats it as a rename.
+- **A `PUT` with `Content-Type: application/json` is a rename, never a write.** `RenameAsync` is the one method
+  that sends it: the new name is the URL, the old one the `{"request":"rename","from-dataset":{…}}` body, `member`
+  present for a member rename and absent for a dataset. Writes send only `text/plain` or `application/octet-stream`
+  (`put-json-is-rename`). A member rename onto an existing name is 400 reason 7 (`AlreadyExists`,
+  `rename-target-exists-400`); a dataset rename onto one is the host's 500 reason 8, a server error quoting it.
+- **The stamp (`etag`).** Every read and write sends `X-IBM-Return-Etag: true` and returns the `ETag` header as
+  bare text (`EtagOf`: quotes and `W/` stripped, never parsed further). A write's `ifMatch` goes out as
+  `If-Match` verbatim, and a 412 is `Conflict`. The stamp of the member as written is the PUT's answer, not the
+  pre-save one, so every write asks for it.
+- **A create posts the allocation as JSON** (`MvsmfAllocation`: `dsorg` `PS`/`PO`, `recfm` folded, `alcunit`
+  `TRK`/`CYL`, `dirblk` only for `PO`) after `DatasetAllocation.Problems()` passes. The host answers every
+  allocation failure with the same 500, category 8, rc 900 (`create-failure-is-one-500`), mapped to
+  `CannotAllocate`. `DeleteAsync` takes a dataset path as well as a member.
 - **Text is ISO-8859-1 on the wire** in both directions, whatever `charset` says. Lines go out as they are, LF
   ended; an empty line is stored as a blank record. `EncodeText` throws for a line break or a character above
   U+00FF; `TextUploadCheck` (Core) should have refused those first, and it also refuses over-long lines when the
@@ -41,7 +53,8 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
 - **Classify errors by the JSON `category`/`reason`, then the status.** A missing dataset or member is 404 with
   reason 4 or 5; a refused open is 500 in category 4; a failed open is 500 in category 6, reason 3 with a message
   starting `Cannot open`; a truncated write is the same shape with another message and reaches the caller as a
-  server error carrying it. `MvsmfErrors` is the one place that mapping lives.
+  server error carrying it. `MvsmfErrors` is the one place that mapping lives. A 412 is `Conflict`; category 8
+  with rc 900 is `CannotAllocate`; a 400 in category 6 with reason 7 is `AlreadyExists`.
 - **Paging is the caller's `HostListRequest`.** `MaxItems` becomes `X-IBM-Max-Items`, `NamePattern` the member
   list's `pattern=`, and `Continuation` (the last name of the page before, opaque to callers) `start=`. `start` is
   inclusive on mvsMF and z/OSMF, so a continued page asks for one more than its size and `Page` drops the repeat, or
