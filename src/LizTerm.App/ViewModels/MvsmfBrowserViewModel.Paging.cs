@@ -144,10 +144,17 @@ public sealed partial class MvsmfBrowserViewModel
     /// host's matches. Another keystroke restarts the pause; a listing already running is waited out.</summary>
     private void ScheduleHostFilter()
     {
-        _filterDebounce?.Cancel();
+        CancelHostFilter();
         var debounce = _filterDebounce = new CancellationTokenSource();
         IsFilterPending = true;
         _ = RunHostFilterAsync(debounce);
+    }
+
+    private void CancelHostFilter()
+    {
+        _filterDebounce?.Cancel();
+        _filterDebounce = null;
+        IsFilterPending = false;
     }
 
     private async Task RunHostFilterAsync(CancellationTokenSource debounce)
@@ -163,11 +170,7 @@ public sealed partial class MvsmfBrowserViewModel
         }
         finally
         {
-            if (ReferenceEquals(_filterDebounce, debounce))
-            {
-                _filterDebounce = null;
-                IsFilterPending = false;
-            }
+            if (ReferenceEquals(_filterDebounce, debounce)) CancelHostFilter();
         }
         if (_disposed || SelectedDataset is not { IsPartitioned: true } row || _allMembersLoaded) return;
         if (!TryHostPattern(out var pattern)) return;

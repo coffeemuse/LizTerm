@@ -128,8 +128,10 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     partial void OnSelectedDatasetChanged(DatasetRow? value)
     {
-        // A pending retry belongs to the dataset it failed on; Retry must never act on another one.
+        // A pending retry belongs to the dataset it failed on; Retry must never act on another one. So does a
+        // filter keystroke still waiting to reach the host: the new dataset's own load applies the filter.
         _retry = null;
+        CancelHostFilter();
         OnPropertyChanged(nameof(CanRetry));
         // A review belongs to the dataset it was opened on; the window disables the list while one is open. Closed
         // before the mode changes, so the old review is not rechecked against the new dataset. A running upload keeps

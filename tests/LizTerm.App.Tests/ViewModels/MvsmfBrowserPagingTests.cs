@@ -140,6 +140,8 @@ public class MvsmfBrowserPagingTests
     {
         var t = Paged();
         await t.ChooseAsync("MVSCE02.BIG");
+        // Wide enough that three keystrokes in a row always land inside one pause, whatever the runner is doing.
+        t.Vm.FilterDelay = TimeSpan.FromMilliseconds(200);
         var requests = t.Host.ListRequests.Count;
 
         t.Vm.MemberFilter = "r";
@@ -177,6 +179,24 @@ public class MvsmfBrowserPagingTests
 
         Assert.Equal("*L*", t.Host.ListRequests[^1].NamePattern);
         Assert.Equal(new[] { "ALLOC", "COMPILE" }, t.Vm.VisibleMembers.Select(m => m.Name));
+    }
+
+    [Fact]
+    public async Task Choosing_another_dataset_drops_a_filter_still_waiting_to_reach_the_host()
+    {
+        var t = Paged();
+        await t.ChooseAsync("MVSCE02.BIG");
+        t.Vm.FilterDelay = TimeSpan.FromMilliseconds(200);
+
+        t.Vm.MemberFilter = "l";
+        Assert.True(t.Vm.IsFilterPending);
+        await t.ChooseAsync("MVSCE02.CNTL");
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+
+        Assert.False(t.Vm.IsFilterPending);
+        // CNTL is partial at two a page, so its own load listed the filtered page once; the stale debounce added nothing.
+        Assert.Equal("*L*", t.Host.ListRequests[^1].NamePattern);
+        Assert.Equal(1, t.Host.ListRequests.Count(r => r.NamePattern == "*L*"));
     }
 
     [Fact]

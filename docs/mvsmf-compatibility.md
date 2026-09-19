@@ -71,7 +71,8 @@ Entries marked *log only* change nothing in the code.
   sent with `%` as `%25`); entries skipped by `start` or rejected by `pattern` are not charged against the page.
 - **Observed:** 1.1.0 honours all of it (three of `SYS1.MACLIB`'s 742 members for `X-IBM-Max-Items: 3`, recorded as
   `members-maclib-page`; 1.0.0-dev ignored `start` and `X-IBM-Max-Items`).
-- **LizTerm:** both lists are fetched 500 at a time with **Load more** for the rest (#144). Because `start` is
+- **LizTerm:** both lists are fetched a page at a time with **Load more** for the rest (#144; the page size is in
+  the user guide). Because `start` is
   inclusive, a continued page asks for one entry more than its size and drops the repeat; a page that no longer
   begins with that name (deleted meanwhile) is cut to the page size instead. A `moreRows: true` on a list asked for
   whole is still refused as a partial answer. The member filter goes to the host as `pattern=*TEXT*` once the host
