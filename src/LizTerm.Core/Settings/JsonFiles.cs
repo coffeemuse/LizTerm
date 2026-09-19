@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -11,7 +12,8 @@ namespace LizTerm.Core.Settings;
 /// Update, one parser, and a write through a sibling temp file renamed over the target.</summary>
 internal static class JsonFiles
 {
-    public static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+    /// <summary>Indented, and with the relaxed encoder: these are files a user reads and edits by hand, so a chord such as Ctrl+Home and a text such as ¬ are written as themselves rather than as + and ¬. Both forms read back identically; only the file's looks differ.</summary>
+    public static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     /// <summary>The file as a JSON object, or null when it is missing, unreadable, not JSON or not an object.</summary>
     public static JsonObject? ReadLenient(string path)

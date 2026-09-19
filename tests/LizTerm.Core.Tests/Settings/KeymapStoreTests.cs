@@ -82,4 +82,16 @@ public class KeymapStoreTests : IDisposable
     {
         Assert.Equal(Path.Combine(Path.GetDirectoryName(AppPaths.SettingsFile())!, "keymap.json"), KeymapStore.DefaultFile());
     }
+
+    [Fact]
+    public void The_file_spells_a_chord_and_a_text_as_themselves()
+    {
+        Store.Update(f => Plus(Plus(f, "Ctrl+Home", new KeymapEntry.SendKey("PA1")), "Ctrl+D6", new KeymapEntry.TypeText("¬")));
+
+        var text = File.ReadAllText(FilePath);
+
+        Assert.Contains("\"Ctrl+Home\": \"PA1\"", text);
+        Assert.Contains("\"text\": \"¬\"", text);
+        Assert.DoesNotContain("\\u", text);
+    }
 }
