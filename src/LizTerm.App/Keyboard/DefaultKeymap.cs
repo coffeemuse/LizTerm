@@ -14,7 +14,7 @@ namespace LizTerm.App.Keyboard;
 /// host sees EBCDIC and 3270 keys, never ASCII control codes, so a TN3270 client need not reserve it. Copy, paste,
 /// and select-all are platform hotkeys checked before this table and are deliberately absent from it; that includes
 /// Vista's Ctrl+Insert for PA1, which Avalonia lists as a Copy gesture on every platform (the Meta-based macOS table
-/// included), so PA1 lives on Alt+1 alone. Not user-editable yet; see <see cref="Keymap.With"/>.</summary>
+/// included), so PA1 lives on Alt+1 alone. The user's keymap.json is applied over this table by <see cref="KeymapOverlay"/> (#18).</summary>
 public static class DefaultKeymap
 {
     private static readonly Keymap Erasing = Build(destructiveBackspace: true);

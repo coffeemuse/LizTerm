@@ -7,8 +7,8 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.App.Keyboard;
 
-/// <summary>A chord-to-key table plus a chord-to-text table (spec 6.1). Immutable; <see cref="With"/> is the seam
-/// for user remapping later: a future profile field would be parsed into entries and applied over the default.</summary>
+/// <summary>A chord-to-key table plus a chord-to-text table (spec 6.1). Immutable. KeymapOverlay applies the user's
+/// keymap.json over the default with <see cref="Without"/> then <see cref="With"/> (#18).</summary>
 public sealed class Keymap
 {
     private readonly Dictionary<KeyChord, TerminalKey> _keys;
@@ -35,5 +35,19 @@ public sealed class Keymap
         var mergedText = new Dictionary<KeyChord, string>(_text);
         foreach (var (chord, value) in text) mergedText[chord] = value;
         return new Keymap(mergedKeys, mergedText);
+    }
+
+    /// <summary>A copy with the given chords removed from both tables, so a user's unbinding takes a default away
+    /// rather than shadowing it, and a chord can move from one table to the other.</summary>
+    public Keymap Without(IEnumerable<KeyChord> chords)
+    {
+        var keys = new Dictionary<KeyChord, TerminalKey>(_keys);
+        var text = new Dictionary<KeyChord, string>(_text);
+        foreach (var chord in chords)
+        {
+            keys.Remove(chord);
+            text.Remove(chord);
+        }
+        return new Keymap(keys, text);
     }
 }
