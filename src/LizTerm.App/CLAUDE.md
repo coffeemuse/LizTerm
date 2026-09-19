@@ -446,7 +446,10 @@ joins the declared name and `KeymapHints.Describe`'s line, and `SessionWindow.Ap
 item and the classic item together, from the rows `CaptureKeysRows` paired at construction, on every keymap change.
 Never a `Gesture` (a key equivalent that steals the keystroke from the screen), and never a classic `InputGesture`
 either: the two menus would then differ, and the parity walk would fail, correctly. A null format is the platform's
-wording, the keypad tooltips' own, so on macOS the hint is glyphs. Tests find a Keys item by the key it sends, never by header, because the header follows the keymap; under InWindow the whole top-level `_Keys` native item is stashed, so a `MenuLookup` from the menu root cannot reach it, and `SessionWindow.KeysRow(TerminalKey)` is the internal seam that answers with the pair the constructor captured.
+wording, the keypad tooltips' own, so on macOS the hint is glyphs. Tests find a Keys item by the key it sends, never
+by header, because the header follows the keymap; under InWindow the whole top-level `_Keys` native item is stashed,
+so a `MenuLookup` from the menu root cannot reach it, and `SessionWindow.KeysRow(TerminalKey)` is the internal seam
+that answers with the pair the constructor captured.
 
 - Edit's Cmd/Ctrl+C, V and A come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`,
   `PasteAsync` and `SelectAll` directly, never the `[RelayCommand]`s, which disable while running.

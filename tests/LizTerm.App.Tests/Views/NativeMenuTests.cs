@@ -939,7 +939,9 @@ public class NativeMenuTests
     /// native gesture is a key equivalent that would take the keystroke from the screen; see
     /// Only_edit_and_two_window_items_carry_gestures), in both menus alike so the parity walk stays a real guard.
     /// The expectation is computed with the window's own keymap and the platform's own wording, exactly as the
-    /// window computes the header, because the headless platform's key names are not ours to assert.</summary>
+    /// window computes the header, because the headless platform's key names are not ours to assert. The name half
+    /// of each header is pinned exactly, in the menu's declared order, rather than checked only for the presence or
+    /// absence of a "  " separator — a check loose enough to pass a header with its name dropped.</summary>
     [AvaloniaFact]
     public void Every_keys_item_carries_its_keystrokes_in_its_header_on_both_menus()
     {
@@ -951,12 +953,19 @@ public class NativeMenuTests
         Assert.Equal(native.Count, classic.Count);
         Assert.Equal(22, native.Count);
 
-        foreach (var (nativeItem, classicItem) in native.Zip(classic))
+        string[] names =
+        [
+            "Clear", "Reset", "Attn", "SysReq", "Dup", "Field Mark", "Insert", "PA1", "PA2", "PA3",
+            "PF13", "PF14", "PF15", "PF16", "PF17", "PF18", "PF19", "PF20", "PF21", "PF22", "PF23", "PF24",
+        ];
+
+        foreach (var (pair, i) in native.Zip(classic).Select((pair, i) => (pair, i)))
         {
+            var (nativeItem, classicItem) = pair;
             var key = (TerminalKey)nativeItem.CommandParameter!;
             var hint = KeymapHints.Describe(map, key);
-            if (hint is not null) Assert.EndsWith("  " + hint, nativeItem.Header);
-            else Assert.DoesNotContain("  ", nativeItem.Header);
+            var expected = hint is null ? names[i] : names[i] + "  " + hint;
+            Assert.Equal(expected, nativeItem.Header);
             Assert.Equal(nativeItem.Header, classicItem.Header as string);
             Assert.Null(nativeItem.Gesture);
             Assert.Null(classicItem.InputGesture);

@@ -43,7 +43,7 @@ public class SessionWindowKeymapTests
     }
 
     /// <summary>A Keys item by the key it sends, never by header: the header carries the keystroke hint and follows
-    /// the keymap. This window is InWindow (see Show below), so ApplyMenuStyle has already removed the top-level
+    /// the keymap. This window is InWindow (see Show above), so ApplyMenuStyle has already removed the top-level
     /// "_Keys" native item from NativeMenu.GetMenu(window).Items by the time a test can look — the same emptying
     /// A_style_change_on_an_open_window_empties_and_refills_the_same_native_menu asserts with Assert.Empty — and a
     /// fresh MenuLookup search from out here can no longer reach it. SessionWindow.KeysRow is the seam that still

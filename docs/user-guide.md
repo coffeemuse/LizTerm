@@ -200,7 +200,7 @@ the place to look one up. Insert has a check mark while insert mode is on. The o
 ### Changing a binding
 
 **Preferences > Keyboard** lists every 3270 key with the keys that send it. Changes apply at once, to every open
-session window, and the keypad's tooltips follow them.
+session window, and the keypad's tooltips and the **Keys** menu follow them.
 
 - **Add a key**: click **Add** on the row, or Tab to it and press Enter or Space, then press the key you want. A tap
   of Left or Right Ctrl is captured the same way: press and release the Ctrl key on its own. To stop without adding

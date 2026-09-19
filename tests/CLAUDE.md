@@ -106,9 +106,12 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   `Vm.Confirmation` directly.
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
   `src/LizTerm.App/CLAUDE.md` say why.
-- A Keys menu item is found by the key it sends, never by header (`NativeMenuTests.KeysItem(window, TerminalKey.Insert)` under the Native style; `SessionWindow.KeysRow(key)` under InWindow, where the top-level `_Keys` native item is stashed out of the menu and a `MenuLookup` from the root finds nothing): the header is `Insert  Insert or Ctrl+I` in the platform's
-  wording and follows the keymap. Compute a header expectation with `KeymapHints.Describe(screen.Keymap, key)` and a
-  null format, as the window does; only Dup and Field Mark read a bare name under the defaults.
+- A Keys menu item is found by the key it sends, never by header (`NativeMenuTests.KeysItem(window, TerminalKey.Insert)`
+  under the Native style; `SessionWindow.KeysRow(key)` under InWindow, where the top-level `_Keys` native item is
+  stashed out of the menu and a `MenuLookup` from the root finds nothing): the header is `Insert  Insert or Ctrl+I`
+  in the platform's wording and follows the keymap. Compute a header expectation with
+  `KeymapHints.Describe(screen.Keymap, key)` and a null format, as the window does; only Dup and Field Mark read a
+  bare name under the defaults.
 - Session switching tests seed a `SessionList` with `TestSessions`. `Create(name, ...)` builds an entry over a
   `FakeEmulatorSession` and a `FakeSessionHost`, which counts `Bring()` and runs `OnBring`, where a test calls
   `SessionList.Activated` as a real window's activation would. `Attach(window, vm, others...)` joins a real headless
