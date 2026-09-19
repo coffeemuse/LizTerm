@@ -255,7 +255,8 @@ public sealed class FakeHostFileService : IHostFileService
 
     private void RenameMember(HostPath from, string member, HostPath to)
     {
-        if (!Members.TryGetValue(from.Dataset, out var names) || !names.Contains(member)) throw Missing(from);
+        if (!Members.TryGetValue(from.Dataset, out var names) || !names.Contains(member))
+            throw new HostFileException(HostFileErrorKind.NotFound, $"Rename {from} to {to.Member}: not found.", 5);
         if (names.Contains(to.Member!))
             throw new HostFileException(HostFileErrorKind.AlreadyExists, $"Rename {from} to {to.Member}: a member of that name already exists.", 7);
         names[names.IndexOf(member)] = to.Member!;

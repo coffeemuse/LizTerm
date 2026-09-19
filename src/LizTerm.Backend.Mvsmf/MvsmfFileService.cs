@@ -319,7 +319,8 @@ public sealed class MvsmfFileService : IHostFileService
             // mvsMF-compat: etag — the stamp of the member as written is the one the next If-Match must carry (the
             // pre-save stamp fails), so every write asks for it. If-Match goes as the host gave it, unquoted.
             request.Headers.Add(ReturnEtagHeader, "true");
-            if (ifMatch is { Length: > 0 }) request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
+            if (ifMatch is { Length: > 0 } && !request.Headers.TryAddWithoutValidation("If-Match", ifMatch))
+                throw new HostFileException(HostFileErrorKind.InvalidRequest, $"{what}: the host's stamp cannot be sent back.");
             return request;
         }, what, idle, cancellationToken);
         return EtagOf(response);

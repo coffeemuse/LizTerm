@@ -27,7 +27,7 @@ public sealed record DatasetAllocation(
     public const int MaxRecordLength = 32760;
 
     /// <summary>The record format as it is sent: trimmed, upper case.</summary>
-    public string FoldedRecfm => Recfm.Trim().ToUpperInvariant();
+    public string FoldedRecfm => (Recfm ?? "").Trim().ToUpperInvariant();
 
     /// <summary>RECFM=U, whose LRECL may be 0.</summary>
     public bool IsUndefinedLength => FoldedRecfm.StartsWith('U');

@@ -154,12 +154,15 @@ Entries marked *log only* change nothing in the code.
   `If-Match` must carry: the pre-save stamp fails, because the write normalises what it stores.
 - **Observed (2026-09-19):** 1.1.0 does all of it. The stamp is 16 hex digits, unquoted, the same for a text and
   a binary read, and a read after a write answers the write's stamp (`read-etag`, `write-etag-204`, `write-412`;
-  the live round trip checks the write-then-read equality).
+  the live round trip checks the write-then-read equality). The stamp costs the host a second full read of the
+  member (`dataset_etag` in `dsapi.c` opens and reads it), so every read and write LizTerm makes now does that
+  work twice on the host; and an `If-Match` on a member that no longer exists answers 412, not 404, so a member
+  deleted since it was read reads as "changed".
 - **LizTerm:** every read and write asks for the stamp and hands it back as bare text (quotes and `W/` stripped,
   never parsed further); a write sends the caller's `ifMatch` as `If-Match` verbatim, and a 412 is
   `HostFileErrorKind.Conflict`. The browser's use of it is in the user guide.
 
-### `create-failure-is-one-500` (log only)
+### `create-failure-is-one-500`
 
 - **Source and observed:** `POST restfiles/ds/{name}` answers every allocation failure — the name already exists,
   no space, a DCB the volume cannot hold, no authority — with the same
@@ -167,7 +170,7 @@ Entries marked *log only* change nothing in the code.
   sends (mvsMF #317, #329; `create-dynalloc-500` is the "already exists" case). A missing field is 400 reason 3.
 - **LizTerm:** reports it as `CannotAllocate`, whose sentence names the three causes, since the host cannot.
 
-### `rename-target-exists-400` (log only)
+### `rename-target-exists-400`
 
 - **Source and observed:** a member rename (`PUT …({new})` with the JSON rename body) onto a name that exists is
   400 reason 7 "Rename target already exists" (`rename-member-exists`); a missing source is 404 reason 5. A

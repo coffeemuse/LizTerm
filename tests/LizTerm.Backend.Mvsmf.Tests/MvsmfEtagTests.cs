@@ -70,6 +70,7 @@ public class MvsmfEtagTests
         Assert.Equal(RecordedEtag("write-etag-204"), text);
         Assert.Equal(RecordedEtag("write-etag-204"), binary);
         Assert.Equal("true", handler.Requests[1].Headers["X-IBM-Return-Etag"]);
+        Assert.Equal("true", handler.Requests[2].Headers["X-IBM-Return-Etag"]);
         Assert.DoesNotContain("If-Match", handler.Requests[1].HeaderNames, StringComparer.OrdinalIgnoreCase);
     }
 

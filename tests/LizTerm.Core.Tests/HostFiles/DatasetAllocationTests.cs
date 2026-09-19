@@ -63,4 +63,13 @@ public class DatasetAllocationTests
     [Fact]
     public void Directory_blocks_are_ignored_for_a_sequential_dataset() =>
         Assert.Empty((Pds with { Organization = DatasetOrganization.Sequential, DirectoryBlocks = -3 }).Problems());
+
+    [Fact]
+    public void A_null_record_format_is_a_problem_not_a_crash()
+    {
+        var problems = (Pds with { Recfm = null! }).Problems();
+
+        Assert.Equal("Enter a record format.", problems[AllocationField.Recfm]);
+        Assert.Single(problems);
+    }
 }
