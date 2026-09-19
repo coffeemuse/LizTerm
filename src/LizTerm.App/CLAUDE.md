@@ -246,7 +246,7 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `KeymapOverlay` (`Keyboard/`) is the user's `keymap.json` parsed (`KeymapStore` and `KeymapFile` in Core hold it as
   strings; `ChordSyntax` and `KeymapAction` read them), composed over the profile's default with `Without` then `With`.
   `KeymapViewModel` is the process's one live copy, write-through like `SettingsViewModel`;
-  `SessionWindow.AttachKeymap` composes it for the screen and the keypad on every change.
+  `SessionWindow.AttachKeymap` composes it for the screen, the keypad and the Keys menu's headers on every change (`ApplyKeymap`).
   `KeymapPolicy` is what the Keyboard tab refuses, with the reason. The tab is `KeymapEditorViewModel` (a
   `KeymapRow` per action, a `KeymapChip` per chord, all answered from `KeymapViewModel`'s `ChordsFor`/`ActionOf`,
   never its dictionary) laid out by `Views/KeyboardTab`. A row's `TryCapture` calls `KeymapPolicy.Check` before every
@@ -440,6 +440,13 @@ one. The in-window Edit > Preferences... *names* the same chord on macOS through
 (`MenuStrategy.PreferencesGesture`), which dispatches nothing. The application menu's key equivalent stays the one
 handler, and it works under every style because the application menu is there under every style. The exported Edit >
 Preferences... is hidden on macOS and carries no `Gesture`, so it installs no second key equivalent.
+
+The Keys items show their keystrokes in **header text**, `PA2  Alt+2 or Ctrl+Home` (#23): `Menus/KeysMenuHints.Header`
+joins the declared name and `KeymapHints.Describe`'s line, and `SessionWindow.ApplyKeymap` writes it onto the native
+item and the classic item together, from the rows `CaptureKeysRows` paired at construction, on every keymap change.
+Never a `Gesture` (a key equivalent that steals the keystroke from the screen), and never a classic `InputGesture`
+either: the two menus would then differ, and the parity walk would fail, correctly. A null format is the platform's
+wording, the keypad tooltips' own, so on macOS the hint is glyphs. Tests find a Keys item by the key it sends, never by header, because the header follows the keymap; under InWindow the whole top-level `_Keys` native item is stashed, so a `MenuLookup` from the menu root cannot reach it, and `SessionWindow.KeysRow(TerminalKey)` is the internal seam that answers with the pair the constructor captured.
 
 - Edit's Cmd/Ctrl+C, V and A come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`,
   `PasteAsync` and `SelectAll` directly, never the `[RelayCommand]`s, which disable while running.
