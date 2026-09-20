@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using LizTerm.App.Menus;
+using LizTerm.App.Platform;
 
 namespace LizTerm.App.Tests.Menus;
 
@@ -11,24 +12,22 @@ namespace LizTerm.App.Tests.Menus;
 /// anything, which is also what it must do under a future Avalonia that renames the class.</summary>
 public class MacMenuKeyEquivalentsTests
 {
-    private const ulong Shift = 1UL << 17, Control = 1UL << 18, Option = 1UL << 19, Function = 1UL << 23;
-
     /// <summary>The rule: without ⌘ it is never a menu key equivalent in LizTerm, so it falls through to the window.</summary>
     [Theory]
     [InlineData(0UL)]
-    [InlineData(Shift)]
-    [InlineData(Control)]
-    [InlineData(Option)]
-    [InlineData(Shift | Function | 0x108UL)]
+    [InlineData(NSEvent.ShiftFlag)]
+    [InlineData(NSEvent.ControlFlag)]
+    [InlineData(NSEvent.OptionFlag)]
+    [InlineData(NSEvent.ShiftFlag | NSEvent.FunctionFlag | 0x108UL)]
     public void A_chord_without_command_is_declined(ulong flags)
     {
         Assert.True(MacMenuKeyEquivalents.Declines(flags));
     }
 
     [Theory]
-    [InlineData(MacMenuKeyEquivalents.CommandFlag)]
-    [InlineData(MacMenuKeyEquivalents.CommandFlag | 0x108UL)]
-    [InlineData(MacMenuKeyEquivalents.CommandFlag | Shift)]
+    [InlineData(NSEvent.CommandFlag)]
+    [InlineData(NSEvent.CommandFlag | 0x108UL)]
+    [InlineData(NSEvent.CommandFlag | NSEvent.ShiftFlag)]
     public void A_chord_with_command_goes_to_the_original(ulong flags)
     {
         Assert.False(MacMenuKeyEquivalents.Declines(flags));

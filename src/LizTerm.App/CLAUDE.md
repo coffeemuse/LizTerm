@@ -309,21 +309,14 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   reached through Alt+1 or the Keys menu.
 - Insert's second home is Ctrl+I (#111), for keyboards with no Insert key (every Apple one). Ctrl+I is Tab only to
   an ASCII terminal; a 3270 host never sees ASCII control codes, so the table does not reserve it for Tab.
-- Clear's Ctrl+Escape works on macOS only because of `Keyboard/MacEscapeChords` (#157). `NSWindow.sendEvent:` never
-  hands an Escape key-down with ⌃ or ⌘ to the first responder's `keyDown:`: it sends `cancelOperation:`, and where
-  nothing answers that, `doCommandBySelector:cancel:`, which Avalonia's `AvnView` swallows, so no `KeyDown` was ever
-  raised (⇧⎋, ⌥⎋ and a bare ⎋ take `keyDown:` and always worked; measured 2026-09-20 with a probe NSView, event by
-  event). At startup on macOS Install adds a `cancelOperation:` to `AvnView` that hands NSApp's `currentEvent` to the
-  view's `keyDown:` when it is an Escape key-down without ⌘ (`Forwards` is the pure rule) and does nothing otherwise,
-  and it declines to install where the class already answers the selector, which is where an Avalonia fix would
-  show up. So the screen sees ⌃⎋ as an ordinary `KeyDown`, and the Escape press ends the Ctrl tap that used to
-  survive the lost chord. ⌘⎋ stays swallowed on purpose: the keymap policy refuses it, and an unmapped Escape
-  chord that reaches the screen falls through `base.OnKeyDown` to AvnView's text path, which types an ESC character
-  to the host (the same hole a user opens by unbinding bare Escape); in a dialog it would press the cancel button,
-  since Avalonia's `Button` matches `IsCancel` on `Key.Escape` alone. A re-entrancy flag keeps a forwarded `keyDown:`
-  from coming back through `cancelOperation:` under an Avalonia whose view stops answering `doCommandBySelector:`
-  itself. Its imports are `Platform/LibObjc`, shared with `MacMenuKeyEquivalents`; both install from `App` before any
-  window.
+- Clear's Ctrl+Escape works on macOS only because of `Keyboard/MacEscapeChords` (#157): AppKit diverts a ⌃⎋
+  key-down around the view's `keyDown:`, and Install gives Avalonia's `AvnView` the `cancelOperation:` that hands it
+  back. The class's summary holds the measured mechanism, the rule (`Forwards`: ⌃ and no ⌘) and why ⌘⎋ is left
+  alone. `SessionWindow.EscapeChordsReachScreen` reads `Installed` the way `NativeGesturesAllowed` reads
+  `MacMenuKeyEquivalents.Installed`, so a Mac where the method could not be added shows Clear without a Ctrl+Escape
+  shortcut it cannot deliver. Both overrides share `Platform/MacOverride` (one attempt per process, a trace warning
+  naming the failed step), `Platform/LibObjc` (the runtime imports) and `Platform/NSEvent` (the modifier flags), and
+  both install from `App` before any window.
 - A Left Ctrl tap is Reset and a Right Ctrl tap is Enter. `ModifierTapDetector` sees a Ctrl key go down and the same
   key come up with nothing between (`OnKeyUp` looks up `KeyChord.TapOf`); another key, a pointer press, a wheel turn,
   focus loss and the window deactivating all reset it.
@@ -495,7 +488,9 @@ Avalonia's `AvnMenu` class that answers NO for any key-down without ⌘ and defe
 draws the shortcut column and still hands ⇧F1 to the screen. The rule holds only while every other native gesture
 carries the command modifier, which `NativeMenuTests.Only_edit_two_window_items_and_the_Keys_items_carry_gestures`
 walks. `ApplyKeymap` sets no native gesture unless `MacMenuKeyEquivalents.Installed`, read into
-`SessionWindow.NativeGesturesAllowed` at construction, which is also the test seam. Measured on 2026-09-19: the
+`SessionWindow.NativeGesturesAllowed` at construction, which is also the test seam; `MacEscapeChords.Installed`
+gates one chord the same way through `SessionWindow.EscapeChordsReachScreen` (#157), so Clear shows Ctrl+Escape on
+a Mac only while the override that delivers it is in place. Measured on 2026-09-19: the
 submenu delegate's `menuHasKeyEquivalent:` is consulted only for ⌘ chords and the submenu's own
 `performKeyEquivalent:` never, which is why the override is on the main menu's class. A key pressed while the
 Keys menu is open fires the item through the menu's tracking loop, as on every macOS menu. Tests find a Keys item by

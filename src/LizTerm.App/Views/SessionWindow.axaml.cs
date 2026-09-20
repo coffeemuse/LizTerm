@@ -157,6 +157,13 @@ public partial class SessionWindow : Window, ISessionHost
     /// regardless, being display-only.</summary>
     internal bool NativeGesturesAllowed { get; set; } = MacMenuKeyEquivalents.Installed;
 
+    /// <summary>Whether a Control+Escape chord may be a Keys item's shortcut on macOS: only when MacEscapeChords
+    /// has given the screen the chord AppKit diverts (#157), so Clear never names a keystroke that cannot arrive.
+    /// Taken at construction from MacEscapeChords.Installed and read on every ApplyKeymap, like
+    /// NativeGesturesAllowed, and a test seam for the same reason; off macOS the chord always arrives and this is
+    /// not consulted.</summary>
+    internal bool EscapeChordsReachScreen { get; set; } = MacEscapeChords.Installed;
+
     /// <summary>The SettingsViewModel this window follows for live style changes, so a data-context swap can
     /// unsubscribe from the old one — the same shape as _bellSource below.</summary>
     private SettingsViewModel? _styleSource;
@@ -670,7 +677,8 @@ public partial class SessionWindow : Window, ISessionHost
     /// on the screen and on the keypad, whose tooltips follow it (keypad spec §4.4), and shown as one shortcut on
     /// every Keys item on both menus (Keys menu shortcuts spec §3.3): the keymap is reversed once for the 22 items,
     /// as the keypad reverses it once for its 36 buttons. The native Gesture is a real key equivalent and is set
-    /// only when the override that declines it is installed; the classic InputGesture dispatches nothing.</summary>
+    /// only when the override that declines it is installed; the classic InputGesture dispatches nothing. On a Mac
+    /// Clear's Ctrl+Escape is shown only when the override that delivers it is installed (#157).</summary>
     private void ApplyKeymap()
     {
         var destructive = ViewModel?.Profile.DestructiveBackspace ?? true;
@@ -680,7 +688,7 @@ public partial class SessionWindow : Window, ISessionHost
         var chords = KeymapHints.ByKey(map);
         foreach (var (native, classic, key) in _keysRows)
         {
-            var gesture = KeymapHints.MenuChord(chords[key], _isMacOS) is { } chord
+            var gesture = KeymapHints.MenuChord(chords[key], _isMacOS, EscapeChordsReachScreen) is { } chord
                 ? new KeyGesture(chord.Key, chord.Modifiers)
                 : null;
             native.Gesture = NativeGesturesAllowed ? gesture : null;

@@ -86,9 +86,8 @@ public partial class App : Application
             // the items no gesture unless Installed says this succeeded.
             MacMenuKeyEquivalents.Install(OperatingSystem.IsMacOS());
 
-            // And the other half of a working Clear on a Mac (#157): AppKit turns a ⌃⎋ or ⌘⎋ key-down into
-            // cancelOperation: rather than keyDown:, which Avalonia's view does not answer, so the screen never saw
-            // the chord. This gives the view an answer that hands the key-down back to keyDown:.
+            // And the other half of a working Clear on a Mac (#157): MacEscapeChords gives Avalonia's view the ⌃⎋
+            // key-down AppKit diverts around keyDown:. SessionWindow.EscapeChordsReachScreen reads Installed.
             MacEscapeChords.Install(OperatingSystem.IsMacOS());
 
             // Settings before anything opens: whether there is a splash at all is one of them (#108). Load never

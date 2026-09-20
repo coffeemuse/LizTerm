@@ -971,12 +971,14 @@ public class NativeMenuTests
     /// because the headless platform's key names are not ours to assert), and the native Gesture is null because
     /// this test sets NativeGesturesAllowed to false itself (see
     /// Only_edit_two_window_items_and_the_Keys_items_carry_gestures for the case where it is true), rather than
-    /// relying on MacMenuKeyEquivalents.Installed being false on every headless run.</summary>
+    /// relying on MacMenuKeyEquivalents.Installed being false on every headless run. EscapeChordsReachScreen is
+    /// set true for the same reason, so Clear's chord is the one the expectation below computes (#157).</summary>
     [AvaloniaFact]
     public void Every_keys_item_has_a_bare_header_and_its_keystroke_as_the_classic_shortcut()
     {
         var (window, _, _, _) = Show();
         window.NativeGesturesAllowed = false;
+        window.EscapeChordsReachScreen = true;
         window.AttachKeymap(new KeymapViewModel());
         var map = window.FindControl<TerminalScreen>("Screen")!.Keymap;
         var chords = KeymapHints.ByKey(map);

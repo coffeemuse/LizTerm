@@ -53,11 +53,15 @@ public static class KeymapHints
 
     /// <summary>The one chord a Keys menu item shows (Keys menu shortcuts spec §3.2): the first in Ordered's order
     /// that is not a tap and whose key the platform's keyboard has. Apple keyboards have no Pause and no Insert.
-    /// Null when nothing qualifies, and the item shows no shortcut. No ⌘ filter is needed: ChordSyntax parses no
+    /// Null when nothing qualifies, and the item shows no shortcut. On a Mac a Control+Escape chord qualifies only
+    /// while MacEscapeChords has given the screen the chord AppKit diverts (#157), which controlEscapeReaches says:
+    /// the menu must not name a keystroke that cannot arrive. No ⌘ filter is needed: ChordSyntax parses no
     /// Cmd modifier and KeymapPolicy refuses one in the Keyboard tab, so a composed keymap never holds a ⌘
     /// chord.</summary>
-    public static KeyChord? MenuChord(IEnumerable<KeyChord> chords, bool isMacOS) =>
-        Ordered(chords.Where(chord => !chord.Tap && !(isMacOS && chord.Key is Key.Pause or Key.Insert)))
+    public static KeyChord? MenuChord(IEnumerable<KeyChord> chords, bool isMacOS, bool controlEscapeReaches = true) =>
+        Ordered(chords.Where(chord => !chord.Tap
+                && !(isMacOS && chord.Key is Key.Pause or Key.Insert)
+                && !(isMacOS && !controlEscapeReaches && chord.Key == Key.Escape && chord.Modifiers.HasFlag(KeyModifiers.Control))))
             .Select(chord => (KeyChord?)chord).FirstOrDefault();
 
     private static int ModifierRank(KeyModifiers modifiers) => modifiers switch
