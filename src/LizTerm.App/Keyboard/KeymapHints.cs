@@ -18,12 +18,6 @@ public static class KeymapHints
     public static ILookup<TerminalKey, KeyChord> ByKey(Keymap keymap) =>
         keymap.Keys.ToLookup(pair => pair.Value, pair => pair.Key);
 
-    /// <summary>A Keys menu item's header (editable keymap spec §6.2, #23): the name, two spaces, then Describe's
-    /// line for the chords, so a menu item, a tooltip and a Keyboard tab chip cannot disagree; a key no chord sends
-    /// keeps its bare name. Header text, never a gesture: see the menu notes in CLAUDE.md.</summary>
-    public static string Label(string name, IEnumerable<KeyChord> chords, IFormatProvider? format = null) =>
-        Describe(chords, format) is { } hint ? name + "  " + hint : name;
-
     /// <summary>Every chord in the keymap that sends the key, or null when none does. Ordered without reference to
     /// the table's insertion order (Keymap holds a Dictionary): unmodified chords first, then by KeyModifiers value
     /// (Alt, Control, Shift, combinations after), function keys ahead of other keys within a group, taps last.

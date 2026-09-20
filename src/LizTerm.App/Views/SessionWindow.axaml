@@ -239,7 +239,7 @@
                     IsChecked="{Binding Settings.KeypadDock, Converter={x:Static vm:KeypadDockConverter.Instance}, ConverterParameter=Right, Mode=OneWay}" />
         </MenuItem>
       </MenuItem>
-      <!-- Named so the code-behind can pair its items with the native Keys items and write both headers (#23). -->
+      <!-- Named so the code-behind can pair its items with the native Keys items and write both shortcuts (#23). -->
       <MenuItem x:Name="KeysMenuItem" Header="_Keys">
         <MenuItem Header="Clear" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Clear}" />
         <MenuItem Header="Reset" Command="{Binding SendKeyCommand}" CommandParameter="{x:Static core:TerminalKey.Reset}" />

@@ -145,10 +145,16 @@ public partial class SessionWindow : Window, ISessionHost
     /// <summary>The generated session rows, both renderers' items with the session each stands for.</summary>
     private readonly List<(NativeMenuItem Native, MenuItem Classic, SessionEntry Entry)> _sessionRows = [];
 
-    /// <summary>Every Keys item on both menus with the name it was declared with and the key it sends, paired in
-    /// declaration order at construction (the parity test holds the two menus to the same order). ApplyKeymap
-    /// writes each pair's headers from the keymap in force, so the menu says what the keyboard does (#23).</summary>
-    private readonly List<(NativeMenuItem Native, MenuItem Classic, string Name, TerminalKey Key)> _keysRows = [];
+    /// <summary>Every Keys item on both menus with the key it sends, paired in declaration order at construction
+    /// (the parity test holds the two menus to the same order). ApplyKeymap writes each pair's shortcut from the
+    /// keymap in force, so the menu says what the keyboard does (#23).</summary>
+    private readonly List<(NativeMenuItem Native, MenuItem Classic, TerminalKey Key)> _keysRows = [];
+
+    /// <summary>Whether a Keys item may carry a native Gesture: only when MacMenuKeyEquivalents has installed the
+    /// override that keeps AppKit from dispatching it (Keys menu shortcuts spec §3.1). Read at construction so a
+    /// test can say yes on a platform where the override never installs; the classic InputGesture is shown
+    /// regardless, being display-only.</summary>
+    internal bool NativeGesturesAllowed { get; set; } = MacMenuKeyEquivalents.Installed;
 
     /// <summary>The SettingsViewModel this window follows for live style changes, so a data-context swap can
     /// unsubscribe from the old one — the same shape as _bellSource below.</summary>
@@ -659,9 +665,10 @@ public partial class SessionWindow : Window, ISessionHost
     }
 
     /// <summary>The map in force for this window: the profile's Backspace choice under the user's keymap.json. Set
-    /// on the screen and on the keypad, whose tooltips follow it (keypad spec §4.4), and written into every Keys
-    /// item's header on both menus (editable keymap spec §6.2): the keymap is reversed once for the 22 items, as
-    /// the keypad reverses it once for its 36 buttons. A null format is the platform's own wording, the tooltips'.</summary>
+    /// on the screen and on the keypad, whose tooltips follow it (keypad spec §4.4), and shown as one shortcut on
+    /// every Keys item on both menus (Keys menu shortcuts spec §3.3): the keymap is reversed once for the 22 items,
+    /// as the keypad reverses it once for its 36 buttons. The native Gesture is a real key equivalent and is set
+    /// only when the override that declines it is installed; the classic InputGesture dispatches nothing.</summary>
     private void ApplyKeymap()
     {
         var destructive = ViewModel?.Profile.DestructiveBackspace ?? true;
@@ -669,11 +676,13 @@ public partial class SessionWindow : Window, ISessionHost
         Screen.Keymap = map;
         KeypadPanel.Keymap = map;
         var chords = KeymapHints.ByKey(map);
-        foreach (var (native, classic, name, key) in _keysRows)
+        foreach (var (native, classic, key) in _keysRows)
         {
-            var header = KeymapHints.Label(name, chords[key]);
-            native.Header = header;
-            classic.Header = header;
+            var gesture = KeymapHints.MenuChord(chords[key], _isMacOS) is { } chord
+                ? new KeyGesture(chord.Key, chord.Modifiers)
+                : null;
+            native.Gesture = NativeGesturesAllowed ? gesture : null;
+            classic.InputGesture = gesture;
         }
     }
 
@@ -764,7 +773,7 @@ public partial class SessionWindow : Window, ISessionHost
     /// <summary>Pairs the declared Keys items of the two menus, the native side found through the declared submenu
     /// (which survives InWindow's stashing of the top-level items, as _nativeWindowMenu does) and the classic side
     /// through KeysMenuItem. A menu whose items differ in count or key is a declaration error and throws here, at
-    /// construction, rather than writing one menu's hint onto the other's item.</summary>
+    /// construction, rather than writing one menu's shortcut onto the other's item.</summary>
     private void CaptureKeysRows()
     {
         var native = MenuLookup.Item(NativeMenu.GetMenu(this), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
@@ -778,7 +787,7 @@ public partial class SessionWindow : Window, ISessionHost
                 throw new InvalidOperationException($"Keys > {nativeItem.Header} sends no TerminalKey.");
             if (!Equals(classicItem.CommandParameter, key))
                 throw new InvalidOperationException($"Keys > {nativeItem.Header} sends {key} natively and {classicItem.CommandParameter} in the window.");
-            _keysRows.Add((nativeItem, classicItem, nativeItem.Header!, key));
+            _keysRows.Add((nativeItem, classicItem, key));
         }
     }
 
