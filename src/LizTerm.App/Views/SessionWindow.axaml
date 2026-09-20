@@ -68,9 +68,9 @@
                 <NativeMenu>
                   <!-- OneWay plus a Click handler, not a TwoWay binding: a NativeMenuItem never toggles itself,
                        so the handler sets the view model and these bindings carry every check mark back —
-                       including the three that have to go false. No Gesture: outside Edit, a native gesture is
-                       an AppKit key equivalent dispatched ahead of the responder chain, which would take the
-                       key from the terminal. Radio renders as a bullet rather than a tick on macOS, which is
+                       including the three that have to go false. No Gesture: outside Edit and Keys, a native
+                       gesture is an AppKit key equivalent dispatched ahead of the responder chain, which would
+                       take the key from the terminal. Radio renders as a bullet rather than a tick on macOS, which is
                        AppKit's own radio-group mark (verified on a real GUI session 2026-09-10). -->
                   <NativeMenuItem Header="_None" ToggleType="Radio" Click="OnCrosshairNoneClickNative"
                                   IsChecked="{Binding Settings.Crosshair, Converter={x:Static vm:CrosshairModeConverter.Instance}, ConverterParameter=None, Mode=OneWay}" />
@@ -92,7 +92,8 @@
                  context; inside a submenu already named Keypad, "At the Bottom" is the whole sentence.
                  One-way plus Click throughout, the Crosshair items' shape: a NativeMenuItem never toggles itself,
                  and the handlers write the view model, whose change reaches every window's panel and check mark.
-                 No Gesture on any of them: nothing outside Edit carries one (keypad spec §6.3). -->
+                 No Gesture on any of them: nothing outside Edit and Keys carries one (keypad spec §6.3; the Keys
+                 items' gestures are safe only under MacMenuKeyEquivalents, see the Gestures notes in CLAUDE.md). -->
             <NativeMenuItem Header="_Keypad">
               <NativeMenuItem.Menu>
                 <NativeMenu>
@@ -145,7 +146,7 @@
            RebuildSessionRows. Minimize and Zoom are macOS's and hidden elsewhere with their separator
            (ApplyPlatformMenuRules). Every item has a Click handler: the exporter greys out anything else. No
            gestures here in XAML: ShowPlatformGestures sets Switch Session's command chord and Minimize's Cmd+M,
-           the two exceptions to "no gesture outside Edit". -->
+           Window's two Cmd chords; the Keys items are the other exception, see the Gestures notes in CLAUDE.md. -->
       <NativeMenuItem Header="_Window">
         <NativeMenuItem.Menu>
           <NativeMenu>

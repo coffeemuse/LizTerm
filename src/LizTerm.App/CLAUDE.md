@@ -168,19 +168,18 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - `TerminalScreen.BlinkEnabled` (bound to `Settings.Blink`) stops the blink timer and clears the hidden phase;
   the snapshot still says what the host asked for.
 - **The bell.** `IEmulatorSession.BellRang` is marshalled like the other events, then `SessionViewModel.OnBell`
-  runs: disposed check; return if neither output has anything to do, so a bell nobody could perceive does not
-  start the interval; one `BellThrottle` (`BellInterval`, 500 ms, one gate for both outputs, refused bells are
-  dropped not queued); then `Settings.VisualBell` raises the view model's own `BellRang` (the window calls
-  `TerminalScreen.Flash()`, a 120 ms `Palette.BellFlash` overlay painted exactly while the control's one-shot
-  timer runs) and `Settings.BellSound` other than `None` calls the ringer. "None means silence" is the view
-  model's rule; the ringer only knows how to make sounds. `IBellRinger.CanRing` is the one home of which sounds
-  this platform can make: the view model treats a refused sound as `None`, and `App` passes the same answer to
-  `PreferencesWindow`, which disables the radio and says why. `SystemBellRinger` is the App's P/Invoke for sounds
-  (`NSBeep`, `MessageBeep`; the other is `Menus/MacMenuKeyEquivalents`) and answers no on Linux. A ringer that
-  throws is reported once and not asked again until the sound setting changes. The bell's sound radios are one-way
-  check marks plus Click handlers over
-  `BellSoundConverter`, the Crosshair shape; both converters are subclasses of `EnumIsConverter<TEnum>`, which
-  holds the rule.
+  runs: disposed check; return if neither output has anything to do, so a bell nobody could perceive does not start
+  the interval; one `BellThrottle` (`BellInterval`, 500 ms, one gate for both outputs, refused bells are dropped not
+  queued); then `Settings.VisualBell` raises the view model's own `BellRang` (the window calls
+  `TerminalScreen.Flash()`, a 120 ms `Palette.BellFlash` overlay painted exactly while the control's one-shot timer
+  runs) and `Settings.BellSound` other than `None` calls the ringer. "None means silence" is the view model's rule;
+  the ringer only knows how to make sounds. `IBellRinger.CanRing` is the one home of which sounds this platform can
+  make: the view model treats a refused sound as `None`, and `App` passes the same answer to `PreferencesWindow`,
+  which disables the radio and says why. `SystemBellRinger` is the App's P/Invoke for sounds (`NSBeep`,
+  `MessageBeep`; the other is `Menus/MacMenuKeyEquivalents`) and answers no on Linux. A ringer that throws is
+  reported once and not asked again until the sound setting changes. The bell's sound radios are one-way check marks
+  plus Click handlers over `BellSoundConverter`, the Crosshair shape; both converters are subclasses of
+  `EnumIsConverter<TEnum>`, which holds the rule.
 - **The release check (#107).** `App._releaseChecker` (`GitHubReleaseChecker.Create()`) is the process's one
   checker. `CheckForUpdatesOnStartupAsync()` fires once from `Execute`, after a session or the picker has actually
   opened — never after `ShowError`, never when opening either one threw — and stays silent unless
@@ -277,7 +276,7 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `KeymapOverlay` (`Keyboard/`) is the user's `keymap.json` parsed (`KeymapStore` and `KeymapFile` in Core hold it as
   strings; `ChordSyntax` and `KeymapAction` read them), composed over the profile's default with `Without` then `With`.
   `KeymapViewModel` is the process's one live copy, write-through like `SettingsViewModel`;
-  `SessionWindow.AttachKeymap` composes it for the screen, the keypad and the Keys menu's headers on every change (`ApplyKeymap`).
+  `SessionWindow.AttachKeymap` composes it for the screen, the keypad and the Keys menu's shortcuts on every change (`ApplyKeymap`).
   `KeymapPolicy` is what the Keyboard tab refuses, with the reason. The tab is `KeymapEditorViewModel` (a
   `KeymapRow` per action, a `KeymapChip` per chord, all answered from `KeymapViewModel`'s `ChordsFor`/`ActionOf`,
   never its dictionary) laid out by `Views/KeyboardTab`. A row's `TryCapture` calls `KeymapPolicy.Check` before every
@@ -499,8 +498,8 @@ constructor captured.
   `new KeyGesture(Key.K, hotkeys.CommandModifiers)` as the native `Gesture` and the classic `InputGesture`, and
   `TerminalScreen.SwitcherRequested` handles the chord wherever no key equivalent is installed. Minimize's Cmd+M is
   native and macOS only; nothing else dispatches it, so the in-window item names no chord.
-  `NativeMenuTests.Only_edit_two_window_items_and_the_Keys_items_carry_gestures` allows exactly those two, alongside
-  Edit and the Keys items.
+  `NativeMenuTests.Only_edit_two_window_items_and_the_Keys_items_carry_gestures` allows those two, Edit's, and the
+  Keys items' and nothing else.
 - View > **Crosshair** is a submenu of four radio items rather than four items directly under View, because
   "Horizontal" and "Vertical" sitting under View read as window tiling. On macOS `ToggleType="Radio"` marks the chosen
   item with a bullet, not a tick; that is AppKit's own radio mark, not a bug.

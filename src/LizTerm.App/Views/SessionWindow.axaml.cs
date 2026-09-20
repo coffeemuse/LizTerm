@@ -529,8 +529,8 @@ public partial class SessionWindow : Window, ISessionHost
     /// The native items take a real Gesture rather than display text: on macOS that is an AppKit key
     /// equivalent, dispatched by the OS before the focused screen sees the key. That is safe for Copy, Paste,
     /// Select All, Find and Switch Session, which TerminalScreen already routes away from the host, and for
-    /// Minimize, which nothing else dispatches — why nothing on File, View, Keys or Help carries one, and
-    /// Window only its two Cmd chords.
+    /// Minimize, which nothing else dispatches — why nothing on File, View or Help carries one, Window only its
+    /// two Cmd chords, and the Keys items carry theirs only under MacMenuKeyEquivalents (see ApplyKeymap).
     ///
     /// Under InWindow, ApplyMenuStyle has emptied the native menu and ExportedMenu answers null, so the five
     /// classic InputGesture assignments still run and all six native ones — the sixth, Minimize, only on

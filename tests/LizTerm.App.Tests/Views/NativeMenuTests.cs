@@ -859,8 +859,10 @@ public class NativeMenuTests
     ///
     /// The Keys items are the exception the Keys menu shortcuts spec makes (§3.1): their gestures are drawn by
     /// AppKit and declined by MacMenuKeyEquivalents, which refuses every key-down without ⌘. That rule is only
-    /// safe while every other native gesture carries the command modifier, which the second walk pins: a
-    /// Ctrl+W on File &gt; Close would be declined silently, and this is where that shows up.</summary>
+    /// safe while every other native gesture carries the command modifier. The first walk (AssertNoGestures)
+    /// catches any gesture on File at all; the second walk's unique contribution is Edit, which the first walk
+    /// skips, so an Edit gesture the platform table handed back without the command modifier is what the second
+    /// walk alone would catch.</summary>
     [AvaloniaFact]
     public void Only_edit_two_window_items_and_the_Keys_items_carry_gestures()
     {
@@ -963,12 +965,15 @@ public class NativeMenuTests
     /// dropped is no guard. The keystroke lives in the shortcut instead: the classic InputGesture always shows the
     /// keymap's one chord for the key (computed with the window's own keymap, exactly as ApplyKeymap computes it,
     /// because the headless platform's key names are not ours to assert), and the native Gesture is null because
-    /// NativeGesturesAllowed defaults to MacMenuKeyEquivalents.Installed, false on every headless run (see
-    /// Only_edit_two_window_items_and_the_Keys_items_carry_gestures for the case where it is true).</summary>
+    /// this test sets NativeGesturesAllowed to false itself (see
+    /// Only_edit_two_window_items_and_the_Keys_items_carry_gestures for the case where it is true), rather than
+    /// relying on MacMenuKeyEquivalents.Installed being false on every headless run.</summary>
     [AvaloniaFact]
     public void Every_keys_item_has_a_bare_header_and_its_keystroke_as_the_classic_shortcut()
     {
         var (window, _, _, _) = Show();
+        window.NativeGesturesAllowed = false;
+        window.AttachKeymap(new KeymapViewModel());
         var map = window.FindControl<TerminalScreen>("Screen")!.Keymap;
         var chords = KeymapHints.ByKey(map);
         var native = MenuLookup.Item(NativeMenu.GetMenu(window), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
@@ -992,7 +997,8 @@ public class NativeMenuTests
                 : null;
             Assert.Equal(names[i], nativeItem.Header);
             Assert.Equal(nativeItem.Header, classicItem.Header as string);
-            // NativeGesturesAllowed is false here, as it is on every headless run (MacMenuKeyEquivalents.Installed).
+            // Set explicitly above, rather than relied on: MacMenuKeyEquivalents.Installed is false on every
+            // headless run today, but that is not this test's invariant to assume.
             Assert.Null(nativeItem.Gesture);
             Assert.Equal(gesture, classicItem.InputGesture);
         }

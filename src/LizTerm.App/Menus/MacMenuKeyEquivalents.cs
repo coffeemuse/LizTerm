@@ -18,7 +18,9 @@ namespace LizTerm.App.Menus;
 ///
 /// Installed is what SessionWindow.ApplyKeymap checks before giving a Keys item a gesture: a process where the
 /// class or the method was not found gets a Keys menu without shortcuts, never one that eats keys. The imports
-/// are DllImport rather than LibraryImport for the reason SystemBellRinger gives.</summary>
+/// are DllImport rather than LibraryImport because LibraryImport's generated stub is unsafe code, which the App
+/// project does not use; three of these signatures take a string, so they are not blittable and SystemBellRinger's
+/// other reason does not apply.</summary>
 internal static class MacMenuKeyEquivalents
 {
     private const string LibObjc = "/usr/lib/libobjc.A.dylib";
@@ -67,8 +69,9 @@ internal static class MacMenuKeyEquivalents
                 Installed = true;
                 return true;
             }
-            catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+            catch (Exception)
             {
+                // Install runs before any window exists; a failure here must degrade to "no shortcuts", never take down launch.
                 return false;
             }
         }

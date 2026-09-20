@@ -53,13 +53,12 @@ public static class KeymapHints
 
     /// <summary>The one chord a Keys menu item shows (Keys menu shortcuts spec §3.2): the first in Ordered's order
     /// that is not a tap and whose key the platform's keyboard has. Apple keyboards have no Pause and no Insert.
-    /// Null when nothing qualifies, and the item shows no shortcut.</summary>
-    public static KeyChord? MenuChord(IEnumerable<KeyChord> chords, bool isMacOS)
-    {
-        foreach (var chord in Ordered(chords.Where(chord => !chord.Tap && !(isMacOS && chord.Key is Key.Pause or Key.Insert))))
-            return chord;
-        return null;
-    }
+    /// Null when nothing qualifies, and the item shows no shortcut. No ⌘ filter is needed: ChordSyntax parses no
+    /// Cmd modifier and KeymapPolicy refuses one in the Keyboard tab, so a composed keymap never holds a ⌘
+    /// chord.</summary>
+    public static KeyChord? MenuChord(IEnumerable<KeyChord> chords, bool isMacOS) =>
+        Ordered(chords.Where(chord => !chord.Tap && !(isMacOS && chord.Key is Key.Pause or Key.Insert)))
+            .Cast<KeyChord?>().FirstOrDefault();
 
     private static int ModifierRank(KeyModifiers modifiers) => modifiers switch
     {
