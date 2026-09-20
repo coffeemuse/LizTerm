@@ -13,8 +13,9 @@ using LizTerm.App.ViewModels;
 
 namespace LizTerm.App.Views;
 
-/// <summary>The mvsMF Browser (spec §4). Owned by its session window and shown with ShowAbove; it never refuses to
-/// close — closing cancels what runs and releases the connection.</summary>
+/// <summary>mvsMF Access (browser spec §4, pane-pattern spec §4): two BrowserPanes, each with the verbs that act on
+/// its own selection, over a window-level status line. Owned by its session window and shown with ShowAbove; it
+/// never refuses to close — closing cancels what runs and releases the connection.</summary>
 public partial class MvsmfBrowserWindow : Window
 {
     public MvsmfBrowserWindow()

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -10,6 +11,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using LizTerm.App.Controls;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.Tests.ViewModels;
 using LizTerm.App.ViewModels;
@@ -56,11 +58,11 @@ public class MvsmfBrowserWindowTests
         var moreDatasets = Named<Button>(window, "LoadMoreDatasetsButton");
         var moreMembers = Named<Button>(window, "LoadMoreMembersButton");
         Assert.True(moreDatasets.IsVisible);
-        Assert.Equal("Load more datasets", moreDatasets.Content);
+        Assert.Equal("Load more", moreDatasets.Content);
 
         await t.ChooseAsync("MVSCE02.BIG");
         Assert.True(moreMembers.IsVisible);
-        Assert.Equal("Load more members", moreMembers.Content);
+        Assert.Equal("Load more", moreMembers.Content);
 
         moreMembers.Command!.Execute(null);
         await Wait.UntilAsync(() => t.Vm.Members.Count == 4, "the second page of members");
@@ -114,7 +116,8 @@ public class MvsmfBrowserWindowTests
         members.SelectedItems.Add(t.Vm.VisibleMembers[2]);
 
         Assert.True(Named<Control>(window, "MemberPane").IsVisible);
-        Assert.Equal("MVSCE02.CNTL · 3 members", Named<TextBlock>(window, "MemberHeader").Text);
+        Assert.Equal("MVSCE02.CNTL", Named<BrowserPane>(window, "MembersPane").Title);
+        Assert.Equal("3 members · none selected", Named<BrowserPane>(window, "MembersPane").FooterText);
         Assert.Equal(new[] { "ALLOC", "HELLO" }, t.Vm.SelectedMembers.Select(m => m.Name));
         Assert.True(Named<Button>(window, "DownloadButton").IsEffectivelyEnabled);
         Assert.True(Named<Button>(window, "DeleteButton").IsEffectivelyEnabled);
@@ -175,6 +178,10 @@ public class MvsmfBrowserWindowTests
             Assert.False(Named<Control>(window, "MemberPane").IsVisible);
             Assert.Equal(1, Named<ItemsControl>(window, "UploadList").ItemCount);
             Assert.False(Named<ListBox>(window, "DatasetList").IsEffectivelyEnabled);
+            Assert.Equal("Upload to MVSCE02.CNTL", Named<BrowserPane>(window, "MembersPane").Title);
+            Assert.Equal("1 file", Named<BrowserPane>(window, "MembersPane").FooterText);
+            Assert.True(Named<StackPanel>(window, "ReviewToolbar").IsVisible);
+            Assert.False(Named<DockPanel>(window, "MemberToolbar").IsVisible);
         }
         finally
         {
@@ -183,18 +190,95 @@ public class MvsmfBrowserWindowTests
     }
 
     [AvaloniaFact]
-    public async Task Binary_mode_shows_the_padding_note()
+    public async Task Choosing_binary_puts_the_padding_note_on_the_status_line_and_the_label_on_the_button()
     {
         var (window, t) = Show();
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
-        t.Vm.SelectedDataset = t.Vm.Datasets[0];
-        await Wait.UntilAsync(() => !t.Vm.IsBusy, "the members");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var transfer = Named<DropDownButton>(window, "TransferButton");
+        Assert.Equal("Transfer: Text", transfer.Content);
 
-        Named<RadioButton>(window, "BinaryModeButton").IsChecked = true;
+        t.Vm.IsBinaryMode = true;
+        Dispatcher.UIThread.RunJobs();
 
-        Assert.True(t.Vm.IsBinaryMode);
-        Assert.True(Named<TextBlock>(window, "PaddingNote").IsVisible);
-        Assert.Equal("⚠ Binary transfers to fixed-length datasets are padded to whole records.", Named<TextBlock>(window, "PaddingNote").Text);
+        Assert.Equal("Transfer: Binary", transfer.Content);
+        Assert.Equal(MvsmfBrowserViewModel.PaddingNote, Named<TextBlock>(window, "StatusLine").Text);
+    }
+
+    [AvaloniaFact]
+    public async Task The_transfer_menu_binds_the_mode_and_the_upload_options()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var transfer = Named<DropDownButton>(window, "TransferButton");
+        var flyout = (MenuFlyout)transfer.Flyout!;
+        flyout.ShowAt(transfer);
+        Dispatcher.UIThread.RunJobs();
+        var items = flyout.Items.OfType<MenuItem>().ToDictionary(i => i.Name!);
+        try
+        {
+            Assert.True(items["TextModeItem"].IsChecked);
+            Assert.False(items["BinaryModeItem"].IsChecked);
+            Assert.True(items["TrimItem"].IsChecked);
+            Assert.True(items["VerifyItem"].IsChecked);
+            Assert.True(items["TrimItem"].IsEffectivelyEnabled);
+
+            items["BinaryModeItem"].IsChecked = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(t.Vm.IsBinaryMode);
+            Assert.False(items["TrimItem"].IsEffectivelyEnabled);
+
+            items["TextModeItem"].IsChecked = true;
+            items["VerifyItem"].IsChecked = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(t.Vm.IsTextMode);
+            Assert.False(t.Vm.VerifyUploads);
+        }
+        finally
+        {
+            flyout.Hide();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Each_pane_has_its_toolbar_and_the_bottom_bar_is_only_status()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var datasets = Named<BrowserPane>(window, "DatasetsPane");
+        var members = Named<BrowserPane>(window, "MembersPane");
+        Assert.Equal("Datasets", datasets.Title);
+        Assert.Equal("4 datasets · none selected", datasets.FooterText);
+        Assert.Equal("Members", members.Title);
+
+        var datasetVerbs = Named<StackPanel>(window, "DatasetToolbar").Children.OfType<Button>().Select(b => b.Content).ToList();
+        Assert.Equal(new object?[] { "New…", "Rename…", "Delete…", "↻ Refresh" }, datasetVerbs);
+        Assert.Same(t.Vm.RefreshCommand, Named<Button>(window, "RefreshButton").Command);
+
+        var memberVerbs = Named<DockPanel>(window, "MemberToolbar").GetLogicalDescendants().OfType<Button>()
+            .Where(b => b is not DropDownButton).Select(b => b.Content).ToList();
+        Assert.Equal(new object?[] { "⇣ Download…", "⇡ Upload…", "Rename…", "Delete…" }, memberVerbs);
+
+        Assert.Null(window.FindControl<RadioButton>("TextModeButton"));
+        Assert.Null(window.FindControl<TextBlock>("PaddingNote"));
+        Assert.False(Named<Button>(window, "CancelButton").IsVisible);
+        Assert.True(Named<TextBlock>(window, "StatusLine").IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task The_members_pane_stays_for_a_sequential_dataset_and_carries_the_note()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.UFSHOME");
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(Named<BrowserPane>(window, "MembersPane").IsVisible);
+        Assert.Equal("MVSCE02.UFSHOME", Named<BrowserPane>(window, "MembersPane").Title);
+        Assert.True(Named<TextBlock>(window, "SequentialNote").IsVisible);
+        Assert.False(Named<DockPanel>(window, "MemberPane").IsVisible);
+        Assert.True(Named<Button>(window, "DownloadButton").IsEffectivelyEnabled);
     }
 
     [AvaloniaFact]

@@ -6,6 +6,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:LizTerm.App.ViewModels"
+        xmlns:controls="using:LizTerm.App.Controls"
         x:Class="LizTerm.App.Views.MvsmfBrowserWindow"
         x:DataType="vm:MvsmfBrowserViewModel"
         Title="{Binding Title}"
@@ -93,131 +94,158 @@
       </DockPanel>
     </Border>
 
-    <Border DockPanel.Dock="Bottom" Background="#1C1E22" Padding="12,8" BorderBrush="#33373D" BorderThickness="0,1,0,0">
-      <StackPanel Spacing="6">
-        <WrapPanel ItemSpacing="8" LineSpacing="6">
-          <TextBlock Text="Mode" VerticalAlignment="Center" />
-          <RadioButton x:Name="TextModeButton" GroupName="Mode" Content="Text" IsChecked="{Binding IsTextMode}" IsEnabled="{Binding IsIdle}" />
-          <RadioButton x:Name="BinaryModeButton" GroupName="Mode" Content="Binary" IsChecked="{Binding IsBinaryMode}" IsEnabled="{Binding IsIdle}" />
-          <CheckBox x:Name="TrimBox" Content="Trim trailing blanks" IsChecked="{Binding TrimTrailingBlanks}" IsEnabled="{Binding IsTextMode}" />
-          <CheckBox x:Name="VerifyBox" Content="Verify after upload" IsChecked="{Binding VerifyUploads}" IsEnabled="{Binding IsTextMode}" />
-          <Button x:Name="DownloadButton" Content="Download…" Command="{Binding DownloadCommand}" />
-          <Button x:Name="UploadButton" Content="Upload…" Command="{Binding UploadCommand}" />
-          <Button x:Name="RenameMemberButton" Content="Rename…" Command="{Binding RenameMemberCommand}" />
-          <Button x:Name="DeleteButton" Content="Delete…" Command="{Binding DeleteCommand}" />
+    <!-- The bottom bar is only status now (pane-pattern spec §4.3): the verbs are in the panes, the transfer
+         options in the Members toolbar's drop-down, and the padding note is a status line. -->
+    <Border DockPanel.Dock="Bottom" Background="#1C1E22" Padding="12,6" BorderBrush="#33373D" BorderThickness="0,1,0,0">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="8,0,0,0">
+          <ProgressBar x:Name="Progress" Width="160" IsIndeterminate="True" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
           <Button x:Name="CancelButton" Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
-        </WrapPanel>
-        <TextBlock x:Name="PaddingNote" Foreground="#FFC080" IsVisible="{Binding ShowPaddingNote}"
-                   Text="⚠ Binary transfers to fixed-length datasets are padded to whole records." />
-        <DockPanel>
-          <ProgressBar x:Name="Progress" DockPanel.Dock="Right" Width="160" IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
-          <TextBlock x:Name="StatusLine" Text="{Binding StatusText}" TextWrapping="Wrap" VerticalAlignment="Center" />
-        </DockPanel>
-      </StackPanel>
+        </StackPanel>
+        <TextBlock x:Name="StatusLine" Text="{Binding StatusText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+      </DockPanel>
     </Border>
 
     <Grid ColumnDefinitions="*,4,*" Margin="12,0,12,8">
-      <DockPanel Grid.Column="0">
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,56,56,56" Margin="8,4">
-          <TextBlock Classes="header" Text="NAME" />
-          <TextBlock Classes="header" Grid.Column="1" Text="DSORG" />
-          <TextBlock Classes="header" Grid.Column="2" Text="RECFM" />
-          <TextBlock Classes="header" Grid.Column="3" Text="LRECL" />
-        </Grid>
-        <Button x:Name="LoadMoreDatasetsButton" DockPanel.Dock="Bottom" Content="Load more datasets" Margin="8,4"
-                HorizontalAlignment="Left" Command="{Binding LoadMoreDatasetsCommand}" IsVisible="{Binding HasMoreDatasets}" />
-        <WrapPanel x:Name="DatasetButtons" DockPanel.Dock="Bottom" ItemSpacing="8" LineSpacing="6" Margin="8,4">
-          <Button x:Name="NewDatasetButton" Content="New…" Command="{Binding NewDatasetCommand}" />
-          <Button x:Name="RenameDatasetButton" Content="Rename…" Command="{Binding RenameDatasetCommand}" />
-          <Button x:Name="DeleteDatasetButton" Content="Delete…" Command="{Binding DeleteDatasetCommand}" />
-        </WrapPanel>
-        <ListBox x:Name="DatasetList" ItemsSource="{Binding Datasets}" SelectedItem="{Binding SelectedDataset}"
-                 SelectionMode="Single" IsEnabled="{Binding CanChooseDataset}">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:DatasetRow">
-              <Grid ColumnDefinitions="*,56,56,56" Opacity="{Binding IsSupported, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
-                <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Dsorg}" />
-                <TextBlock Classes="cell" Grid.Column="2" Text="{Binding Recfm}" />
-                <TextBlock Classes="cell" Grid.Column="3" Text="{Binding Lrecl}" />
-              </Grid>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
+      <controls:BrowserPane x:Name="DatasetsPane" Grid.Column="0" Title="Datasets" FooterText="{Binding DatasetsFooter}">
+        <controls:BrowserPane.Toolbar>
+          <StackPanel x:Name="DatasetToolbar" Orientation="Horizontal" Spacing="6">
+            <Button x:Name="NewDatasetButton" Classes="pane-verb" Content="New…" Command="{Binding NewDatasetCommand}" />
+            <Button x:Name="RenameDatasetButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameDatasetCommand}" />
+            <Button x:Name="DeleteDatasetButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteDatasetCommand}" />
+            <Button x:Name="RefreshButton" Classes="pane-verb" Content="↻ Refresh" Command="{Binding RefreshCommand}" />
+          </StackPanel>
+        </controls:BrowserPane.Toolbar>
+        <controls:BrowserPane.FooterAction>
+          <Button x:Name="LoadMoreDatasetsButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreDatasetsCommand}"
+                  IsVisible="{Binding HasMoreDatasets}" />
+        </controls:BrowserPane.FooterAction>
+        <controls:BrowserPane.Body>
+          <DockPanel>
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,56,56,56" Margin="8,4">
+              <TextBlock Classes="header" Text="NAME" />
+              <TextBlock Classes="header" Grid.Column="1" Text="DSORG" />
+              <TextBlock Classes="header" Grid.Column="2" Text="RECFM" />
+              <TextBlock Classes="header" Grid.Column="3" Text="LRECL" />
+            </Grid>
+            <ListBox x:Name="DatasetList" ItemsSource="{Binding Datasets}" SelectedItem="{Binding SelectedDataset}"
+                     SelectionMode="Single" IsEnabled="{Binding CanChooseDataset}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:DatasetRow">
+                  <Grid ColumnDefinitions="*,56,56,56" Opacity="{Binding IsSupported, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                    <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Dsorg}" />
+                    <TextBlock Classes="cell" Grid.Column="2" Text="{Binding Recfm}" />
+                    <TextBlock Classes="cell" Grid.Column="3" Text="{Binding Lrecl}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+        </controls:BrowserPane.Body>
+      </controls:BrowserPane>
 
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="#33373D" />
 
-      <Panel Grid.Column="2">
-        <TextBlock x:Name="ChooseHint" Text="{Binding ChooseHint}" TextWrapping="Wrap" Margin="12"
-                   Foreground="#A0A0A0" IsVisible="{Binding ShowChooseHint}" />
-        <TextBlock x:Name="SequentialNote" Margin="12" TextWrapping="Wrap"
-                   Text="Sequential dataset: Download and Upload act on the dataset itself."
-                   IsVisible="{Binding ShowSequentialNote}" />
-
-        <DockPanel x:Name="MemberPane" IsVisible="{Binding ShowMemberPane}">
-          <DockPanel DockPanel.Dock="Top" Margin="8,4">
-            <TextBox x:Name="MemberFilterBox" DockPanel.Dock="Right" Width="140" Text="{Binding MemberFilter}"
-                     PlaceholderText="Filter members" />
-            <TextBlock x:Name="MemberHeader" Text="{Binding MembersFooter}" FontWeight="SemiBold" VerticalAlignment="Center"
-                       TextTrimming="CharacterEllipsis" />
-          </DockPanel>
-          <Grid DockPanel.Dock="Top" ColumnDefinitions="110,*" Margin="8,4">
-            <TextBlock Classes="header" Text="MEMBER" />
-            <TextBlock Classes="header" Grid.Column="1" Text="STATUS" />
-          </Grid>
-          <Button x:Name="LoadMoreMembersButton" DockPanel.Dock="Bottom" Content="Load more members" Margin="8,4"
-                  HorizontalAlignment="Left" Command="{Binding LoadMoreMembersCommand}" IsVisible="{Binding HasMoreMembers}" />
-          <ListBox x:Name="MemberList" ItemsSource="{Binding VisibleMembers}" SelectionMode="Multiple"
-                   IsEnabled="{Binding IsIdle}">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:MemberRow">
-                <Grid ColumnDefinitions="110,*">
-                  <TextBlock Classes="cell" Text="{Binding Name}" />
-                  <TextBlock Grid.Column="1" Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
-                </Grid>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </DockPanel>
-
-        <DockPanel x:Name="ReviewPane" IsVisible="{Binding IsReviewingUpload}">
-          <TextBlock DockPanel.Dock="Top" Text="{Binding UploadHeader}" FontWeight="SemiBold" Margin="8,4" />
-          <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="8">
-            <CheckBox x:Name="ExpandTabsBox" Content="Expand tabs (every 8 columns)" IsChecked="{Binding ExpandTabs}"
-                      IsEnabled="{Binding IsTextMode}" />
-            <TextBlock Text="{Binding ReviewMessage}" Foreground="#FF8080" TextWrapping="Wrap"
-                       IsVisible="{Binding ReviewMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-              <Button x:Name="CloseReviewButton" Content="Close" Command="{Binding CloseReviewCommand}" />
-              <Button x:Name="StartUploadButton" Content="Upload" Command="{Binding StartUploadCommand}" />
+      <controls:BrowserPane x:Name="MembersPane" Grid.Column="2" Title="{Binding MembersTitle}" FooterText="{Binding MembersFooter}">
+        <controls:BrowserPane.HeaderContent>
+          <TextBox x:Name="MemberFilterBox" Width="140" Text="{Binding MemberFilter}" PlaceholderText="Filter members"
+                   IsEnabled="{Binding ShowMemberPane}" />
+        </controls:BrowserPane.HeaderContent>
+        <controls:BrowserPane.Toolbar>
+          <Panel>
+            <DockPanel x:Name="MemberToolbar" IsVisible="{Binding !IsReviewingUpload}">
+              <DropDownButton x:Name="TransferButton" DockPanel.Dock="Right" Classes="pane-verb" Content="{Binding TransferModeLabel}"
+                              IsEnabled="{Binding IsIdle}">
+                <DropDownButton.Flyout>
+                  <MenuFlyout>
+                    <MenuItem x:Name="TextModeItem" Header="Text" ToggleType="Radio" GroupName="TransferMode"
+                              IsChecked="{Binding IsTextMode, Mode=TwoWay}" />
+                    <MenuItem x:Name="BinaryModeItem" Header="Binary" ToggleType="Radio" GroupName="TransferMode"
+                              IsChecked="{Binding IsBinaryMode, Mode=TwoWay}" />
+                    <Separator />
+                    <MenuItem x:Name="TrimItem" Header="Trim trailing blanks" ToggleType="CheckBox"
+                              IsChecked="{Binding TrimTrailingBlanks, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
+                    <MenuItem x:Name="VerifyItem" Header="Verify after upload" ToggleType="CheckBox"
+                              IsChecked="{Binding VerifyUploads, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
+                  </MenuFlyout>
+                </DropDownButton.Flyout>
+              </DropDownButton>
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button x:Name="DownloadButton" Classes="pane-verb" Content="⇣ Download…" Command="{Binding DownloadCommand}" />
+                <Button x:Name="UploadButton" Classes="pane-verb" Content="⇡ Upload…" Command="{Binding UploadCommand}" />
+                <Button x:Name="RenameMemberButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameMemberCommand}" />
+                <Button x:Name="DeleteButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteCommand}" />
+              </StackPanel>
+            </DockPanel>
+            <StackPanel x:Name="ReviewToolbar" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReviewingUpload}">
+              <Button x:Name="CloseReviewButton" Classes="pane-verb" Content="Close" Command="{Binding CloseReviewCommand}" />
+              <Button x:Name="StartUploadButton" Classes="pane-verb" Content="Upload" Command="{Binding StartUploadCommand}" />
+              <CheckBox x:Name="ExpandTabsBox" Content="Expand tabs (every 8 columns)" IsChecked="{Binding ExpandTabs}"
+                        IsEnabled="{Binding IsTextMode}" Margin="8,0,0,0" />
             </StackPanel>
-          </StackPanel>
-          <ScrollViewer>
-            <ItemsControl x:Name="UploadList" ItemsSource="{Binding Uploads}" Margin="8,0">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:UploadRow">
-                  <Border BorderBrush="#33373D" BorderThickness="0,0,0,1" Padding="0,6">
-                    <StackPanel Spacing="4">
-                      <DockPanel>
-                        <TextBox DockPanel.Dock="Right" Width="110" Text="{Binding MemberName}" MaxLength="8"
-                                 FontFamily="Menlo, Consolas, monospace" IsReadOnly="{Binding Sent}" />
-                        <TextBlock Text="{Binding FileName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                      </DockPanel>
-                      <TextBlock Text="{Binding NameProblem}" Foreground="#FF8080"
-                                 IsVisible="{Binding NameProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                      <TextBlock Text="{Binding Problems}" TextWrapping="Wrap" FontSize="12"
-                                 IsVisible="{Binding Problems, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                      <TextBlock Text="{Binding Status}" FontSize="12"
-                                 IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                    </StackPanel>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-        </DockPanel>
-      </Panel>
+          </Panel>
+        </controls:BrowserPane.Toolbar>
+        <controls:BrowserPane.FooterAction>
+          <Button x:Name="LoadMoreMembersButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreMembersCommand}"
+                  IsVisible="{Binding HasMoreMembers}" />
+        </controls:BrowserPane.FooterAction>
+        <controls:BrowserPane.Body>
+          <Panel>
+            <TextBlock x:Name="ChooseHint" Text="{Binding ChooseHint}" TextWrapping="Wrap" Margin="12"
+                       Foreground="#A0A0A0" IsVisible="{Binding ShowChooseHint}" />
+            <TextBlock x:Name="SequentialNote" Margin="12" TextWrapping="Wrap"
+                       Text="Sequential dataset: Download and Upload act on the dataset itself."
+                       IsVisible="{Binding ShowSequentialNote}" />
+
+            <DockPanel x:Name="MemberPane" IsVisible="{Binding ShowMemberPane}">
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="110,*" Margin="8,4">
+                <TextBlock Classes="header" Text="MEMBER" />
+                <TextBlock Classes="header" Grid.Column="1" Text="STATUS" />
+              </Grid>
+              <ListBox x:Name="MemberList" ItemsSource="{Binding VisibleMembers}" SelectionMode="Multiple"
+                       IsEnabled="{Binding IsIdle}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:MemberRow">
+                    <Grid ColumnDefinitions="110,*">
+                      <TextBlock Classes="cell" Text="{Binding Name}" />
+                      <TextBlock Grid.Column="1" Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </DockPanel>
+
+            <DockPanel x:Name="ReviewPane" IsVisible="{Binding IsReviewingUpload}">
+              <TextBlock DockPanel.Dock="Bottom" Text="{Binding ReviewMessage}" Foreground="#FF8080" TextWrapping="Wrap" Margin="8,4"
+                         IsVisible="{Binding ReviewMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <ScrollViewer>
+                <ItemsControl x:Name="UploadList" ItemsSource="{Binding Uploads}" Margin="8,0">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:UploadRow">
+                      <Border BorderBrush="#33373D" BorderThickness="0,0,0,1" Padding="0,6">
+                        <StackPanel Spacing="4">
+                          <DockPanel>
+                            <TextBox DockPanel.Dock="Right" Width="110" Text="{Binding MemberName}" MaxLength="8"
+                                     FontFamily="Menlo, Consolas, monospace" IsReadOnly="{Binding Sent}" />
+                            <TextBlock Text="{Binding FileName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                          </DockPanel>
+                          <TextBlock Text="{Binding NameProblem}" Foreground="#FF8080"
+                                     IsVisible="{Binding NameProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                          <TextBlock Text="{Binding Problems}" TextWrapping="Wrap" FontSize="12"
+                                     IsVisible="{Binding Problems, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                          <TextBlock Text="{Binding Status}" FontSize="12"
+                                     IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </DockPanel>
+          </Panel>
+        </controls:BrowserPane.Body>
+      </controls:BrowserPane>
     </Grid>
   </DockPanel>
 </Window>
