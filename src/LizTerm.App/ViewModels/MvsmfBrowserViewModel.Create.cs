@@ -17,7 +17,7 @@ public sealed partial class MvsmfBrowserViewModel
     public NewDatasetFormViewModel Form { get; } = new();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowMemberPane), nameof(CanChooseDataset), nameof(ShowChooseHint), nameof(ShowSequentialNote))]
+    [NotifyPropertyChangedFor(nameof(CanChooseDataset))]
     private bool _isCreating;
 
     private bool CanNewDataset => !IsBusy && !IsReviewingUpload && !IsCreating;

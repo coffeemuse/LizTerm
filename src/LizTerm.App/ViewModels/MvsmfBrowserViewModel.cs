@@ -108,8 +108,8 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     }
 
     public bool ShowMembers => SelectedDataset is { IsPartitioned: true };
-    public bool ShowSequentialNote => SelectedDataset is { IsSequential: true } && !IsCreating;
-    public bool ShowChooseHint => SelectedDataset is not { IsSupported: true } && !IsCreating;
+    public bool ShowSequentialNote => SelectedDataset is { IsSequential: true };
+    public bool ShowChooseHint => SelectedDataset is not { IsSupported: true };
 
     public string ChooseHint => SelectedDataset is { IsSupported: false } dataset
         ? $"{dataset.Name} cannot be opened in this release (DSORG {(dataset.Dsorg.Length > 0 ? dataset.Dsorg : "unknown")})."
