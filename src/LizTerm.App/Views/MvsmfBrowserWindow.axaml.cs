@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -18,6 +19,12 @@ namespace LizTerm.App.Views;
 /// never refuses to close — closing cancels what runs and releases the connection.</summary>
 public partial class MvsmfBrowserWindow : Window
 {
+    /// <summary>Cmd+R on macOS, Ctrl+R elsewhere: the platform's command modifier, as the session window's Find.</summary>
+    internal KeyGesture RefreshGesture { get; private set; } = new(Key.R, KeyModifiers.Control);
+
+    /// <summary>Cmd+N on macOS, Ctrl+N elsewhere.</summary>
+    internal KeyGesture NewDatasetGesture { get; private set; } = new(Key.N, KeyModifiers.Control);
+
     public MvsmfBrowserWindow()
     {
         InitializeComponent();
@@ -28,11 +35,31 @@ public partial class MvsmfBrowserWindow : Window
         ClosingBehavior = WindowClosingBehavior.OwnerWindowOnly;
         MemberList.SelectionChanged += (_, _) => PushSelectedMembers();
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
+
+        // The platform's command modifier (Cmd on macOS, Ctrl elsewhere), as SessionWindow.ShowPlatformGestures.
+        var modifiers = this.GetPlatformSettings()?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
+        RefreshGesture = new KeyGesture(Key.R, modifiers);
+        NewDatasetGesture = new KeyGesture(Key.N, modifiers);
+        DatasetMenuRefresh.InputGesture = RefreshGesture;
+        DatasetMenuNew.InputGesture = NewDatasetGesture;
+        ToolTip.SetTip(RefreshButton, $"Refresh the list ({RefreshGesture})");
+        ToolTip.SetTip(NewDatasetButton, $"Allocate a new dataset ({NewDatasetGesture})");
+        MemberList.AddHandler(InputElement.DoubleTappedEvent, OnMemberDoubleTapped);
+
         Opened += (_, _) =>
         {
             FilterBox.Focus();
             if (ViewModel is { Filter.Length: > 0 } vm && vm.Datasets.Count == 0) _ = vm.ListCommand.ExecuteAsync(null);
         };
+    }
+
+    /// <summary>A double-click on a member row is Download, as Enter is. On a row only: a double-click on the empty
+    /// part of the list selects nothing and must download nothing.</summary>
+    private void OnMemberDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is null) return;
+        if (vm.DownloadCommand.CanExecute(null)) _ = vm.DownloadCommand.ExecuteAsync(null);
     }
 
     private MvsmfBrowserViewModel? _watched;
@@ -221,6 +248,20 @@ public partial class MvsmfBrowserWindow : Window
         if (ViewModel is not { } vm) return;
         switch (e.Key)
         {
+            case Key.R when e.KeyModifiers == RefreshGesture.KeyModifiers:
+                e.Handled = true;
+                if (vm.RefreshCommand.CanExecute(null)) _ = vm.RefreshCommand.ExecuteAsync(null);
+                break;
+            case Key.N when e.KeyModifiers == NewDatasetGesture.KeyModifiers:
+                e.Handled = true;
+                if (vm.NewDatasetCommand.CanExecute(null)) vm.NewDatasetCommand.Execute(null);
+                break;
+            // The dataset list's own Delete/Backspace; disjoint from the member list's case below because only one
+            // list can hold the focus.
+            case Key.Delete or Key.Back when DatasetList.IsKeyboardFocusWithin:
+                e.Handled = true;
+                if (vm.DeleteDatasetCommand.CanExecute(null)) _ = vm.DeleteDatasetCommand.ExecuteAsync(null);
+                break;
             case Key.Escape:
                 e.Handled = true;
                 if (vm.Confirmation is { } question) question.CancelCommand.Execute(null);

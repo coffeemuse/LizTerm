@@ -111,8 +111,8 @@
         <controls:BrowserPane.Toolbar>
           <StackPanel x:Name="DatasetToolbar" Orientation="Horizontal" Spacing="6">
             <Button x:Name="NewDatasetButton" Classes="pane-verb" Content="New…" Command="{Binding NewDatasetCommand}" />
-            <Button x:Name="RenameDatasetButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameDatasetCommand}" />
-            <Button x:Name="DeleteDatasetButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteDatasetCommand}" />
+            <Button x:Name="RenameDatasetButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameDatasetCommand}" ToolTip.Tip="Rename the selected dataset" />
+            <Button x:Name="DeleteDatasetButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteDatasetCommand}" ToolTip.Tip="Delete the selected dataset (Delete)" />
             <Button x:Name="RefreshButton" Classes="pane-verb" Content="↻ Refresh" Command="{Binding RefreshCommand}" />
           </StackPanel>
         </controls:BrowserPane.Toolbar>
@@ -130,6 +130,15 @@
             </Grid>
             <ListBox x:Name="DatasetList" ItemsSource="{Binding Datasets}" SelectedItem="{Binding SelectedDataset}"
                      SelectionMode="Single" IsEnabled="{Binding CanChooseDataset}">
+              <ListBox.ContextMenu>
+                <ContextMenu x:Name="DatasetMenu">
+                  <MenuItem x:Name="DatasetMenuNew" Header="New…" Command="{Binding NewDatasetCommand}" />
+                  <MenuItem x:Name="DatasetMenuRename" Header="Rename…" Command="{Binding RenameDatasetCommand}" />
+                  <MenuItem x:Name="DatasetMenuDelete" Header="Delete…" Command="{Binding DeleteDatasetCommand}" InputGesture="Delete" />
+                  <Separator />
+                  <MenuItem x:Name="DatasetMenuRefresh" Header="Refresh" Command="{Binding RefreshCommand}" />
+                </ContextMenu>
+              </ListBox.ContextMenu>
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:DatasetRow">
                   <Grid ColumnDefinitions="*,56,56,56" Opacity="{Binding IsSupported, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
@@ -172,10 +181,10 @@
                 </DropDownButton.Flyout>
               </DropDownButton>
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Button x:Name="DownloadButton" Classes="pane-verb" Content="⇣ Download…" Command="{Binding DownloadCommand}" />
-                <Button x:Name="UploadButton" Classes="pane-verb" Content="⇡ Upload…" Command="{Binding UploadCommand}" />
-                <Button x:Name="RenameMemberButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameMemberCommand}" />
-                <Button x:Name="DeleteButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteCommand}" />
+                <Button x:Name="DownloadButton" Classes="pane-verb" Content="⇣ Download…" Command="{Binding DownloadCommand}" ToolTip.Tip="Download the selected members (Enter)" />
+                <Button x:Name="UploadButton" Classes="pane-verb" Content="⇡ Upload…" Command="{Binding UploadCommand}" ToolTip.Tip="Upload files into this dataset" />
+                <Button x:Name="RenameMemberButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameMemberCommand}" ToolTip.Tip="Rename the selected member" />
+                <Button x:Name="DeleteButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete the selected members (Delete)" />
               </StackPanel>
             </DockPanel>
             <StackPanel x:Name="ReviewToolbar" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReviewingUpload}">
@@ -205,6 +214,14 @@
               </Grid>
               <ListBox x:Name="MemberList" ItemsSource="{Binding VisibleMembers}" SelectionMode="Multiple"
                        IsEnabled="{Binding IsIdle}">
+                <ListBox.ContextMenu>
+                  <ContextMenu x:Name="MemberMenu">
+                    <MenuItem x:Name="MemberMenuDownload" Header="Download…" Command="{Binding DownloadCommand}" InputGesture="Enter" />
+                    <MenuItem x:Name="MemberMenuUpload" Header="Upload…" Command="{Binding UploadCommand}" />
+                    <MenuItem x:Name="MemberMenuRename" Header="Rename…" Command="{Binding RenameMemberCommand}" />
+                    <MenuItem x:Name="MemberMenuDelete" Header="Delete…" Command="{Binding DeleteCommand}" InputGesture="Delete" />
+                  </ContextMenu>
+                </ListBox.ContextMenu>
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:MemberRow">
                     <Grid ColumnDefinitions="110,*">

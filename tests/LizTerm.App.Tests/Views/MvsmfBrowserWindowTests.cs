@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
@@ -738,5 +739,128 @@ public class MvsmfBrowserWindowTests
         {
             t.Host.Gate.SetResult();
         }
+    }
+
+    [AvaloniaFact]
+    public async Task The_context_menus_bind_the_same_commands_as_the_toolbars()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+
+        var datasetMenu = Named<ListBox>(window, "DatasetList").ContextMenu!;
+        datasetMenu.Open(Named<ListBox>(window, "DatasetList"));
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            var items = datasetMenu.Items.OfType<MenuItem>().ToDictionary(i => i.Name!);
+            Assert.Same(t.Vm.NewDatasetCommand, items["DatasetMenuNew"].Command);
+            Assert.Same(t.Vm.RenameDatasetCommand, items["DatasetMenuRename"].Command);
+            Assert.Same(t.Vm.DeleteDatasetCommand, items["DatasetMenuDelete"].Command);
+            Assert.Same(t.Vm.RefreshCommand, items["DatasetMenuRefresh"].Command);
+            Assert.Equal(window.NewDatasetGesture, items["DatasetMenuNew"].InputGesture);
+            Assert.Equal(window.RefreshGesture, items["DatasetMenuRefresh"].InputGesture);
+        }
+        finally
+        {
+            datasetMenu.Close();
+        }
+
+        var memberMenu = Named<ListBox>(window, "MemberList").ContextMenu!;
+        memberMenu.Open(Named<ListBox>(window, "MemberList"));
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            var items = memberMenu.Items.OfType<MenuItem>().ToDictionary(i => i.Name!);
+            Assert.Same(t.Vm.DownloadCommand, items["MemberMenuDownload"].Command);
+            Assert.Same(t.Vm.UploadCommand, items["MemberMenuUpload"].Command);
+            Assert.Same(t.Vm.RenameMemberCommand, items["MemberMenuRename"].Command);
+            Assert.Same(t.Vm.DeleteCommand, items["MemberMenuDelete"].Command);
+            Assert.Equal(new KeyGesture(Key.Enter), items["MemberMenuDownload"].InputGesture);
+            Assert.Equal(new KeyGesture(Key.Delete), items["MemberMenuDelete"].InputGesture);
+        }
+        finally
+        {
+            memberMenu.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Double_clicking_a_member_downloads_it()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        // The Standard seed lists COMPILE as a member but stores no content for it (FakeHostFileService.Text is
+        // keyed separately): without this the download itself would fail Not found, and the double-click could
+        // never be told apart from a click that reached DownloadCommand but failed for an unrelated reason.
+        t.Host.Text["MVSCE02.CNTL(COMPILE)"] = ["//COMPILE JOB", "//STEP EXEC PGM=IEFBR14"];
+        window.UpdateLayout();
+        var list = Named<ListBox>(window, "MemberList");
+        var row = (Control)list.ContainerFromIndex(1)!;
+        var centre = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
+        var target = Path.Combine(Path.GetTempPath(), $"lizterm-{Guid.NewGuid():N}.txt");
+        t.Picker.Result = target;
+        try
+        {
+            window.MouseDown(centre, MouseButton.Left);
+            window.MouseUp(centre, MouseButton.Left);
+            window.MouseDown(centre, MouseButton.Left);
+            window.MouseUp(centre, MouseButton.Left);
+
+            await Wait.UntilAsync(() => t.Vm.StatusText.StartsWith("✓"), "the download");
+            Assert.Contains("save:", t.Picker.Calls.Single(c => c.StartsWith("save:")));
+            Assert.Equal(new[] { "COMPILE" }, t.Vm.SelectedMembers.Select(m => m.Name));
+        }
+        finally
+        {
+            File.Delete(target);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_command_key_shortcuts_refresh_and_open_new()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var modifiers = window.RefreshGesture.KeyModifiers;
+        var raw = modifiers.HasFlag(KeyModifiers.Meta) ? RawInputModifiers.Meta : RawInputModifiers.Control;
+        t.Host.AddDataset("MVSCE02.NEW", dsorg: "PS");
+
+        window.KeyPress(Key.R, raw, PhysicalKey.R, null);
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 5, "the refreshed listing");
+
+        window.KeyPress(Key.N, raw, PhysicalKey.N, null);
+        await Wait.UntilAsync(() => window.NewDatasetDialog is { IsVisible: true }, "the New dataset dialog");
+        window.NewDatasetDialog!.Close();
+        await Wait.UntilAsync(() => window.NewDatasetDialog is null, "the dialog to close");
+    }
+
+    [AvaloniaFact]
+    public async Task Delete_in_the_dataset_list_asks_about_the_dataset()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.DB");
+        window.UpdateLayout();
+        ((Control)Named<ListBox>(window, "DatasetList").ContainerFromIndex(3)!).Focus();
+
+        window.KeyPress(Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null);
+        await Wait.UntilAsync(() => t.Vm.HasConfirmation, "the question");
+
+        Assert.Contains("MVSCE02.DB", t.Vm.Confirmation!.Message);
+        t.Vm.Confirmation.CancelCommand.Execute(null);
+    }
+
+    [AvaloniaFact]
+    public async Task The_verbs_carry_tooltips_that_name_their_keys()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+
+        Assert.Equal($"Refresh the list ({window.RefreshGesture})", ToolTip.GetTip(Named<Button>(window, "RefreshButton")));
+        Assert.Equal($"Allocate a new dataset ({window.NewDatasetGesture})", ToolTip.GetTip(Named<Button>(window, "NewDatasetButton")));
+        Assert.Equal("Download the selected members (Enter)", ToolTip.GetTip(Named<Button>(window, "DownloadButton")));
+        Assert.Equal("Delete the selected members (Delete)", ToolTip.GetTip(Named<Button>(window, "DeleteButton")));
     }
 }
