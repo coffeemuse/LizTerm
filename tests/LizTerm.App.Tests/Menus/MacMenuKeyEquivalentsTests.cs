@@ -42,11 +42,12 @@ public class MacMenuKeyEquivalentsTests
     }
 
     /// <summary>On a Mac test runner AppKit's menu class is still absent (headless), so the answer is a quiet
-    /// false; on the others the call must not even reach libobjc, which does not exist.</summary>
+    /// false. Skipped rather than passed on the others, where libobjc does not exist: a green run there must not
+    /// read as this path having been exercised.</summary>
     [Fact]
     public void Without_the_menu_class_install_answers_false_and_does_not_throw()
     {
-        if (!OperatingSystem.IsMacOS()) return;
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "libobjc exists only on macOS.");
         Assert.False(MacMenuKeyEquivalents.Install(isMacOS: true));
         Assert.False(MacMenuKeyEquivalents.Installed);
     }

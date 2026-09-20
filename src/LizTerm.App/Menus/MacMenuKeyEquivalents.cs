@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Runtime.InteropServices;
+using Avalonia.Logging;
 
 namespace LizTerm.App.Menus;
 
@@ -17,7 +18,8 @@ namespace LizTerm.App.Menus;
 /// carries a ⌘-less gesture; NativeMenuTests pins that.
 ///
 /// Installed is what SessionWindow.ApplyKeymap checks before giving a Keys item a gesture: a process where the
-/// class or the method was not found gets a Keys menu without shortcuts, never one that eats keys. The imports
+/// class or the method was not found gets a Keys menu without shortcuts, never one that eats keys, and a warning
+/// in the trace log naming the step that failed, so the missing column is not a silent one. The imports
 /// are DllImport rather than LibraryImport because LibraryImport's generated stub is unsafe code, which the App
 /// project does not use; three of these signatures take a string, so they are not blittable and SystemBellRinger's
 /// other reason does not apply.</summary>
@@ -54,27 +56,36 @@ internal static class MacMenuKeyEquivalents
             try
             {
                 var cls = objc_getClass(MenuClass);
-                if (cls == IntPtr.Zero) return false;
+                if (cls == IntPtr.Zero) return Failed($"no {MenuClass} class");
                 var selector = sel_registerName(PerformSelector);
                 var inherited = class_getInstanceMethod(cls, selector);
-                if (inherited == IntPtr.Zero) return false;
+                if (inherited == IntPtr.Zero) return Failed($"{MenuClass} inherits no {PerformSelector}");
                 var originalImp = method_getImplementation(inherited);
-                if (originalImp == IntPtr.Zero) return false;
+                if (originalImp == IntPtr.Zero) return Failed($"{PerformSelector} has no implementation");
                 _original = Marshal.GetDelegateForFunctionPointer<PerformKeyEquivalent>(originalImp);
                 _modifierFlags = sel_registerName("modifierFlags");
                 // BOOL is 'B' on arm64 and 'c' on x86_64; the rest is self, _cmd and the event.
                 var encoding = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "B@:@" : "c@:@";
                 if (!class_addMethod(cls, selector, Marshal.GetFunctionPointerForDelegate(Replacement), encoding))
-                    return false;
+                    return Failed($"{MenuClass} already defines {PerformSelector}");
                 Installed = true;
                 return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Install runs before any window exists; a failure here must degrade to "no shortcuts", never take down launch.
-                return false;
+                return Failed(ex.ToString());
             }
         }
+    }
+
+    /// <summary>The one place every failure path goes through: the step is logged where Program's LogToTrace
+    /// sends it, and the answer is false.</summary>
+    private static bool Failed(string step)
+    {
+        Logger.TryGet(LogEventLevel.Warning, LogArea.Platform)
+            ?.Log(null, "MacMenuKeyEquivalents not installed ({Step}); the Keys menu shows no shortcuts", step);
+        return false;
     }
 
     /// <summary>The rule, on its own so a test can pin it: a key-down without ⌘ is never a menu key equivalent.</summary>

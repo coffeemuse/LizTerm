@@ -891,27 +891,31 @@ public class NativeMenuTests
 
     private static readonly string[] GestureExceptions = ["_Window > _Switch Session...", "_Window > _Minimize"];
 
-    private static void AssertNoGestures(string path, NativeMenu menu)
-    {
-        foreach (var item in menu.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator))
+    private static void AssertNoGestures(string path, NativeMenu menu) =>
+        WalkItems(path, menu, (itemPath, item) =>
         {
-            var itemPath = $"{path} > {item.Header}";
-            if (GestureExceptions.Contains(itemPath)) continue;
+            if (GestureExceptions.Contains(itemPath)) return;
             Assert.True(item.Gesture is null,
                 $"{itemPath} carries a gesture, which takes that key away from the terminal");
-            if (item.Menu is { } submenu) AssertNoGestures(itemPath, submenu);
-        }
-    }
+        });
 
-    private static void AssertEveryGestureCarriesCommand(string path, NativeMenu menu, KeyModifiers command)
-    {
-        foreach (var item in menu.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator))
+    private static void AssertEveryGestureCarriesCommand(string path, NativeMenu menu, KeyModifiers command) =>
+        WalkItems(path, menu, (itemPath, item) =>
         {
-            var itemPath = $"{path} > {item.Header}";
             if (item.Gesture is { } gesture)
                 Assert.True(gesture.KeyModifiers.HasFlag(command) || gesture.KeyModifiers.HasFlag(KeyModifiers.Meta),
                     $"{itemPath} carries {gesture} without the command modifier, which MacMenuKeyEquivalents would decline");
-            if (item.Menu is { } submenu) AssertEveryGestureCarriesCommand(itemPath, submenu, command);
+        });
+
+    /// <summary>Every item under the menu, separators aside, with its path: the one walk both gesture invariants
+    /// share, so they cannot come to cover different item sets.</summary>
+    private static void WalkItems(string path, NativeMenu menu, Action<string, NativeMenuItem> visit)
+    {
+        foreach (var item in menu.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator))
+        {
+            var itemPath = $"{path} > {item.Header}";
+            visit(itemPath, item);
+            if (item.Menu is { } submenu) WalkItems(itemPath, submenu, visit);
         }
     }
 

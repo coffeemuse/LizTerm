@@ -7,8 +7,7 @@ using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Bell;
 
-/// <summary>The platform's own alert sound, and the App's P/Invoke for sounds (the App's only other P/Invoke is
-/// `Menus/MacMenuKeyEquivalents`). NSBeep and MessageBeep play the sound
+/// <summary>The platform's own alert sound. NSBeep and MessageBeep play the sound
 /// the user chose at the alert volume they chose, and stay silent when they have turned interface sounds off — a
 /// bundled WAV would override all three (#47). Neither needs a file, which matters for a single-file publish.
 /// Linux has no guaranteed audio path without a library dependency, so CanRing says no there and Ring does nothing;

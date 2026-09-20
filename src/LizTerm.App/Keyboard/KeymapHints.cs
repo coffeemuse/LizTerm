@@ -19,8 +19,8 @@ public static class KeymapHints
         keymap.Keys.ToLookup(pair => pair.Value, pair => pair.Key);
 
     /// <summary>Every chord in the keymap that sends the key, or null when none does. Ordered without reference to
-    /// the table's insertion order (Keymap holds a Dictionary): unmodified chords first, then by KeyModifiers value
-    /// (Alt, Control, Shift, combinations after), function keys ahead of other keys within a group, taps last.
+    /// the table's insertion order (Keymap holds a Dictionary): in Ordered's order, unmodified chords first, then
+    /// Shift, Alt, Control and combinations, function keys ahead of other keys within a group, taps last.
     /// Ordinary chords are formatted by Avalonia's own platform formatter — glyphs on macOS, words elsewhere — and a
     /// null format means the platform's registration; taps, which it has no word for, are worded here.</summary>
     public static string? Describe(Keymap keymap, TerminalKey key, IFormatProvider? format = null) =>
@@ -58,7 +58,7 @@ public static class KeymapHints
     /// chord.</summary>
     public static KeyChord? MenuChord(IEnumerable<KeyChord> chords, bool isMacOS) =>
         Ordered(chords.Where(chord => !chord.Tap && !(isMacOS && chord.Key is Key.Pause or Key.Insert)))
-            .Cast<KeyChord?>().FirstOrDefault();
+            .Select(chord => (KeyChord?)chord).FirstOrDefault();
 
     private static int ModifierRank(KeyModifiers modifiers) => modifiers switch
     {
