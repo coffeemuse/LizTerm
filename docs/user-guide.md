@@ -205,9 +205,7 @@ The **Keys** menu sends every key the keyboard might not reach: Clear, Reset, At
 PA1 to PA3, and PF13 to PF24. Each item shows one keystroke that sends it, following your bindings, so the menu is
 the place to look one up; a key with several bindings shows the first, and the keypad's tooltip and
 **Preferences > Keyboard** list them all. On a Mac the keystroke shown is one an Apple keyboard has, so Clear shows
-Ctrl+Escape rather than Pause; that chord does not yet reach the screen on macOS
-([#157](https://github.com/coffeemuse/LizTerm/issues/157)), so until it does, send Clear from the menu or the
-keypad. Insert has a check mark while insert mode is on. The on-screen keypad
+Ctrl+Escape rather than Pause. Insert has a check mark while insert mode is on. The on-screen keypad
 (**View > Keypad > Show the Keypad**) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.
 
 ### Changing a binding
@@ -634,8 +632,6 @@ text like any other chord.
   the pin.
 - **TLS hosts that rely on SNI** (several TLS sites sharing one address) cannot be verified, because the
   underlying x3270 engine does not send a server name ([#12](https://github.com/coffeemuse/LizTerm/issues/12)).
-- **Ctrl+Escape does not send Clear on macOS** ([#157](https://github.com/coffeemuse/LizTerm/issues/157)), and
-  Pause, the other Clear key, is not on Apple keyboards; use **Keys > Clear** or the keypad's Clear until it is fixed.
 - **No printer sessions or scripting.**
 - **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). Older mvsMF builds
   are not supported (see [Signing in](#signing-in)). It can't submit jobs or browse the z/OS UNIX file system.

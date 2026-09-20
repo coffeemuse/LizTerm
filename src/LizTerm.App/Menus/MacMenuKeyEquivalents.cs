@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Runtime.InteropServices;
-using Avalonia.Logging;
+using LizTerm.App.Platform;
+using static LizTerm.App.Platform.LibObjc;
 
 namespace LizTerm.App.Menus;
 
@@ -19,18 +20,12 @@ namespace LizTerm.App.Menus;
 ///
 /// Installed is what SessionWindow.ApplyKeymap checks before giving a Keys item a gesture: a process where the
 /// class or the method was not found gets a Keys menu without shortcuts, never one that eats keys, and a warning
-/// in the trace log naming the step that failed, so the missing column is not a silent one. The imports
-/// are DllImport rather than LibraryImport because LibraryImport's generated stub is unsafe code, which the App
-/// project does not use; three of these signatures take a string, so they are not blittable and SystemBellRinger's
-/// other reason does not apply.</summary>
+/// in the trace log naming the step that failed, so the missing column is not a silent one. The once-only attempt
+/// and that warning are Platform/MacOverride's; the runtime imports are Platform/LibObjc's.</summary>
 internal static class MacMenuKeyEquivalents
 {
-    private const string LibObjc = "/usr/lib/libobjc.A.dylib";
     private const string MenuClass = "AvnMenu";
     private const string PerformSelector = "performKeyEquivalent:";
-
-    /// <summary>NSEventModifierFlagCommand.</summary>
-    internal const ulong CommandFlag = 1UL << 20;
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate byte PerformKeyEquivalent(IntPtr self, IntPtr selector, IntPtr theEvent);
@@ -40,56 +35,36 @@ internal static class MacMenuKeyEquivalents
     private static readonly PerformKeyEquivalent Replacement = Perform;
     private static PerformKeyEquivalent? _original;
     private static IntPtr _modifierFlags;
-    private static readonly object Gate = new();
+    private static readonly MacOverride Override = new(nameof(MacMenuKeyEquivalents), "the Keys menu shows no shortcuts");
 
-    public static bool Installed { get; private set; }
+    public static bool Installed => Override.Installed;
 
     /// <summary>Adds the override once. False off macOS, when libobjc or the class or the method cannot be found,
     /// or when the class already defines the selector itself (an Avalonia that started overriding it would need
     /// this code revisited, not silently wrapped).</summary>
-    public static bool Install(bool isMacOS)
-    {
-        if (!isMacOS) return false;
-        lock (Gate)
-        {
-            if (Installed) return true;
-            try
-            {
-                var cls = objc_getClass(MenuClass);
-                if (cls == IntPtr.Zero) return Failed($"no {MenuClass} class");
-                var selector = sel_registerName(PerformSelector);
-                var inherited = class_getInstanceMethod(cls, selector);
-                if (inherited == IntPtr.Zero) return Failed($"{MenuClass} inherits no {PerformSelector}");
-                var originalImp = method_getImplementation(inherited);
-                if (originalImp == IntPtr.Zero) return Failed($"{PerformSelector} has no implementation");
-                _original = Marshal.GetDelegateForFunctionPointer<PerformKeyEquivalent>(originalImp);
-                _modifierFlags = sel_registerName("modifierFlags");
-                // BOOL is 'B' on arm64 and 'c' on x86_64; the rest is self, _cmd and the event.
-                var encoding = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "B@:@" : "c@:@";
-                if (!class_addMethod(cls, selector, Marshal.GetFunctionPointerForDelegate(Replacement), encoding))
-                    return Failed($"{MenuClass} already defines {PerformSelector}");
-                Installed = true;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                // Install runs before any window exists; a failure here must degrade to "no shortcuts", never take down launch.
-                return Failed(ex.ToString());
-            }
-        }
-    }
+    public static bool Install(bool isMacOS) => Override.Install(isMacOS, Add);
 
-    /// <summary>The one place every failure path goes through: the step is logged where Program's LogToTrace
-    /// sends it, and the answer is false.</summary>
-    private static bool Failed(string step)
+    /// <summary>The steps in order; the first that fails is the answer, and null means the override is in place.</summary>
+    private static string? Add()
     {
-        Logger.TryGet(LogEventLevel.Warning, LogArea.Platform)
-            ?.Log(null, "MacMenuKeyEquivalents not installed ({Step}); the Keys menu shows no shortcuts", step);
-        return false;
+        var cls = objc_getClass(MenuClass);
+        if (cls == IntPtr.Zero) return $"no {MenuClass} class";
+        var selector = sel_registerName(PerformSelector);
+        var inherited = class_getInstanceMethod(cls, selector);
+        if (inherited == IntPtr.Zero) return $"{MenuClass} inherits no {PerformSelector}";
+        var originalImp = method_getImplementation(inherited);
+        if (originalImp == IntPtr.Zero) return $"{PerformSelector} has no implementation";
+        _original = Marshal.GetDelegateForFunctionPointer<PerformKeyEquivalent>(originalImp);
+        _modifierFlags = sel_registerName("modifierFlags");
+        // A BOOL return, then self, _cmd and the event.
+        var encoding = BoolEncoding + "@:@";
+        if (!class_addMethod(cls, selector, Marshal.GetFunctionPointerForDelegate(Replacement), encoding))
+            return $"{MenuClass} already defines {PerformSelector}";
+        return null;
     }
 
     /// <summary>The rule, on its own so a test can pin it: a key-down without ⌘ is never a menu key equivalent.</summary>
-    internal static bool Declines(ulong modifierFlags) => (modifierFlags & CommandFlag) == 0;
+    internal static bool Declines(ulong modifierFlags) => (modifierFlags & NSEvent.CommandFlag) == 0;
 
     private static byte Perform(IntPtr self, IntPtr selector, IntPtr theEvent)
     {
@@ -97,12 +72,4 @@ internal static class MacMenuKeyEquivalents
         if (Declines(flags)) return 0;
         return _original!(self, selector, theEvent);
     }
-
-    [DllImport(LibObjc)] private static extern IntPtr objc_getClass(string name);
-    [DllImport(LibObjc)] private static extern IntPtr sel_registerName(string name);
-    [DllImport(LibObjc)] private static extern IntPtr class_getInstanceMethod(IntPtr cls, IntPtr selector);
-    [DllImport(LibObjc)] private static extern IntPtr method_getImplementation(IntPtr method);
-    [DllImport(LibObjc)] [return: MarshalAs(UnmanagedType.I1)]
-    private static extern bool class_addMethod(IntPtr cls, IntPtr selector, IntPtr imp, string types);
-    [DllImport(LibObjc, EntryPoint = "objc_msgSend")] private static extern ulong objc_msgSend_ulong(IntPtr self, IntPtr selector);
 }

@@ -161,6 +161,19 @@ public class KeymapHintsTests
         Assert.Null(KeymapHints.MenuChord([KeyChord.TapOf(Key.LeftCtrl)], isMacOS: false));
     }
 
+    /// <summary>#157: on a Mac Clear's Ctrl+Escape reaches the screen only through MacEscapeChords, so where that
+    /// is not installed the menu shows Clear without a keystroke rather than one AppKit keeps. Elsewhere the flag
+    /// is not consulted, since the chord always arrives.</summary>
+    [Fact]
+    public void Without_the_escape_override_a_mac_shows_no_control_escape()
+    {
+        var clear = KeymapHints.ByKey(Map)[TerminalKey.Clear];
+
+        Assert.Null(KeymapHints.MenuChord(clear, isMacOS: true, controlEscapeReaches: false));
+        Assert.Equal(new KeyChord(Key.Escape, KeyModifiers.Control), KeymapHints.MenuChord(clear, isMacOS: true, controlEscapeReaches: true));
+        Assert.Equal(new KeyChord(Key.Pause), KeymapHints.MenuChord(clear, isMacOS: false, controlEscapeReaches: false));
+    }
+
     /// <summary>A rebind wins when it sorts first: F9 is unmodified, so it beats Alt+1.</summary>
     [Fact]
     public void A_remapped_key_changes_the_menu_chord()

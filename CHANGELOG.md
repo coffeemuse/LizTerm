@@ -5,6 +5,9 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **Ctrl+Escape sends Clear on macOS.** The chord never reached the screen there, and letting go of Ctrl afterwards
+  sent Reset or Enter instead; Pause, the other Clear key, is not on Apple keyboards, so Clear had no working
+  keystroke on a Mac ([#157](https://github.com/coffeemuse/LizTerm/issues/157)).
 - **A connected session is not closed by accident.** Closing a session window while its session is connected, or
   quitting with connected sessions, now asks first. **Keep Connected**, the default, leaves everything as it was;
   **Disconnect** closes the window, or **Disconnect and Quit** quits. A window that is not connected closes without

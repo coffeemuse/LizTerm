@@ -23,14 +23,17 @@ namespace LizTerm.App.Tests.Views;
 public class SessionWindowKeymapTests
 {
     private static (SessionWindow Window, FakeEmulatorSession Session, TerminalScreen Screen) Show(
-        bool destructiveBackspace, KeymapViewModel? keymap, bool isMacOS = false, bool nativeGestures = false)
+        bool destructiveBackspace, KeymapViewModel? keymap, bool isMacOS = false, bool nativeGestures = false, bool escapeChords = true)
     {
         var session = new FakeEmulatorSession
         {
             Profile = new SessionProfile { Name = "TSO", Host = "tk5.local", Port = 3270, DestructiveBackspace = destructiveBackspace },
         };
         var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard());
-        var window = new SessionWindow(MenuStyle.InWindow, isMacOS) { NativeGesturesAllowed = nativeGestures, DataContext = vm };
+        var window = new SessionWindow(MenuStyle.InWindow, isMacOS)
+        {
+            NativeGesturesAllowed = nativeGestures, EscapeChordsReachScreen = escapeChords, DataContext = vm,
+        };
         if (keymap is not null) window.AttachKeymap(keymap);
         window.Show();
         var screen = window.FindControl<TerminalScreen>("Screen")!;
@@ -160,6 +163,17 @@ public class SessionWindowKeymapTests
         Assert.Equal(new KeyGesture(Key.I, KeyModifiers.Control), KeysItems(mac, TerminalKey.Insert).Classic.InputGesture);
         Assert.Equal(new KeyGesture(Key.Insert), KeysItems(other, TerminalKey.Insert).Classic.InputGesture);
         Assert.Equal(new KeyGesture(Key.F1, KeyModifiers.Shift), KeysItems(mac, TerminalKey.PF13).Classic.InputGesture);
+    }
+
+    /// <summary>#157: without MacEscapeChords in place Clear's Ctrl+Escape never arrives on a Mac, so the item
+    /// names no keystroke there; SysReq's Shift+Escape, which AppKit delivers, is unaffected.</summary>
+    [AvaloniaFact]
+    public void Without_the_escape_override_clear_shows_no_chord_on_a_mac()
+    {
+        var (mac, _, _) = Show(destructiveBackspace: true, new KeymapViewModel(), isMacOS: true, escapeChords: false);
+
+        Assert.Null(KeysItems(mac, TerminalKey.Clear).Classic.InputGesture);
+        Assert.Equal(new KeyGesture(Key.Escape, KeyModifiers.Shift), KeysItems(mac, TerminalKey.SysReq).Classic.InputGesture);
     }
 
     /// <summary>The other half of the InWindow guarantee: a rebind made while the native items were stashed is what

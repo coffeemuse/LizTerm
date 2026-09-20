@@ -12,6 +12,7 @@ using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
 using LizTerm.App.HostFiles;
+using LizTerm.App.Keyboard;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
 using LizTerm.App.Startup;
@@ -84,6 +85,10 @@ public partial class App : Application
             // and this is what keeps AppKit from dispatching it ahead of the screen. SessionWindow.ApplyKeymap gives
             // the items no gesture unless Installed says this succeeded.
             MacMenuKeyEquivalents.Install(OperatingSystem.IsMacOS());
+
+            // And the other half of a working Clear on a Mac (#157): MacEscapeChords gives Avalonia's view the ⌃⎋
+            // key-down AppKit diverts around keyDown:. SessionWindow.EscapeChordsReachScreen reads Installed.
+            MacEscapeChords.Install(OperatingSystem.IsMacOS());
 
             // Settings before anything opens: whether there is a splash at all is one of them (#108). Load never
             // throws, so reading them first adds no way for startup to fail before a window can say so.

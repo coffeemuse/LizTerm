@@ -221,9 +221,7 @@ The session switcher is Cmd+K on macOS and Ctrl+K elsewhere; see <a href="#sever
 PA1 to PA3, and PF13 to PF24. Each item shows one keystroke that sends it, following your bindings, so the menu is
 the place to look one up; a key with several bindings shows the first, and the keypad's tooltip and
 <strong>Preferences &gt; Keyboard</strong> list them all. On a Mac the keystroke shown is one an Apple keyboard has, so Clear shows
-Ctrl+Escape rather than Pause; that chord does not yet reach the screen on macOS
-(<a href="https://github.com/coffeemuse/LizTerm/issues/157">#157</a>), so until it does, send Clear from the menu or the
-keypad. Insert has a check mark while insert mode is on. The on-screen keypad
+Ctrl+Escape rather than Pause. Insert has a check mark while insert mode is on. The on-screen keypad
 (<strong>View &gt; Keypad &gt; Show the Keypad</strong>) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.</p>
 <h3 id="changing-a-binding">Changing a binding</h3>
 <p><strong>Preferences &gt; Keyboard</strong> lists every 3270 key with the keys that send it. Changes apply at once, to every open
@@ -590,8 +588,6 @@ store and cannot pin a certificate. A profile carrying a pin refuses to connect 
 the pin.</li>
 <li><strong>TLS hosts that rely on SNI</strong> (several TLS sites sharing one address) cannot be verified, because the
 underlying x3270 engine does not send a server name (<a href="https://github.com/coffeemuse/LizTerm/issues/12">#12</a>).</li>
-<li><strong>Ctrl+Escape does not send Clear on macOS</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/157">#157</a>), and
-Pause, the other Clear key, is not on Apple keyboards; use <strong>Keys &gt; Clear</strong> or the keypad's Clear until it is fixed.</li>
 <li><strong>No printer sessions or scripting.</strong></li>
 <li><strong>The mvsMF Browser is a preview</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/17">#17</a>). Older mvsMF builds
 are not supported (see <a href="#signing-in">Signing in</a>). It can't submit jobs or browse the z/OS UNIX file system.</li>
