@@ -597,8 +597,8 @@ sit on five tabs:
 
 Profiles are in `profiles/`, one JSON file each, and wire logs in `logs/`, named
 `wire-<profile>-<date>-<time>.log`. An older LizTerm reading a profile written by a newer one keeps the settings it
-understands and drops the rest the next time it saves that profile: going back to a LizTerm without the mvsMF
-Browser loses that profile's mvsMF URL, userid and pinned certificate. `settings.json` holds your preferences — only
+understands and drops the rest the next time it saves that profile: going back to a LizTerm without mvsMF Access
+loses that profile's mvsMF URL, userid and pinned certificate. `settings.json` holds your preferences — only
 the ones you have changed, so deleting it puts everything back to the defaults. `tags.json` holds one colour per tag
 name; deleting it loses only the colours, because the tag names themselves live in the profiles and are given fresh
 colours the next time LizTerm starts. `recent-hosts.json` holds the hosts Quick Connect remembers; deleting it
