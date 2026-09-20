@@ -175,9 +175,10 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   timer runs) and `Settings.BellSound` other than `None` calls the ringer. "None means silence" is the view
   model's rule; the ringer only knows how to make sounds. `IBellRinger.CanRing` is the one home of which sounds
   this platform can make: the view model treats a refused sound as `None`, and `App` passes the same answer to
-  `PreferencesWindow`, which disables the radio and says why. `SystemBellRinger` is the App's only P/Invoke
-  (`NSBeep`, `MessageBeep`) and answers no on Linux. A ringer that throws is reported once and not asked again
-  until the sound setting changes. The bell's sound radios are one-way check marks plus Click handlers over
+  `PreferencesWindow`, which disables the radio and says why. `SystemBellRinger` is the App's P/Invoke for sounds
+  (`NSBeep`, `MessageBeep`; the other is `Menus/MacMenuKeyEquivalents`) and answers no on Linux. A ringer that
+  throws is reported once and not asked again until the sound setting changes. The bell's sound radios are one-way
+  check marks plus Click handlers over
   `BellSoundConverter`, the Crosshair shape; both converters are subclasses of `EnumIsConverter<TEnum>`, which
   holds the rule.
 - **The release check (#107).** `App._releaseChecker` (`GitHubReleaseChecker.Create()`) is the process's one
@@ -282,8 +283,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   never its dictionary) laid out by `Views/KeyboardTab`. A row's `TryCapture` calls `KeymapPolicy.Check` before every
   `Bind`, which is what keeps a Cmd chord out of the file, and answers the slot with a `CaptureResult`. There are two
   Backspace rows because `TerminalKey` has two Backspace actions. A "Type ¬" row stays for the tab's life once shown.
-  A row's chips are in `KeymapHints.Ordered`'s order, the keypad tooltips' own (so a PA1 row reads Alt+F9 before
-  Alt+1 once both are bound).
+  A row's chips are in `KeymapHints.Ordered`'s order, the keypad tooltips' own (unmodified, then Shift, Alt, Control;
+  so a PA1 row reads F9 before Alt+1 once both are bound, and Alt+F9 before Alt+1).
   `Controls/ChordCaptureBox` is the Add slot, a `Button` subclass: it needs `StyleKeyOverride => typeof(Button)` or
   it has no template, which also means a style selector cannot name it (the tab styles the `chord-slot` class and
   `:armed` pseudo-class). It is armed by a click or Enter or Space and not by focus, because an armed slot swallows
@@ -357,7 +358,7 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   border's padding, the margins between buttons, a button the pointer leaves before releasing — and each of those
   sent a spurious Enter on the Ctrl release.
 - Tooltips come from `KeymapHints.Describe` (`Keyboard/`), the reverse of a `Keymap`: chords ordered unmodified
-  first, then by modifier, function keys ahead within a group, taps last; ordinary chords through Avalonia's
+  first, then Shift, Alt, Control, function keys ahead within a group, taps last; ordinary chords through Avalonia's
   `KeyGesture.ToString("p", format)`, taps worded by hand. The overload taking a `Keymap` and one `TerminalKey`
   scans the table; the one taking the chords themselves is what the control uses, over a single `ToLookup`, so 36
   tooltips are one pass and not 36. The control passes a null format, the platform's registration (glyphs on macOS,
@@ -459,7 +460,7 @@ the host through the text input `TerminalScreen` already handles, and Ctrl+Cmd+S
 
 ### Gestures
 
-**No window menu item outside Edit carries a `Gesture`, apart from Window's two Cmd chords (below).** On macOS a
+**No window menu item outside Edit and Keys carries a `Gesture`, apart from Window's two Cmd chords (below).** On macOS a
 `NativeMenuItem` gesture becomes an AppKit key equivalent that `NSApplication.sendEvent:` dispatches before the key
 window's responder chain, so `Gesture="F1"` would silently swallow PF1 — `TerminalScreen` would never see the key. So
 View (Crosshair and Keypad), File > Save Screen As... and Edit > Copy Screen as HTML carry none. **The one exception
@@ -471,16 +472,22 @@ one. The in-window Edit > Preferences... *names* the same chord on macOS through
 handler, and it works under every style because the application menu is there under every style. The exported Edit >
 Preferences... is hidden on macOS and carries no `Gesture`, so it installs no second key equivalent.
 
-The Keys items show their keystrokes in **header text**, `PA2  Alt+2 or Ctrl+Home` (#23): `KeymapHints.Label` joins
-the declared name and `KeymapHints.Describe`'s line over `KeymapHints.ByKey`, the one reversal of the keymap the
-keypad reads too, and `SessionWindow.ApplyKeymap` writes it onto the native item and the classic item together, from
-the rows `CaptureKeysRows` paired at construction, on every keymap change.
-Never a `Gesture` (a key equivalent that steals the keystroke from the screen), and never a classic `InputGesture`
-either: the two menus would then differ, and the parity walk would fail, correctly. A null format is the platform's
-wording, the keypad tooltips' own, so on macOS the hint is glyphs. Tests find a Keys item by the key it sends, never
-by header, because the header follows the keymap; under InWindow the whole top-level `_Keys` native item is stashed,
-so a `MenuLookup` from the menu root cannot reach it, and `SessionWindow.KeysRow(TerminalKey)` is the internal seam
-that answers with the pair the constructor captured.
+**The Keys items are the one place a native gesture is allowed** (#23, Keys menu shortcuts spec). Each item's
+`Gesture` is `KeymapHints.MenuChord` over `KeymapHints.ByKey`, one chord per key from the keymap in force, written
+by `SessionWindow.ApplyKeymap` on both the native item and the classic item (`InputGesture`, display-only) from the
+rows `CaptureKeysRows` paired at construction, on every keymap change. Headers are the bare names. What makes the
+native gesture safe is `Menus/MacMenuKeyEquivalents`: at startup on macOS it adds a `performKeyEquivalent:` to
+Avalonia's `AvnMenu` class that answers NO for any key-down without ⌘ and defers to NSMenu for the rest, so AppKit
+draws the shortcut column and still hands ⇧F1 to the screen. The rule holds only while every other native gesture
+carries the command modifier, which `NativeMenuTests.Only_edit_two_window_items_and_the_Keys_items_carry_gestures`
+walks. `ApplyKeymap` sets no native gesture unless `MacMenuKeyEquivalents.Installed`, read into
+`SessionWindow.NativeGesturesAllowed` at construction, which is also the test seam. Measured on 2026-09-19: the
+submenu delegate's `menuHasKeyEquivalent:` is consulted only for ⌘ chords and the submenu's own
+`performKeyEquivalent:` never, which is why the override is on the main menu's class. A key pressed while the
+Keys menu is open fires the item through the menu's tracking loop, as on every macOS menu. Tests find a Keys item by
+the key it sends; under InWindow the whole top-level `_Keys` native item is stashed, so a `MenuLookup` from the menu
+root cannot reach it, and `SessionWindow.KeysRow(TerminalKey)` is the internal seam that answers with the pair the
+constructor captured.
 
 - Edit's Cmd/Ctrl+C, V and A come from `GetPlatformSettings().HotkeyConfiguration` and activate `CopyAsync`,
   `PasteAsync` and `SelectAll` directly, never the `[RelayCommand]`s, which disable while running.
@@ -492,7 +499,8 @@ that answers with the pair the constructor captured.
   `new KeyGesture(Key.K, hotkeys.CommandModifiers)` as the native `Gesture` and the classic `InputGesture`, and
   `TerminalScreen.SwitcherRequested` handles the chord wherever no key equivalent is installed. Minimize's Cmd+M is
   native and macOS only; nothing else dispatches it, so the in-window item names no chord.
-  `NativeMenuTests.Only_edit_and_two_window_items_carry_gestures` allows exactly those two.
+  `NativeMenuTests.Only_edit_two_window_items_and_the_Keys_items_carry_gestures` allows exactly those two, alongside
+  Edit and the Keys items.
 - View > **Crosshair** is a submenu of four radio items rather than four items directly under View, because
   "Horizontal" and "Vertical" sitting under View read as window tiling. On macOS `ToggleType="Radio"` marks the chosen
   item with a bullet, not a tick; that is AppKit's own radio mark, not a bug.

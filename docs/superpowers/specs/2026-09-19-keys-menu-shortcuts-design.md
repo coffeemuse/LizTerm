@@ -62,8 +62,10 @@ do, and all three become true together.
 ### 3.1 The override
 
 `LizTerm.App/Menus/MacMenuKeyEquivalents` (macOS only, `DllImport` on `libobjc` in the style of
-`SystemBellRinger`) replaces `performKeyEquivalent:` on the `AvnMenu` class once, at startup, under the native
-menu strategy only, and keeps the original implementation. The replacement reads the event's modifier flags:
+`SystemBellRinger`) adds a `performKeyEquivalent:` to the `AvnMenu` class once, at startup, whenever the process
+runs on macOS, keeping NSMenu's inherited implementation to defer to. It is not gated on the menu style: the style
+is per window and can switch to Native at run time, and under InWindow the exported menu is empty, so the override
+has nothing to decline. The replacement reads the event's modifier flags:
 without ⌘ it returns NO, so the keystroke goes on to the key window and the screen; with ⌘ it calls the
 original. Replacing the class covers every main menu Avalonia builds, one per window, with no per-window install.
 

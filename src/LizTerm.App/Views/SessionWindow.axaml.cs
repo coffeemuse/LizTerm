@@ -151,8 +151,9 @@ public partial class SessionWindow : Window, ISessionHost
     private readonly List<(NativeMenuItem Native, MenuItem Classic, TerminalKey Key)> _keysRows = [];
 
     /// <summary>Whether a Keys item may carry a native Gesture: only when MacMenuKeyEquivalents has installed the
-    /// override that keeps AppKit from dispatching it (Keys menu shortcuts spec §3.1). Read at construction so a
-    /// test can say yes on a platform where the override never installs; the classic InputGesture is shown
+    /// override that keeps AppKit from dispatching it (Keys menu shortcuts spec §3.1). The default is taken at
+    /// construction from MacMenuKeyEquivalents.Installed, and the value is read on every ApplyKeymap, so a test
+    /// sets it before the data context (or re-attaches a keymap) for it to show; the classic InputGesture is shown
     /// regardless, being display-only.</summary>
     internal bool NativeGesturesAllowed { get; set; } = MacMenuKeyEquivalents.Installed;
 
