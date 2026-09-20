@@ -8,7 +8,7 @@ using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.Dialogs;
 
-/// <summary>Opens <see cref="SignInWindow"/> modally over its owner, which is the mvsMF Browser or the profile
+/// <summary>Opens <see cref="SignInWindow"/> modally over its owner, which is mvsMF Access or the profile
 /// editor. Closing the window any way but Sign In answers null.</summary>
 public sealed class AvaloniaCredentialPrompt(Window owner) : ICredentialPrompt
 {

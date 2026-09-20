@@ -429,7 +429,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         return transfer;
     }
 
-    /// <summary>Builds the mvsMF Browser's view model around this session's dispatcher, with Help's user guide
+    /// <summary>Builds the mvsMF Access window's view model around this session's dispatcher, with Help's user guide
     /// behind its "What to expect…" link.</summary>
     public MvsmfBrowserViewModel CreateMvsmfBrowser(HostFileAccess access, HostFileConnection connection, IFilePicker picker) =>
         new(access, connection, picker, _dispatch, ShowUserGuideAsync);

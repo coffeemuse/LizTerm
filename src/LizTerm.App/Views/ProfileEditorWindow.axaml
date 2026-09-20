@@ -286,7 +286,7 @@
             <StackPanel Grid.Column="1" Spacing="4">
               <TextBox x:Name="MvsmfUrlBox" Text="{Binding MvsmfUrl}" PlaceholderText="http://host:8080 (optional)" />
               <TextBlock Classes="hint"
-                         Text="The z/OSMF REST address for File &gt; mvsMF Browser (a feature preview). /zosmf is added when the path is empty; use https:// through a TLS proxy." />
+                         Text="The z/OSMF REST address for File &gt; mvsMF Access (a feature preview). /zosmf is added when the path is empty; use https:// through a TLS proxy." />
             </StackPanel>
           </Grid>
           <Grid Classes="row" ColumnDefinitions="120,*">

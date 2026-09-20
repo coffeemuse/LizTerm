@@ -51,7 +51,7 @@ public partial class SessionWindow : Window, ISessionHost
         _nativeMinimizeSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().First();
         _nativeKeepOnTop = MenuLookup.Item(_nativeWindowMenu, "_Keep on Top")!;
         _nativeSessionsSeparator = _nativeWindowMenu.Items.OfType<NativeMenuItemSeparator>().Last();
-        _nativeMvsmfBrowser = MenuLookup.Item(NativeMenu.GetMenu(this), "_File", "mvsMF _Browser...")!;
+        _nativeMvsmfBrowser = MenuLookup.Item(NativeMenu.GetMenu(this), "_File", "mvsMF _Access...")!;
         CaptureKeysRows();
         RebuildSessionRows();
         // The screen's events call the view model's methods, not its commands: each method carries its own guard,
@@ -963,7 +963,7 @@ public partial class SessionWindow : Window, ISessionHost
         Screen.Focus();
     }
 
-    /// <summary>The open mvsMF Browser, if any; one per session window.</summary>
+    /// <summary>The open mvsMF Access window, if any; one per session window.</summary>
     internal MvsmfBrowserWindow? MvsmfBrowser { get; private set; }
 
     /// <summary>App calls this for a profile with a REST URL (spec §3.3): the item appears in both menus and the
@@ -1010,7 +1010,7 @@ public partial class SessionWindow : Window, ISessionHost
         {
             connection?.Dispose();
             MvsmfBrowser = null;
-            vm.ErrorMessage = "Could not open the mvsMF Browser: " + ex.Message;
+            vm.ErrorMessage = "Could not open mvsMF Access: " + ex.Message;
         }
     }
 

@@ -43,7 +43,7 @@ public class SessionWindowMvsmfTests
     private static MenuItem Classic(SessionWindow window) => window.FindControl<MenuItem>("MvsmfBrowserMenuItem")!;
 
     private static NativeMenuItem Native(SessionWindow window) =>
-        MenuLookup.Item(NativeMenu.GetMenu(window), "_File", "mvsMF _Browser...")!;
+        MenuLookup.Item(NativeMenu.GetMenu(window), "_File", "mvsMF _Access...")!;
 
     private static void Click(MenuItem item) => item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
 
@@ -52,6 +52,7 @@ public class SessionWindowMvsmfTests
     {
         var shown = Show(url: null);
         Assert.False(Classic(shown.Window).IsVisible);
+        Assert.Equal("mvsMF _Access...", Classic(shown.Window).Header);
         Assert.False(Native(Show(url: null, style: MenuStyle.Native).Window).IsVisible);
     }
 

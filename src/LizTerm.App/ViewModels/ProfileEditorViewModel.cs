@@ -552,7 +552,7 @@ public partial class ProfileEditorViewModel : ObservableObject
         }
         catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.CertificateRejected)
         {
-            result = "✗ The host's certificate is not trusted. Open the mvsMF Browser from a session to review it.";
+            result = "✗ The host's certificate is not trusted. Open mvsMF Access from a session to review it.";
         }
         catch (Exception ex)
         {

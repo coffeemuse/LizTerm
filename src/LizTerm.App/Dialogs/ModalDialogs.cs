@@ -12,7 +12,7 @@ namespace LizTerm.App.Dialogs;
 /// Keep on Top owner, which refuses input while the dialog is open. The dialog therefore takes its owner's Topmost
 /// and follows it while open, since the macOS menu bar can still flip Keep on Top over a modal dialog.
 /// ModalDialogsTests fails for any other ShowDialog call in the app. <see cref="ShowAbove"/> is the same rule for a
-/// window that belongs to one session window but does not block it, the mvsMF Browser.</summary>
+/// window that belongs to one session window but does not block it, mvsMF Access.</summary>
 public static class ModalDialogs
 {
     public static Task ShowDialogAbove(this Window dialog, Window owner) => dialog.ShowDialogAbove<object?>(owner);

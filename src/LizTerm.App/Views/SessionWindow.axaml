@@ -26,7 +26,7 @@
             <NativeMenuItem Header="_Disconnect" Command="{Binding DisconnectCommand}" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="IND$FILE _Transfer..." Click="OnFileTransferClickNative" IsEnabled="{Binding IsConnected}" />
-            <NativeMenuItem Header="mvsMF _Browser..." Click="OnMvsmfBrowserClickNative" IsVisible="False" />
+            <NativeMenuItem Header="mvsMF _Access..." Click="OnMvsmfBrowserClickNative" IsVisible="False" />
             <NativeMenuItem Header="_Save Screen As..." Click="OnSaveScreenClickNative" IsEnabled="{Binding CanCaptureScreen}" />
             <NativeMenuItem Header="Save as _Profile..." Click="OnSaveAsProfileClickNative" IsEnabled="{Binding CanSaveAsProfile}" />
             <NativeMenuItemSeparator />
@@ -194,7 +194,7 @@
         <MenuItem Header="_Disconnect" Command="{Binding DisconnectCommand}" />
         <Separator />
         <MenuItem x:Name="FileTransferMenuItem" Header="IND$FILE _Transfer..." Click="OnFileTransferClick" IsEnabled="{Binding IsConnected}" />
-        <MenuItem x:Name="MvsmfBrowserMenuItem" Header="mvsMF _Browser..." Click="OnMvsmfBrowserClick" IsVisible="False" />
+        <MenuItem x:Name="MvsmfBrowserMenuItem" Header="mvsMF _Access..." Click="OnMvsmfBrowserClick" IsVisible="False" />
         <MenuItem Header="_Save Screen As..." Click="OnSaveScreenClick" IsEnabled="{Binding CanCaptureScreen}" />
         <MenuItem Header="Save as _Profile..." Click="OnSaveAsProfileClick" IsEnabled="{Binding CanSaveAsProfile}" />
         <Separator />

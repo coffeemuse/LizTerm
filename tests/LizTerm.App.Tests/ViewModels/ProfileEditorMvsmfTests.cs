@@ -179,7 +179,7 @@ public class ProfileEditorMvsmfTests
     [Theory]
     [InlineData(HostFileErrorKind.Unauthenticated, "The host rejected the userid or password.", "✗ The host rejected the userid or password.")]
     [InlineData(HostFileErrorKind.Unreachable, "Server information: cannot reach the host (refused).", "✗ Server information: cannot reach the host (refused).")]
-    [InlineData(HostFileErrorKind.CertificateRejected, "x", "✗ The host's certificate is not trusted. Open the mvsMF Browser from a session to review it.")]
+    [InlineData(HostFileErrorKind.CertificateRejected, "x", "✗ The host's certificate is not trusted. Open mvsMF Access from a session to review it.")]
     [InlineData(HostFileErrorKind.Unsupported, "This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.", "✗ This host does not support sign-in; LizTerm needs mvsMF 1.1.0 or later.")]
     [InlineData(HostFileErrorKind.Unsupported, "Nothing at this URL answers as mvsMF.", "✗ Nothing at this URL answers as mvsMF.")]
     public async Task Test_failures_are_reported_in_words(HostFileErrorKind kind, string message, string expected)
