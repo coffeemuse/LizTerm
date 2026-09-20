@@ -49,8 +49,10 @@ since this release — <a href="https://github.com/coffeemuse/LizTerm/blob/main/
 <li><a href="#tls-and-certificates">TLS and certificates</a></li>
 <li><a href="#file-transfer-indfile">File transfer (IND$FILE)</a></li>
 <li><a href="#mvsmf-access-preview">mvsMF Access (preview)</a></li>
+<li><a href="#which-build-you-are-running">Which build you are running</a></li>
 <li><a href="#wire-logs">Wire logs</a></li>
 <li><a href="#menus">Menus</a></li>
+<li><a href="#preferences">Preferences</a></li>
 <li><a href="#where-lizterm-keeps-its-files">Where LizTerm keeps its files</a></li>
 <li><a href="#known-limitations">Known limitations</a></li>
 </ul>
@@ -163,11 +165,13 @@ button to see its keyboard shortcut, where it has one; a greyed-out button shows
 are three ways back to the one you want:</p>
 <ul>
 <li><strong>Cmd+K</strong> on macOS, or <strong>Ctrl+K</strong> on Windows and Linux, opens a list of every open session over the current
-window; so does <strong>Window &gt; Switch Session...</strong>. Sessions are numbered in the order you opened them, 1 to 9 and
-then 0 for the tenth: press a number to go straight there. Or type part of a session's name, host, tag or note
-to narrow the list, then use the arrow keys and <strong>Enter</strong>, or click a session. The session you were in before
-this one is highlighted when the list opens, so <strong>Cmd+K</strong> then <strong>Enter</strong> flips between two sessions. <strong>Escape</strong>
-closes the list. Nothing you type while it is open is sent to the host.</li>
+window; so does <strong>Window &gt; Switch Session...</strong>. The first ten sessions are numbered in the order you opened
+them, 1 to 9 and then 0 for the tenth: while the filter box is still empty, press a number to go straight there.
+Or type part of a session's name, host, tag or note to narrow the list — from then on digits go into the filter,
+so a name like TK4 or VM370 stays typeable — then use the arrow keys and <strong>Enter</strong>, or click a session. An
+eleventh session and beyond are listed without a number, here and in the <strong>Window</strong> menu alike. The session you
+were in before this one is highlighted when the list opens, so <strong>Cmd+K</strong> then <strong>Enter</strong> flips between two
+sessions. <strong>Escape</strong> closes the list. Nothing you type while it is open is sent to the host.</li>
 <li>The <strong>Window</strong> menu lists the same numbered sessions, with a check mark on the session you are in. On Windows
 and Linux each number is also the item's access key, so <strong>Alt</strong>, <strong>W</strong>, <strong>3</strong> reaches session 3. <strong>Bring All to
 Front</strong> raises every LizTerm session that is not minimised above other applications' windows. On macOS the menu
@@ -175,9 +179,10 @@ also has <strong>Minimize</strong> (Cmd+M, which works only while the menu is in
 <li>On macOS, right-click LizTerm's icon in the Dock to see the sessions there too, and choose one to go straight to
 it from any application. <strong>New Session...</strong> in the same menu opens the Sessions list.</li>
 </ul>
-<p>In the list, a session shows its star if it is a favourite, then its tags, host and note, a filled circle ● while
-it is connected or an open circle ○ and the word <strong>Disconnected</strong> when it is not, and <strong>This window</strong> or <strong>On top</strong>
-where they apply. A session that is not a saved profile — Quick Connect, or a host named on the command line —
+<p>In the list, a session shows its star if it is a favourite, then its tags, host and note, and a filled circle ●
+while it is connected or an open circle ○ while it is down; a session still connecting or reconnecting keeps the
+filled circle. Then comes one word where it applies — the first of <strong>Disconnected</strong>, <strong>This window</strong> or <strong>On
+top</strong>, never two at once. A session that is not a saved profile — Quick Connect, or a host named on the command line —
 shows <strong>Quick Connect</strong> under its name.</p>
 <p><strong>Window &gt; Keep on Top</strong> keeps that window above other applications' windows, for a session you want in view while
 you work in another, such as an operator console. It is not remembered: a new window starts without it.</p>
@@ -218,11 +223,12 @@ between.</p>
 elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.
 The session switcher is Cmd+K on macOS and Ctrl+K elsewhere; see <a href="#several-sessions">Several sessions</a>.</p>
 <p>The <strong>Keys</strong> menu sends every key the keyboard might not reach: Clear, Reset, Attn, SysReq, Dup, Field Mark, Insert,
-PA1 to PA3, and PF13 to PF24. Each item shows one keystroke that sends it, following your bindings, so the menu is
-the place to look one up; a key with several bindings shows the first, and the keypad's tooltip and
-<strong>Preferences &gt; Keyboard</strong> list them all. On a Mac the keystroke shown is one an Apple keyboard has, so Clear shows
-Ctrl+Escape rather than Pause. Insert has a check mark while insert mode is on. The on-screen keypad
-(<strong>View &gt; Keypad &gt; Show the Keypad</strong>) offers all of those as buttons, plus PF1 to PF12, Erase EOF and Erase Input.</p>
+PA1 to PA3, and PF13 to PF24. Each item shows one keystroke that sends it where it has one, following your bindings,
+so the menu is the place to look one up; Dup and Field Mark have none until you give them one, a key with several
+bindings shows the first, and the keypad's tooltip and <strong>Preferences &gt; Keyboard</strong> list them all. On a Mac the
+keystroke shown is one an Apple keyboard has, so Clear shows Ctrl+Escape rather than Pause. Insert has a check mark
+while insert mode is on. The on-screen keypad (<strong>View &gt; Keypad &gt; Show the Keypad</strong>) offers all of those as buttons,
+plus PF1 to PF12, Erase EOF and Erase Input.</p>
 <h3 id="changing-a-binding">Changing a binding</h3>
 <p><strong>Preferences &gt; Keyboard</strong> lists every 3270 key with the keys that send it. Changes apply at once, to every open
 session window, and the keypad's tooltips and the <strong>Keys</strong> menu follow them.</p>
@@ -231,7 +237,7 @@ session window, and the keypad's tooltips and the <strong>Keys</strong> menu fol
 of Left or Right Ctrl is captured the same way: press and release the Ctrl key on its own. To stop without adding
 anything, press <strong>Escape</strong> twice, or click <strong>Cancel</strong> beside the slot. To add the Escape key itself, press Escape
 and then Enter.</li>
-<li><strong>Remove a key</strong>: click the <strong>×</strong> on its chip.</li>
+<li><strong>Remove a key</strong>: click the <strong>×</strong> on its chip, or Tab to it and press Enter.</li>
 <li><strong>Move a key</strong>: add it to another row. It leaves the row it was on, and the slot says where it came from.</li>
 <li><strong>Reset to defaults</strong> puts back the table above and clears every change you made.</li>
 </ul>
@@ -240,9 +246,10 @@ Find and Switch Session; any key with Cmd, or the Windows key; a letter, digit, 
 or with Shift, which would stop you typing it; and, on Windows and Linux, Ctrl+Alt with one of those, which is how
 some keyboards type characters such as @; and Caps Lock, Num Lock and Scroll Lock. Everything else can be bound,
 Tab included, and Escape by pressing Escape and then Enter.</p>
-<p>Backspace follows the profile's Backspace setting until you bind it here. The two Backspace rows are the two things
-it can do: erase the character to the left, or move the cursor left.</p>
-<p>The last rows, <strong>Type ¬</strong> and <strong>Type ¢</strong>, are the keys that type a character rather than send a 3270 key. You can move
+<p>Backspace follows the profile's Backspace setting until you bind it here. The two Backspace rows, <strong>Backspace,
+erasing</strong> and <strong>Backspace, moving left</strong>, are the two things it can do: erase the character to the left, or move the
+cursor left.</p>
+<p>The last rows, <strong>Type ¢</strong> and <strong>Type ¬</strong>, are the keys that type a character rather than send a 3270 key. You can move
 or remove their keys the same way, and a text binding added by hand to <code>keymap.json</code> gets a row of its own.</p>
 <h2 id="mouse-selection-and-clipboard">Mouse, selection and clipboard</h2>
 <ul>
@@ -261,7 +268,7 @@ repaints, and the highlight stays on your current match where it can.</p>
 <h2 id="saving-and-copying-the-screen">Saving and copying the screen</h2>
 <ul>
 <li><strong>File &gt; Save Screen As...</strong> saves the current screen as plain text, or as HTML in the colours you see. Choose the
-format in the save dialog, or end the file name with <code>.html</code>.</li>
+format in the save dialog, or end the file name with <code>.html</code> or <code>.htm</code>.</li>
 <li><strong>Edit &gt; Copy Screen as HTML</strong> puts the coloured screen on the clipboard as HTML source, for pasting into a web
 page, a wiki, or anything else that takes HTML markup.</li>
 </ul>
@@ -315,14 +322,14 @@ host only answers on its next turn, so if it has stalled, closing the dialog aga
 the transfer ends. The dialog remembers your last transfer for that window.</p>
 <h2 id="mvsmf-access-preview">mvsMF Access (preview)</h2>
 <p><strong>This is a feature preview.</strong> It works, but it is new and still being refined, and it has been tested against one
-build of mvsMF (1.1.0). It follows that build's behaviour; older builds are not supported (see
-<a href="#signing-in">Signing in</a>). Please report what you find
-(<a href="https://github.com/coffeemuse/LizTerm/issues/new/choose">Help &gt; Report an Issue...</a>).</p>
-<p><a href="https://github.com/mvslovers/mvsmf">mvsMF</a> is a z/OSMF-style REST server for MVS 3.8j. It ships with TK5 and can be
-installed on TK4- or a hand-rolled MVS 3.8. <strong>mvsMF Access</strong> uses it to list datasets and members, download and
-upload them, and create, rename and delete them, without typing anything on the 3270 screen. It is a second way to
-move files alongside <a href="#file-transfer-indfile">IND$FILE</a>, and it doesn't need the session to be logged on, or even
-connected.</p>
+build of mvsMF (1.1.0), on MVS/CE. Nothing about it is particular to that distribution. It follows that build's
+behaviour; older builds are not supported (see <a href="#signing-in">Signing in</a>). Please report what you find (<a href="https://github.com/coffeemuse/LizTerm/issues/new/choose">Help &gt; Report
+an Issue...</a>).</p>
+<p><a href="https://github.com/mvslovers/mvsmf">mvsMF</a> is a z/OSMF-style REST server for MVS 3.8j. It can be installed on any MVS
+3.8j running under Hercules, whichever distribution you use — some take more work than others — and a future TK5
+release is expected to ship with it. <strong>mvsMF Access</strong> uses it to list datasets and members, download and upload them,
+and create, rename and delete them, without typing anything on the 3270 screen. It is a second way to move files
+alongside <a href="#file-transfer-indfile">IND$FILE</a>, and it doesn't need the session to be logged on, or even connected.</p>
 <h3 id="setting-it-up">Setting it up</h3>
 <p>Open the profile in the editor and go to the <strong>mvsMF</strong> tab:</p>
 <ul>
@@ -354,17 +361,18 @@ only the exact certificate you pinned, and only until that certificate expires.<
 <h3 id="browsing">Browsing</h3>
 <p>Type a dataset pattern in <strong>Filter</strong>, such as <code>MVSCE02.**</code>, and choose <strong>List</strong>. The window has two panes, each
 with a toolbar of the actions that apply to what is selected in it, and a status line at the bottom.</p>
-<p>The <strong>Datasets</strong> pane on the left lists the matching datasets with their <strong>NAME</strong>, <strong>DSORG</strong>, <strong>RECFM</strong> and
-<strong>LRECL</strong>. Its toolbar has <strong>New…</strong>, <strong>Rename…</strong>, <strong>Delete…</strong> and <strong>Refresh</strong> (which lists the filter again and keeps
-the dataset you had chosen). VSAM and direct-access (<code>DA</code>) datasets are listed as <strong>(not supported)</strong>: nothing can be
-downloaded from or uploaded to them. The footer says how many datasets are listed and whether one is selected.</p>
+<p>The <strong>Datasets</strong> pane on the left lists the matching datasets with their <strong>NAME</strong>, <strong>DSORG</strong>, <strong>RECFM</strong> and <strong>LRECL</strong>.
+Its toolbar has <strong>New…</strong>, <strong>Rename…</strong>, <strong>Delete…</strong> and <strong>↻ Refresh</strong> (which lists the filter again and keeps the
+dataset you had chosen). Anything that is not a sequential or partitioned dataset — VSAM, direct-access (<code>DA</code>), or a
+dataset whose organisation the host does not report — is listed as <strong>(not supported)</strong>: nothing can be downloaded from
+or uploaded to it. The footer says how many datasets are listed and whether one is selected.</p>
 <p>Choosing a partitioned dataset (a PDS) lists its members in the pane on the right, titled with the dataset's name,
-where <strong>Filter members</strong> narrows the list as you type and you can select several members at once. In the filter,
-<code>*</code> stands for any run of characters and <code>%</code> for exactly one, so <code>IEF*</code> keeps the members starting with IEF. Its
-toolbar has <strong>Download…</strong>, <strong>Upload…</strong>, <strong>Rename…</strong> and <strong>Delete…</strong>, and a <strong>Transfer</strong> drop-down that shows the
-current mode (<strong>Text</strong> or <strong>Binary</strong>) and holds <strong>Trim trailing blanks</strong> and <strong>Verify after upload</strong>. The footer says
-how many members are shown and how many are selected. For a sequential dataset, <strong>Download…</strong> and <strong>Upload…</strong> act on
-the dataset itself.</p>
+where <strong>Filter members</strong> narrows the list as you type and you can select several members at once. What you type
+matches anywhere in the name, so <code>IEF</code> keeps every member with IEF in it; inside it, <code>*</code> stands for any run of
+characters and <code>%</code> for exactly one, so <code>IEF%%14</code> keeps IEFBR14. Its toolbar has <strong>⇣ Download…</strong>, <strong>⇡ Upload…</strong>,
+<strong>Rename…</strong> and <strong>Delete…</strong>, and a <strong>Transfer</strong> drop-down that shows the current mode (<strong>Text</strong> or <strong>Binary</strong>) and
+holds <strong>Trim trailing blanks</strong> and <strong>Verify after upload</strong>. The footer says how many members are shown and how many
+are selected. For a sequential dataset, <strong>Download…</strong> and <strong>Upload…</strong> act on the dataset itself.</p>
 <p>Each list also has a right-click menu with the same actions, and these keys: <strong>Enter</strong> or a double-click on a
 member downloads it, <strong>Delete</strong> or <strong>Backspace</strong> deletes the selected members (or, in the Datasets pane, the
 selected dataset), <strong>Cmd+R</strong> (macOS) or <strong>Ctrl+R</strong> refreshes, <strong>Cmd+N</strong> or <strong>Ctrl+N</strong> opens <strong>New dataset</strong>, and
@@ -384,8 +392,8 @@ undefined-length (<code>RECFM=U</code>) dataset, such as a load library.</p>
 with <code>.txt</code> in text mode. With several selected, it asks for a folder and downloads two at a time, showing each
 member's progress in its <strong>STATUS</strong> column. A file that already exists in that folder is not replaced without
 asking: choose <strong>Replace</strong> or <strong>Skip</strong>, and tick <strong>Apply to all</strong> to answer for the rest.</p>
-<p>A download is written to a hidden temporary file first and moved into place only when it is complete, so a
-cancelled or failed download never leaves a half-written file under the real name.</p>
+<p>A download is written to a temporary <code>.part</code> file beside it first — hidden on macOS and Linux — and moved into place
+only when it is complete, so a cancelled or failed download never leaves a half-written file under the real name.</p>
 <ul>
 <li>In text mode, <strong>Trim trailing blanks</strong> (on by default) removes the spaces that pad out each fixed-length record.
 Lines end the way your system expects: LF on macOS and Linux, CRLF on Windows.</li>
@@ -418,10 +426,10 @@ contents.</p>
 <p>mvsMF cannot undo a write. If an upload fails or is cancelled while a member is being written, the member may be
 left partly written, and its row says so.</p>
 <h3 id="deleting">Deleting</h3>
-<p><strong>Delete…</strong> in the Members pane's toolbar deletes the selected members, after a question that names them (<strong>Delete 3
-members</strong>). A deleted member cannot be recovered. If you cancel part-way, the window lists the members again and
-says how many were deleted. <strong>Delete…</strong> in the Datasets pane's toolbar deletes a whole dataset; see
-<a href="#managing-datasets">Managing datasets</a>.</p>
+<p><strong>Delete…</strong> in the Members pane's toolbar deletes the selected members, after a question that names up to five of
+them, with <strong>Delete 3 members</strong> as the button. A deleted member cannot be recovered. If you cancel part-way, the
+window lists the members again and says how many were deleted. <strong>Delete…</strong> in the Datasets pane's toolbar deletes a
+whole dataset; see <a href="#managing-datasets">Managing datasets</a>.</p>
 <h3 id="managing-datasets">Managing datasets</h3>
 <p>The <strong>Datasets</strong> pane's toolbar creates, renames and deletes datasets.</p>
 <p><strong>New…</strong> opens the <strong>New dataset</strong> window. With a dataset selected, it starts from the dataset's type, RECFM, LRECL
@@ -431,9 +439,9 @@ for a partitioned dataset; the window keeps the space you last used while it is 
 is marked <strong>✗</strong> under its box until you fix it. <strong>Cancel</strong> or <strong>Escape</strong> closes the window without creating anything;
 while the create runs, <strong>Escape</strong> or the close box cancels it and the window stays.</p>
 <p>mvsMF cannot say why an allocation failed: a name that already exists, no room on the volume and a missing
-authorization all come back as the same <strong>The host could not allocate it</strong> message, which stays in the window so
-you can change the values and try again. A record layout the host rejects (a BLKSIZE that is not a multiple of a
-fixed LRECL, say) fails the same way.</p>
+authorization all come back as the same message: <strong>The host could not allocate it: it may already exist, there may be
+no space, or you may not be authorized.</strong> It stays in the window so you can change the values and try again. A record
+layout the host rejects (a BLKSIZE that is not a multiple of a fixed LRECL, say) fails the same way.</p>
 <p><strong>Rename…</strong> in the Datasets pane's toolbar renames the selected dataset, and <strong>Rename…</strong> in the Members pane's
 toolbar renames the selected member. Both ask for the new name in the strip at the bottom of the window, where
 <strong>Rename</strong> is enabled once the name is different and acceptable, and <strong>Enter</strong> confirms. A renamed dataset your
@@ -444,9 +452,9 @@ partitioned dataset, says how many members it has. This cannot be undone.</p>
 <h3 id="when-something-goes-wrong">When something goes wrong</h3>
 <p>A problem with one member shows in its row or in the status line at the bottom of the window. A problem with the
 connection itself (the host can't be reached, the sign-in was refused, or the certificate isn't trusted) shows as a
-red banner with <strong>Retry</strong>. Every status line starts with a mark as well as words (<strong>✓</strong>, <strong>✗</strong>, <strong>⚠</strong>, <strong>⟳</strong> or
-<strong>–</strong>), so its meaning never depends on colour.
-## Which build you are running</p>
+red banner with <strong>Retry</strong>. A status line that reports an outcome starts with a mark as well as words (<strong>✓</strong>, <strong>✗</strong>,
+<strong>⚠</strong>, <strong>⟳</strong> or <strong>–</strong>), so its meaning never depends on colour; a plain count such as <strong>3 members</strong> carries no mark.</p>
+<h2 id="which-build-you-are-running">Which build you are running</h2>
 <p><strong>Help &gt; About LizTerm...</strong> names the version, and so does the splash screen. A build that is not a release — one
 made from source, or from a pull request — shows it as <code>0.6.1-DEV (a1b2c3d)</code>, where <code>a1b2c3d</code> is the commit it was
 built from; a build made outside a git checkout, such as one from a downloaded source archive, says <code>0.6.1-DEV</code> with
@@ -469,6 +477,20 @@ you delete them.</p>
 <h2 id="menus">Menus</h2>
 <p>On macOS, LizTerm uses the system menu bar, and About and Preferences are in the LizTerm application menu. On
 Windows and Linux, the menu is drawn inside each window.</p>
+<p>The menu bar has six menus:</p>
+<table>
+<thead>
+<tr><th>Menu</th><th>What it holds</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>File</strong></td><td><strong>New Session...</strong>, which brings the Sessions list back up without closing this window, so you can connect another profile; <strong>Connect</strong> and <strong>Disconnect</strong>; <strong>IND$FILE Transfer...</strong> and <strong>mvsMF Access...</strong>, the latter appearing once the profile has an mvsMF URL; <strong>Save Screen As...</strong> and <strong>Save as Profile...</strong>; and <strong>Close</strong>.</td></tr>
+<tr><td><strong>Edit</strong></td><td><strong>Copy</strong>, <strong>Paste</strong>, <strong>Select All</strong>, <strong>Copy Screen as HTML</strong> and <strong>Find...</strong>, and <strong>Preferences...</strong> wherever the menu is inside the window.</td></tr>
+<tr><td><strong>View</strong></td><td><strong>Crosshair</strong> and <strong>Keypad</strong>, covered under <a href="#the-session-window">The session window</a>.</td></tr>
+<tr><td><strong>Keys</strong></td><td>The 3270 keys the keyboard might not reach; see <a href="#keyboard">Keyboard</a>.</td></tr>
+<tr><td><strong>Window</strong></td><td>The open sessions, and the items described below.</td></tr>
+<tr><td><strong>Help</strong></td><td>The project's pages, the wire log and the update check, listed below.</td></tr>
+</tbody>
+</table>
 <p>The Help menu carries the project's own pages, ahead of Wire Log (see <a href="#wire-logs">Wire logs</a>):</p>
 <ul>
 <li><strong>Help &gt; User Guide</strong> opens this guide in your browser, from a bundled copy, so it works with no network

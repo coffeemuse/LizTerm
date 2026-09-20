@@ -1,4 +1,4 @@
-<img src="src/LizTerm.App/Assets/Icons/lizterm-256.png" alt="" width="128">
+![LizTerm](src/LizTerm.App/Assets/Icons/lizterm-256.png)
 
 # LizTerm
 
@@ -19,7 +19,7 @@ LizTerm is the modern client around it.
 LizTerm is named after Liz, a beloved cat who passed away in December 2021. She liked to sit on my desk beside the
 keyboard while I worked. She was my mainframe cat.
 
-<img src="src/LizTerm.App/Assets/Liz/liz.jpg" alt="Liz, a white and ginger cat, sitting at a keyboard in front of a monitor showing the MVS/TSO logon screen. The caption reads: Dedicated to Liz, “My Mainframe Cat”, 2007–2021." width="480">
+![Liz, a white and ginger cat, sitting at a keyboard in front of a monitor showing the MVS/TSO logon screen. The caption reads: Dedicated to Liz, “My Mainframe Cat”, 2007–2021.](src/LizTerm.App/Assets/Liz/liz.jpg)
 
 Her photo is in the app too, under **About LizTerm**.
 
@@ -29,23 +29,27 @@ Her photo is in the app too, under **About LizTerm**.
   self-contained.
 - **Session profiles** for your hosts, or **Quick Connect** to try a host without saving one.
 - **TLS**, with certificate verification against your system's trusted roots, and **certificate pinning** for the
-  self-signed certificates most hobbyist hosts use.
+  self-signed certificates most hobbyist hosts use (pinning is not available on the Windows build — see
+  [Known limitations](docs/user-guide.md#known-limitations)).
 - **IND$FILE file transfer** to and from TSO (at READY or inside ISPF), VM/CMS and CICS, with progress and cancel.
-- **mvsMF Access, a dataset browser over mvsMF** (feature preview) for MVS 3.8j hosts running mvsMF 1.1.0 or later:
-  sign in once, then create, rename, list, download, upload and delete datasets and members without touching the
-  3270 screen.
-- **Models 2 to 5**, custom oversize screens, extended colour, and 41 host code pages.
-- **A Vista TN3270-style keyboard**, rectangular selection, and margin-aware paste.
+- **mvsMF Access**, dataset and member access over **mvsMF** (feature preview), for any MVS 3.8j host running
+  mvsMF 1.1.0 or later: sign in once, then create, rename, list, download, upload and delete datasets and members
+  without touching the 3270 screen.
+- **Models 2 to 5** in **colour (3279)** or **mono (3278)** green phosphor, custom oversize screens, extended
+  colour, and 41 host code pages.
+- **A Vista TN3270-style keyboard you can remap** key by key under Preferences > Keyboard, rectangular selection,
+  and margin-aware paste.
 - **An on-screen keypad** for PF1–PF24, PA1–PA3, Attn, Clear, Reset and the rest, docked to the bottom or the
-  right of the window.
+  right of the window, and the PF1–PF24 rows can be hidden when your keyboard's F-keys already cover them.
 - **Find on screen**, a **crosshair** cursor, and **screen capture** to text or HTML.
 - **A session switcher** (Cmd/Ctrl+K), a **Window** menu and, on macOS, a Dock menu for finding the right session
   among many, with **Keep on Top** for a console you want in view.
-- **A bell** you can see, hear, or both.
+- **A bell** you can see, hear, or both (the sound is macOS and Windows only).
 - **Keep-alive** and **automatic reconnect**.
 - **Update notices** when a newer release is out, from one request to GitHub at startup that you can turn off.
-- **Preferences** for the crosshair, cursor blink, the bell, the keypad, the splash screen and the update check,
-  and — on macOS — whether the menu is the system menu bar, the one inside the window, or both.
+- **Preferences** for the crosshair, blinking text, the bell, the keypad, the splash screen, the update check, the
+  close confirmation and your keyboard bindings, and — on macOS — whether the menu is the system menu bar, the one
+  inside the window, or both.
 - The **IBM 3270 font**, on the screen and in the status bar.
 
 ## Where LizTerm is right now
@@ -89,7 +93,7 @@ time, macOS may ask you to confirm that you want to open something downloaded fr
 
 ## Getting started
 
-1. Open LizTerm. After the splash screen you'll see the **Sessions** list.
+1. Open LizTerm. After the splash screen — which you can turn off later — you'll see the **Sessions** list.
 2. Choose **New...**, give the profile a name, and enter the host and port. Tick **Use TLS** if the host needs it,
    then **Save**.
 3. Select the profile and choose **Connect**.
