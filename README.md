@@ -134,7 +134,7 @@ these notices in full under **About LizTerm** — in a session window's Help men
 
 ## Documentation
 
-- [User guide](docs/user-guide.md): keyboard, profiles, TLS, file transfer, the mvsMF Browser, screen capture, wire
+- [User guide](docs/user-guide.md): keyboard, profiles, TLS, file transfer, mvsMF Access, screen capture, wire
   logs.
 - [Changelog](CHANGELOG.md): what changed in each release.
 - [Development](docs/development.md): building from source, tests, conventions.

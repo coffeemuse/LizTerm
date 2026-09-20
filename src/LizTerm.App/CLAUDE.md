@@ -825,7 +825,7 @@ that answers with the pair the constructor captured.
   `HostType.IsTso()`), and `CursorHint`, bound to the `CursorHintText` line under the form, says where the cursor
   must be for the chosen host type. `LocalFileNames` names an ISPF receive as it does a TSO one.
 
-## mvsMF Browser
+## mvsMF Access
 
 - `HostFileServiceFactory` also reads a typed URL for the profile editor (`TryNormalizeUrl`) and builds the
   editor's one-shot `HostFileTester`, which **probes `/info` before it asks for anything**: a host that answers
@@ -838,10 +838,10 @@ that answers with the pair the constructor captured.
   session (`Pin`: the profile's REST pin, or one accepted since). A saved profile's remembered pin is written back
   through `ProfileStore.Update`, like the 3270 pin; an ad hoc profile has nowhere to keep one, so it is not offered
   Remember. A save that fails (`IOException`, `UnauthorizedAccessException`, `InvalidDataException`) keeps the pin
-  for the session and raises `HostFileAccess.PinSaveFailed`; the browser shows it as the `⚠` status line once the
-  operation ends, and unsubscribes when disposed. The session window closes its browser, then signs out, when it
-  closes: `HostFileAccess.SignOutAsync` builds a service for the URL (over a `NullPrompt`, which throws, because the
-  token is passed in and the prompt can never be reached) and ends the session.
+  for the session and raises `HostFileAccess.PinSaveFailed`; the window shows it as the `⚠` status line once the
+  operation ends, and unsubscribes when disposed. The session window closes its mvsMF Access window, then signs
+  out, when it closes: `HostFileAccess.SignOutAsync` builds a service for the URL (over a `NullPrompt`, which
+  throws, because the token is passed in and the prompt can never be reached) and ends the session.
 - **That sign-out splits across two threads on purpose.** `SignOutAsync` takes the token out of the holder
   *synchronously*, on the caller's thread, so `IsSignedIn` is false the moment the window closes; then it hands the
   DELETE to `Task.Run`, and `OnClosed` fire-and-forgets the result. The five-second cap (`SignInHolder.SignOutCap`)
@@ -883,16 +883,16 @@ that answers with the pair the constructor captured.
   `HostFileConnection` while the sign-in prompt is still closed; after Connect Anyway the operation runs again on a
   service built for that certificate and signs in once. Nothing holds the password across the certificate prompt,
   which is the constraint that made the earlier design cost two prompts.
-- **File > mvsMF Browser...** (`mvsMF _Browser...`, no shortcut: the menu rule) is hidden until `AttachHostFiles`
+- **File > mvsMF Access...** (`mvsMF _Access...`, no shortcut: the menu rule) is hidden until `AttachHostFiles`
   shows both the classic item and the held native item. It does not need the 3270 connection. A profile URL that
-  cannot be used goes to the session's error line rather than opening a browser.
-- The browser is the app's first owned window that does not block its owner: `ModalDialogs.ShowAbove` shows it
+  cannot be used goes to the session's error line rather than opening mvsMF Access.
+- mvsMF Access is the app's first owned window that does not block its owner: `ModalDialogs.ShowAbove` shows it
   owned (it closes with the session window) and makes it follow the owner's Keep on Top, subscribing only after
   `Show` returns so a failed show leaves the owner no handler. One per session window
   (`SessionWindow.MvsmfBrowser`); the menu item fronts an open one. It is not in the Window menu (spec §3.3).
-- Each browser window gets its own `HostFileConnection` (`HostFileAccess.Connect`), whose prompts open over the
-  browser. An operation refused for an untrusted certificate asks once and, on Connect Anyway, runs once more on a
-  service built for that certificate. The pin is set on the `HostFileAccess`, so it holds for the session (a
+- Each mvsMF Access window gets its own `HostFileConnection` (`HostFileAccess.Connect`), whose prompts open over
+  the window. An operation refused for an untrusted certificate asks once and, on Connect Anyway, runs once more
+  on a service built for that certificate. The pin is set on the `HostFileAccess`, so it holds for the session (a
   connection whose service was built for another pin rebuilds it before the next operation), and Remember also
   stores it. Refusals in flight together share one prompt. A decline answers the refusals already in flight with
   the declined service and then replaces the service, so a later operation is asked again. A refusal of the
@@ -902,7 +902,7 @@ that answers with the pair the constructor captured.
 - `MvsmfBrowserViewModel` runs one operation at a time (`RunExclusiveAsync`, which ignores a second); only a
   download batch runs two transfers at once (`ParallelDownloads`). Results are set after `await` on the UI
   context; progress goes through `dispatch`, and a closed `RowProgress` drops late reports. Questions are an inline
-  `ConfirmationRequest` strip, awaited by the operation that asked; a disposed browser shows none and answers
+  `ConfirmationRequest` strip, awaited by the operation that asked; a disposed window shows none and answers
   Cancel. A question with a text box (`ConfirmationRequest` with `input` and an `inputRule`) is how a rename asks;
   its primary is allowed only for an acceptable, changed value, and `Primary()` checks that itself because the
   window's Enter goes through `Execute`.
@@ -930,15 +930,15 @@ that answers with the pair the constructor captured.
   before its contents are replaced that names the check's warnings.
 - **Delete** asks once, naming up to five members. A delete cancelled part-way refreshes the list and says how
   many members went, because a delete cannot be undone and the interrupted request may have deleted its member.
-- **Manage** (`Manage.cs`): Rename… and Delete… under the dataset list act on any listed dataset whose name the
-  rules accept, opened or not; Rename… in the bottom bar needs exactly one selected member. A member rename
-  reloads the list and selects the new name through `SelectMemberRequested`, which the window applies to its list
-  box (the list box owns the selection, so the view model never sets it directly); a `NotFound` means the member
-  went meanwhile, so the list is reloaded before the status line. Once the host has renamed, the old member row
-  (`RemoveDeletedMembers`) or the old dataset row (`DropDataset`) goes at once, before any listing, so a listing
-  that fails leaves nothing on screen that names what the host no longer has; a `NotFound` on a dataset rename or
-  delete drops the row the same way, with the host's sentence. A dataset rename or a create lists the filter
-  again and chooses the new name if it shows (`ShowAfterChangeAsync`); `SelectAsync` exists because setting
+- **Manage** (`Manage.cs`): Rename… and Delete… in the Datasets pane's toolbar act on any listed dataset whose name
+  the rules accept, opened or not; Rename… in the Members pane's toolbar needs exactly one selected member. A
+  member rename reloads the list and selects the new name through `SelectMemberRequested`, which the window
+  applies to its list box (the list box owns the selection, so the view model never sets it directly); a
+  `NotFound` means the member went meanwhile, so the list is reloaded before the status line. Once the host has
+  renamed, the old member row (`RemoveDeletedMembers`) or the old dataset row (`DropDataset`) goes at once, before
+  any listing, so a listing that fails leaves nothing on screen that names what the host no longer has; a
+  `NotFound` on a dataset rename or delete drops the row the same way, with the host's sentence. A dataset rename
+  or a create lists the filter again and chooses the new name if it shows (`ShowAfterChangeAsync`); `SelectAsync` exists because setting
   `SelectedDataset` inside a running operation starts no member load of its own (`RunExclusiveAsync` ignores a
   second operation). `RunThenListAsync` swaps the retry to the listing once the host has done the first half of a
   rename or a create, so Retry after a failed listing never repeats it: a member rename pairs it with
@@ -957,21 +957,41 @@ that answers with the pair the constructor captured.
   Retry goes with the form; closed without an operation, the keyboard goes to the filter box, since the form's
   boxes are hidden. The form builds its allocation and problem list once per field change (`Check`), since every
   problem line and `CanCreate` read them. While the form is open every other operation is off (`!IsCreating` in
-  each rule) and the right pane shows the form in place of the member list, the review, the hint and the
-  sequential note.
+  each rule); the Members pane stays as it was, since `ShowMemberPane`, `ShowChooseHint` and `ShowSequentialNote`
+  no longer read `IsCreating`. The form is `NewDatasetWindow`, an owned modal dialog over the mvsMF Access window,
+  bound to the same view model: the window opens it when `IsCreating` turns on (`ShowNewDatasetAsync`, through
+  `ShowDialogAbove`) and the dialog closes itself when `IsCreating` turns off; its close box is `CloseFormCommand`,
+  executed from a posted callback because the notification would otherwise close a window still inside `Closing`.
+  A refused create leaves `IsCreating` on and the dialog open with `Form.Message`.
 - **ETag memory** (`HostFileAccess.Etags`, `EtagMemory`): a download remembers the stamp once the file is in
   place; a write remembers the write's stamp; a member delete forgets, a dataset delete forgets everything under
   it, a rename moves. An upload sends the stamp as `ifMatch` only for a member it is replacing; a `Conflict` is
   the question `NAME changed on the host since you downloaded it.` with Replace anyway / Skip (Cancel stops the
   batch; a sequential dataset offers Replace anyway or Cancel), and Replace anyway sends again with no stamp. A
   member never downloaded or written here sends nothing and gets the old behaviour.
+- **The panes** (pane-pattern spec §4): `MvsmfBrowserWindow` is two `Controls/BrowserPane`s, a `UserControl` with
+  six slots (`Title`, `HeaderContent`, `Toolbar`, `Body`, `FooterText`, `FooterAction`) that owns the frame and the
+  `pane-verb` button style and binds only to its own properties; the window's controls in the slots bind to the
+  view model as usual. A pane's toolbar, its list's `ContextMenu`, the window's keys and a double-click all bind
+  the same command instance (`The_context_menus_bind_the_same_commands_as_the_toolbars` pins it), so a verb has one
+  code path. The strings are the view model's: `MembersTitle` (the dataset's name, the review's header, or
+  "Members"), `DatasetsFooter` and `MembersFooter` (count, a plus while the host has more, "n of m" under a local
+  filter, "matching" under a host one, and the selection), `TransferModeLabel` for the `DropDownButton` whose
+  `MenuFlyout` holds the mode radios and the two upload check items. `RefreshCommand` lists the filter again and
+  keeps the chosen dataset through `SelectAsync`, or says it is no longer listed. Choosing Binary on a
+  fixed-length dataset puts `PaddingNote` on the status line (`OnModeChanged`); a dataset's own choice of mode is
+  followed by its member listing, which sets the status line itself. The window's key shortcuts use the platform's
+  command modifier (`RefreshGesture`, `NewDatasetGesture`), as the session window's Find does. A USS browser is two
+  more panes in the same frame, on a `TabControl` that arrives with it (spec §11). The window itself sets
+  `ClosingBehavior = WindowClosingBehavior.OwnerWindowOnly`, so the owned New dataset dialog's `Closing` can never
+  veto the window's own close.
 - The window pushes the member selection through `SetSelectedMembers`, and only rows the member filter still
   shows, so a transfer or a delete never acts on a member the user cannot see. In the member list, Enter downloads,
   and Delete or Backspace (the key Apple labels "delete") deletes. A question moves focus to its
   Cancel button, posted at `Loaded` priority because a control that is still hidden refuses focus. Escape cancels
-  a question, else the running operation, else an open upload review or the New dataset form, else closes the
-  window. A question with a text box takes the focus to the box with the old name selected, and Enter in it is the
-  primary.
+  a question, else the running operation, else an open upload review, else closes the window (the New dataset
+  dialog takes Escape itself while it is open). A question with a text box takes the focus to the box with the old
+  name selected, and Enter in it is the primary.
 - **Focus survives an operation.** In Avalonia 12.1.2, disabling a list whose row has the focus drops the focus,
   and enabling it again does not give it back, so arrowing onto a PDS (a member load) or pressing Enter or Delete
   used to strand the keyboard. When `IsBusy` turns on (its notification comes before `IsIdle` and
@@ -984,7 +1004,7 @@ that answers with the pair the constructor captured.
   visible, enabled control, since the user may have moved it on.
 - The window never refuses to close: closing cancels and disposes the view model, which disposes the connection.
 - Every status that reports an outcome, a warning or progress starts with a mark and words (`✓ ✗ ⚠ ⟳ –`), per
-  the colour rule; plain counts (the dataset count, the member header) carry none.
+  the colour rule; plain counts (the Datasets and Members panes' footers) carry none.
 - The profile editor's mvsMF tab has its own result line (`MvsmfTestResult`), never `ValidationMessage`. A change
   to the URL or userid, or Forget on the REST pin, drops the result, and a Test still running then drops its own
   when it finishes (`_testGeneration`). The REST pin follows the URL as the 3270 pin follows host and port,

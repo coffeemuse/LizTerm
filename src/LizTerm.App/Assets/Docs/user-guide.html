@@ -48,7 +48,7 @@ since this release — <a href="https://github.com/coffeemuse/LizTerm/blob/main/
 <li><a href="#saving-and-copying-the-screen">Saving and copying the screen</a></li>
 <li><a href="#tls-and-certificates">TLS and certificates</a></li>
 <li><a href="#file-transfer-indfile">File transfer (IND$FILE)</a></li>
-<li><a href="#mvsmf-browser-preview">mvsMF Browser (preview)</a></li>
+<li><a href="#mvsmf-access-preview">mvsMF Access (preview)</a></li>
 <li><a href="#wire-logs">Wire logs</a></li>
 <li><a href="#menus">Menus</a></li>
 <li><a href="#where-lizterm-keeps-its-files">Where LizTerm keeps its files</a></li>
@@ -80,7 +80,7 @@ first. <strong>FAVORITE</strong> is fixed: it can't be renamed, recoloured or de
 <h3 id="profile-settings">Profile settings</h3>
 <p>The editor puts its settings on four tabs: <strong>Connection</strong> (name, host, port, TLS, keep-alive, reconnect),
 <strong>Terminal</strong> (model, screen size, code page, LU name, keyboard), <strong>Organize</strong> (FAVORITE, tags, note) and
-<strong>mvsMF</strong> (the address and userid for the mvsMF Browser, a feature preview). If
+<strong>mvsMF</strong> (the address and userid for mvsMF Access, a feature preview). If
 <strong>Save</strong> can't accept something, the editor shows the tab it's on, outlines the setting, and says what to fix beside
 the buttons.</p>
 <table>
@@ -311,34 +311,35 @@ try a smaller buffer size.</li>
 <p>The dialog shows progress while the transfer runs. <strong>Cancel</strong>, or closing the dialog, asks the host to stop. The
 host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
 the transfer ends. The dialog remembers your last transfer for that window.</p>
-<h2 id="mvsmf-browser-preview">mvsMF Browser (preview)</h2>
+<h2 id="mvsmf-access-preview">mvsMF Access (preview)</h2>
 <p><strong>This is a feature preview.</strong> It works, but it is new and still being refined, and it has been tested against one
 build of mvsMF (1.1.0). It follows that build's behaviour; older builds are not supported (see
 <a href="#signing-in">Signing in</a>). Please report what you find
 (<a href="https://github.com/coffeemuse/LizTerm/issues/new/choose">Help &gt; Report an Issue...</a>).</p>
-<p><a href="https://github.com/mvslovers/mvsmf">mvsMF</a> is a z/OSMF-style REST server for MVS 3.8j. The <strong>mvsMF Browser</strong> uses
-it to list datasets and members, download and upload them, and delete members, without typing anything on the
-3270 screen. It is a second way to move files alongside <a href="#file-transfer-indfile">IND$FILE</a>, and it doesn't need the
-session to be logged on, or even connected.</p>
+<p><a href="https://github.com/mvslovers/mvsmf">mvsMF</a> is a z/OSMF-style REST server for MVS 3.8j. It ships with TK5 and can be
+installed on TK4- or a hand-rolled MVS 3.8. <strong>mvsMF Access</strong> uses it to list datasets and members, download and
+upload them, and create, rename and delete them, without typing anything on the 3270 screen. It is a second way to
+move files alongside <a href="#file-transfer-indfile">IND$FILE</a>, and it doesn't need the session to be logged on, or even
+connected.</p>
 <h3 id="setting-it-up">Setting it up</h3>
 <p>Open the profile in the editor and go to the <strong>mvsMF</strong> tab:</p>
 <ul>
 <li><strong>URL</strong> is the address of the mvsMF server, for example <code>http://mvs.example:8080</code>. When the address has no path,
 LizTerm adds <code>/zosmf</code>. Only <code>http://</code> and <code>https://</code> addresses are accepted.</li>
-<li><strong>Userid</strong> is optional. It fills in the sign-in window, and the browser starts by listing <code>USERID.**</code>.</li>
+<li><strong>Userid</strong> is optional. It fills in the sign-in window, and the window starts by listing <code>USERID.**</code>.</li>
 <li><strong>Test</strong> checks the server is reachable, then signs in and asks it what it is, showing the answer (for example
 <strong>✓ Connected: mvsMF 1.1.0 on MVS 3.8j</strong>) or what went wrong. If the URL cannot be reached, it says so without
 asking for a password. A sign-in made for <strong>Test</strong> is ended right after.</li>
 </ul>
-<p>Once a profile has a URL, its session window has <strong>File &gt; mvsMF Browser...</strong>. The item has no keyboard shortcut, so
-it never takes a key the host needs. Choosing it again brings the open browser back to the front: each session
-window has one browser, which closes when the session window does. A change to the URL takes effect the next time
+<p>Once a profile has a URL, its session window has <strong>File &gt; mvsMF Access...</strong>. The item has no keyboard shortcut, so
+it never takes a key the host needs. Choosing it again brings the open window back to the front: each session
+window has one, which closes when the session window does. A change to the URL takes effect the next time
 you open the session.</p>
 <h3 id="signing-in">Signing in</h3>
 <p><strong>LizTerm needs mvsMF 1.1.0 or later.</strong> Older builds have no sign-in service, and LizTerm says so rather than
 connecting.</p>
-<p>The first time the browser reaches the host, it asks for your userid and password. LizTerm uses them once to sign
-in, then keeps only a session token in memory; the password is not stored. Every browser operation in that session
+<p>The first time mvsMF Access reaches the host, it asks for your userid and password. LizTerm uses them once to sign
+in, then keeps only a session token in memory; the password is not stored. Every operation in that session
 uses the token, so you sign in once. mvsMF forgets an idle session after about 30 minutes, and then LizTerm asks
 you to sign in again. Closing the session window signs you out. LizTerm cannot guarantee the password is wiped from
 memory, because .NET gives no way to erase a string.</p>
@@ -349,25 +350,33 @@ untrusted one opens the <strong>Certificate not verified</strong> window, and <s
 The mvsMF pin is kept apart from the 3270 one, and <strong>Forget</strong> on the <strong>mvsMF</strong> tab removes it. An mvsMF pin trusts
 only the exact certificate you pinned, and only until that certificate expires.</p>
 <h3 id="browsing">Browsing</h3>
-<p>Type a dataset pattern in <strong>Filter</strong>, such as <code>MVSCE02.**</code>, and choose <strong>List</strong>. The left pane lists the matching
-datasets with their <strong>NAME</strong>, <strong>DSORG</strong>, <strong>RECFM</strong> and <strong>LRECL</strong>. VSAM and direct-access (<code>DA</code>) datasets are listed
-as <strong>(not supported)</strong>: nothing can be downloaded from or uploaded to them.</p>
-<p>Choosing a partitioned dataset (a PDS) lists its members on the right, where <strong>Filter members</strong> narrows the list as
-you type and you can select several members at once. In the filter, <code>*</code> stands for any run of characters and <code>%</code>
-for exactly one, so <code>IEF*</code> keeps the members starting with IEF. For a sequential dataset, <strong>Download…</strong> and
-<strong>Upload…</strong> act on the dataset itself.</p>
-<p>Long lists arrive 500 entries at a time. When the host has more, the status line says so (<strong>500 datasets shown,
-more on the host</strong>), the member header shows a plus (<strong>500+ members</strong>), and a <strong>Load more</strong> button appears under
-the list; each press adds the next 500. On such a library the host does the narrowing: what you type in <strong>Filter
-members</strong> is sent to it, after a short pause, and the members shown are every match, again 500 at a time; the
-header then counts matches (<strong>40 matching</strong>) rather than members. Download, Upload and Delete act on the members
-that are shown, but an upload always checks the whole library before replacing a member, whether or not its page
-is loaded.</p>
-<p><strong>Mode</strong> chooses <strong>Text</strong>, which converts between EBCDIC and your computer's characters, or <strong>Binary</strong>, which copies
-bytes unchanged. <strong>Binary</strong> is chosen for you on an undefined-length (<code>RECFM=U</code>) dataset, such as a load library.</p>
-<p>The keyboard reaches everything. In the member list, <strong>Enter</strong> downloads the selection, and <strong>Delete</strong> or
-<strong>Backspace</strong> deletes it. <strong>Escape</strong> answers a question with Cancel, else cancels what is running, else closes an
-upload review or the New dataset form, else closes the window.</p>
+<p>Type a dataset pattern in <strong>Filter</strong>, such as <code>MVSCE02.**</code>, and choose <strong>List</strong>. The window has two panes, each
+with a toolbar of the actions that apply to what is selected in it, and a status line at the bottom.</p>
+<p>The <strong>Datasets</strong> pane on the left lists the matching datasets with their <strong>NAME</strong>, <strong>DSORG</strong>, <strong>RECFM</strong> and
+<strong>LRECL</strong>. Its toolbar has <strong>New…</strong>, <strong>Rename…</strong>, <strong>Delete…</strong> and <strong>Refresh</strong> (which lists the filter again and keeps
+the dataset you had chosen). VSAM and direct-access (<code>DA</code>) datasets are listed as <strong>(not supported)</strong>: nothing can be
+downloaded from or uploaded to them. The footer says how many datasets are listed and whether one is selected.</p>
+<p>Choosing a partitioned dataset (a PDS) lists its members in the pane on the right, titled with the dataset's name,
+where <strong>Filter members</strong> narrows the list as you type and you can select several members at once. In the filter,
+<code>*</code> stands for any run of characters and <code>%</code> for exactly one, so <code>IEF*</code> keeps the members starting with IEF. Its
+toolbar has <strong>Download…</strong>, <strong>Upload…</strong>, <strong>Rename…</strong> and <strong>Delete…</strong>, and a <strong>Transfer</strong> drop-down that shows the
+current mode (<strong>Text</strong> or <strong>Binary</strong>) and holds <strong>Trim trailing blanks</strong> and <strong>Verify after upload</strong>. The footer says
+how many members are shown and how many are selected. For a sequential dataset, <strong>Download…</strong> and <strong>Upload…</strong> act on
+the dataset itself.</p>
+<p>Each list also has a right-click menu with the same actions, and these keys: <strong>Enter</strong> or a double-click on a
+member downloads it, <strong>Delete</strong> or <strong>Backspace</strong> deletes the selected members (or, in the Datasets pane, the
+selected dataset), <strong>Cmd+R</strong> (macOS) or <strong>Ctrl+R</strong> refreshes, <strong>Cmd+N</strong> or <strong>Ctrl+N</strong> opens <strong>New dataset</strong>, and
+<strong>Escape</strong> cancels a question, then a running operation, then an open upload review, then closes the window.</p>
+<p>Long lists arrive 500 entries at a time. When the host has more datasets than shown, the status line says so
+(<strong>500 datasets shown, more on the host</strong>) and the Datasets pane's footer offers <strong>Load more</strong>; the Members pane's
+footer shows a plus (<strong>500+ members</strong>) and offers its own <strong>Load more</strong>. Each press adds the next 500. On such a
+library the host does the narrowing: what you type in <strong>Filter members</strong> is sent to it, after a short pause, and
+the members shown are every match, again 500 at a time; the footer then counts matches (<strong>40 matching</strong>) rather
+than members. Download, Upload and Delete act on the members that are shown, but an upload always checks the whole
+library before replacing a member, whether or not its page is loaded.</p>
+<p>The <strong>Transfer</strong> drop-down's <strong>Text</strong> and <strong>Binary</strong> radios choose how a transfer moves bytes: <strong>Text</strong> converts
+between EBCDIC and your computer's characters, <strong>Binary</strong> copies them unchanged. <strong>Binary</strong> is chosen for you on an
+undefined-length (<code>RECFM=U</code>) dataset, such as a load library.</p>
 <h3 id="downloading">Downloading</h3>
 <p>With one member (or a sequential dataset) selected, <strong>Download…</strong> asks where to save it, suggesting the member name
 with <code>.txt</code> in text mode. With several selected, it asks for a folder and downloads two at a time, showing each
@@ -395,39 +404,39 @@ would cut a long line short and still write the rest, so LizTerm refuses the fil
 host as a tab character.</li>
 <li><strong>Empty lines</strong> become blank records on the host.</li>
 </ul>
-<p>Choose <strong>Upload</strong> to start. Before replacing a member that already exists, the browser asks <strong>Replace</strong> or
+<p>Choose <strong>Upload</strong> to start. Before replacing a member that already exists, the window asks <strong>Replace</strong> or
 <strong>Skip</strong>. With <strong>Verify after upload</strong> on (the default), each text member is read back and compared with what was
 sent. A member that differs is marked <strong>⚠ Uploaded, but the host copy differs at line N</strong>.</p>
-<p>If you downloaded a member in this window and it has changed on the host since, the browser says so before
+<p>If you downloaded a member in this window and it has changed on the host since, the window says so before
 replacing it: <strong>Replace anyway</strong> writes your copy over the change, <strong>Skip</strong> leaves the member alone. The check
-covers only members downloaded or uploaded through this browser window; anything else is replaced as before, and
+covers only members downloaded or uploaded through this window; anything else is replaced as before, and
 a sequential dataset is checked the same way, with <strong>Cancel</strong> in place of <strong>Skip</strong>.</p>
-<p>A sequential dataset takes one file at a time. After the checks, the browser asks before replacing the dataset's
+<p>A sequential dataset takes one file at a time. After the checks, the window asks before replacing the dataset's
 contents.</p>
 <p>mvsMF cannot undo a write. If an upload fails or is cancelled while a member is being written, the member may be
 left partly written, and its row says so.</p>
 <h3 id="deleting">Deleting</h3>
-<p><strong>Delete…</strong> in the bottom bar deletes the selected members, after a question that names them (<strong>Delete 3
-members</strong>). A deleted member cannot be recovered. If you cancel part-way, the browser lists the members again and
-says how many were deleted. <strong>Delete…</strong> under the dataset list deletes a whole dataset; see
+<p><strong>Delete…</strong> in the Members pane's toolbar deletes the selected members, after a question that names them (<strong>Delete 3
+members</strong>). A deleted member cannot be recovered. If you cancel part-way, the window lists the members again and
+says how many were deleted. <strong>Delete…</strong> in the Datasets pane's toolbar deletes a whole dataset; see
 <a href="#managing-datasets">Managing datasets</a>.</p>
 <h3 id="managing-datasets">Managing datasets</h3>
-<p>The buttons under the dataset list create, rename and delete datasets.</p>
-<p><strong>New…</strong> opens a form in the right pane. With a dataset selected, the form starts from its type, RECFM, LRECL and
-BLKSIZE, and the name starts with your filter's first qualifier, so a new library like the one selected is a name
-and <strong>Create</strong> away. Space is in tracks or cylinders, a primary and a secondary amount, and directory blocks for a
-partitioned dataset; the form keeps the space you last used while the window is open. A value the host cannot take
-is marked <strong>✗</strong> under its box until you fix it.</p>
+<p>The <strong>Datasets</strong> pane's toolbar creates, renames and deletes datasets.</p>
+<p><strong>New…</strong> opens the <strong>New dataset</strong> window. With a dataset selected, it starts from the dataset's type, RECFM, LRECL
+and BLKSIZE, and the name starts with your filter's first qualifier, so a new library like the one selected is a
+name and <strong>Create</strong> away. Space is in tracks or cylinders, a primary and a secondary amount, and directory blocks
+for a partitioned dataset; the window keeps the space you last used while it is open. A value the host cannot take
+is marked <strong>✗</strong> under its box until you fix it. <strong>Cancel</strong> or <strong>Escape</strong> closes the window without creating anything.</p>
 <p>mvsMF cannot say why an allocation failed: a name that already exists, no room on the volume and a missing
-authorization all come back as the same <strong>The host could not allocate it</strong> message, which stays in the form so you
-can change the values and try again. A record layout the host rejects (a BLKSIZE that is not a multiple of a
+authorization all come back as the same <strong>The host could not allocate it</strong> message, which stays in the window so
+you can change the values and try again. A record layout the host rejects (a BLKSIZE that is not a multiple of a
 fixed LRECL, say) fails the same way.</p>
-<p><strong>Rename…</strong> under the dataset list renames the selected dataset, and <strong>Rename…</strong> in the bottom bar renames the
-selected member. Both ask for the new name in the strip at the bottom of the window, where <strong>Rename</strong> is enabled
-once the name is different and acceptable, and <strong>Enter</strong> confirms. A renamed dataset your filter does not show is
-reported in the status line. The host refuses to rename a member onto a name that already exists; renaming a
-dataset onto an existing name fails with a server error.</p>
-<p><strong>Delete…</strong> under the dataset list deletes the selected dataset, after a question that names it and, for a
+<p><strong>Rename…</strong> in the Datasets pane's toolbar renames the selected dataset, and <strong>Rename…</strong> in the Members pane's
+toolbar renames the selected member. Both ask for the new name in the strip at the bottom of the window, where
+<strong>Rename</strong> is enabled once the name is different and acceptable, and <strong>Enter</strong> confirms. A renamed dataset your
+filter does not show is reported in the status line. The host refuses to rename a member onto a name that already
+exists; renaming a dataset onto an existing name fails with a server error.</p>
+<p><strong>Delete…</strong> in the Datasets pane's toolbar deletes the selected dataset, after a question that names it and, for a
 partitioned dataset, says how many members it has. This cannot be undone.</p>
 <h3 id="when-something-goes-wrong">When something goes wrong</h3>
 <p>A problem with one member shows in its row or in the status line at the bottom of the window. A problem with the
@@ -587,7 +596,7 @@ the pin.</li>
 <li><strong>TLS hosts that rely on SNI</strong> (several TLS sites sharing one address) cannot be verified, because the
 underlying x3270 engine does not send a server name (<a href="https://github.com/coffeemuse/LizTerm/issues/12">#12</a>).</li>
 <li><strong>No printer sessions or scripting.</strong></li>
-<li><strong>The mvsMF Browser is a preview</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/17">#17</a>). Older mvsMF builds
+<li><strong>mvsMF Access is a preview</strong> (<a href="https://github.com/coffeemuse/LizTerm/issues/17">#17</a>). Older mvsMF builds
 are not supported (see <a href="#signing-in">Signing in</a>). It can't submit jobs or browse the z/OS UNIX file system.</li>
 </ul>
 </body>

@@ -74,13 +74,13 @@ AXAML plus code-behind shape. It has no view model, knows nothing about hosts, a
 | `Title` | `string` | Title row, left |
 | `HeaderContent` | `object?` | Title row, right (the member filter box) |
 | `Toolbar` | `object?` | The verb row under the title |
-| `Content` | `object?` | Column header plus list, filling the pane |
+| `Body` | `object?` | Column header plus list, filling the pane (a UserControl's own Content is its XAML root) |
 | `FooterText` | `string` | Footer, left ("41 datasets · 1 selected") |
 | `FooterAction` | `object?` | Footer, right (the Load more button); the footer's right cell collapses when null |
 
 The control owns the borders, spacing, the title-row typography, the toolbar's button style (one `Classes="pane-verb"`
 style for compact buttons) and the footer's secondary colour. A caller that needs the list replaced (the upload
-review) swaps `Content` and `Toolbar` on its own bindings; the frame does not change.
+review) swaps `Body` and `Toolbar` on its own bindings; the frame does not change.
 
 The layout, top to bottom: title row · toolbar · content · footer, each separated by the same hairline the window's
 other strips use. The window's two panes and the future USS panes are four uses of this one control.
@@ -133,9 +133,10 @@ The items bind to the properties the view model already has (`IsTextMode`, `IsBi
 
 ## 6. The new-dataset dialog
 
-`NewDatasetWindow` under `src/LizTerm.App/Dialogs`, owned by the browser window and shown modally. It binds the
-existing `NewDatasetFormViewModel`: the same fields (name, type, RECFM, LRECL, BLKSIZE, space unit, primary,
-secondary, directory blocks), the same per-field problem lines and message. Create runs the allocation through the
+`NewDatasetWindow` under `src/LizTerm.App/Views`, beside every other window (`Dialogs` holds prompt interfaces and
+adapters), owned by the browser window and shown modally. It binds the existing `NewDatasetFormViewModel`: the same
+fields (name, type, RECFM, LRECL, BLKSIZE, space unit, primary, secondary, directory blocks), the same per-field
+problem lines and message. Create runs the allocation through the
 view model as today and closes on success; a failure keeps the dialog open with the message shown; Escape and Cancel
 close it without allocating. The create pane and `IsCreating` leave the window.
 
@@ -158,7 +159,8 @@ input box and "Apply to all", sign-in and certificate handling, paging, ETag han
 ## 9. Testing
 
 - `tests/LizTerm.App.Tests/Controls`: a headless test instantiates a `BrowserPane`, fills the slots and checks each
-  lands in the tree, and that the footer's right cell collapses when `FooterAction` is null.
+  lands in the tree and the `pane-verb` style applies inside the pane, and that the footer's right cell collapses
+  when `FooterAction` is null.
 - View-model tests gain the refresh command (re-runs the current filter, disabled while busy) and the footer strings
   for the count and selection cases.
 - A headless window test checks that every toolbar verb and every context-menu item share a command instance, that
