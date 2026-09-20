@@ -7,9 +7,10 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.App.Keyboard;
 
-/// <summary>The keyboard equivalents of a key as one line of text, for the keypad's tooltips (keypad spec §5), the
-/// Keyboard tab's chips and the Keys menu (#23). Pure: the keymap and the format are arguments, so a remap (#18)
-/// changes the answer and a test can pin the words.</summary>
+/// <summary>The keyboard equivalents of a key as one line of text, for the keypad's tooltips (keypad spec §5) and
+/// the Keyboard tab's chips, and as one chord for the Keys menu's shortcut (Keys menu shortcuts spec §3.2). Pure:
+/// the keymap, the platform and the format are arguments, so a remap (#18) changes the answer and a test can pin
+/// the words.</summary>
 public static class KeymapHints
 {
     /// <summary>The keymap reversed: every chord that sends each key. The one reversal the keypad, the Keys menu
@@ -47,13 +48,33 @@ public static class KeymapHints
     /// <summary>One chord as text, worded exactly as it is inside a tooltip's line, for the Keyboard tab's chips.</summary>
     public static string Describe(KeyChord chord, IFormatProvider? format = null) => Format(chord, format);
 
-    /// <summary>The order every list of chords is shown in, tooltips and the Keyboard tab alike: unmodified chords
-    /// first, then by KeyModifiers value, function keys ahead of other keys within a group, taps last.</summary>
+    /// <summary>The order every list of chords is shown in, tooltips, the Keyboard tab and the Keys menu alike:
+    /// unmodified chords first, then Shift, Alt, Control, then combinations; function keys ahead of other keys
+    /// within a group; taps last. Shift+F1 ahead of Ctrl+F1 is the order every 3270 user is taught PF13 in.</summary>
     public static IEnumerable<KeyChord> Ordered(IEnumerable<KeyChord> chords) => chords
         .OrderBy(chord => chord.Tap ? 1 : 0)
-        .ThenBy(chord => (int)chord.Modifiers)
+        .ThenBy(chord => ModifierRank(chord.Modifiers))
         .ThenBy(chord => IsFunctionKey(chord.Key) ? 0 : 1)
         .ThenBy(chord => (int)chord.Key);
+
+    /// <summary>The one chord a Keys menu item shows (Keys menu shortcuts spec §3.2): the first in Ordered's order
+    /// that is not a tap and whose key the platform's keyboard has. Apple keyboards have no Pause and no Insert.
+    /// Null when nothing qualifies, and the item shows no shortcut.</summary>
+    public static KeyChord? MenuChord(IEnumerable<KeyChord> chords, bool isMacOS)
+    {
+        foreach (var chord in Ordered(chords.Where(chord => !chord.Tap && !(isMacOS && chord.Key is Key.Pause or Key.Insert))))
+            return chord;
+        return null;
+    }
+
+    private static int ModifierRank(KeyModifiers modifiers) => modifiers switch
+    {
+        KeyModifiers.None => 0,
+        KeyModifiers.Shift => 1,
+        KeyModifiers.Alt => 2,
+        KeyModifiers.Control => 3,
+        _ => 4 + (int)modifiers,
+    };
 
     private static bool IsFunctionKey(Key key) => key is >= Key.F1 and <= Key.F24;
 
