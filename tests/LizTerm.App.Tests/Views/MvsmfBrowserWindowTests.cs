@@ -117,7 +117,7 @@ public class MvsmfBrowserWindowTests
 
         Assert.True(Named<Control>(window, "MemberPane").IsVisible);
         Assert.Equal("MVSCE02.CNTL", Named<BrowserPane>(window, "MembersPane").Title);
-        Assert.Equal("3 members · none selected", Named<BrowserPane>(window, "MembersPane").FooterText);
+        Assert.Equal("3 members · 2 selected", Named<BrowserPane>(window, "MembersPane").FooterText);
         Assert.Equal(new[] { "ALLOC", "HELLO" }, t.Vm.SelectedMembers.Select(m => m.Name));
         Assert.True(Named<Button>(window, "DownloadButton").IsEffectivelyEnabled);
         Assert.True(Named<Button>(window, "DeleteButton").IsEffectivelyEnabled);
