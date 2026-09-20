@@ -23,14 +23,17 @@ namespace LizTerm.App.Tests.Views;
 public class SessionWindowKeymapTests
 {
     private static (SessionWindow Window, FakeEmulatorSession Session, TerminalScreen Screen) Show(
-        bool destructiveBackspace, KeymapViewModel? keymap, bool isMacOS = false)
+        bool destructiveBackspace, KeymapViewModel? keymap, bool isMacOS = false, bool nativeGestures = false, bool escapeChords = true)
     {
         var session = new FakeEmulatorSession
         {
             Profile = new SessionProfile { Name = "TSO", Host = "tk5.local", Port = 3270, DestructiveBackspace = destructiveBackspace },
         };
         var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard());
-        var window = new SessionWindow(MenuStyle.InWindow, isMacOS) { DataContext = vm };
+        var window = new SessionWindow(MenuStyle.InWindow, isMacOS)
+        {
+            NativeGesturesAllowed = nativeGestures, EscapeChordsReachScreen = escapeChords, DataContext = vm,
+        };
         if (keymap is not null) window.AttachKeymap(keymap);
         window.Show();
         var screen = window.FindControl<TerminalScreen>("Screen")!;
@@ -44,8 +47,8 @@ public class SessionWindowKeymapTests
         return window.FindControl<Keypad>("KeypadPanel")!.GetVisualDescendants().OfType<Button>().First(b => Equals(b.Tag, key));
     }
 
-    /// <summary>A Keys item by the key it sends, never by header, through the seam that reaches a native item
-    /// stashed under InWindow (the menu notes in src/LizTerm.App/CLAUDE.md say why a MenuLookup cannot).</summary>
+    /// <summary>A Keys item by the key it sends, through the seam that reaches a native item stashed under InWindow
+    /// (the menu notes in src/LizTerm.App/CLAUDE.md say why a MenuLookup cannot).</summary>
     private static (NativeMenuItem Native, MenuItem Classic) KeysItems(SessionWindow window, TerminalKey key) => window.KeysRow(key);
 
     [AvaloniaFact]
@@ -112,26 +115,65 @@ public class SessionWindowKeymapTests
         Assert.Equal(TerminalKey.PA2, key);
     }
 
-    /// <summary>Editable keymap spec §6.2 and §7.2: a rebind reaches the Keys menu's header text on both renderers.
+    private static readonly KeyGesture Alt1 = new(Key.D1, KeyModifiers.Alt);
+
+    /// <summary>Keys menu shortcuts spec §3.3: the chord is the native item's Gesture and the classic item's
+    /// display-only InputGesture, the header is the bare name, and a rebind that sorts first replaces it on both.
     /// The window is InWindow, so the native top-level items are stashed out of the menu while this runs, and the
     /// Keys items still have to follow, because a later switch to Native puts those same objects back.</summary>
     [AvaloniaFact]
-    public void A_rebind_reaches_the_Keys_menu_headers_on_both_menus()
+    public void A_rebind_reaches_the_Keys_menu_shortcut_on_both_menus()
     {
         var keymap = new KeymapViewModel();
-        var (window, _, screen) = Show(destructiveBackspace: true, keymap);
+        var (window, _, _) = Show(destructiveBackspace: true, keymap, nativeGestures: true);
         var (native, classic) = KeysItems(window, TerminalKey.PA1);
-        Assert.Equal("PA1  " + KeymapHints.Describe(screen.Keymap, TerminalKey.PA1), native.Header);
-        Assert.Equal(native.Header, classic.Header as string);
-        Assert.DoesNotContain("F9", native.Header);
+        Assert.Equal("PA1", native.Header);
+        Assert.Equal("PA1", classic.Header);
+        Assert.Equal(Alt1, native.Gesture);
+        Assert.Equal(Alt1, classic.InputGesture);
 
-        keymap.Bind(new KeyChord(Key.F9, KeyModifiers.Alt), new KeymapAction.SendKey(TerminalKey.PA1));
+        keymap.Bind(new KeyChord(Key.F9), new KeymapAction.SendKey(TerminalKey.PA1));
 
-        Assert.Equal("PA1  " + KeymapHints.Describe(screen.Keymap, TerminalKey.PA1), native.Header);
-        Assert.Contains("F9", native.Header);
-        Assert.Equal(native.Header, classic.Header as string);
+        Assert.Equal(new KeyGesture(Key.F9), native.Gesture);
+        Assert.Equal(new KeyGesture(Key.F9), classic.InputGesture);
+        Assert.Equal("PA1", native.Header);
+    }
+
+    /// <summary>Without the override installed a native gesture would be a key equivalent that eats the key, so the
+    /// native item gets none; the classic InputGesture dispatches nothing and is always shown.</summary>
+    [AvaloniaFact]
+    public void Without_the_override_the_native_item_has_no_gesture_and_the_classic_one_still_does()
+    {
+        var (window, _, _) = Show(destructiveBackspace: true, new KeymapViewModel(), nativeGestures: false);
+        var (native, classic) = KeysItems(window, TerminalKey.PA1);
+
         Assert.Null(native.Gesture);
-        Assert.Null(classic.InputGesture);
+        Assert.Equal(Alt1, classic.InputGesture);
+    }
+
+    /// <summary>The platform decides which chord: Apple keyboards have no Pause and no Insert (spec §3.2).</summary>
+    [AvaloniaFact]
+    public void The_chord_shown_follows_the_platform()
+    {
+        var (mac, _, _) = Show(destructiveBackspace: true, new KeymapViewModel(), isMacOS: true);
+        var (other, _, _) = Show(destructiveBackspace: true, new KeymapViewModel(), isMacOS: false);
+
+        Assert.Equal(new KeyGesture(Key.Escape, KeyModifiers.Control), KeysItems(mac, TerminalKey.Clear).Classic.InputGesture);
+        Assert.Equal(new KeyGesture(Key.Pause), KeysItems(other, TerminalKey.Clear).Classic.InputGesture);
+        Assert.Equal(new KeyGesture(Key.I, KeyModifiers.Control), KeysItems(mac, TerminalKey.Insert).Classic.InputGesture);
+        Assert.Equal(new KeyGesture(Key.Insert), KeysItems(other, TerminalKey.Insert).Classic.InputGesture);
+        Assert.Equal(new KeyGesture(Key.F1, KeyModifiers.Shift), KeysItems(mac, TerminalKey.PF13).Classic.InputGesture);
+    }
+
+    /// <summary>#157: without MacEscapeChords in place Clear's Ctrl+Escape never arrives on a Mac, so the item
+    /// names no keystroke there; SysReq's Shift+Escape, which AppKit delivers, is unaffected.</summary>
+    [AvaloniaFact]
+    public void Without_the_escape_override_clear_shows_no_chord_on_a_mac()
+    {
+        var (mac, _, _) = Show(destructiveBackspace: true, new KeymapViewModel(), isMacOS: true, escapeChords: false);
+
+        Assert.Null(KeysItems(mac, TerminalKey.Clear).Classic.InputGesture);
+        Assert.Equal(new KeyGesture(Key.Escape, KeyModifiers.Shift), KeysItems(mac, TerminalKey.SysReq).Classic.InputGesture);
     }
 
     /// <summary>The other half of the InWindow guarantee: a rebind made while the native items were stashed is what
@@ -141,38 +183,38 @@ public class SessionWindowKeymapTests
     public void A_rebind_made_under_InWindow_is_on_the_exported_Keys_menu_after_a_switch_to_Native()
     {
         var keymap = new KeymapViewModel();
-        var (window, _, screen) = Show(destructiveBackspace: true, keymap, isMacOS: true);
+        var (window, _, _) = Show(destructiveBackspace: true, keymap, isMacOS: true, nativeGestures: true);
         Assert.Empty(NativeMenu.GetMenu(window)!.Items);
-        keymap.Bind(new KeyChord(Key.F9, KeyModifiers.Alt), new KeymapAction.SendKey(TerminalKey.PA1));
+        keymap.Bind(new KeyChord(Key.F9), new KeymapAction.SendKey(TerminalKey.PA1));
 
         ((SessionViewModel)window.DataContext!).Settings.MenuStyle = MenuStyle.Native;
 
         var exported = MenuLookup.Item(NativeMenu.GetMenu(window), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
             .Single(item => Equals(item.CommandParameter, TerminalKey.PA1));
-        Assert.Equal("PA1  " + KeymapHints.Describe(screen.Keymap, TerminalKey.PA1), exported.Header);
-        Assert.Contains("F9", exported.Header);
-        Assert.Null(exported.Gesture);
+        Assert.Equal(new KeyGesture(Key.F9), exported.Gesture);
+        Assert.Equal("PA1", exported.Header);
     }
 
-    /// <summary>A key the user has taken every chord away from keeps its bare name, on both menus, and gets its hint
-    /// back on Reset.</summary>
+    /// <summary>A key the user has taken every chord away from shows no shortcut, on both menus, and gets it back
+    /// on Reset.</summary>
     [AvaloniaFact]
-    public void A_key_left_with_no_chord_keeps_its_bare_name_on_the_Keys_menu()
+    public void A_key_left_with_no_chord_shows_no_shortcut_on_the_Keys_menu()
     {
         var keymap = new KeymapViewModel();
-        var (window, _, _) = Show(destructiveBackspace: true, keymap);
+        var (window, _, _) = Show(destructiveBackspace: true, keymap, nativeGestures: true);
         var (native, classic) = KeysItems(window, TerminalKey.PA3);
-        Assert.StartsWith("PA3  ", native.Header);
+        Assert.NotNull(native.Gesture);
 
         keymap.Unbind(new KeyChord(Key.D3, KeyModifiers.Alt));
         keymap.Unbind(new KeyChord(Key.PageUp, KeyModifiers.Control));
 
+        Assert.Null(native.Gesture);
+        Assert.Null(classic.InputGesture);
         Assert.Equal("PA3", native.Header);
-        Assert.Equal("PA3", classic.Header);
 
         keymap.ResetToDefaults();
 
-        Assert.StartsWith("PA3  ", native.Header);
-        Assert.Equal(native.Header, classic.Header as string);
+        Assert.Equal(new KeyGesture(Key.D3, KeyModifiers.Alt), native.Gesture);
+        Assert.Equal(native.Gesture, classic.InputGesture);
     }
 }

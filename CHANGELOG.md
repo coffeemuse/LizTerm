@@ -5,52 +5,34 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
-- **A connected session is not closed by accident.** Closing a session window while its session is connected, or
-  quitting with connected sessions, now asks first. **Keep Connected**, the default, leaves everything as it was;
-  **Disconnect** closes the window, or **Disconnect and Quit** quits. A window that is not connected closes without
-  a question. A system logout or shutdown skips the question where the system tells LizTerm it is one; macOS does
-  not, so there a logout with connected sessions asks too, and macOS cancels the logout until you answer.
-  **Preferences > General > Closing** turns the question off
-  ([#151](https://github.com/coffeemuse/LizTerm/issues/151)).
-- **Keyboard bindings.** **Preferences > Keyboard** lists every 3270 key with the keys that send it: add a key by
-  pressing it, remove one with its **×**, move one to another row, or reset to the defaults. LizTerm refuses the keys
-  it needs itself, such as Copy and Paste or a plain letter, and says why. Your changes are kept in `keymap.json`
-  beside `settings.json`, and the on-screen keypad's tooltips follow them. So does the **Keys** menu, which now
-  shows each key's keystrokes beside its name, and the user guide's Keyboard table is now the default layout rather
-  than the only one
+- **Ctrl+Escape sends Clear on macOS**, which had no working Clear keystroke before: the chord never reached the
+  screen, and Pause is not on Apple keyboards ([#157](https://github.com/coffeemuse/LizTerm/issues/157)).
+- **Closing a connected session asks first**, and so does quitting with connected sessions. Turn the question off
+  under **Preferences > General > Closing** ([#151](https://github.com/coffeemuse/LizTerm/issues/151)).
+- **Keyboard bindings.** **Preferences > Keyboard** lists every 3270 key with the keystrokes that send it: add,
+  remove, move or reset them. The on-screen keypad's tooltips and the **Keys** menu's shortcuts follow your bindings
   ([#18](https://github.com/coffeemuse/LizTerm/issues/18), [#23](https://github.com/coffeemuse/LizTerm/issues/23)).
-- **Mono terminals.** A profile can now be a **Mono (3278)** as well as a **Colour (3279)**: the host is told it is a
-  3278 and the screen is drawn in a green phosphor, brighter where the host intensifies. Choose it in the profile
-  editor's Terminal tab, beside Model ([#123](https://github.com/coffeemuse/LizTerm/issues/123)).
+- **Mono terminals.** A profile can be a **Mono (3278)** as well as a **Colour (3279)**, drawn in green phosphor.
+  Choose it in the profile editor's Terminal tab ([#123](https://github.com/coffeemuse/LizTerm/issues/123)).
 - **mvsMF Access (feature preview).** On MVS 3.8j hosts running [mvsMF](https://github.com/mvslovers/mvsmf) 1.1.0
   or later (it ships with TK5 and installs on TK4- or a hand-rolled MVS 3.8), a second way to move files beside
-  IND$FILE: sign in once per session window, then list, download, upload and delete. Long lists arrive 500 entries
-  at a time with **Load more** for the rest, and on such a library the member filter is the host's work. It can
-  create, rename and delete datasets and members, and warns before replacing a member that changed on the host
-  since you downloaded it. The window has a **Datasets** pane and a **Members** pane, each with a toolbar of its own
-  actions and a footer that counts what is listed and selected; **Refresh** lists again and keeps your place; the
-  transfer mode and options sit in a **Transfer** drop-down; **New dataset** is its own window; each list has a
-  right-click menu, a double-click on a member downloads it, and **Cmd/Ctrl+R** and **Cmd/Ctrl+N** refresh and
-  create. It is not yet complete and there are likely bugs. See the user guide's
+  IND$FILE: list, download, upload and delete, and manage datasets and members, in a window with a **Datasets**
+  pane and a **Members** pane that each carry their own actions. It is not yet complete and there are likely bugs;
+  see the user guide's
   [mvsMF Access section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-access-preview).
-- **A build that is not a release says so.** **About LizTerm** and the splash screen show the version as
-  `0.6.1-DEV (a1b2c3d)`, naming the commit it was built from, and you can select and copy it for a bug report
-  ([#141](https://github.com/coffeemuse/LizTerm/issues/141)).
-- **Starting a wire log now asks first.** A wire log records the whole session, everything you type and passwords
-  included, so **Help > Wire Log** says so and asks before it starts one.
-- **Wire logs are readable only by your account** on macOS and Linux. They used to be readable by every other
-  account on the machine ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
-- **A clearer message when the emulation engine stops.** LizTerm now says that the engine stopped and repeats its
-  explanation, instead of showing the problem alone a moment before the session vanishes
+- **A build that is not a release says so.** **About LizTerm** and the splash screen show it as
+  `0.6.1-DEV (a1b2c3d)`, naming the commit ([#141](https://github.com/coffeemuse/LizTerm/issues/141)).
+- **Wire logs.** **Help > Wire Log** now warns that a log records everything you type, passwords included, and asks
+  before starting one. On macOS and Linux the log is readable only by your account
   ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
-- **Binary uploads to MVS/CE work.** File transfers now use a 2500-byte buffer unless you set another size under
-  **Advanced**; the larger size used before left uploads truncated and the TSO user logged on
+- **A clearer message when the emulation engine stops**, instead of a problem shown a moment before the session
+  vanishes ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).
+- **Binary uploads to MVS/CE work.** File transfers now default to a 2500-byte buffer; change it under **Advanced**
   ([#137](https://github.com/coffeemuse/LizTerm/issues/137)).
-- **Custom screen sizes are easier to set.** Choose **Other (custom size)** at the end of the profile editor's Model
-  list, then type the columns and rows in two boxes.
-- **A tidier profile editor.** Its settings are now on tabs — Connection, Terminal and Organize, plus mvsMF — and
-  tags are colored chips you add with Enter or a comma, with the tags you already use offered as you type. When
-  **Save** can't accept something, the editor shows that tab and outlines the setting.
+- **Custom screen sizes**: choose **Other (custom size)** in the profile editor's Model list and type the columns
+  and rows.
+- **A tidier profile editor.** Its settings are on tabs, and tags are chips, with the tags you already use offered
+  as you type.
 
 ## 0.6.1
 

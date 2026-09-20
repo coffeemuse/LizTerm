@@ -12,6 +12,7 @@ using LizTerm.App.Clipboard;
 using LizTerm.App.Dialogs;
 using LizTerm.App.Files;
 using LizTerm.App.HostFiles;
+using LizTerm.App.Keyboard;
 using LizTerm.App.Menus;
 using LizTerm.App.Sessions;
 using LizTerm.App.Startup;
@@ -79,6 +80,15 @@ public partial class App : Application
             // The Dock icon's menu, on macOS only (#46): the open sessions and New Session..., current for the life
             // of the process.
             DockMenu.Attach(this, _sessions, ShowPicker, OperatingSystem.IsMacOS());
+
+            // Before any session window exists (#23): every Keys item's shortcut is a real key equivalent on macOS,
+            // and this is what keeps AppKit from dispatching it ahead of the screen. SessionWindow.ApplyKeymap gives
+            // the items no gesture unless Installed says this succeeded.
+            MacMenuKeyEquivalents.Install(OperatingSystem.IsMacOS());
+
+            // And the other half of a working Clear on a Mac (#157): MacEscapeChords gives Avalonia's view the ⌃⎋
+            // key-down AppKit diverts around keyDown:. SessionWindow.EscapeChordsReachScreen reads Installed.
+            MacEscapeChords.Install(OperatingSystem.IsMacOS());
 
             // Settings before anything opens: whether there is a splash at all is one of them (#108). Load never
             // throws, so reading them first adds no way for startup to fail before a window can say so.

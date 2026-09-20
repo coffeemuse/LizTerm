@@ -30,10 +30,10 @@ public class KeymapHintsTests
         Assert.Equal(expected, Hint(key));
     }
 
-    /// <summary>Unmodified first, then by modifier (Alt before Ctrl before Shift), function keys ahead of other
+    /// <summary>Unmodified first, then by modifier (Shift before Alt before Ctrl), function keys ahead of other
     /// keys within a group, taps last; two join with "or", three with a comma and "or".</summary>
     [Theory]
-    [InlineData(TerminalKey.PF13, "Ctrl+F1 or Shift+F1")]
+    [InlineData(TerminalKey.PF13, "Shift+F1 or Ctrl+F1")]
     [InlineData(TerminalKey.PA2, "Alt+2 or Ctrl+Home")]
     [InlineData(TerminalKey.PF7, "F7 or PageUp")]
     [InlineData(TerminalKey.Clear, "Pause or Ctrl+Escape")]
@@ -86,20 +86,21 @@ public class KeymapHintsTests
     }
 
     [Fact]
-    public void Ordered_puts_unmodified_first_then_modifiers_then_taps()
+    public void Ordered_puts_unmodified_first_then_shift_alt_control_then_taps()
     {
         var chords = new[]
         {
             KeyChord.TapOf(Key.LeftCtrl),
             new KeyChord(Key.Home, KeyModifiers.Control),
             new KeyChord(Key.D2, KeyModifiers.Alt),
+            new KeyChord(Key.F1, KeyModifiers.Shift),
             new KeyChord(Key.F7),
             new KeyChord(Key.PageUp),
         };
 
         Assert.Equal(
-            [new KeyChord(Key.F7), new KeyChord(Key.PageUp), new KeyChord(Key.D2, KeyModifiers.Alt),
-             new KeyChord(Key.Home, KeyModifiers.Control), KeyChord.TapOf(Key.LeftCtrl)],
+            [new KeyChord(Key.F7), new KeyChord(Key.PageUp), new KeyChord(Key.F1, KeyModifiers.Shift),
+             new KeyChord(Key.D2, KeyModifiers.Alt), new KeyChord(Key.Home, KeyModifiers.Control), KeyChord.TapOf(Key.LeftCtrl)],
             KeymapHints.Ordered(chords));
     }
 
@@ -121,20 +122,74 @@ public class KeymapHintsTests
         Assert.Empty(byKey[TerminalKey.Dup]);
     }
 
-    /// <summary>Editable keymap spec §6.2: a Keys item's header is its name, two spaces, then the tooltip's own
-    /// line for that key; a key with no chord keeps its bare name.</summary>
-    [Fact]
-    public void A_label_is_the_name_two_spaces_and_the_tooltips_line()
+    private static string? MenuChord(TerminalKey key, bool isMacOS, Keymap? map = null) =>
+        KeymapHints.MenuChord(KeymapHints.ByKey(map ?? Map)[key], isMacOS) is { } chord ? KeymapHints.Describe(chord, Words) : null;
+
+    /// <summary>Keys menu shortcuts spec §3.2: one chord per item, the first in Ordered's order that is not a tap
+    /// and whose key the platform's keyboard has. Both platforms are pinned from one machine: the platform is an
+    /// argument.</summary>
+    [Theory]
+    [InlineData(TerminalKey.PF13, false, "Shift+F1")]
+    [InlineData(TerminalKey.PF13, true, "Shift+F1")]
+    [InlineData(TerminalKey.PF24, true, "Shift+F12")]
+    [InlineData(TerminalKey.PA1, false, "Alt+1")]
+    [InlineData(TerminalKey.PA2, true, "Alt+2")]
+    [InlineData(TerminalKey.Reset, true, "Ctrl+R")]
+    [InlineData(TerminalKey.Attn, true, "Escape")]
+    [InlineData(TerminalKey.SysReq, true, "Shift+Escape")]
+    [InlineData(TerminalKey.Clear, false, "Pause")]
+    [InlineData(TerminalKey.Clear, true, "Ctrl+Escape")]
+    [InlineData(TerminalKey.Insert, false, "Insert")]
+    [InlineData(TerminalKey.Insert, true, "Ctrl+I")]
+    public void The_menu_chord_is_the_first_the_platform_can_press(TerminalKey key, bool isMacOS, string expected)
     {
-        Assert.Equal("PA2  Alt+2 or Ctrl+Home", KeymapHints.Label("PA2", KeymapHints.ByKey(Map)[TerminalKey.PA2], Words));
-        Assert.Equal("Attn  Escape", KeymapHints.Label("Attn", KeymapHints.ByKey(Map)[TerminalKey.Attn], Words));
-        Assert.Equal("Insert  " + Hint(TerminalKey.Insert), KeymapHints.Label("Insert", KeymapHints.ByKey(Map)[TerminalKey.Insert], Words));
+        Assert.Equal(expected, MenuChord(key, isMacOS));
+    }
+
+    [Theory]
+    [InlineData(TerminalKey.Dup)]
+    [InlineData(TerminalKey.FieldMark)]
+    public void A_key_nothing_maps_has_no_menu_chord(TerminalKey key)
+    {
+        Assert.Null(MenuChord(key, isMacOS: false));
+        Assert.Null(MenuChord(key, isMacOS: true));
     }
 
     [Fact]
-    public void A_label_with_no_chord_is_the_bare_name()
+    public void A_key_only_a_tap_sends_has_no_menu_chord()
     {
-        Assert.Equal("Field Mark", KeymapHints.Label("Field Mark", KeymapHints.ByKey(Map)[TerminalKey.FieldMark], Words));
-        Assert.Equal("Dup", KeymapHints.Label("Dup", [], Words));
+        Assert.Null(KeymapHints.MenuChord([KeyChord.TapOf(Key.LeftCtrl)], isMacOS: false));
+    }
+
+    /// <summary>#157: on a Mac Clear's Ctrl+Escape reaches the screen only through MacEscapeChords, so where that
+    /// is not installed the menu shows Clear without a keystroke rather than one AppKit keeps. Elsewhere the flag
+    /// is not consulted, since the chord always arrives.</summary>
+    [Fact]
+    public void Without_the_escape_override_a_mac_shows_no_control_escape()
+    {
+        var clear = KeymapHints.ByKey(Map)[TerminalKey.Clear];
+
+        Assert.Null(KeymapHints.MenuChord(clear, isMacOS: true, controlEscapeReaches: false));
+        Assert.Equal(new KeyChord(Key.Escape, KeyModifiers.Control), KeymapHints.MenuChord(clear, isMacOS: true, controlEscapeReaches: true));
+        Assert.Equal(new KeyChord(Key.Pause), KeymapHints.MenuChord(clear, isMacOS: false, controlEscapeReaches: false));
+    }
+
+    /// <summary>A rebind wins when it sorts first: F9 is unmodified, so it beats Alt+1.</summary>
+    [Fact]
+    public void A_remapped_key_changes_the_menu_chord()
+    {
+        var remapped = Map.With([KeyValuePair.Create(new KeyChord(Key.F9), TerminalKey.PA1)], []);
+
+        Assert.Equal("F9", MenuChord(TerminalKey.PA1, isMacOS: false, remapped));
+    }
+
+    /// <summary>The Dictionary order must not leak into which chord the menu shows.</summary>
+    [Fact]
+    public void The_same_table_in_reverse_order_gives_the_same_menu_chord()
+    {
+        var reversed = new Keymap(Map.Keys.Reverse(), Map.Text);
+
+        Assert.Equal(MenuChord(TerminalKey.PF13, true), MenuChord(TerminalKey.PF13, true, reversed));
+        Assert.Equal(MenuChord(TerminalKey.Clear, false), MenuChord(TerminalKey.Clear, false, reversed));
     }
 }
