@@ -14,10 +14,12 @@ What changed in each LizTerm release, newest first. Downloads are on the
   ([#18](https://github.com/coffeemuse/LizTerm/issues/18), [#23](https://github.com/coffeemuse/LizTerm/issues/23)).
 - **Mono terminals.** A profile can be a **Mono (3278)** as well as a **Colour (3279)**, drawn in green phosphor.
   Choose it in the profile editor's Terminal tab ([#123](https://github.com/coffeemuse/LizTerm/issues/123)).
-- **mvsMF Browser (feature preview).** On MVS 3.8j hosts running [mvsMF](https://github.com/mvslovers/mvsmf) 1.1.0
-  or later, a second way to move files beside IND$FILE: list, download, upload and delete, and manage datasets and
-  members. It is not yet complete and there are likely bugs; see the user guide's
-  [mvsMF Browser section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-browser-preview).
+- **mvsMF Access (feature preview).** On MVS 3.8j hosts running [mvsMF](https://github.com/mvslovers/mvsmf) 1.1.0
+  or later (it ships with TK5 and installs on TK4- or a hand-rolled MVS 3.8), a second way to move files beside
+  IND$FILE: list, download, upload and delete, and manage datasets and members, in a window with a **Datasets**
+  pane and a **Members** pane that each carry their own actions. It is not yet complete and there are likely bugs;
+  see the user guide's
+  [mvsMF Access section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-access-preview).
 - **A build that is not a release says so.** **About LizTerm** and the splash screen show it as
   `0.6.1-DEV (a1b2c3d)`, naming the commit ([#141](https://github.com/coffeemuse/LizTerm/issues/141)).
 - **Wire logs.** **Help > Wire Log** now warns that a log records everything you type, passwords included, and asks

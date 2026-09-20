@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LizTerm.App.Files;
@@ -11,9 +12,9 @@ using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.ViewModels;
 
-/// <summary>The mvsMF Browser (spec §4): datasets on the left, members of the chosen PDS on the right, and the
-/// transfers in the bottom bar. One operation at a time; see the partial files for downloads, uploads, delete,
-/// manage and create.</summary>
+/// <summary>mvsMF Access (browser spec §4, pane-pattern spec §4): datasets on the left, members of the chosen PDS
+/// on the right, each pane with the verbs that act on its selection, and a window-level status line. One operation
+/// at a time; see the partial files for downloads, uploads, delete, manage and create.</summary>
 public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposable
 {
     private readonly HostFileAccess _access;
@@ -48,7 +49,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         else StatusText = "⚠ " + message;
     });
 
-    public string Title => $"mvsMF Browser — {_access.ProfileName} (Preview)";
+    public string Title => $"mvsMF Access — {_access.ProfileName} (Preview)";
 
     public ObservableCollection<DatasetRow> Datasets { get; } = [];
     public ObservableCollection<MemberRow> Members { get; } = [];
@@ -59,11 +60,11 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMembers), nameof(ShowSequentialNote), nameof(ShowChooseHint), nameof(ChooseHint),
-        nameof(MembersHeader), nameof(ShowPaddingNote), nameof(UploadHeader), nameof(ShowMemberPane))]
+        nameof(MembersTitle), nameof(DatasetsFooter), nameof(MembersFooter), nameof(UploadHeader), nameof(ShowMemberPane))]
     private DatasetRow? _selectedDataset;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTextMode), nameof(IsBinaryMode), nameof(ShowPaddingNote))]
+    [NotifyPropertyChangedFor(nameof(IsTextMode), nameof(IsBinaryMode), nameof(TransferModeLabel))]
     private HostTransferMode _mode = HostTransferMode.Text;
 
     [ObservableProperty] private bool _trimTrailingBlanks = true;
@@ -102,25 +103,59 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     }
 
     public bool ShowMembers => SelectedDataset is { IsPartitioned: true };
-    public bool ShowSequentialNote => SelectedDataset is { IsSequential: true } && !IsCreating;
-    public bool ShowChooseHint => SelectedDataset is not { IsSupported: true } && !IsCreating;
+    public bool ShowSequentialNote => SelectedDataset is { IsSequential: true };
+    public bool ShowChooseHint => SelectedDataset is not { IsSupported: true };
 
     public string ChooseHint => SelectedDataset is { IsSupported: false } dataset
         ? $"{dataset.Name} cannot be opened in this release (DSORG {(dataset.Dsorg.Length > 0 ? dataset.Dsorg : "unknown")})."
         : "Choose a dataset on the left.";
 
-    /// <summary>Short, since it shares a line with the filter box: a plus marks a list the host has more of, and the
-    /// status line (<see cref="MembersStatus"/>) says so in words.</summary>
-    public string MembersHeader => SelectedDataset is { IsPartitioned: true } dataset
-        ? $"{dataset.Name} · {(HasMoreMembers ? $"{Members.Count}+ {(_memberPattern is null ? "members" : "matching")}" : MembersCount())}"
-        : "";
+    /// <summary>The Members pane's title row: the chosen dataset's name, the review's header while one is open,
+    /// and "Members" when nothing supported is chosen (the body then carries the hint).</summary>
+    public string MembersTitle => IsReviewingUpload ? UploadHeader
+        : SelectedDataset is { IsSupported: true } dataset ? dataset.Name
+        : "Members";
 
-    private string MembersCount() => _memberPattern is null ? Plural(Members.Count, "member") : $"{Members.Count} matching";
+    /// <summary>The Datasets pane's footer: the count, a plus while the host has more, and the selection. Empty until
+    /// a listing has landed, so a list not yet listed never reads as an empty one. Each operation that refills the
+    /// list raises it once at the end, rather than on every row added.</summary>
+    public string DatasetsFooter => Datasets.Count == 0 ? (_listedPattern is null ? "" : "No datasets")
+        : $"{Counted(Datasets.Count, HasMoreDatasets, "dataset")} · {(SelectedDataset is null ? "none" : "1")} selected";
+
+    /// <summary>The Members pane's footer: the files under review, else the members shown (with a plus while the
+    /// host has more, "matching" when the host applied the filter, "n of m" when the filter narrowed the list
+    /// here) and how many are selected. Empty for a dataset that has no member list, and until a listing has landed
+    /// (still running, failed, cancelled), so an unlisted library never reads as an empty one, DescribeForDelete's
+    /// rule. Raised once by whatever refills or narrows the list (RefreshVisibleMembers, SetSelectedMembers).</summary>
+    public string MembersFooter
+    {
+        get
+        {
+            if (IsReviewingUpload) return Plural(Uploads.Count, "file");
+            if (SelectedDataset is not { IsPartitioned: true }) return "";
+            if (Members.Count == 0) return _memberPattern is not null ? "No matching members" : _allMembersLoaded ? "No members" : "";
+            var shown = _memberPattern is not null ? $"{Members.Count}{(HasMoreMembers ? "+" : "")} matching"
+                : VisibleMembers.Count < Members.Count ? $"{VisibleMembers.Count} of {Plural(Members.Count, "member")}"
+                : Counted(Members.Count, HasMoreMembers, "member");
+            var selected = _selectedMembers.Count == 0 ? "none" : _selectedMembers.Count.ToString(CultureInfo.InvariantCulture);
+            return $"{shown} · {selected} selected";
+        }
+    }
 
     /// <summary>The status line after a member listing: the count, the pattern the host applied, and whether it
     /// has more.</summary>
     private string MembersStatus() =>
-        MembersCount() + (_memberPattern is { } pattern ? " " + pattern : "") + (HasMoreMembers ? " shown, more on the host" : "");
+        (_memberPattern is null ? Plural(Members.Count, "member") : $"{Members.Count} matching")
+        + (_memberPattern is { } pattern ? " " + pattern : "") + (HasMoreMembers ? " shown, more on the host" : "");
+
+    private static string Counted(int count, bool more, string noun) => more ? $"{count}+ {noun}s" : Plural(count, noun);
+
+    /// <summary>The drop-down button's label (pane-pattern spec §5).</summary>
+    public string TransferModeLabel => IsBinaryMode ? "Transfer: Binary" : "Transfer: Text";
+
+    /// <summary>Binary transfers to fixed-length records are padded to whole records (compatibility log,
+    /// binary-fixed-padding); the status line says so when Binary is chosen on such a dataset.</summary>
+    public const string PaddingNote = "⚠ Binary transfers to fixed-length datasets are padded to whole records.";
 
     /// <summary>Binary transfers to fixed-length records are padded to whole records (compatibility log,
     /// binary-fixed-padding), so the bar says so while it applies.</summary>
@@ -134,6 +169,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     {
         _selectedMembers = [.. members];
         OnPropertyChanged(nameof(SelectedMembers));
+        OnPropertyChanged(nameof(MembersFooter));
         NotifyCommands();
     }
 
@@ -168,14 +204,16 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     [RelayCommand(CanExecute = nameof(CanChooseDataset))]
     private Task ListAsync() => RunExclusiveAsync(ListCoreAsync, () => ListAsync());
 
-    private async Task ListCoreAsync(CancellationToken token)
+    /// <summary>False when the listing was refused (a review open, a filter the rules reject, with the reason on the
+    /// status line), so an operation that lists on the way to something else knows to stop there.</summary>
+    private async Task<bool> ListCoreAsync(CancellationToken token)
     {
         // The command is off during a review; a Retry left over from an earlier failed listing is not.
-        if (IsReviewingUpload) return;
+        if (IsReviewingUpload) return false;
         if (HostPath.DatasetPatternError(Filter) is { } problem)
         {
             StatusText = "✗ " + problem;
-            return;
+            return false;
         }
         var pattern = Filter.Trim().ToUpperInvariant();
         StatusText = $"⟳ Listing {pattern}…";
@@ -186,7 +224,9 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _listedPattern = pattern;
         _datasetContinuation = listing.Continuation;
         HasMoreDatasets = !listing.IsComplete;
+        OnPropertyChanged(nameof(DatasetsFooter));
         StatusText = DatasetsStatus();
+        return true;
     }
 
     private Task LoadMembersAsync(DatasetRow? row)
@@ -205,7 +245,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _allMembersLoaded = false;
         HasMoreMembers = false;
         SetSelectedMembers([]);
-        OnPropertyChanged(nameof(MembersHeader));
+        OnPropertyChanged(nameof(MembersFooter));
     }
 
     /// <summary>The filter narrows the rows here only while the whole library is loaded, read as the host would read
@@ -219,6 +259,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         {
             if (pattern is null || HostPath.MemberPatternMatches(pattern, member.Name)) VisibleMembers.Add(member);
         }
+        OnPropertyChanged(nameof(MembersFooter));
     }
 
     /// <summary>Drops a pending Retry with its banner: the operation it belongs to has been closed away from.</summary>
@@ -331,6 +372,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     private void NotifyCommands()
     {
         ListCommand.NotifyCanExecuteChanged();
+        RefreshCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         DownloadCommand.NotifyCanExecuteChanged();
         UploadCommand.NotifyCanExecuteChanged();

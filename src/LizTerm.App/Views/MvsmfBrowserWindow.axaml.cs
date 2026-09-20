@@ -3,29 +3,63 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using LizTerm.App.Dialogs;
 using LizTerm.App.ViewModels;
 
 namespace LizTerm.App.Views;
 
-/// <summary>The mvsMF Browser (spec §4). Owned by its session window and shown with ShowAbove; it never refuses to
-/// close — closing cancels what runs and releases the connection.</summary>
+/// <summary>mvsMF Access (browser spec §4, pane-pattern spec §4): two BrowserPanes, each with the verbs that act on
+/// its own selection, over a window-level status line. Owned by its session window and shown with ShowAbove; it
+/// never refuses to close — closing cancels what runs and releases the connection.</summary>
 public partial class MvsmfBrowserWindow : Window
 {
+    /// <summary>Cmd+R on macOS, Ctrl+R elsewhere: the platform's command modifier, as the session window's Find.</summary>
+    internal KeyGesture RefreshGesture { get; private set; } = new(Key.R, KeyModifiers.Control);
+
+    /// <summary>Cmd+N on macOS, Ctrl+N elsewhere.</summary>
+    internal KeyGesture NewDatasetGesture { get; private set; } = new(Key.N, KeyModifiers.Control);
+
     public MvsmfBrowserWindow()
     {
         InitializeComponent();
+        // The owned New dataset dialog's own OnClosing must never veto this window's close (it never refuses to
+        // close): Avalonia's default child-first ClosingBehavior would ask the dialog ahead of this window's own
+        // OnClosing/OnClosed, and the dialog cancels while a create is in flight. OwnerWindowOnly, SessionWindow's
+        // and FileTransferWindow's rule, closes the dialog with the window instead of asking it first.
+        ClosingBehavior = WindowClosingBehavior.OwnerWindowOnly;
         MemberList.SelectionChanged += (_, _) => PushSelectedMembers();
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
+
+        // The platform's command modifier (Cmd on macOS, Ctrl elsewhere), as SessionWindow.ShowPlatformGestures.
+        var modifiers = this.GetPlatformSettings()?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
+        RefreshGesture = new KeyGesture(Key.R, modifiers);
+        NewDatasetGesture = new KeyGesture(Key.N, modifiers);
+        DatasetMenuRefresh.InputGesture = RefreshGesture;
+        DatasetMenuNew.InputGesture = NewDatasetGesture;
+        ToolTip.SetTip(RefreshButton, $"Refresh the list ({RefreshGesture.ToString("p", null)})");
+        ToolTip.SetTip(NewDatasetButton, $"Allocate a new dataset ({NewDatasetGesture.ToString("p", null)})");
+        MemberList.AddHandler(InputElement.DoubleTappedEvent, OnMemberDoubleTapped);
+
         Opened += (_, _) =>
         {
             FilterBox.Focus();
             if (ViewModel is { Filter.Length: > 0 } vm && vm.Datasets.Count == 0) _ = vm.ListCommand.ExecuteAsync(null);
         };
+    }
+
+    /// <summary>A double-click on a member row is Download, as Enter is. On a row only: a double-click on the empty
+    /// part of the list selects nothing and must download nothing.</summary>
+    private void OnMemberDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is null) return;
+        if (vm.DownloadCommand.CanExecute(null)) _ = vm.DownloadCommand.ExecuteAsync(null);
     }
 
     private MvsmfBrowserViewModel? _watched;
@@ -87,16 +121,12 @@ public partial class MvsmfBrowserWindow : Window
                 PostRestoreFocus(forget: false);
                 break;
             case nameof(MvsmfBrowserViewModel.IsCreating) when vm.IsCreating:
-                // The form's first box, like the filter box when the window opens; posted because the pane is
-                // still hidden when the notification arrives.
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (_watched is { IsCreating: true }) NewNameBox.Focus();
-                }, DispatcherPriority.Loaded);
+                _ = ShowNewDatasetAsync(vm);
                 break;
-            case nameof(MvsmfBrowserViewModel.IsCreating) when !vm.IsCreating && !vm.IsBusy:
-                // Closed without an operation (Close, Escape): the keyboard was in the form, which is now hidden, so
-                // it goes where the window opens. A form an operation closes is handled by the IsBusy case above.
+            case nameof(MvsmfBrowserViewModel.IsCreating) when !vm.IsBusy:
+                // Closed without an operation (Cancel, Escape, the close box): the dialog gave the keyboard back to
+                // this window, which puts it where the window opens. A form an operation closes is handled by the
+                // IsBusy case above.
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (_watched is not { IsCreating: false, IsBusy: false }) return;
@@ -104,6 +134,35 @@ public partial class MvsmfBrowserWindow : Window
                     FilterBox.Focus();
                 }, DispatcherPriority.Loaded);
                 break;
+        }
+    }
+
+    /// <summary>The open New dataset dialog, if any (pane-pattern spec §6); for the tests and the close path.</summary>
+    internal NewDatasetWindow? NewDatasetDialog { get; private set; }
+
+    /// <summary>Opens the form as a modal dialog over this window. The dialog closes itself when IsCreating turns
+    /// off. A dialog that cannot be shown is a status line, and the form is closed so the commands come back.</summary>
+    private async Task ShowNewDatasetAsync(MvsmfBrowserViewModel vm)
+    {
+        if (NewDatasetDialog is not null) return;
+        var dialog = new NewDatasetWindow { DataContext = vm };
+        NewDatasetDialog = dialog;
+        // Freed on Closed, which Close raises at once: the await below resumes a turn later, and a form closed and
+        // opened again within one turn must find the slot free, and must not have its own dialog cleared by the
+        // finally of the one before.
+        dialog.Closed += (_, _) => { if (ReferenceEquals(NewDatasetDialog, dialog)) NewDatasetDialog = null; };
+        try
+        {
+            await dialog.ShowDialogAbove(this);
+        }
+        catch (Exception ex)
+        {
+            vm.StatusText = "✗ Could not open the New dataset window: " + ex.Message;
+            if (vm.CloseFormCommand.CanExecute(null)) vm.CloseFormCommand.Execute(null);
+        }
+        finally
+        {
+            if (ReferenceEquals(NewDatasetDialog, dialog)) NewDatasetDialog = null;
         }
     }
 
@@ -192,12 +251,25 @@ public partial class MvsmfBrowserWindow : Window
         if (ViewModel is not { } vm) return;
         switch (e.Key)
         {
+            case Key.R when e.KeyModifiers == RefreshGesture.KeyModifiers:
+                e.Handled = true;
+                if (vm.RefreshCommand.CanExecute(null)) _ = vm.RefreshCommand.ExecuteAsync(null);
+                break;
+            case Key.N when e.KeyModifiers == NewDatasetGesture.KeyModifiers:
+                e.Handled = true;
+                if (vm.NewDatasetCommand.CanExecute(null)) vm.NewDatasetCommand.Execute(null);
+                break;
+            // The dataset list's own Delete/Backspace; disjoint from the member list's case below because only one
+            // list can hold the focus.
+            case Key.Delete or Key.Back when DatasetList.IsKeyboardFocusWithin:
+                e.Handled = true;
+                if (vm.DeleteDatasetCommand.CanExecute(null)) _ = vm.DeleteDatasetCommand.ExecuteAsync(null);
+                break;
             case Key.Escape:
                 e.Handled = true;
                 if (vm.Confirmation is { } question) question.CancelCommand.Execute(null);
                 else if (vm.IsBusy) vm.CancelCommand.Execute(null);
                 else if (vm.IsReviewingUpload) vm.CloseReviewCommand.Execute(null);
-                else if (vm.IsCreating) vm.CloseFormCommand.Execute(null);
                 else Close();
                 break;
             case Key.Enter when vm.Confirmation is { HasInput: true } inputQuestion && ConfirmInputBox.IsKeyboardFocusWithin:

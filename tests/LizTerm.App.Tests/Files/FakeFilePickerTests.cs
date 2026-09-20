@@ -6,7 +6,7 @@ using LizTerm.App.Tests.Fakes;
 
 namespace LizTerm.App.Tests.Files;
 
-/// <summary>The fake's contract for the two pickers the mvsMF Browser adds; the Avalonia side is a thin call into
+/// <summary>The fake's contract for the two pickers mvsMF Access adds; the Avalonia side is a thin call into
 /// the platform's storage provider and has no headless test.</summary>
 public class FakeFilePickerTests
 {

@@ -2,7 +2,9 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -10,6 +12,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using LizTerm.App.Controls;
 using LizTerm.App.Tests.Fakes;
 using LizTerm.App.Tests.ViewModels;
 using LizTerm.App.ViewModels;
@@ -39,7 +42,7 @@ public class MvsmfBrowserWindowTests
 
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
 
-        Assert.Equal("mvsMF Browser — MVS/CE (Preview)", window.Title);
+        Assert.Equal("mvsMF Access — MVS/CE (Preview)", window.Title);
         Assert.True(Named<Border>(window, "PreviewStrip").IsVisible);
         Assert.StartsWith("⚠ Feature preview.", Named<Border>(window, "PreviewStrip").GetLogicalDescendants().OfType<TextBlock>().First().Text);
         Assert.Equal("MVSCE02.**", Named<TextBox>(window, "FilterBox").Text);
@@ -56,11 +59,11 @@ public class MvsmfBrowserWindowTests
         var moreDatasets = Named<Button>(window, "LoadMoreDatasetsButton");
         var moreMembers = Named<Button>(window, "LoadMoreMembersButton");
         Assert.True(moreDatasets.IsVisible);
-        Assert.Equal("Load more datasets", moreDatasets.Content);
+        Assert.Equal("Load more", moreDatasets.Content);
 
         await t.ChooseAsync("MVSCE02.BIG");
         Assert.True(moreMembers.IsVisible);
-        Assert.Equal("Load more members", moreMembers.Content);
+        Assert.Equal("Load more", moreMembers.Content);
 
         moreMembers.Command!.Execute(null);
         await Wait.UntilAsync(() => t.Vm.Members.Count == 4, "the second page of members");
@@ -114,7 +117,8 @@ public class MvsmfBrowserWindowTests
         members.SelectedItems.Add(t.Vm.VisibleMembers[2]);
 
         Assert.True(Named<Control>(window, "MemberPane").IsVisible);
-        Assert.Equal("MVSCE02.CNTL · 3 members", Named<TextBlock>(window, "MemberHeader").Text);
+        Assert.Equal("MVSCE02.CNTL", Named<BrowserPane>(window, "MembersPane").Title);
+        Assert.Equal("3 members · 2 selected", Named<BrowserPane>(window, "MembersPane").FooterText);
         Assert.Equal(new[] { "ALLOC", "HELLO" }, t.Vm.SelectedMembers.Select(m => m.Name));
         Assert.True(Named<Button>(window, "DownloadButton").IsEffectivelyEnabled);
         Assert.True(Named<Button>(window, "DeleteButton").IsEffectivelyEnabled);
@@ -175,6 +179,11 @@ public class MvsmfBrowserWindowTests
             Assert.False(Named<Control>(window, "MemberPane").IsVisible);
             Assert.Equal(1, Named<ItemsControl>(window, "UploadList").ItemCount);
             Assert.False(Named<ListBox>(window, "DatasetList").IsEffectivelyEnabled);
+            Assert.Equal("Upload to MVSCE02.CNTL", Named<BrowserPane>(window, "MembersPane").Title);
+            Assert.Equal("1 file", Named<BrowserPane>(window, "MembersPane").FooterText);
+            Assert.True(Named<WrapPanel>(window, "ReviewToolbar").IsVisible);
+            Assert.False(Named<WrapPanel>(window, "MemberToolbar").IsVisible);
+            Assert.True(Named<DropDownButton>(window, "TransferButton").IsVisible);
         }
         finally
         {
@@ -183,18 +192,95 @@ public class MvsmfBrowserWindowTests
     }
 
     [AvaloniaFact]
-    public async Task Binary_mode_shows_the_padding_note()
+    public async Task Choosing_binary_puts_the_padding_note_on_the_status_line_and_the_label_on_the_button()
     {
         var (window, t) = Show();
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
-        t.Vm.SelectedDataset = t.Vm.Datasets[0];
-        await Wait.UntilAsync(() => !t.Vm.IsBusy, "the members");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var transfer = Named<DropDownButton>(window, "TransferButton");
+        Assert.Equal("Transfer: Text", transfer.Content);
 
-        Named<RadioButton>(window, "BinaryModeButton").IsChecked = true;
+        t.Vm.IsBinaryMode = true;
+        Dispatcher.UIThread.RunJobs();
 
-        Assert.True(t.Vm.IsBinaryMode);
-        Assert.True(Named<TextBlock>(window, "PaddingNote").IsVisible);
-        Assert.Equal("⚠ Binary transfers to fixed-length datasets are padded to whole records.", Named<TextBlock>(window, "PaddingNote").Text);
+        Assert.Equal("Transfer: Binary", transfer.Content);
+        Assert.Equal(MvsmfBrowserViewModel.PaddingNote, Named<TextBlock>(window, "StatusLine").Text);
+    }
+
+    [AvaloniaFact]
+    public async Task The_transfer_menu_binds_the_mode_and_the_upload_options()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        var transfer = Named<DropDownButton>(window, "TransferButton");
+        var flyout = (MenuFlyout)transfer.Flyout!;
+        flyout.ShowAt(transfer);
+        Dispatcher.UIThread.RunJobs();
+        var items = flyout.Items.OfType<MenuItem>().ToDictionary(i => i.Name!);
+        try
+        {
+            Assert.True(items["TextModeItem"].IsChecked);
+            Assert.False(items["BinaryModeItem"].IsChecked);
+            Assert.True(items["TrimItem"].IsChecked);
+            Assert.True(items["VerifyItem"].IsChecked);
+            Assert.True(items["TrimItem"].IsEffectivelyEnabled);
+
+            items["BinaryModeItem"].IsChecked = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(t.Vm.IsBinaryMode);
+            Assert.False(items["TrimItem"].IsEffectivelyEnabled);
+
+            items["TextModeItem"].IsChecked = true;
+            items["VerifyItem"].IsChecked = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(t.Vm.IsTextMode);
+            Assert.False(t.Vm.VerifyUploads);
+        }
+        finally
+        {
+            flyout.Hide();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Each_pane_has_its_toolbar_and_the_bottom_bar_is_only_status()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var datasets = Named<BrowserPane>(window, "DatasetsPane");
+        var members = Named<BrowserPane>(window, "MembersPane");
+        Assert.Equal("Datasets", datasets.Title);
+        Assert.Equal("4 datasets · none selected", datasets.FooterText);
+        Assert.Equal("Members", members.Title);
+
+        var datasetVerbs = Named<WrapPanel>(window, "DatasetToolbar").Children.OfType<Button>().Select(b => b.Content).ToList();
+        Assert.Equal(new object?[] { "New…", "Rename…", "Delete…", "↻ Refresh" }, datasetVerbs);
+        Assert.Same(t.Vm.RefreshCommand, Named<Button>(window, "RefreshButton").Command);
+
+        var memberVerbs = Named<WrapPanel>(window, "MemberToolbar").Children.OfType<Button>()
+            .Select(b => b.Content).ToList();
+        Assert.Equal(new object?[] { "⇣ Download…", "⇡ Upload…", "Rename…", "Delete…" }, memberVerbs);
+
+        Assert.Null(window.FindControl<RadioButton>("TextModeButton"));
+        Assert.Null(window.FindControl<TextBlock>("PaddingNote"));
+        Assert.False(Named<Button>(window, "CancelButton").IsVisible);
+        Assert.True(Named<TextBlock>(window, "StatusLine").IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task The_members_pane_stays_for_a_sequential_dataset_and_carries_the_note()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.UFSHOME");
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(Named<BrowserPane>(window, "MembersPane").IsVisible);
+        Assert.Equal("MVSCE02.UFSHOME", Named<BrowserPane>(window, "MembersPane").Title);
+        Assert.True(Named<TextBlock>(window, "SequentialNote").IsVisible);
+        Assert.False(Named<DockPanel>(window, "MemberPane").IsVisible);
+        Assert.True(Named<Button>(window, "DownloadButton").IsEffectivelyEnabled);
     }
 
     [AvaloniaFact]
@@ -533,8 +619,15 @@ public class MvsmfBrowserWindowTests
         Assert.Equal(new[] { "HELLO2" }, t.Vm.SelectedMembers.Select(m => m.Name));
     }
 
+    private static async Task<NewDatasetWindow> OpenNewDatasetAsync(MvsmfBrowserWindow window, BrowserTestHost t)
+    {
+        t.Vm.NewDatasetCommand.Execute(null);
+        await Wait.UntilAsync(() => window.NewDatasetDialog is { IsVisible: true }, "the New dataset dialog");
+        return window.NewDatasetDialog!;
+    }
+
     [AvaloniaFact]
-    public async Task New_opens_the_form_in_the_right_pane_with_the_focus_in_the_name_box()
+    public async Task New_opens_a_dialog_over_the_window_with_the_focus_in_the_name_box()
     {
         var (window, t) = Show();
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
@@ -544,53 +637,302 @@ public class MvsmfBrowserWindowTests
         Assert.True(newButton.IsEffectivelyEnabled);
 
         newButton.Command!.Execute(null);
-        Dispatcher.UIThread.RunJobs();
+        await Wait.UntilAsync(() => window.NewDatasetDialog is { IsVisible: true }, "the New dataset dialog");
+        var dialog = window.NewDatasetDialog!;
 
-        Assert.True(Named<DockPanel>(window, "CreatePane").IsVisible);
-        Assert.False(Named<DockPanel>(window, "MemberPane").IsVisible);
-        Assert.False(Named<ListBox>(window, "DatasetList").IsEffectivelyEnabled);
-        Assert.False(newButton.IsEffectivelyEnabled);
-        var name = Named<TextBox>(window, "NewNameBox");
+        Assert.Same(dialog, Assert.Single(window.OwnedWindows));
+        Assert.Equal("New dataset", dialog.Title);
+        Assert.True(Named<DockPanel>(window, "MemberPane").IsVisible);
+        var name = dialog.FindControl<TextBox>("NewNameBox")!;
         await Wait.UntilAsync(() => name.IsFocused, "the focus in the name box");
         Assert.Equal("MVSCE02.", name.Text);
-        Assert.False(Named<Button>(window, "CreateButton").IsEffectivelyEnabled);
+        Assert.False(dialog.FindControl<Button>("CreateButton")!.IsEffectivelyEnabled);
 
         name.Text = "MVSCE02.NEW";
         Dispatcher.UIThread.RunJobs();
-        Assert.True(Named<Button>(window, "CreateButton").IsEffectivelyEnabled);
+        Assert.True(dialog.FindControl<Button>("CreateButton")!.IsEffectivelyEnabled);
     }
 
     [AvaloniaFact]
-    public async Task Escape_closes_the_form_before_the_window()
+    public async Task Escape_in_the_dialog_closes_it_and_leaves_the_window()
     {
         var (window, t) = Show();
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
-        t.Vm.NewDatasetCommand.Execute(null);
-        Assert.True(t.Vm.IsCreating);
+        var dialog = await OpenNewDatasetAsync(window, t);
 
-        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        await Wait.UntilAsync(() => window.NewDatasetDialog is null, "the dialog to close");
 
         Assert.False(t.Vm.IsCreating);
         Assert.True(window.IsVisible);
-        Assert.True(Named<DockPanel>(window, "MemberPane").IsVisible || Named<TextBlock>(window, "ChooseHint").IsVisible);
+        Assert.Empty(window.OwnedWindows);
         await Wait.UntilAsync(() => Named<TextBox>(window, "FilterBox").IsFocused, "the focus back in the filter box");
     }
 
     [AvaloniaFact]
-    public async Task Focus_returns_to_the_form_after_a_refused_create()
+    public async Task Escape_in_the_dialog_cancels_a_create_in_flight_and_keeps_the_dialog()
     {
         var (window, t) = Show();
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+        t.Vm.Form.Name = "MVSCE02.NEW";
+        t.Host.Gate = new TaskCompletionSource();
+        try
+        {
+            var create = t.Vm.CreateCommand.ExecuteAsync(null);
+            await Wait.UntilAsync(() => t.Vm.IsBusy, "the create to start");
+
+            dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            await create;
+
+            Assert.Equal("– Cancelled.", t.Vm.StatusText);
+            Assert.True(t.Vm.IsCreating);
+            Assert.Same(dialog, window.NewDatasetDialog);
+            Assert.True(dialog.IsVisible);
+            Assert.DoesNotContain(t.Vm.Datasets, d => d.Name == "MVSCE02.NEW");
+        }
+        finally
+        {
+            t.Host.Gate.TrySetResult();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_dialogs_close_box_cancels_a_create_in_flight()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+        t.Vm.Form.Name = "MVSCE02.NEW";
+        t.Host.Gate = new TaskCompletionSource();
+        try
+        {
+            var create = t.Vm.CreateCommand.ExecuteAsync(null);
+            await Wait.UntilAsync(() => t.Vm.IsBusy, "the create to start");
+
+            dialog.Close();
+            await create;
+
+            Assert.Equal("– Cancelled.", t.Vm.StatusText);
+            Assert.True(t.Vm.IsCreating);
+            Assert.Same(dialog, window.NewDatasetDialog);
+        }
+        finally
+        {
+            t.Host.Gate.TrySetResult();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_form_closed_and_opened_again_in_one_turn_gets_a_new_dialog()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var first = await OpenNewDatasetAsync(window, t);
+
+        t.Vm.CloseFormCommand.Execute(null);
         t.Vm.NewDatasetCommand.Execute(null);
-        t.Vm.Form.Name = "MVSCE02.CNTL";
+        await Wait.UntilAsync(() => window.NewDatasetDialog is { IsVisible: true }, "the second dialog");
+
+        Assert.NotSame(first, window.NewDatasetDialog);
         Dispatcher.UIThread.RunJobs();
-        var name = Named<TextBox>(window, "NewNameBox");
-        await Wait.UntilAsync(() => name.IsFocused, "the focus in the name box");
+        Assert.NotNull(window.NewDatasetDialog);
+        Assert.True(t.Vm.IsCreating);
+    }
+
+    [AvaloniaFact]
+    public async Task The_dialogs_close_box_is_the_forms_close()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+
+        dialog.Close();
+        await Wait.UntilAsync(() => window.NewDatasetDialog is null, "the dialog to close");
+
+        Assert.False(t.Vm.IsCreating);
+        Assert.True(window.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task A_refused_create_keeps_the_dialog_open_with_the_message()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+        t.Vm.Form.Name = "MVSCE02.CNTL";
+        t.Host.Failures["create:MVSCE02.CNTL"] = new HostFileException(HostFileErrorKind.CannotAllocate, "x", 900, "Dynamic allocation Error");
 
         await t.Vm.CreateCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
 
         Assert.True(t.Vm.IsCreating);
-        Assert.True(Named<TextBlock>(window, "CreateMessage").IsVisible);
-        await Wait.UntilAsync(() => name.IsFocused, "the focus back in the name box");
+        Assert.Same(dialog, window.NewDatasetDialog);
+        Assert.True(dialog.FindControl<TextBlock>("CreateMessage")!.IsVisible);
+        await Wait.UntilAsync(() => dialog.FindControl<TextBox>("NewNameBox")!.IsFocused, "the focus back in the name box");
+    }
+
+    [AvaloniaFact]
+    public async Task A_create_that_succeeds_closes_the_dialog_and_lists_the_new_dataset()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+        t.Vm.Form.Name = "MVSCE02.NEW";
+
+        await t.Vm.CreateCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => window.NewDatasetDialog is null, "the dialog to close");
+
+        Assert.False(t.Vm.IsCreating);
+        Assert.False(dialog.IsVisible);
+        Assert.Contains(t.Vm.Datasets, d => d.Name == "MVSCE02.NEW");
+        Assert.Equal("MVSCE02.NEW", t.Vm.SelectedDataset?.Name);
+    }
+
+    [AvaloniaFact]
+    public async Task Closing_the_window_while_a_create_runs_closes_the_dialog_too()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+        t.Vm.Form.Name = "MVSCE02.NEW";
+        t.Host.Gate = new TaskCompletionSource();
+        try
+        {
+            _ = t.Vm.CreateCommand.ExecuteAsync(null);
+            await Wait.UntilAsync(() => t.Vm.IsBusy, "the create to start");
+
+            window.Close();
+
+            Assert.False(window.IsVisible);
+            Assert.False(dialog.IsVisible);
+        }
+        finally
+        {
+            t.Host.Gate.SetResult();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_context_menus_bind_the_same_commands_as_the_toolbars()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+
+        var datasetMenu = Named<ListBox>(window, "DatasetList").ContextMenu!;
+        datasetMenu.Open(Named<ListBox>(window, "DatasetList"));
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            var items = datasetMenu.Items.OfType<MenuItem>().ToDictionary(i => i.Name!);
+            Assert.Same(t.Vm.NewDatasetCommand, items["DatasetMenuNew"].Command);
+            Assert.Same(t.Vm.RenameDatasetCommand, items["DatasetMenuRename"].Command);
+            Assert.Same(t.Vm.DeleteDatasetCommand, items["DatasetMenuDelete"].Command);
+            Assert.Same(t.Vm.RefreshCommand, items["DatasetMenuRefresh"].Command);
+            Assert.Equal(window.NewDatasetGesture, items["DatasetMenuNew"].InputGesture);
+            Assert.Equal(window.RefreshGesture, items["DatasetMenuRefresh"].InputGesture);
+        }
+        finally
+        {
+            datasetMenu.Close();
+        }
+
+        var memberMenu = Named<ListBox>(window, "MemberList").ContextMenu!;
+        memberMenu.Open(Named<ListBox>(window, "MemberList"));
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            var items = memberMenu.Items.OfType<MenuItem>().ToDictionary(i => i.Name!);
+            Assert.Same(t.Vm.DownloadCommand, items["MemberMenuDownload"].Command);
+            Assert.Same(t.Vm.UploadCommand, items["MemberMenuUpload"].Command);
+            Assert.Same(t.Vm.RenameMemberCommand, items["MemberMenuRename"].Command);
+            Assert.Same(t.Vm.DeleteCommand, items["MemberMenuDelete"].Command);
+            Assert.Equal(new KeyGesture(Key.Enter), items["MemberMenuDownload"].InputGesture);
+            Assert.Equal(new KeyGesture(Key.Delete), items["MemberMenuDelete"].InputGesture);
+        }
+        finally
+        {
+            memberMenu.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Double_clicking_a_member_downloads_it()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        // The Standard seed lists COMPILE as a member but stores no content for it (FakeHostFileService.Text is
+        // keyed separately): without this the download itself would fail Not found, and the double-click could
+        // never be told apart from a click that reached DownloadCommand but failed for an unrelated reason.
+        t.Host.Text["MVSCE02.CNTL(COMPILE)"] = ["//COMPILE JOB", "//STEP EXEC PGM=IEFBR14"];
+        window.UpdateLayout();
+        var list = Named<ListBox>(window, "MemberList");
+        var row = (Control)list.ContainerFromIndex(1)!;
+        var centre = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
+        var target = Path.Combine(Path.GetTempPath(), $"lizterm-{Guid.NewGuid():N}.txt");
+        t.Picker.Result = target;
+        try
+        {
+            window.MouseDown(centre, MouseButton.Left);
+            window.MouseUp(centre, MouseButton.Left);
+            window.MouseDown(centre, MouseButton.Left);
+            window.MouseUp(centre, MouseButton.Left);
+
+            await Wait.UntilAsync(() => t.Vm.StatusText.StartsWith("✓"), "the download");
+            Assert.Contains("save:", t.Picker.Calls.Single(c => c.StartsWith("save:")));
+            Assert.Equal(new[] { "COMPILE" }, t.Vm.SelectedMembers.Select(m => m.Name));
+        }
+        finally
+        {
+            File.Delete(target);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_command_key_shortcuts_refresh_and_open_new()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var modifiers = window.RefreshGesture.KeyModifiers;
+        var raw = modifiers.HasFlag(KeyModifiers.Meta) ? RawInputModifiers.Meta : RawInputModifiers.Control;
+        t.Host.AddDataset("MVSCE02.NEW", dsorg: "PS");
+
+        window.KeyPress(Key.R, raw, PhysicalKey.R, null);
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 5, "the refreshed listing");
+
+        window.KeyPress(Key.N, raw, PhysicalKey.N, null);
+        await Wait.UntilAsync(() => window.NewDatasetDialog is { IsVisible: true }, "the New dataset dialog");
+        window.NewDatasetDialog!.Close();
+        await Wait.UntilAsync(() => window.NewDatasetDialog is null, "the dialog to close");
+    }
+
+    [AvaloniaFact]
+    public async Task Delete_in_the_dataset_list_asks_about_the_dataset()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.DB");
+        window.UpdateLayout();
+        ((Control)Named<ListBox>(window, "DatasetList").ContainerFromIndex(3)!).Focus();
+
+        window.KeyPress(Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null);
+        await Wait.UntilAsync(() => t.Vm.HasConfirmation, "the question");
+
+        Assert.Contains("MVSCE02.DB", t.Vm.Confirmation!.Message);
+        t.Vm.Confirmation.CancelCommand.Execute(null);
+    }
+
+    [AvaloniaFact]
+    public async Task The_verbs_carry_tooltips_that_name_their_keys()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+
+        Assert.Equal($"Refresh the list ({window.RefreshGesture.ToString("p", null)})", ToolTip.GetTip(Named<Button>(window, "RefreshButton")));
+        Assert.Equal($"Allocate a new dataset ({window.NewDatasetGesture.ToString("p", null)})", ToolTip.GetTip(Named<Button>(window, "NewDatasetButton")));
+        Assert.Equal("Download the selected members (Enter)", ToolTip.GetTip(Named<Button>(window, "DownloadButton")));
+        Assert.Equal("Delete the selected members (Delete)", ToolTip.GetTip(Named<Button>(window, "DeleteButton")));
     }
 }

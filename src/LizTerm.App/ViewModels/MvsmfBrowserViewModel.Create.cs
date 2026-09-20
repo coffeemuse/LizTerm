@@ -10,14 +10,15 @@ using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.ViewModels;
 
-/// <summary>New dataset (spec §4.4): a form in the right pane, where the upload review goes, sent as an explicit
-/// allocation. The form is one instance for the life of the window, so the space it was last sent with is kept.</summary>
+/// <summary>New dataset (spec §4.4): the form is <see cref="Views.NewDatasetWindow"/>, an owned modal dialog over
+/// the browser window, bound to this view model, sent as an explicit allocation. The form is one instance for the
+/// life of the window, so the space it was last sent with is kept.</summary>
 public sealed partial class MvsmfBrowserViewModel
 {
     public NewDatasetFormViewModel Form { get; } = new();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowMemberPane), nameof(CanChooseDataset), nameof(ShowChooseHint), nameof(ShowSequentialNote))]
+    [NotifyPropertyChangedFor(nameof(CanChooseDataset))]
     private bool _isCreating;
 
     private bool CanNewDataset => !IsBusy && !IsReviewingUpload && !IsCreating;

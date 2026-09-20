@@ -12,7 +12,7 @@ This guide covers everything past the first connection. For downloading and firs
 - [Saving and copying the screen](#saving-and-copying-the-screen)
 - [TLS and certificates](#tls-and-certificates)
 - [File transfer (IND$FILE)](#file-transfer-indfile)
-- [mvsMF Browser (preview)](#mvsmf-browser-preview)
+- [mvsMF Access (preview)](#mvsmf-access-preview)
 - [Wire logs](#wire-logs)
 - [Menus](#menus)
 - [Where LizTerm keeps its files](#where-lizterm-keeps-its-files)
@@ -51,7 +51,7 @@ first. **FAVORITE** is fixed: it can't be renamed, recoloured or deleted.
 
 The editor puts its settings on four tabs: **Connection** (name, host, port, TLS, keep-alive, reconnect),
 **Terminal** (model, screen size, code page, LU name, keyboard), **Organize** (FAVORITE, tags, note) and
-**mvsMF** (the address and userid for the mvsMF Browser, a feature preview). If
+**mvsMF** (the address and userid for mvsMF Access, a feature preview). If
 **Save** can't accept something, the editor shows the tab it's on, outlines the setting, and says what to fix beside
 the buttons.
 
@@ -311,17 +311,18 @@ The dialog shows progress while the transfer runs. **Cancel**, or closing the di
 host only answers on its next turn, so if it has stalled, closing the dialog again lets it go. The host's own message is shown when
 the transfer ends. The dialog remembers your last transfer for that window.
 
-## mvsMF Browser (preview)
+## mvsMF Access (preview)
 
 **This is a feature preview.** It works, but it is new and still being refined, and it has been tested against one
 build of mvsMF (1.1.0). It follows that build's behaviour; older builds are not supported (see
 [Signing in](#signing-in)). Please report what you find
 ([Help > Report an Issue...](https://github.com/coffeemuse/LizTerm/issues/new/choose)).
 
-[mvsMF](https://github.com/mvslovers/mvsmf) is a z/OSMF-style REST server for MVS 3.8j. The **mvsMF Browser** uses
-it to list datasets and members, download and upload them, and delete members, without typing anything on the
-3270 screen. It is a second way to move files alongside [IND$FILE](#file-transfer-indfile), and it doesn't need the
-session to be logged on, or even connected.
+[mvsMF](https://github.com/mvslovers/mvsmf) is a z/OSMF-style REST server for MVS 3.8j. It ships with TK5 and can be
+installed on TK4- or a hand-rolled MVS 3.8. **mvsMF Access** uses it to list datasets and members, download and
+upload them, and create, rename and delete them, without typing anything on the 3270 screen. It is a second way to
+move files alongside [IND$FILE](#file-transfer-indfile), and it doesn't need the session to be logged on, or even
+connected.
 
 ### Setting it up
 
@@ -329,14 +330,14 @@ Open the profile in the editor and go to the **mvsMF** tab:
 
 - **URL** is the address of the mvsMF server, for example `http://mvs.example:8080`. When the address has no path,
   LizTerm adds `/zosmf`. Only `http://` and `https://` addresses are accepted.
-- **Userid** is optional. It fills in the sign-in window, and the browser starts by listing `USERID.**`.
+- **Userid** is optional. It fills in the sign-in window, and the window starts by listing `USERID.**`.
 - **Test** checks the server is reachable, then signs in and asks it what it is, showing the answer (for example
   **✓ Connected: mvsMF 1.1.0 on MVS 3.8j**) or what went wrong. If the URL cannot be reached, it says so without
   asking for a password. A sign-in made for **Test** is ended right after.
 
-Once a profile has a URL, its session window has **File > mvsMF Browser...**. The item has no keyboard shortcut, so
-it never takes a key the host needs. Choosing it again brings the open browser back to the front: each session
-window has one browser, which closes when the session window does. A change to the URL takes effect the next time
+Once a profile has a URL, its session window has **File > mvsMF Access...**. The item has no keyboard shortcut, so
+it never takes a key the host needs. Choosing it again brings the open window back to the front: each session
+window has one, which closes when the session window does. A change to the URL takes effect the next time
 you open the session.
 
 ### Signing in
@@ -344,8 +345,8 @@ you open the session.
 **LizTerm needs mvsMF 1.1.0 or later.** Older builds have no sign-in service, and LizTerm says so rather than
 connecting.
 
-The first time the browser reaches the host, it asks for your userid and password. LizTerm uses them once to sign
-in, then keeps only a session token in memory; the password is not stored. Every browser operation in that session
+The first time mvsMF Access reaches the host, it asks for your userid and password. LizTerm uses them once to sign
+in, then keeps only a session token in memory; the password is not stored. Every operation in that session
 uses the token, so you sign in once. mvsMF forgets an idle session after about 30 minutes, and then LizTerm asks
 you to sign in again. Closing the session window signs you out. LizTerm cannot guarantee the password is wiped from
 memory, because .NET gives no way to erase a string.
@@ -359,29 +360,38 @@ only the exact certificate you pinned, and only until that certificate expires.
 
 ### Browsing
 
-Type a dataset pattern in **Filter**, such as `MVSCE02.**`, and choose **List**. The left pane lists the matching
-datasets with their **NAME**, **DSORG**, **RECFM** and **LRECL**. VSAM and direct-access (`DA`) datasets are listed
-as **(not supported)**: nothing can be downloaded from or uploaded to them.
+Type a dataset pattern in **Filter**, such as `MVSCE02.**`, and choose **List**. The window has two panes, each
+with a toolbar of the actions that apply to what is selected in it, and a status line at the bottom.
 
-Choosing a partitioned dataset (a PDS) lists its members on the right, where **Filter members** narrows the list as
-you type and you can select several members at once. In the filter, `*` stands for any run of characters and `%`
-for exactly one, so `IEF*` keeps the members starting with IEF. For a sequential dataset, **Download…** and
-**Upload…** act on the dataset itself.
+The **Datasets** pane on the left lists the matching datasets with their **NAME**, **DSORG**, **RECFM** and
+**LRECL**. Its toolbar has **New…**, **Rename…**, **Delete…** and **Refresh** (which lists the filter again and keeps
+the dataset you had chosen). VSAM and direct-access (`DA`) datasets are listed as **(not supported)**: nothing can be
+downloaded from or uploaded to them. The footer says how many datasets are listed and whether one is selected.
 
-Long lists arrive 500 entries at a time. When the host has more, the status line says so (**500 datasets shown,
-more on the host**), the member header shows a plus (**500+ members**), and a **Load more** button appears under
-the list; each press adds the next 500. On such a library the host does the narrowing: what you type in **Filter
-members** is sent to it, after a short pause, and the members shown are every match, again 500 at a time; the
-header then counts matches (**40 matching**) rather than members. Download, Upload and Delete act on the members
-that are shown, but an upload always checks the whole library before replacing a member, whether or not its page
-is loaded.
+Choosing a partitioned dataset (a PDS) lists its members in the pane on the right, titled with the dataset's name,
+where **Filter members** narrows the list as you type and you can select several members at once. In the filter,
+`*` stands for any run of characters and `%` for exactly one, so `IEF*` keeps the members starting with IEF. Its
+toolbar has **Download…**, **Upload…**, **Rename…** and **Delete…**, and a **Transfer** drop-down that shows the
+current mode (**Text** or **Binary**) and holds **Trim trailing blanks** and **Verify after upload**. The footer says
+how many members are shown and how many are selected. For a sequential dataset, **Download…** and **Upload…** act on
+the dataset itself.
 
-**Mode** chooses **Text**, which converts between EBCDIC and your computer's characters, or **Binary**, which copies
-bytes unchanged. **Binary** is chosen for you on an undefined-length (`RECFM=U`) dataset, such as a load library.
+Each list also has a right-click menu with the same actions, and these keys: **Enter** or a double-click on a
+member downloads it, **Delete** or **Backspace** deletes the selected members (or, in the Datasets pane, the
+selected dataset), **Cmd+R** (macOS) or **Ctrl+R** refreshes, **Cmd+N** or **Ctrl+N** opens **New dataset**, and
+**Escape** cancels a question, then a running operation, then an open upload review, then closes the window.
 
-The keyboard reaches everything. In the member list, **Enter** downloads the selection, and **Delete** or
-**Backspace** deletes it. **Escape** answers a question with Cancel, else cancels what is running, else closes an
-upload review or the New dataset form, else closes the window.
+Long lists arrive 500 entries at a time. When the host has more datasets than shown, the status line says so
+(**500 datasets shown, more on the host**) and the Datasets pane's footer offers **Load more**; the Members pane's
+footer shows a plus (**500+ members**) and offers its own **Load more**. Each press adds the next 500. On such a
+library the host does the narrowing: what you type in **Filter members** is sent to it, after a short pause, and
+the members shown are every match, again 500 at a time; the footer then counts matches (**40 matching**) rather
+than members. Download, Upload and Delete act on the members that are shown, but an upload always checks the whole
+library before replacing a member, whether or not its page is loaded.
+
+The **Transfer** drop-down's **Text** and **Binary** radios choose how a transfer moves bytes: **Text** converts
+between EBCDIC and your computer's characters, **Binary** copies them unchanged. **Binary** is chosen for you on an
+undefined-length (`RECFM=U`) dataset, such as a load library.
 
 ### Downloading
 
@@ -413,16 +423,16 @@ checks each text file against the dataset:
   host as a tab character.
 - **Empty lines** become blank records on the host.
 
-Choose **Upload** to start. Before replacing a member that already exists, the browser asks **Replace** or
+Choose **Upload** to start. Before replacing a member that already exists, the window asks **Replace** or
 **Skip**. With **Verify after upload** on (the default), each text member is read back and compared with what was
 sent. A member that differs is marked **⚠ Uploaded, but the host copy differs at line N**.
 
-If you downloaded a member in this window and it has changed on the host since, the browser says so before
+If you downloaded a member in this window and it has changed on the host since, the window says so before
 replacing it: **Replace anyway** writes your copy over the change, **Skip** leaves the member alone. The check
-covers only members downloaded or uploaded through this browser window; anything else is replaced as before, and
+covers only members downloaded or uploaded through this window; anything else is replaced as before, and
 a sequential dataset is checked the same way, with **Cancel** in place of **Skip**.
 
-A sequential dataset takes one file at a time. After the checks, the browser asks before replacing the dataset's
+A sequential dataset takes one file at a time. After the checks, the window asks before replacing the dataset's
 contents.
 
 mvsMF cannot undo a write. If an upload fails or is cancelled while a member is being written, the member may be
@@ -430,33 +440,34 @@ left partly written, and its row says so.
 
 ### Deleting
 
-**Delete…** in the bottom bar deletes the selected members, after a question that names them (**Delete 3
-members**). A deleted member cannot be recovered. If you cancel part-way, the browser lists the members again and
-says how many were deleted. **Delete…** under the dataset list deletes a whole dataset; see
+**Delete…** in the Members pane's toolbar deletes the selected members, after a question that names them (**Delete 3
+members**). A deleted member cannot be recovered. If you cancel part-way, the window lists the members again and
+says how many were deleted. **Delete…** in the Datasets pane's toolbar deletes a whole dataset; see
 [Managing datasets](#managing-datasets).
 
 ### Managing datasets
 
-The buttons under the dataset list create, rename and delete datasets.
+The **Datasets** pane's toolbar creates, renames and deletes datasets.
 
-**New…** opens a form in the right pane. With a dataset selected, the form starts from its type, RECFM, LRECL and
-BLKSIZE, and the name starts with your filter's first qualifier, so a new library like the one selected is a name
-and **Create** away. Space is in tracks or cylinders, a primary and a secondary amount, and directory blocks for a
-partitioned dataset; the form keeps the space you last used while the window is open. A value the host cannot take
-is marked **✗** under its box until you fix it.
+**New…** opens the **New dataset** window. With a dataset selected, it starts from the dataset's type, RECFM, LRECL
+and BLKSIZE, and the name starts with your filter's first qualifier, so a new library like the one selected is a
+name and **Create** away. Space is in tracks or cylinders, a primary and a secondary amount, and directory blocks
+for a partitioned dataset; the window keeps the space you last used while it is open. A value the host cannot take
+is marked **✗** under its box until you fix it. **Cancel** or **Escape** closes the window without creating anything;
+while the create runs, **Escape** or the close box cancels it and the window stays.
 
 mvsMF cannot say why an allocation failed: a name that already exists, no room on the volume and a missing
-authorization all come back as the same **The host could not allocate it** message, which stays in the form so you
-can change the values and try again. A record layout the host rejects (a BLKSIZE that is not a multiple of a
+authorization all come back as the same **The host could not allocate it** message, which stays in the window so
+you can change the values and try again. A record layout the host rejects (a BLKSIZE that is not a multiple of a
 fixed LRECL, say) fails the same way.
 
-**Rename…** under the dataset list renames the selected dataset, and **Rename…** in the bottom bar renames the
-selected member. Both ask for the new name in the strip at the bottom of the window, where **Rename** is enabled
-once the name is different and acceptable, and **Enter** confirms. A renamed dataset your filter does not show is
-reported in the status line. The host refuses to rename a member onto a name that already exists; renaming a
-dataset onto an existing name fails with a server error.
+**Rename…** in the Datasets pane's toolbar renames the selected dataset, and **Rename…** in the Members pane's
+toolbar renames the selected member. Both ask for the new name in the strip at the bottom of the window, where
+**Rename** is enabled once the name is different and acceptable, and **Enter** confirms. A renamed dataset your
+filter does not show is reported in the status line. The host refuses to rename a member onto a name that already
+exists; renaming a dataset onto an existing name fails with a server error.
 
-**Delete…** under the dataset list deletes the selected dataset, after a question that names it and, for a
+**Delete…** in the Datasets pane's toolbar deletes the selected dataset, after a question that names it and, for a
 partitioned dataset, says how many members it has. This cannot be undone.
 
 ### When something goes wrong
@@ -589,8 +600,8 @@ sit on five tabs:
 
 Profiles are in `profiles/`, one JSON file each, and wire logs in `logs/`, named
 `wire-<profile>-<date>-<time>.log`. An older LizTerm reading a profile written by a newer one keeps the settings it
-understands and drops the rest the next time it saves that profile: going back to a LizTerm without the mvsMF
-Browser loses that profile's mvsMF URL, userid and pinned certificate. `settings.json` holds your preferences — only
+understands and drops the rest the next time it saves that profile: going back to a LizTerm without mvsMF Access
+loses that profile's mvsMF URL, userid and pinned certificate. `settings.json` holds your preferences — only
 the ones you have changed, so deleting it puts everything back to the defaults. `tags.json` holds one colour per tag
 name; deleting it loses only the colours, because the tag names themselves live in the profiles and are given fresh
 colours the next time LizTerm starts. `recent-hosts.json` holds the hosts Quick Connect remembers; deleting it
@@ -633,5 +644,5 @@ text like any other chord.
 - **TLS hosts that rely on SNI** (several TLS sites sharing one address) cannot be verified, because the
   underlying x3270 engine does not send a server name ([#12](https://github.com/coffeemuse/LizTerm/issues/12)).
 - **No printer sessions or scripting.**
-- **The mvsMF Browser is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). Older mvsMF builds
+- **mvsMF Access is a preview** ([#17](https://github.com/coffeemuse/LizTerm/issues/17)). Older mvsMF builds
   are not supported (see [Signing in](#signing-in)). It can't submit jobs or browse the z/OS UNIX file system.

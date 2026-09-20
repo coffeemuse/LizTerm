@@ -27,7 +27,7 @@ public class MvsmfBrowserCreateTests
         Assert.Equal(("MVSCE02.", true, "FB", "80", "19040"), (form.Name, form.IsPartitioned, form.Recfm, form.Lrecl, form.Blksize));
         Assert.Equal(("5", "5", "20"), (form.Primary, form.Secondary, form.DirectoryBlocks));
         Assert.Null(form.Message);
-        Assert.False(t.Vm.ShowMemberPane);
+        Assert.True(t.Vm.ShowMemberPane);
         Assert.False(t.Vm.CanChooseDataset);
         Assert.False(t.Vm.ShowChooseHint);
         Assert.False(t.Vm.CreateCommand.CanExecute(null));

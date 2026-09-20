@@ -12,8 +12,8 @@ LizTerm is the client experience around it. The reasoning, and the alternatives 
 |---|---|---|
 | `src/LizTerm.Core` | The domain model: screen snapshots, connection and keyboard state, profiles and settings, the `IEmulatorSession` interface, host-neutral file access (`IHostFileService`), certificate utilities, the release check. | The BCL only |
 | `src/LizTerm.Backend.B3270` | `B3270Session`, the implementation of `IEmulatorSession`: process host, JSON protocol, engine locator, wire log. | Core |
-| `src/LizTerm.Backend.Mvsmf` | `MvsmfFileService`, the implementation of `IHostFileService`: the HTTP client for mvsMF used by the mvsMF Browser; the only project that knows mvsMF exists. | Core |
-| `src/LizTerm.App` | The Avalonia UI: splash, profile picker and editor, session window, terminal control, dialogs, menus, and the mvsMF Browser, which reaches its backend through `HostFileServiceFactory`. | Core, and each backend in one file only |
+| `src/LizTerm.Backend.Mvsmf` | `MvsmfFileService`, the implementation of `IHostFileService`: the HTTP client for mvsMF used by mvsMF Access; the only project that knows mvsMF exists. | Core |
+| `src/LizTerm.App` | The Avalonia UI: splash, profile picker and editor, session window, terminal control, dialogs, menus, and mvsMF Access, which reaches its backend through `HostFileServiceFactory`. | Core, and each backend in one file only |
 
 **The dependency rule.** Core never mentions Avalonia, b3270 or mvsMF. Each backend is the only project that knows
 its product exists, and the two never reference each other. The App names the b3270 backend in exactly one file,
@@ -40,7 +40,7 @@ in review, not by tooling.
 
 ## The release check
 
-The release check is the only HTTP request the app makes on its own. The mvsMF Browser, and the profile editor's
+The release check is the only HTTP request the app makes on its own. mvsMF Access, and the profile editor's
 Test button, talk only to the URL a profile names, and only when the user asks. Core's `GitHubReleaseChecker` asks
 GitHub's releases API for the latest release
 (`GET https://api.github.com/repos/coffeemuse/LizTerm/releases/latest`, with a 10 s timeout and the User-Agent

@@ -15,7 +15,7 @@ public sealed partial class MvsmfBrowserViewModel
     public ObservableCollection<UploadRow> Uploads { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(UploadHeader), nameof(ShowMemberPane), nameof(CanChooseDataset))]
+    [NotifyPropertyChangedFor(nameof(UploadHeader), nameof(ShowMemberPane), nameof(CanChooseDataset), nameof(MembersTitle), nameof(MembersFooter))]
     private bool _isReviewingUpload;
 
     [ObservableProperty] private bool _uploadFinished;
@@ -24,8 +24,9 @@ public sealed partial class MvsmfBrowserViewModel
     /// <summary>Set when a connection failure stopped a write part-way, so the banner warns about a partial member.</summary>
     private bool _uploadStoppedMidWrite;
 
-    /// <summary>The member list gives way to the upload review or the New dataset form.</summary>
-    public bool ShowMemberPane => ShowMembers && !IsReviewingUpload && !IsCreating;
+    /// <summary>The member list gives way to the upload review; the New dataset dialog covers it instead of hiding
+    /// it, so this does not gate on IsCreating.</summary>
+    public bool ShowMemberPane => ShowMembers && !IsReviewingUpload;
 
     /// <summary>The dataset list is fixed while an operation runs, or a review or the form is open: the review and
     /// the member list both belong to the chosen dataset.</summary>
@@ -43,7 +44,13 @@ public sealed partial class MvsmfBrowserViewModel
 
     partial void OnExpandTabsChanged(bool value) => RecheckIfReviewing();
 
-    partial void OnModeChanged(HostTransferMode value) => RecheckIfReviewing();
+    partial void OnModeChanged(HostTransferMode value)
+    {
+        RecheckIfReviewing();
+        // Chosen by the user (a dataset's own choice of mode is followed by its member listing, which sets the
+        // status line itself): the bar's old padding note becomes the status line.
+        if (ShowPaddingNote && !IsBusy) StatusText = PaddingNote;
+    }
 
     [RelayCommand(CanExecute = nameof(CanUpload))]
     private async Task UploadAsync()

@@ -65,7 +65,7 @@ public class MvsmfBrowserPagingTests
 
         Assert.False(t.Vm.HasMoreMembers);
         Assert.False(t.Vm.LoadMoreMembersCommand.CanExecute(null));
-        Assert.Equal("MVSCE02.LOAD · 1 member", t.Vm.MembersHeader);
+        Assert.Equal("1 member · none selected", t.Vm.MembersFooter);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class MvsmfBrowserPagingTests
 
         Assert.Equal(new[] { "ALLOC", "COMPILE" }, t.Vm.Members.Select(m => m.Name));
         Assert.True(t.Vm.HasMoreMembers);
-        Assert.Equal("MVSCE02.BIG · 2+ members", t.Vm.MembersHeader);
+        Assert.Equal("2+ members · none selected", t.Vm.MembersFooter);
         Assert.Equal("2 members shown, more on the host", t.Vm.StatusText);
 
         await t.LoadMoreMembersAsync();
@@ -90,7 +90,7 @@ public class MvsmfBrowserPagingTests
 
         Assert.Equal(5, t.Vm.Members.Count);
         Assert.False(t.Vm.HasMoreMembers);
-        Assert.Equal("MVSCE02.BIG · 5 members", t.Vm.MembersHeader);
+        Assert.Equal("5 members · none selected", t.Vm.MembersFooter);
         Assert.Equal("5 members", t.Vm.StatusText);
     }
 
@@ -152,7 +152,7 @@ public class MvsmfBrowserPagingTests
         Assert.Equal(new HostListRequest(MaxItems: 2, NamePattern: "*L*"), t.Host.ListRequests[^1]);
         Assert.Equal(new[] { "ALLOC", "COMPILE" }, t.Vm.VisibleMembers.Select(m => m.Name));
         Assert.True(t.Vm.HasMoreMembers);
-        Assert.Equal("MVSCE02.BIG · 2+ matching", t.Vm.MembersHeader);
+        Assert.Equal("2+ matching · none selected", t.Vm.MembersFooter);
         Assert.Equal("2 matching *L* shown, more on the host", t.Vm.StatusText);
 
         await t.LoadMoreMembersAsync();
@@ -160,7 +160,7 @@ public class MvsmfBrowserPagingTests
         Assert.Equal(new HostListRequest(MaxItems: 2, Continuation: "COMPILE", NamePattern: "*L*"), t.Host.ListRequests[^1]);
         Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO", "LINK" }, t.Vm.VisibleMembers.Select(m => m.Name));
         Assert.False(t.Vm.HasMoreMembers);
-        Assert.Equal("MVSCE02.BIG · 4 matching", t.Vm.MembersHeader);
+        Assert.Equal("4 matching · none selected", t.Vm.MembersFooter);
         Assert.Equal("4 matching *L*", t.Vm.StatusText);
 
         await t.FilterMembersAsync("");

@@ -95,7 +95,6 @@ public sealed partial class MvsmfBrowserViewModel
         foreach (var member in deleted) Members.Remove(member);
         RefreshVisibleMembers();
         SetSelectedMembers([]);
-        OnPropertyChanged(nameof(MembersHeader));
     }
 
     /// <summary>A refresh on the way out of a stopped delete: its own failure would only hide the reason for the
