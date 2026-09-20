@@ -80,6 +80,11 @@ public partial class App : Application
             // of the process.
             DockMenu.Attach(this, _sessions, ShowPicker, OperatingSystem.IsMacOS());
 
+            // Before any session window exists (#23): every Keys item's shortcut is a real key equivalent on macOS,
+            // and this is what keeps AppKit from dispatching it ahead of the screen. SessionWindow.ApplyKeymap gives
+            // the items no gesture unless Installed says this succeeded.
+            MacMenuKeyEquivalents.Install(OperatingSystem.IsMacOS());
+
             // Settings before anything opens: whether there is a splash at all is one of them (#108). Load never
             // throws, so reading them first adds no way for startup to fail before a window can say so.
             _settings = new SettingsViewModel(new SettingsStore(AppPaths.SettingsFile()));
