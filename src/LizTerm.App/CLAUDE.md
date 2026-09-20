@@ -309,6 +309,15 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   reached through Alt+1 or the Keys menu.
 - Insert's second home is Ctrl+I (#111), for keyboards with no Insert key (every Apple one). Ctrl+I is Tab only to
   an ASCII terminal; a 3270 host never sees ASCII control codes, so the table does not reserve it for Tab.
+- Clear's Ctrl+Escape works on macOS only because of `Keyboard/MacEscapeChords` (#157). `NSWindow.sendEvent:` never
+  hands an Escape key-down with ⌃ or ⌘ to the first responder's `keyDown:`: it sends `cancelOperation:`, and where
+  nothing answers that, `doCommandBySelector:cancel:`, which Avalonia's `AvnView` swallows, so no `KeyDown` was ever
+  raised (⇧⎋, ⌥⎋ and a bare ⎋ take `keyDown:` and always worked; measured 2026-09-20 with a probe NSView, event by
+  event). At startup on macOS Install adds a `cancelOperation:` to `AvnView` that hands NSApp's `currentEvent` to the
+  view's `keyDown:` when it is the Escape key-down (`Forwards` is the pure rule) and does nothing otherwise, and it
+  declines to install where the class already answers the selector. So the screen sees ⌃⎋ (and ⌘⎋, which the keymap
+  policy refuses) as an ordinary `KeyDown`, and the Escape press ends the Ctrl tap that used to survive the lost chord.
+  Its imports are `Platform/LibObjc`, shared with `MacMenuKeyEquivalents`; both install from `App` before any window.
 - A Left Ctrl tap is Reset and a Right Ctrl tap is Enter. `ModifierTapDetector` sees a Ctrl key go down and the same
   key come up with nothing between (`OnKeyUp` looks up `KeyChord.TapOf`); another key, a pointer press, a wheel turn,
   focus loss and the window deactivating all reset it.
