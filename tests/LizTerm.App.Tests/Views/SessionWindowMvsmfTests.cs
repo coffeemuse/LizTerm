@@ -77,7 +77,7 @@ public class SessionWindowMvsmfTests
 
         var browser = Assert.IsType<MvsmfBrowserWindow>(Assert.Single(shown.Window.OwnedWindows));
         var vm = Assert.IsType<MvsmfBrowserViewModel>(browser.DataContext);
-        Assert.Equal("mvsMF Browser — MVS/CE (Preview)", vm.Title);
+        Assert.Equal("mvsMF Access — MVS/CE (Preview)", vm.Title);
         Assert.Same(browser, shown.Window.MvsmfBrowser);
 
         Click(Classic(shown.Window));

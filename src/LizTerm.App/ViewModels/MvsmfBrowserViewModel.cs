@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LizTerm.App.Files;
@@ -38,6 +39,11 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _filter = access.Userid is { Length: > 0 } userid ? userid + ".**" : "";
         _access.PinSaveFailed += OnPinSaveFailed;
         WatchForm();
+        // The footers count the collections, so they follow every add, clear and refill.
+        Datasets.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DatasetsFooter));
+        Members.CollectionChanged += (_, _) => OnPropertyChanged(nameof(MembersFooter));
+        VisibleMembers.CollectionChanged += (_, _) => OnPropertyChanged(nameof(MembersFooter));
+        Uploads.CollectionChanged += (_, _) => OnPropertyChanged(nameof(MembersFooter));
     }
 
     /// <summary>The operation that accepted the pin goes on; the warning replaces its status line when it ends.</summary>
@@ -48,7 +54,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         else StatusText = "⚠ " + message;
     });
 
-    public string Title => $"mvsMF Browser — {_access.ProfileName} (Preview)";
+    public string Title => $"mvsMF Access — {_access.ProfileName} (Preview)";
 
     public ObservableCollection<DatasetRow> Datasets { get; } = [];
     public ObservableCollection<MemberRow> Members { get; } = [];
@@ -59,11 +65,11 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMembers), nameof(ShowSequentialNote), nameof(ShowChooseHint), nameof(ChooseHint),
-        nameof(MembersHeader), nameof(ShowPaddingNote), nameof(UploadHeader), nameof(ShowMemberPane))]
+        nameof(MembersTitle), nameof(DatasetsFooter), nameof(MembersFooter), nameof(ShowPaddingNote), nameof(UploadHeader), nameof(ShowMemberPane))]
     private DatasetRow? _selectedDataset;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTextMode), nameof(IsBinaryMode), nameof(ShowPaddingNote))]
+    [NotifyPropertyChangedFor(nameof(IsTextMode), nameof(IsBinaryMode), nameof(ShowPaddingNote), nameof(TransferModeLabel))]
     private HostTransferMode _mode = HostTransferMode.Text;
 
     [ObservableProperty] private bool _trimTrailingBlanks = true;
@@ -109,18 +115,48 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         ? $"{dataset.Name} cannot be opened in this release (DSORG {(dataset.Dsorg.Length > 0 ? dataset.Dsorg : "unknown")})."
         : "Choose a dataset on the left.";
 
-    /// <summary>Short, since it shares a line with the filter box: a plus marks a list the host has more of, and the
-    /// status line (<see cref="MembersStatus"/>) says so in words.</summary>
-    public string MembersHeader => SelectedDataset is { IsPartitioned: true } dataset
-        ? $"{dataset.Name} · {(HasMoreMembers ? $"{Members.Count}+ {(_memberPattern is null ? "members" : "matching")}" : MembersCount())}"
-        : "";
+    /// <summary>The Members pane's title row: the chosen dataset's name, the review's header while one is open,
+    /// and "Members" when nothing supported is chosen (the body then carries the hint).</summary>
+    public string MembersTitle => IsReviewingUpload ? UploadHeader
+        : SelectedDataset is { IsSupported: true } dataset ? dataset.Name
+        : "Members";
 
-    private string MembersCount() => _memberPattern is null ? Plural(Members.Count, "member") : $"{Members.Count} matching";
+    /// <summary>The Datasets pane's footer: the count, a plus while the host has more, and the selection.</summary>
+    public string DatasetsFooter => Datasets.Count == 0 ? "No datasets"
+        : $"{Counted(Datasets.Count, HasMoreDatasets, "dataset")} · {(SelectedDataset is null ? "none" : "1")} selected";
+
+    /// <summary>The Members pane's footer: the files under review, else the members shown (with a plus while the
+    /// host has more, "matching" when the host applied the filter, "n of m" when the filter narrowed the list
+    /// here) and how many are selected. Empty for a dataset that has no member list.</summary>
+    public string MembersFooter
+    {
+        get
+        {
+            if (IsReviewingUpload) return Plural(Uploads.Count, "file");
+            if (SelectedDataset is not { IsPartitioned: true }) return "";
+            if (Members.Count == 0) return _memberPattern is null ? "No members" : "No matching members";
+            var shown = _memberPattern is not null ? $"{Members.Count}{(HasMoreMembers ? "+" : "")} matching"
+                : VisibleMembers.Count < Members.Count ? $"{VisibleMembers.Count} of {Plural(Members.Count, "member")}"
+                : Counted(Members.Count, HasMoreMembers, "member");
+            var selected = _selectedMembers.Count == 0 ? "none" : _selectedMembers.Count.ToString(CultureInfo.InvariantCulture);
+            return $"{shown} · {selected} selected";
+        }
+    }
 
     /// <summary>The status line after a member listing: the count, the pattern the host applied, and whether it
     /// has more.</summary>
     private string MembersStatus() =>
-        MembersCount() + (_memberPattern is { } pattern ? " " + pattern : "") + (HasMoreMembers ? " shown, more on the host" : "");
+        (_memberPattern is null ? Plural(Members.Count, "member") : $"{Members.Count} matching")
+        + (_memberPattern is { } pattern ? " " + pattern : "") + (HasMoreMembers ? " shown, more on the host" : "");
+
+    private static string Counted(int count, bool more, string noun) => more ? $"{count}+ {noun}s" : Plural(count, noun);
+
+    /// <summary>The drop-down button's label (pane-pattern spec §5).</summary>
+    public string TransferModeLabel => IsBinaryMode ? "Transfer: Binary" : "Transfer: Text";
+
+    /// <summary>Binary transfers to fixed-length records are padded to whole records (compatibility log,
+    /// binary-fixed-padding); the status line says so when Binary is chosen on such a dataset.</summary>
+    public const string PaddingNote = "⚠ Binary transfers to fixed-length datasets are padded to whole records.";
 
     /// <summary>Binary transfers to fixed-length records are padded to whole records (compatibility log,
     /// binary-fixed-padding), so the bar says so while it applies.</summary>
@@ -134,6 +170,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     {
         _selectedMembers = [.. members];
         OnPropertyChanged(nameof(SelectedMembers));
+        OnPropertyChanged(nameof(MembersFooter));
         NotifyCommands();
     }
 
@@ -205,7 +242,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _allMembersLoaded = false;
         HasMoreMembers = false;
         SetSelectedMembers([]);
-        OnPropertyChanged(nameof(MembersHeader));
+        OnPropertyChanged(nameof(MembersFooter));
     }
 
     /// <summary>The filter narrows the rows here only while the whole library is loaded, read as the host would read
@@ -331,6 +368,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     private void NotifyCommands()
     {
         ListCommand.NotifyCanExecuteChanged();
+        RefreshCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         DownloadCommand.NotifyCanExecuteChanged();
         UploadCommand.NotifyCanExecuteChanged();

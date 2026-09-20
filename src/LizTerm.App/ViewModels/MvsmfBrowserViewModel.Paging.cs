@@ -29,10 +29,12 @@ public sealed partial class MvsmfBrowserViewModel
     private readonly object _idleLock = new();
     private TaskCompletionSource? _idle;
 
-    [ObservableProperty] private bool _hasMoreDatasets;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DatasetsFooter))]
+    private bool _hasMoreDatasets;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MembersHeader))]
+    [NotifyPropertyChangedFor(nameof(MembersFooter))]
     private bool _hasMoreMembers;
 
     /// <summary>True from a keystroke in the member filter until the host-side listing it schedules has started.</summary>
@@ -61,6 +63,26 @@ public sealed partial class MvsmfBrowserViewModel
 
     private string DatasetsStatus() => Plural(Datasets.Count, "dataset") + (HasMoreDatasets ? " shown, more on the host" : "");
 
+    /// <summary>Lists the filter again and keeps the chosen dataset when it is still listed, reloading its members
+    /// (pane-pattern spec §4.1). Off whenever List is.</summary>
+    [RelayCommand(CanExecute = nameof(CanChooseDataset))]
+    private Task RefreshAsync() => RunExclusiveAsync(RefreshCoreAsync, () => RefreshAsync());
+
+    private async Task RefreshCoreAsync(CancellationToken token)
+    {
+        if (IsReviewingUpload) return;
+        if (HostPath.DatasetPatternError(Filter) is { } problem)
+        {
+            StatusText = "✗ " + problem;
+            return;
+        }
+        var keep = SelectedDataset?.Name;
+        await ListCoreAsync(token);
+        if (keep is null) return;
+        if (Datasets.FirstOrDefault(row => row.Name == keep) is { } row) await SelectAsync(row, token);
+        else StatusText = $"{DatasetsStatus()} · {keep} is no longer listed";
+    }
+
     [RelayCommand(CanExecute = nameof(CanLoadMoreMembers))]
     private Task LoadMoreMembersAsync()
     {
@@ -78,7 +100,7 @@ public sealed partial class MvsmfBrowserViewModel
         _memberContinuation = listing.Continuation;
         HasMoreMembers = !listing.IsComplete;
         RefreshVisibleMembers();
-        OnPropertyChanged(nameof(MembersHeader));
+        OnPropertyChanged(nameof(MembersFooter));
         StatusText = MembersStatus();
     }
 
@@ -107,7 +129,7 @@ public sealed partial class MvsmfBrowserViewModel
         if (pattern is null && listing.IsComplete) _allMembersLoaded = true;
         HasMoreMembers = !listing.IsComplete;
         RefreshVisibleMembers();
-        OnPropertyChanged(nameof(MembersHeader));
+        OnPropertyChanged(nameof(MembersFooter));
         StatusText = MembersStatus();
     }
 

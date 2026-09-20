@@ -15,7 +15,7 @@ public sealed partial class MvsmfBrowserViewModel
     public ObservableCollection<UploadRow> Uploads { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(UploadHeader), nameof(ShowMemberPane), nameof(CanChooseDataset))]
+    [NotifyPropertyChangedFor(nameof(UploadHeader), nameof(ShowMemberPane), nameof(CanChooseDataset), nameof(MembersTitle), nameof(MembersFooter))]
     private bool _isReviewingUpload;
 
     [ObservableProperty] private bool _uploadFinished;
@@ -43,7 +43,13 @@ public sealed partial class MvsmfBrowserViewModel
 
     partial void OnExpandTabsChanged(bool value) => RecheckIfReviewing();
 
-    partial void OnModeChanged(HostTransferMode value) => RecheckIfReviewing();
+    partial void OnModeChanged(HostTransferMode value)
+    {
+        RecheckIfReviewing();
+        // Chosen by the user (a dataset's own choice of mode is followed by its member listing, which sets the
+        // status line itself): the bar's old padding note becomes the status line.
+        if (ShowPaddingNote && !IsBusy) StatusText = PaddingNote;
+    }
 
     [RelayCommand(CanExecute = nameof(CanUpload))]
     private async Task UploadAsync()

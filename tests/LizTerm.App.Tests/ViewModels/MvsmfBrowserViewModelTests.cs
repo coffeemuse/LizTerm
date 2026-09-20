@@ -19,7 +19,7 @@ public class MvsmfBrowserViewModelTests
     public void The_title_and_filter_come_from_the_profile()
     {
         var t = BrowserTestHost.Create();
-        Assert.Equal("mvsMF Browser — MVS/CE (Preview)", t.Vm.Title);
+        Assert.Equal("mvsMF Access — MVS/CE (Preview)", t.Vm.Title);
         Assert.Equal("MVSCE02.**", t.Vm.Filter);
         Assert.Equal("", BrowserTestHost.Create(userid: null).Vm.Filter);
         Assert.True(t.Vm.ShowChooseHint);
@@ -63,7 +63,8 @@ public class MvsmfBrowserViewModelTests
 
         Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO" }, t.Vm.Members.Select(m => m.Name));
         Assert.Equal(new[] { "ALLOC", "COMPILE", "HELLO" }, t.Vm.VisibleMembers.Select(m => m.Name));
-        Assert.Equal("MVSCE02.CNTL · 3 members", t.Vm.MembersHeader);
+        Assert.Equal("MVSCE02.CNTL", t.Vm.MembersTitle);
+        Assert.Equal("3 members · none selected", t.Vm.MembersFooter);
         Assert.Equal("3 members", t.Vm.StatusText);
         Assert.True(t.Vm.ShowMembers);
         Assert.False(t.Vm.ShowSequentialNote);

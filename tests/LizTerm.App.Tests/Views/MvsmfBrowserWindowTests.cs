@@ -39,7 +39,7 @@ public class MvsmfBrowserWindowTests
 
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
 
-        Assert.Equal("mvsMF Browser — MVS/CE (Preview)", window.Title);
+        Assert.Equal("mvsMF Access — MVS/CE (Preview)", window.Title);
         Assert.True(Named<Border>(window, "PreviewStrip").IsVisible);
         Assert.StartsWith("⚠ Feature preview.", Named<Border>(window, "PreviewStrip").GetLogicalDescendants().OfType<TextBlock>().First().Text);
         Assert.Equal("MVSCE02.**", Named<TextBox>(window, "FilterBox").Text);
