@@ -3,7 +3,7 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
-## Unreleased
+## 0.7.0
 
 - **Ctrl+Escape sends Clear on macOS**, which had no working Clear keystroke before: the chord never reached the
   screen, and Pause is not on Apple keyboards ([#157](https://github.com/coffeemuse/LizTerm/issues/157)).
@@ -21,7 +21,7 @@ What changed in each LizTerm release, newest first. Downloads are on the
   see the user guide's
   [mvsMF Access section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-access-preview).
 - **A build that is not a release says so.** **About LizTerm** and the splash screen show it as
-  `0.6.1-DEV (a1b2c3d)`, naming the commit ([#141](https://github.com/coffeemuse/LizTerm/issues/141)).
+  `0.7.0-DEV (a1b2c3d)`, naming the commit ([#141](https://github.com/coffeemuse/LizTerm/issues/141)).
 - **Wire logs.** **Help > Wire Log** now warns that a log records everything you type, passwords included, and asks
   before starting one. On macOS and Linux the log is readable only by your account
   ([#139](https://github.com/coffeemuse/LizTerm/issues/139)).

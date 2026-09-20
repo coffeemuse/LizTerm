@@ -156,7 +156,7 @@ names (`Win32Settings.InstallerIcon`, `MacOsSettings.AppIcon`, `LinuxSettings.Ap
 
 ### Release builds and test builds
 
-About shows the bare version for a release and `0.6.1-DEV (a1b2c3d)` for anything else
+About shows the bare version for a release and `0.7.0-DEV (a1b2c3d)` for anything else
 ([#141](https://github.com/coffeemuse/LizTerm/issues/141)), so that a bug report filed against a test build can say
 which build it was. A build states which it is rather than being guessed at: the workflow-level
 `LIZTERM_RELEASE_BUILD` is `true` only for a pushed tag, every publish step passes it to `dotnet publish` as
