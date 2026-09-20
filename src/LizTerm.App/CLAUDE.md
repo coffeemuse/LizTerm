@@ -498,8 +498,8 @@ constructor captured.
   `new KeyGesture(Key.K, hotkeys.CommandModifiers)` as the native `Gesture` and the classic `InputGesture`, and
   `TerminalScreen.SwitcherRequested` handles the chord wherever no key equivalent is installed. Minimize's Cmd+M is
   native and macOS only; nothing else dispatches it, so the in-window item names no chord.
-  `NativeMenuTests.Only_edit_two_window_items_and_the_Keys_items_carry_gestures` allows those two, Edit's, and the
-  Keys items' and nothing else.
+  `NativeMenuTests.Only_edit_two_window_items_and_the_Keys_items_carry_gestures` allows a gesture on those two, on
+  Edit's items and on the Keys items, and nowhere else.
 - View > **Crosshair** is a submenu of four radio items rather than four items directly under View, because
   "Horizontal" and "Vertical" sitting under View read as window tiling. On macOS `ToggleType="Radio"` marks the chosen
   item with a bullet, not a tick; that is AppKit's own radio mark, not a bug.

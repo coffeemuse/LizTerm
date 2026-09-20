@@ -559,7 +559,8 @@ public partial class SessionWindow : Window, ISessionHost
 
         // The session switcher's chord (spec §6), Find's arrangement: a real key equivalent on the native item, display
         // text on the classic one, and TerminalScreen.SwitcherRequested wherever no key equivalent is installed. A Cmd
-        // chord cannot be a 3270 keystroke, which is why this and Minimize are the two exceptions outside Edit.
+        // chord cannot be a 3270 keystroke, which is why this and Minimize carry one outside Edit; the Keys items are
+        // the other case, safe only under MacMenuKeyEquivalents (ApplyKeymap).
         var switcher = new KeyGesture(Key.K, hotkeys.CommandModifiers);
         SwitchSessionMenuItem.InputGesture = switcher;
         if (MenuLookup.Required(menu, "_Window", "_Switch Session...") is { } nativeSwitch) nativeSwitch.Gesture = switcher;
