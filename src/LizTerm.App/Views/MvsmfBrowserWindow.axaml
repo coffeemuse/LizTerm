@@ -109,12 +109,12 @@
     <Grid ColumnDefinitions="*,4,*" Margin="12,0,12,8">
       <controls:BrowserPane x:Name="DatasetsPane" Grid.Column="0" Title="Datasets" FooterText="{Binding DatasetsFooter}">
         <controls:BrowserPane.Toolbar>
-          <StackPanel x:Name="DatasetToolbar" Orientation="Horizontal" Spacing="6">
+          <WrapPanel x:Name="DatasetToolbar" ItemSpacing="6" LineSpacing="4">
             <Button x:Name="NewDatasetButton" Classes="pane-verb" Content="New…" Command="{Binding NewDatasetCommand}" />
             <Button x:Name="RenameDatasetButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameDatasetCommand}" ToolTip.Tip="Rename the selected dataset" />
             <Button x:Name="DeleteDatasetButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteDatasetCommand}" ToolTip.Tip="Delete the selected dataset (Delete)" />
             <Button x:Name="RefreshButton" Classes="pane-verb" Content="↻ Refresh" Command="{Binding RefreshCommand}" />
-          </StackPanel>
+          </WrapPanel>
         </controls:BrowserPane.Toolbar>
         <controls:BrowserPane.FooterAction>
           <Button x:Name="LoadMoreDatasetsButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreDatasetsCommand}"
@@ -166,7 +166,7 @@
                (pane-pattern spec §4.2): the mode can be changed and the queued files re-checked mid-review
                (OnModeChanged → RecheckIfReviewing), so it must be reachable then too. -->
           <DockPanel>
-            <DropDownButton x:Name="TransferButton" DockPanel.Dock="Right" Classes="pane-verb" Content="{Binding TransferModeLabel}"
+            <DropDownButton x:Name="TransferButton" DockPanel.Dock="Right" Classes="pane-verb" Content="{Binding TransferModeLabel}" Margin="8,0,0,0" VerticalAlignment="Top"
                             IsEnabled="{Binding IsIdle}">
               <DropDownButton.Flyout>
                 <MenuFlyout>
@@ -183,18 +183,18 @@
               </DropDownButton.Flyout>
             </DropDownButton>
             <Panel>
-              <StackPanel x:Name="MemberToolbar" Orientation="Horizontal" Spacing="6" IsVisible="{Binding !IsReviewingUpload}">
+              <WrapPanel x:Name="MemberToolbar" ItemSpacing="6" LineSpacing="4" IsVisible="{Binding !IsReviewingUpload}">
                 <Button x:Name="DownloadButton" Classes="pane-verb" Content="⇣ Download…" Command="{Binding DownloadCommand}" ToolTip.Tip="Download the selected members (Enter)" />
                 <Button x:Name="UploadButton" Classes="pane-verb" Content="⇡ Upload…" Command="{Binding UploadCommand}" ToolTip.Tip="Upload files into this dataset" />
                 <Button x:Name="RenameMemberButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameMemberCommand}" ToolTip.Tip="Rename the selected member" />
                 <Button x:Name="DeleteButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete the selected members (Delete)" />
-              </StackPanel>
-              <StackPanel x:Name="ReviewToolbar" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReviewingUpload}">
+              </WrapPanel>
+              <WrapPanel x:Name="ReviewToolbar" ItemSpacing="6" LineSpacing="4" IsVisible="{Binding IsReviewingUpload}">
                 <Button x:Name="CloseReviewButton" Classes="pane-verb" Content="Close" Command="{Binding CloseReviewCommand}" />
                 <Button x:Name="StartUploadButton" Classes="pane-verb" Content="Upload" Command="{Binding StartUploadCommand}" />
                 <CheckBox x:Name="ExpandTabsBox" Content="Expand tabs (every 8 columns)" IsChecked="{Binding ExpandTabs}"
                           IsEnabled="{Binding IsTextMode}" Margin="8,0,0,0" />
-              </StackPanel>
+              </WrapPanel>
             </Panel>
           </DockPanel>
         </controls:BrowserPane.Toolbar>

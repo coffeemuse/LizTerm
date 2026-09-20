@@ -181,8 +181,8 @@ public class MvsmfBrowserWindowTests
             Assert.False(Named<ListBox>(window, "DatasetList").IsEffectivelyEnabled);
             Assert.Equal("Upload to MVSCE02.CNTL", Named<BrowserPane>(window, "MembersPane").Title);
             Assert.Equal("1 file", Named<BrowserPane>(window, "MembersPane").FooterText);
-            Assert.True(Named<StackPanel>(window, "ReviewToolbar").IsVisible);
-            Assert.False(Named<StackPanel>(window, "MemberToolbar").IsVisible);
+            Assert.True(Named<WrapPanel>(window, "ReviewToolbar").IsVisible);
+            Assert.False(Named<WrapPanel>(window, "MemberToolbar").IsVisible);
             Assert.True(Named<DropDownButton>(window, "TransferButton").IsVisible);
         }
         finally
@@ -254,11 +254,11 @@ public class MvsmfBrowserWindowTests
         Assert.Equal("4 datasets · none selected", datasets.FooterText);
         Assert.Equal("Members", members.Title);
 
-        var datasetVerbs = Named<StackPanel>(window, "DatasetToolbar").Children.OfType<Button>().Select(b => b.Content).ToList();
+        var datasetVerbs = Named<WrapPanel>(window, "DatasetToolbar").Children.OfType<Button>().Select(b => b.Content).ToList();
         Assert.Equal(new object?[] { "New…", "Rename…", "Delete…", "↻ Refresh" }, datasetVerbs);
         Assert.Same(t.Vm.RefreshCommand, Named<Button>(window, "RefreshButton").Command);
 
-        var memberVerbs = Named<StackPanel>(window, "MemberToolbar").Children.OfType<Button>()
+        var memberVerbs = Named<WrapPanel>(window, "MemberToolbar").Children.OfType<Button>()
             .Select(b => b.Content).ToList();
         Assert.Equal(new object?[] { "⇣ Download…", "⇡ Upload…", "Rename…", "Delete…" }, memberVerbs);
 
