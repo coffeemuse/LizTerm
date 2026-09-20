@@ -80,7 +80,8 @@ public sealed partial class MvsmfBrowserViewModel
         await ListCoreAsync(token);
         if (keep is null) return;
         if (Datasets.FirstOrDefault(row => row.Name == keep) is { } row) await SelectAsync(row, token);
-        else StatusText = $"{DatasetsStatus()} · {keep} is no longer listed";
+        else if (HasMoreDatasets) StatusText = $"⚠ {keep} is not on the first page of {_listedPattern}; load more datasets or narrow the filter. {DatasetsStatus()}";
+        else StatusText = $"⚠ {keep} is no longer listed. {DatasetsStatus()}";
     }
 
     [RelayCommand(CanExecute = nameof(CanLoadMoreMembers))]

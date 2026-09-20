@@ -12,9 +12,9 @@ using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.ViewModels;
 
-/// <summary>mvsMF Access (spec §4): datasets on the left, members of the chosen PDS on the right, and the
-/// transfers in the bottom bar. One operation at a time; see the partial files for downloads, uploads, delete,
-/// manage and create.</summary>
+/// <summary>mvsMF Access (browser spec §4, pane-pattern spec §4): datasets on the left, members of the chosen PDS
+/// on the right, each pane with the verbs that act on its selection, and a window-level status line. One operation
+/// at a time; see the partial files for downloads, uploads, delete, manage and create.</summary>
 public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposable
 {
     private readonly HostFileAccess _access;
@@ -65,11 +65,11 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMembers), nameof(ShowSequentialNote), nameof(ShowChooseHint), nameof(ChooseHint),
-        nameof(MembersTitle), nameof(DatasetsFooter), nameof(MembersFooter), nameof(ShowPaddingNote), nameof(UploadHeader), nameof(ShowMemberPane))]
+        nameof(MembersTitle), nameof(DatasetsFooter), nameof(MembersFooter), nameof(UploadHeader), nameof(ShowMemberPane))]
     private DatasetRow? _selectedDataset;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTextMode), nameof(IsBinaryMode), nameof(ShowPaddingNote), nameof(TransferModeLabel))]
+    [NotifyPropertyChangedFor(nameof(IsTextMode), nameof(IsBinaryMode), nameof(TransferModeLabel))]
     private HostTransferMode _mode = HostTransferMode.Text;
 
     [ObservableProperty] private bool _trimTrailingBlanks = true;

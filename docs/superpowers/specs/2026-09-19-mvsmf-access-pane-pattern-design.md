@@ -106,7 +106,9 @@ other strips use. The window's two panes and the future USS panes are four uses 
   empty and its placeholder is the choose hint ("Choose a dataset on the left." or the cannot-be-opened text). A
   sequential dataset shows the same pane with an empty list whose placeholder is the sequential note, so the pane
   never disappears. While an upload review is open, `Content` is the review list, `Title` is "Upload to <dataset>"
-  and `Toolbar` is Close and Upload plus the Expand tabs check box; the frame stays.
+  and the verbs give way to Close and Upload plus the Expand tabs check box; the transfer drop-down stays at the
+  toolbar's right end in both states, because the mode can be changed while a review is open and the queued files
+  are re-checked; the frame stays.
 - `FooterText`: "<n> members · <m> selected"; during a review, "<n> files".
 - `FooterAction`: the existing Load more button, visible when `HasMoreMembers`.
 

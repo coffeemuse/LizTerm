@@ -142,7 +142,22 @@ public class MvsmfBrowserPaneTextTests
 
         Assert.Null(t.Vm.SelectedDataset);
         Assert.Equal(3, t.Vm.Datasets.Count);
-        Assert.Equal("3 datasets · MVSCE02.CNTL is no longer listed", t.Vm.StatusText);
+        Assert.Equal("⚠ MVSCE02.CNTL is no longer listed. 3 datasets", t.Vm.StatusText);
+    }
+
+    [Fact]
+    public async Task Refresh_says_when_the_chosen_dataset_fell_off_the_first_page()
+    {
+        var t = BrowserTestHost.Create(seed: BrowserTestHost.Large, pageSize: 2);
+        await t.ChooseAsync("MVSCE02.UFSHOME");
+
+        await t.Vm.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Null(t.Vm.SelectedDataset);
+        Assert.True(t.Vm.HasMoreDatasets);
+        Assert.Equal(
+            "⚠ MVSCE02.UFSHOME is not on the first page of MVSCE02.**; load more datasets or narrow the filter. 2 datasets shown, more on the host",
+            t.Vm.StatusText);
     }
 
     [Fact]

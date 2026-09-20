@@ -137,7 +137,8 @@ Entries marked *log only* change nothing in the code.
 ### `binary-fixed-padding` (log only)
 
 - **Observed:** a 100-byte binary write to an FB 80 member reads back as 160 bytes, the last record zero-padded.
-- **LizTerm:** the browser's bottom bar says so while Binary is chosen for a fixed-length dataset.
+- **LizTerm:** the status line says so when Binary is chosen on a fixed-length dataset; it is transient, and the
+  next status write replaces it.
 
 ### `record-write-broken` (log only)
 

@@ -182,7 +182,8 @@ public class MvsmfBrowserWindowTests
             Assert.Equal("Upload to MVSCE02.CNTL", Named<BrowserPane>(window, "MembersPane").Title);
             Assert.Equal("1 file", Named<BrowserPane>(window, "MembersPane").FooterText);
             Assert.True(Named<StackPanel>(window, "ReviewToolbar").IsVisible);
-            Assert.False(Named<DockPanel>(window, "MemberToolbar").IsVisible);
+            Assert.False(Named<StackPanel>(window, "MemberToolbar").IsVisible);
+            Assert.True(Named<DropDownButton>(window, "TransferButton").IsVisible);
         }
         finally
         {
@@ -257,8 +258,8 @@ public class MvsmfBrowserWindowTests
         Assert.Equal(new object?[] { "New…", "Rename…", "Delete…", "↻ Refresh" }, datasetVerbs);
         Assert.Same(t.Vm.RefreshCommand, Named<Button>(window, "RefreshButton").Command);
 
-        var memberVerbs = Named<DockPanel>(window, "MemberToolbar").GetLogicalDescendants().OfType<Button>()
-            .Where(b => b is not DropDownButton).Select(b => b.Content).ToList();
+        var memberVerbs = Named<StackPanel>(window, "MemberToolbar").Children.OfType<Button>()
+            .Select(b => b.Content).ToList();
         Assert.Equal(new object?[] { "⇣ Download…", "⇡ Upload…", "Rename…", "Delete…" }, memberVerbs);
 
         Assert.Null(window.FindControl<RadioButton>("TextModeButton"));
@@ -858,8 +859,8 @@ public class MvsmfBrowserWindowTests
         var (window, t) = Show();
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
 
-        Assert.Equal($"Refresh the list ({window.RefreshGesture})", ToolTip.GetTip(Named<Button>(window, "RefreshButton")));
-        Assert.Equal($"Allocate a new dataset ({window.NewDatasetGesture})", ToolTip.GetTip(Named<Button>(window, "NewDatasetButton")));
+        Assert.Equal($"Refresh the list ({window.RefreshGesture.ToString("p", null)})", ToolTip.GetTip(Named<Button>(window, "RefreshButton")));
+        Assert.Equal($"Allocate a new dataset ({window.NewDatasetGesture.ToString("p", null)})", ToolTip.GetTip(Named<Button>(window, "NewDatasetButton")));
         Assert.Equal("Download the selected members (Enter)", ToolTip.GetTip(Named<Button>(window, "DownloadButton")));
         Assert.Equal("Delete the selected members (Delete)", ToolTip.GetTip(Named<Button>(window, "DeleteButton")));
     }

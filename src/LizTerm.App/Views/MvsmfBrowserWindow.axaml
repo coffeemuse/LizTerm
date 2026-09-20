@@ -45,7 +45,7 @@
   <DockPanel>
     <Border x:Name="PreviewStrip" DockPanel.Dock="Top" Background="#F5C542" Padding="12,5">
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <TextBlock Text="⚠ Feature preview. mvsMF access is new and still being refined." VerticalAlignment="Center" />
+        <TextBlock Text="⚠ Feature preview. mvsMF Access is new and still being refined." VerticalAlignment="Center" />
         <Button x:Name="GuideLink" Classes="link" Command="{Binding OpenGuideCommand}">
           <TextBlock Text="What to expect…" TextDecorations="Underline" FontWeight="SemiBold" />
         </Button>
@@ -162,38 +162,41 @@
                    IsEnabled="{Binding ShowMemberPane}" />
         </controls:BrowserPane.HeaderContent>
         <controls:BrowserPane.Toolbar>
-          <Panel>
-            <DockPanel x:Name="MemberToolbar" IsVisible="{Binding !IsReviewingUpload}">
-              <DropDownButton x:Name="TransferButton" DockPanel.Dock="Right" Classes="pane-verb" Content="{Binding TransferModeLabel}"
-                              IsEnabled="{Binding IsIdle}">
-                <DropDownButton.Flyout>
-                  <MenuFlyout>
-                    <MenuItem x:Name="TextModeItem" Header="Text" ToggleType="Radio" GroupName="TransferMode"
-                              IsChecked="{Binding IsTextMode, Mode=TwoWay}" />
-                    <MenuItem x:Name="BinaryModeItem" Header="Binary" ToggleType="Radio" GroupName="TransferMode"
-                              IsChecked="{Binding IsBinaryMode, Mode=TwoWay}" />
-                    <Separator />
-                    <MenuItem x:Name="TrimItem" Header="Trim trailing blanks" ToggleType="CheckBox"
-                              IsChecked="{Binding TrimTrailingBlanks, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
-                    <MenuItem x:Name="VerifyItem" Header="Verify after upload" ToggleType="CheckBox"
-                              IsChecked="{Binding VerifyUploads, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
-                  </MenuFlyout>
-                </DropDownButton.Flyout>
-              </DropDownButton>
-              <StackPanel Orientation="Horizontal" Spacing="6">
+          <!-- The transfer drop-down stays at the toolbar's right end whether or not an upload review is open
+               (pane-pattern spec §4.2): the mode can be changed and the queued files re-checked mid-review
+               (OnModeChanged → RecheckIfReviewing), so it must be reachable then too. -->
+          <DockPanel>
+            <DropDownButton x:Name="TransferButton" DockPanel.Dock="Right" Classes="pane-verb" Content="{Binding TransferModeLabel}"
+                            IsEnabled="{Binding IsIdle}">
+              <DropDownButton.Flyout>
+                <MenuFlyout>
+                  <MenuItem x:Name="TextModeItem" Header="Text" ToggleType="Radio" GroupName="TransferMode"
+                            IsChecked="{Binding IsTextMode, Mode=TwoWay}" />
+                  <MenuItem x:Name="BinaryModeItem" Header="Binary" ToggleType="Radio" GroupName="TransferMode"
+                            IsChecked="{Binding IsBinaryMode, Mode=TwoWay}" />
+                  <Separator />
+                  <MenuItem x:Name="TrimItem" Header="Trim trailing blanks" ToggleType="CheckBox"
+                            IsChecked="{Binding TrimTrailingBlanks, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
+                  <MenuItem x:Name="VerifyItem" Header="Verify after upload" ToggleType="CheckBox"
+                            IsChecked="{Binding VerifyUploads, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
+                </MenuFlyout>
+              </DropDownButton.Flyout>
+            </DropDownButton>
+            <Panel>
+              <StackPanel x:Name="MemberToolbar" Orientation="Horizontal" Spacing="6" IsVisible="{Binding !IsReviewingUpload}">
                 <Button x:Name="DownloadButton" Classes="pane-verb" Content="⇣ Download…" Command="{Binding DownloadCommand}" ToolTip.Tip="Download the selected members (Enter)" />
                 <Button x:Name="UploadButton" Classes="pane-verb" Content="⇡ Upload…" Command="{Binding UploadCommand}" ToolTip.Tip="Upload files into this dataset" />
                 <Button x:Name="RenameMemberButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameMemberCommand}" ToolTip.Tip="Rename the selected member" />
                 <Button x:Name="DeleteButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete the selected members (Delete)" />
               </StackPanel>
-            </DockPanel>
-            <StackPanel x:Name="ReviewToolbar" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReviewingUpload}">
-              <Button x:Name="CloseReviewButton" Classes="pane-verb" Content="Close" Command="{Binding CloseReviewCommand}" />
-              <Button x:Name="StartUploadButton" Classes="pane-verb" Content="Upload" Command="{Binding StartUploadCommand}" />
-              <CheckBox x:Name="ExpandTabsBox" Content="Expand tabs (every 8 columns)" IsChecked="{Binding ExpandTabs}"
-                        IsEnabled="{Binding IsTextMode}" Margin="8,0,0,0" />
-            </StackPanel>
-          </Panel>
+              <StackPanel x:Name="ReviewToolbar" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReviewingUpload}">
+                <Button x:Name="CloseReviewButton" Classes="pane-verb" Content="Close" Command="{Binding CloseReviewCommand}" />
+                <Button x:Name="StartUploadButton" Classes="pane-verb" Content="Upload" Command="{Binding StartUploadCommand}" />
+                <CheckBox x:Name="ExpandTabsBox" Content="Expand tabs (every 8 columns)" IsChecked="{Binding ExpandTabs}"
+                          IsEnabled="{Binding IsTextMode}" Margin="8,0,0,0" />
+              </StackPanel>
+            </Panel>
+          </DockPanel>
         </controls:BrowserPane.Toolbar>
         <controls:BrowserPane.FooterAction>
           <Button x:Name="LoadMoreMembersButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreMembersCommand}"

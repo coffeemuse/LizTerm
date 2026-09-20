@@ -42,8 +42,8 @@ public partial class MvsmfBrowserWindow : Window
         NewDatasetGesture = new KeyGesture(Key.N, modifiers);
         DatasetMenuRefresh.InputGesture = RefreshGesture;
         DatasetMenuNew.InputGesture = NewDatasetGesture;
-        ToolTip.SetTip(RefreshButton, $"Refresh the list ({RefreshGesture})");
-        ToolTip.SetTip(NewDatasetButton, $"Allocate a new dataset ({NewDatasetGesture})");
+        ToolTip.SetTip(RefreshButton, $"Refresh the list ({RefreshGesture.ToString("p", null)})");
+        ToolTip.SetTip(NewDatasetButton, $"Allocate a new dataset ({NewDatasetGesture.ToString("p", null)})");
         MemberList.AddHandler(InputElement.DoubleTappedEvent, OnMemberDoubleTapped);
 
         Opened += (_, _) =>
@@ -238,7 +238,6 @@ public partial class MvsmfBrowserWindow : Window
             _watched.SelectMemberRequested -= SelectMember;
         }
         _watched = null;
-        NewDatasetDialog?.Close();
         ViewModel?.Dispose();
         base.OnClosed(e);
     }
