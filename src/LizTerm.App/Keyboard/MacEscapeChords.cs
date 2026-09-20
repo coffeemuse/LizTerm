@@ -4,6 +4,7 @@
 
 using System.Runtime.InteropServices;
 using Avalonia.Logging;
+using LizTerm.App.Menus;
 using static LizTerm.App.Platform.LibObjc;
 
 namespace LizTerm.App.Keyboard;
@@ -17,11 +18,14 @@ namespace LizTerm.App.Keyboard;
 /// to the view class receiving the chord with the key-down as NSApp's currentEvent.
 ///
 /// Install adds that cancelOperation: to AvnView, the class of every Avalonia window's content view. It hands the
-/// current event to the view's own keyDown: when it is the Escape key-down and does nothing otherwise, so Avalonia
-/// raises the KeyDown it raises on Windows and Linux, TerminalScreen maps ⌃⎋ through the keymap, and the Escape
-/// press also ends the Ctrl tap that used to survive it (a lone Ctrl release after the lost chord sent Reset or
-/// Enter). It is added, never wrapped: a class that already answers cancelOperation: means Avalonia has started
-/// handling the chord itself, and this code should be revisited rather than run in front of it.
+/// current event to the view's own keyDown: when it is an Escape key-down without ⌘ and does nothing otherwise, so
+/// Avalonia raises the KeyDown it raises on Linux, TerminalScreen maps ⌃⎋ through the keymap, and the Escape press
+/// also ends the Ctrl tap that used to survive it (a lone Ctrl release after the lost chord sent Reset or Enter).
+/// ⌘⎋ stays swallowed as it always was: the keymap policy refuses ⌘ chords, so on the screen it could only fall
+/// through to AvnView's text path and type an ESC character to the host, and in a dialog it would press the cancel
+/// button, which Avalonia's Button matches on Key.Escape alone. It is added, never wrapped: a class that already
+/// answers cancelOperation: means Avalonia has started handling the chord itself (the right home for this fix), and
+/// this code should be revisited rather than run in front of it.
 ///
 /// A process where the class or the selector cannot be set up gets a warning in the trace log naming the step, and
 /// keeps the old behaviour: the menu and the keypad still send Clear.</summary>
@@ -41,8 +45,13 @@ internal static class MacEscapeChords
 
     // Kept for the life of the process: AppKit holds the pointer.
     private static readonly CancelOperation Added = Cancel;
-    private static IntPtr _nsApplication, _sharedApplication, _currentEvent, _type, _keyCode, _keyDown;
+    private static IntPtr _nsApplication, _sharedApplication, _currentEvent, _type, _keyCode, _modifierFlags, _keyDown;
     private static readonly object Gate = new();
+
+    // The forwarded keyDown: must never come back here. It does not today, because AvnView answers
+    // doCommandBySelector: with nothing; an Avalonia that let NSResponder's default run would route the input
+    // context's cancelOperation: straight back, and the guard turns that from a stack overflow into one lost key.
+    [ThreadStatic] private static bool _forwarding;
 
     public static bool Installed { get; private set; }
 
@@ -67,6 +76,7 @@ internal static class MacEscapeChords
                 _currentEvent = sel_registerName("currentEvent");
                 _type = sel_registerName("type");
                 _keyCode = sel_registerName("keyCode");
+                _modifierFlags = sel_registerName("modifierFlags");
                 _keyDown = sel_registerName("keyDown:");
                 // A void return, then self, _cmd and the sender.
                 if (!class_addMethod(cls, selector, Marshal.GetFunctionPointerForDelegate(Added), "v@:@"))
@@ -87,28 +97,35 @@ internal static class MacEscapeChords
     private static bool Failed(string step)
     {
         Logger.TryGet(LogEventLevel.Warning, LogArea.Platform)
-            ?.Log(null, "MacEscapeChords not installed ({Step}); Ctrl+Escape does not reach the screen", step);
+            ?.Log(null, "MacEscapeChords not installed ({Step}); Ctrl+Escape is left to Avalonia", step);
         return false;
     }
 
-    /// <summary>The rule, on its own so a test can pin it: only the Escape key-down that AppKit diverted is handed
-    /// to keyDown:. cancelOperation: also arrives for ⌘. and from code, and neither is a key the screen should see.</summary>
-    internal static bool Forwards(ulong eventType, ushort keyCode) => eventType == KeyDownEventType && keyCode == EscapeKeyCode;
+    /// <summary>The rule, on its own so a test can pin it: only an Escape key-down without ⌘ is handed to keyDown:.
+    /// cancelOperation: also arrives for ⌘⎋, ⌘. and from code, and none of those is a key the screen should see.</summary>
+    internal static bool Forwards(ulong eventType, ushort keyCode, ulong modifierFlags) =>
+        eventType == KeyDownEventType && keyCode == EscapeKeyCode && (modifierFlags & MacMenuKeyEquivalents.CommandFlag) == 0;
 
     private static void Cancel(IntPtr self, IntPtr selector, IntPtr sender)
     {
+        if (_forwarding) return;
         try
         {
+            _forwarding = true;
             var app = objc_msgSend_IntPtr(_nsApplication, _sharedApplication);
             var theEvent = app == IntPtr.Zero ? IntPtr.Zero : objc_msgSend_IntPtr(app, _currentEvent);
             if (theEvent == IntPtr.Zero) return;
-            if (Forwards(objc_msgSend_ulong(theEvent, _type), objc_msgSend_ushort(theEvent, _keyCode)))
+            if (Forwards(objc_msgSend_ulong(theEvent, _type), objc_msgSend_ushort(theEvent, _keyCode), objc_msgSend_ulong(theEvent, _modifierFlags)))
                 objc_msgSend_void(self, _keyDown, theEvent);
         }
         catch (Exception ex)
         {
             // Called from AppKit: an exception must not cross back into it. The chord is lost, as it was before.
             Logger.TryGet(LogEventLevel.Warning, LogArea.Platform)?.Log(null, "MacEscapeChords: {Error}", ex.ToString());
+        }
+        finally
+        {
+            _forwarding = false;
         }
     }
 }

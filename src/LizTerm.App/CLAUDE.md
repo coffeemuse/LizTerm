@@ -314,10 +314,16 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   nothing answers that, `doCommandBySelector:cancel:`, which Avalonia's `AvnView` swallows, so no `KeyDown` was ever
   raised (⇧⎋, ⌥⎋ and a bare ⎋ take `keyDown:` and always worked; measured 2026-09-20 with a probe NSView, event by
   event). At startup on macOS Install adds a `cancelOperation:` to `AvnView` that hands NSApp's `currentEvent` to the
-  view's `keyDown:` when it is the Escape key-down (`Forwards` is the pure rule) and does nothing otherwise, and it
-  declines to install where the class already answers the selector. So the screen sees ⌃⎋ (and ⌘⎋, which the keymap
-  policy refuses) as an ordinary `KeyDown`, and the Escape press ends the Ctrl tap that used to survive the lost chord.
-  Its imports are `Platform/LibObjc`, shared with `MacMenuKeyEquivalents`; both install from `App` before any window.
+  view's `keyDown:` when it is an Escape key-down without ⌘ (`Forwards` is the pure rule) and does nothing otherwise,
+  and it declines to install where the class already answers the selector, which is where an Avalonia fix would
+  show up. So the screen sees ⌃⎋ as an ordinary `KeyDown`, and the Escape press ends the Ctrl tap that used to
+  survive the lost chord. ⌘⎋ stays swallowed on purpose: the keymap policy refuses it, and an unmapped Escape
+  chord that reaches the screen falls through `base.OnKeyDown` to AvnView's text path, which types an ESC character
+  to the host (the same hole a user opens by unbinding bare Escape); in a dialog it would press the cancel button,
+  since Avalonia's `Button` matches `IsCancel` on `Key.Escape` alone. A re-entrancy flag keeps a forwarded `keyDown:`
+  from coming back through `cancelOperation:` under an Avalonia whose view stops answering `doCommandBySelector:`
+  itself. Its imports are `Platform/LibObjc`, shared with `MacMenuKeyEquivalents`; both install from `App` before any
+  window.
 - A Left Ctrl tap is Reset and a Right Ctrl tap is Enter. `ModifierTapDetector` sees a Ctrl key go down and the same
   key come up with nothing between (`OnKeyUp` looks up `KeyChord.TapOf`); another key, a pointer press, a wheel turn,
   focus loss and the window deactivating all reset it.

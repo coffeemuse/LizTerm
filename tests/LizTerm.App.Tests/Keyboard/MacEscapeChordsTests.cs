@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using LizTerm.App.Keyboard;
+using LizTerm.App.Menus;
 
 namespace LizTerm.App.Tests.Keyboard;
 
@@ -13,12 +14,26 @@ public class MacEscapeChordsTests
 {
     private const ulong KeyUp = 11, FlagsChanged = 12, LeftMouseDown = 1;
     private const ushort KeyR = 15, KeyPeriod = 47;
+    private const ulong Shift = 1UL << 17, Control = 1UL << 18, Option = 1UL << 19, Command = MacMenuKeyEquivalents.CommandFlag;
 
-    /// <summary>The rule: only the Escape key-down AppKit diverted is handed back to keyDown:.</summary>
-    [Fact]
-    public void An_escape_key_down_is_forwarded()
+    /// <summary>The rule: an Escape key-down AppKit diverted is handed back to keyDown: unless ⌘ is in it.</summary>
+    [Theory]
+    [InlineData(Control)]
+    [InlineData(Control | Shift)]
+    [InlineData(Control | Option | 0x108UL)]
+    public void An_escape_key_down_without_command_is_forwarded(ulong flags)
     {
-        Assert.True(MacEscapeChords.Forwards(MacEscapeChords.KeyDownEventType, MacEscapeChords.EscapeKeyCode));
+        Assert.True(MacEscapeChords.Forwards(MacEscapeChords.KeyDownEventType, MacEscapeChords.EscapeKeyCode, flags));
+    }
+
+    /// <summary>⌘⎋ stays swallowed as it always was: the keymap policy refuses it, so on the screen it could only
+    /// type an ESC character, and in a dialog it would press the cancel button.</summary>
+    [Theory]
+    [InlineData(Command)]
+    [InlineData(Command | Control)]
+    public void An_escape_key_down_with_command_is_left_alone(ulong flags)
+    {
+        Assert.False(MacEscapeChords.Forwards(MacEscapeChords.KeyDownEventType, MacEscapeChords.EscapeKeyCode, flags));
     }
 
     /// <summary>Any other current event means cancelOperation: arrived some other way (⌘. is one, a programmatic
@@ -31,7 +46,7 @@ public class MacEscapeChordsTests
     [InlineData(MacEscapeChords.KeyDownEventType, KeyPeriod)]
     public void Anything_else_is_left_alone(ulong eventType, ushort keyCode)
     {
-        Assert.False(MacEscapeChords.Forwards(eventType, keyCode));
+        Assert.False(MacEscapeChords.Forwards(eventType, keyCode, Control));
     }
 
     [Fact]
