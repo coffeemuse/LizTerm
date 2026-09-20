@@ -533,8 +533,15 @@ public class MvsmfBrowserWindowTests
         Assert.Equal(new[] { "HELLO2" }, t.Vm.SelectedMembers.Select(m => m.Name));
     }
 
+    private static async Task<NewDatasetWindow> OpenNewDatasetAsync(MvsmfBrowserWindow window, BrowserTestHost t)
+    {
+        t.Vm.NewDatasetCommand.Execute(null);
+        await Wait.UntilAsync(() => window.NewDatasetDialog is { IsVisible: true }, "the New dataset dialog");
+        return window.NewDatasetDialog!;
+    }
+
     [AvaloniaFact]
-    public async Task New_opens_the_form_in_the_right_pane_with_the_focus_in_the_name_box()
+    public async Task New_opens_a_dialog_over_the_window_with_the_focus_in_the_name_box()
     {
         var (window, t) = Show();
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
@@ -544,53 +551,84 @@ public class MvsmfBrowserWindowTests
         Assert.True(newButton.IsEffectivelyEnabled);
 
         newButton.Command!.Execute(null);
-        Dispatcher.UIThread.RunJobs();
+        await Wait.UntilAsync(() => window.NewDatasetDialog is { IsVisible: true }, "the New dataset dialog");
+        var dialog = window.NewDatasetDialog!;
 
-        Assert.True(Named<DockPanel>(window, "CreatePane").IsVisible);
-        Assert.False(Named<DockPanel>(window, "MemberPane").IsVisible);
-        Assert.False(Named<ListBox>(window, "DatasetList").IsEffectivelyEnabled);
-        Assert.False(newButton.IsEffectivelyEnabled);
-        var name = Named<TextBox>(window, "NewNameBox");
+        Assert.Same(dialog, Assert.Single(window.OwnedWindows));
+        Assert.Equal("New dataset", dialog.Title);
+        Assert.True(Named<DockPanel>(window, "MemberPane").IsVisible);
+        var name = dialog.FindControl<TextBox>("NewNameBox")!;
         await Wait.UntilAsync(() => name.IsFocused, "the focus in the name box");
         Assert.Equal("MVSCE02.", name.Text);
-        Assert.False(Named<Button>(window, "CreateButton").IsEffectivelyEnabled);
+        Assert.False(dialog.FindControl<Button>("CreateButton")!.IsEffectivelyEnabled);
 
         name.Text = "MVSCE02.NEW";
         Dispatcher.UIThread.RunJobs();
-        Assert.True(Named<Button>(window, "CreateButton").IsEffectivelyEnabled);
+        Assert.True(dialog.FindControl<Button>("CreateButton")!.IsEffectivelyEnabled);
     }
 
     [AvaloniaFact]
-    public async Task Escape_closes_the_form_before_the_window()
+    public async Task Escape_in_the_dialog_closes_it_and_leaves_the_window()
     {
         var (window, t) = Show();
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
-        t.Vm.NewDatasetCommand.Execute(null);
-        Assert.True(t.Vm.IsCreating);
+        var dialog = await OpenNewDatasetAsync(window, t);
 
-        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        await Wait.UntilAsync(() => window.NewDatasetDialog is null, "the dialog to close");
 
         Assert.False(t.Vm.IsCreating);
         Assert.True(window.IsVisible);
-        Assert.True(Named<DockPanel>(window, "MemberPane").IsVisible || Named<TextBlock>(window, "ChooseHint").IsVisible);
+        Assert.Empty(window.OwnedWindows);
         await Wait.UntilAsync(() => Named<TextBox>(window, "FilterBox").IsFocused, "the focus back in the filter box");
     }
 
     [AvaloniaFact]
-    public async Task Focus_returns_to_the_form_after_a_refused_create()
+    public async Task The_dialogs_close_box_is_the_forms_close()
     {
         var (window, t) = Show();
         await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
-        t.Vm.NewDatasetCommand.Execute(null);
+        var dialog = await OpenNewDatasetAsync(window, t);
+
+        dialog.Close();
+        await Wait.UntilAsync(() => window.NewDatasetDialog is null, "the dialog to close");
+
+        Assert.False(t.Vm.IsCreating);
+        Assert.True(window.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task A_refused_create_keeps_the_dialog_open_with_the_message()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
         t.Vm.Form.Name = "MVSCE02.CNTL";
-        Dispatcher.UIThread.RunJobs();
-        var name = Named<TextBox>(window, "NewNameBox");
-        await Wait.UntilAsync(() => name.IsFocused, "the focus in the name box");
+        t.Host.Failures["create:MVSCE02.CNTL"] = new HostFileException(HostFileErrorKind.CannotAllocate, "x", 900, "Dynamic allocation Error");
 
         await t.Vm.CreateCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
 
         Assert.True(t.Vm.IsCreating);
-        Assert.True(Named<TextBlock>(window, "CreateMessage").IsVisible);
-        await Wait.UntilAsync(() => name.IsFocused, "the focus back in the name box");
+        Assert.Same(dialog, window.NewDatasetDialog);
+        Assert.True(dialog.FindControl<TextBlock>("CreateMessage")!.IsVisible);
+        await Wait.UntilAsync(() => dialog.FindControl<TextBox>("NewNameBox")!.IsFocused, "the focus back in the name box");
+    }
+
+    [AvaloniaFact]
+    public async Task A_create_that_succeeds_closes_the_dialog_and_lists_the_new_dataset()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+        t.Vm.Form.Name = "MVSCE02.NEW";
+
+        await t.Vm.CreateCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => window.NewDatasetDialog is null, "the dialog to close");
+
+        Assert.False(t.Vm.IsCreating);
+        Assert.False(dialog.IsVisible);
+        Assert.Contains(t.Vm.Datasets, d => d.Name == "MVSCE02.NEW");
+        Assert.Equal("MVSCE02.NEW", t.Vm.SelectedDataset?.Name);
     }
 }

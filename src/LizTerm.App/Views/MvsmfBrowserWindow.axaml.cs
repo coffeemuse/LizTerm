@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using LizTerm.App.Dialogs;
 using LizTerm.App.ViewModels;
 
 namespace LizTerm.App.Views;
@@ -87,16 +88,12 @@ public partial class MvsmfBrowserWindow : Window
                 PostRestoreFocus(forget: false);
                 break;
             case nameof(MvsmfBrowserViewModel.IsCreating) when vm.IsCreating:
-                // The form's first box, like the filter box when the window opens; posted because the pane is
-                // still hidden when the notification arrives.
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (_watched is { IsCreating: true }) NewNameBox.Focus();
-                }, DispatcherPriority.Loaded);
+                _ = ShowNewDatasetAsync(vm);
                 break;
-            case nameof(MvsmfBrowserViewModel.IsCreating) when !vm.IsCreating && !vm.IsBusy:
-                // Closed without an operation (Close, Escape): the keyboard was in the form, which is now hidden, so
-                // it goes where the window opens. A form an operation closes is handled by the IsBusy case above.
+            case nameof(MvsmfBrowserViewModel.IsCreating) when !vm.IsBusy:
+                // Closed without an operation (Cancel, Escape, the close box): the dialog gave the keyboard back to
+                // this window, which puts it where the window opens. A form an operation closes is handled by the
+                // IsBusy case above.
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (_watched is not { IsCreating: false, IsBusy: false }) return;
@@ -104,6 +101,31 @@ public partial class MvsmfBrowserWindow : Window
                     FilterBox.Focus();
                 }, DispatcherPriority.Loaded);
                 break;
+        }
+    }
+
+    /// <summary>The open New dataset dialog, if any (pane-pattern spec §6); for the tests and the close path.</summary>
+    internal NewDatasetWindow? NewDatasetDialog { get; private set; }
+
+    /// <summary>Opens the form as a modal dialog over this window. The dialog closes itself when IsCreating turns
+    /// off. A dialog that cannot be shown is a status line, and the form is closed so the commands come back.</summary>
+    private async Task ShowNewDatasetAsync(MvsmfBrowserViewModel vm)
+    {
+        if (NewDatasetDialog is not null) return;
+        var dialog = new NewDatasetWindow { DataContext = vm };
+        NewDatasetDialog = dialog;
+        try
+        {
+            await dialog.ShowDialogAbove(this);
+        }
+        catch (Exception ex)
+        {
+            vm.StatusText = "✗ Could not open the New dataset window: " + ex.Message;
+            if (vm.CloseFormCommand.CanExecute(null)) vm.CloseFormCommand.Execute(null);
+        }
+        finally
+        {
+            NewDatasetDialog = null;
         }
     }
 
@@ -183,6 +205,7 @@ public partial class MvsmfBrowserWindow : Window
             _watched.SelectMemberRequested -= SelectMember;
         }
         _watched = null;
+        NewDatasetDialog?.Close();
         ViewModel?.Dispose();
         base.OnClosed(e);
     }
@@ -197,7 +220,6 @@ public partial class MvsmfBrowserWindow : Window
                 if (vm.Confirmation is { } question) question.CancelCommand.Execute(null);
                 else if (vm.IsBusy) vm.CancelCommand.Execute(null);
                 else if (vm.IsReviewingUpload) vm.CloseReviewCommand.Execute(null);
-                else if (vm.IsCreating) vm.CloseFormCommand.Execute(null);
                 else Close();
                 break;
             case Key.Enter when vm.Confirmation is { HasInput: true } inputQuestion && ConfirmInputBox.IsKeyboardFocusWithin:
