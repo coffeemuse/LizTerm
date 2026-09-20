@@ -15,8 +15,8 @@ What changed in each LizTerm release, newest first. Downloads are on the
 - **Mono terminals.** A profile can be a **Mono (3278)** as well as a **Colour (3279)**, drawn in green phosphor.
   Choose it in the profile editor's Terminal tab ([#123](https://github.com/coffeemuse/LizTerm/issues/123)).
 - **mvsMF Access (feature preview).** On MVS 3.8j hosts running [mvsMF](https://github.com/mvslovers/mvsmf) 1.1.0
-  or later (it ships with TK5 and installs on TK4- or a hand-rolled MVS 3.8), a second way to move files beside
-  IND$FILE: list, download, upload and delete, and manage datasets and members, in a window with a **Datasets**
+  or later (it installs on any MVS 3.8j under Hercules, whichever distribution you use), a second way to move files
+  beside IND$FILE: list, download, upload and delete, and manage datasets and members, in a window with a **Datasets**
   pane and a **Members** pane that each carry their own actions. It is not yet complete and there are likely bugs;
   see the user guide's
   [mvsMF Access section](https://github.com/coffeemuse/LizTerm/blob/main/docs/user-guide.md#mvsmf-access-preview).

@@ -1,6 +1,6 @@
 # mvsMF compatibility log
 
-LizTerm's dataset browser talks to [mvsMF](https://github.com/mvslovers/mvsmf), a z/OSMF REST subset for MVS 3.8j.
+LizTerm's mvsMF Access window talks to [mvsMF](https://github.com/mvslovers/mvsmf), a z/OSMF REST subset for MVS 3.8j.
 This log is the one place that records where mvsMF's documentation, its source and the build LizTerm was tested
 against disagree, and what LizTerm does about each. When a newer mvsMF is available, work through it top to bottom.
 
@@ -164,7 +164,8 @@ Entries marked *log only* change nothing in the code.
   every read; every write asks, since the write's answer is the stamp the next `If-Match` needs. The value is kept
   as the host sent it, quotes or `W/` included and never parsed, so a host that quotes its entity tags gets its own
   text back; a write sends the caller's `ifMatch` as `If-Match` verbatim, and a 412 is `HostFileErrorKind.Conflict`.
-  Nothing in the app sends an `ifMatch` yet.
+  mvsMF Access sends one when it replaces a member or dataset it downloaded or wrote in the same window, and turns
+  the 412 into the **Replace anyway / Skip** question.
 
 ### `create-failure-is-one-500`
 
