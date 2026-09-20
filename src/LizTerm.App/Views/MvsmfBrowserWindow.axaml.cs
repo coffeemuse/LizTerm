@@ -20,6 +20,11 @@ public partial class MvsmfBrowserWindow : Window
     public MvsmfBrowserWindow()
     {
         InitializeComponent();
+        // The owned New dataset dialog's own OnClosing must never veto this window's close (it never refuses to
+        // close): Avalonia's default child-first ClosingBehavior would ask the dialog ahead of this window's own
+        // OnClosing/OnClosed, and the dialog cancels while a create is in flight. OwnerWindowOnly, SessionWindow's
+        // and FileTransferWindow's rule, closes the dialog with the window instead of asking it first.
+        ClosingBehavior = WindowClosingBehavior.OwnerWindowOnly;
         MemberList.SelectionChanged += (_, _) => PushSelectedMembers();
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
         Opened += (_, _) =>

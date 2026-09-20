@@ -631,4 +631,28 @@ public class MvsmfBrowserWindowTests
         Assert.Contains(t.Vm.Datasets, d => d.Name == "MVSCE02.NEW");
         Assert.Equal("MVSCE02.NEW", t.Vm.SelectedDataset?.Name);
     }
+
+    [AvaloniaFact]
+    public async Task Closing_the_window_while_a_create_runs_closes_the_dialog_too()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+        t.Vm.Form.Name = "MVSCE02.NEW";
+        t.Host.Gate = new TaskCompletionSource();
+        try
+        {
+            _ = t.Vm.CreateCommand.ExecuteAsync(null);
+            await Wait.UntilAsync(() => t.Vm.IsBusy, "the create to start");
+
+            window.Close();
+
+            Assert.False(window.IsVisible);
+            Assert.False(dialog.IsVisible);
+        }
+        finally
+        {
+            t.Host.Gate.SetResult();
+        }
+    }
 }
