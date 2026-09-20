@@ -107,7 +107,7 @@ If your host uses a self-signed certificate, as most hobbyist hosts do, LizTerm 
 A few keys to know straight away:
 
 - **Escape is Attn**, not Reset. **Reset** is a tap of the Left Ctrl key, or Ctrl+R.
-- **Clear** is Pause, or Ctrl+Escape.
+- **Clear** is Pause, or Ctrl+Escape — on Windows, where Ctrl+Escape opens the Start menu, it is Pause.
 - **F1–F12** are PF1–PF12; add Shift for PF13–PF24.
 
 The [user guide](docs/user-guide.md) has the full keyboard map and everything else.

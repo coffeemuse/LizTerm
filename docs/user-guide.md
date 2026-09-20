@@ -200,7 +200,8 @@ binding in **Preferences > Keyboard**; see [Changing a binding](#changing-a-bind
 | Ctrl+6 | Types `¢` |
 
 On a Mac, Alt is the Option key. A "tap" means pressing and releasing the key on its own, with nothing else in
-between.
+between. On Windows, Ctrl+Escape opens the Start menu before LizTerm can see it, so Clear there is Pause — or
+any keystroke you give it in **Preferences > Keyboard**.
 
 Copy, Paste, Select All and Find use the platform's own shortcuts — Cmd+C, Cmd+V, Cmd+A and Cmd+F on macOS, Ctrl
 elsewhere. Ctrl+Insert copies, on every platform, which is why PA1 lives on Alt+1 rather than Vista's Ctrl+Insert.
