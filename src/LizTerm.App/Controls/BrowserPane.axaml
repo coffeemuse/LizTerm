@@ -45,7 +45,9 @@
       </Border>
       <Border DockPanel.Dock="Bottom" BorderBrush="#33373D" BorderThickness="0,1,0,0" Padding="8,4">
         <DockPanel>
-          <ContentPresenter x:Name="FooterActionPresenter" DockPanel.Dock="Right" Margin="8,0,0,0"
+          <!-- No margin of its own: the action carries it, so an action hidden with its own IsVisible takes its
+               margin with it. -->
+          <ContentPresenter x:Name="FooterActionPresenter" DockPanel.Dock="Right"
                             Content="{Binding $parent[controls:BrowserPane].FooterAction}"
                             IsVisible="{Binding $parent[controls:BrowserPane].FooterAction, Converter={x:Static ObjectConverters.IsNotNull}}" />
           <TextBlock x:Name="FooterTextBlock" Classes="pane-footer" Text="{Binding $parent[controls:BrowserPane].FooterText}" />

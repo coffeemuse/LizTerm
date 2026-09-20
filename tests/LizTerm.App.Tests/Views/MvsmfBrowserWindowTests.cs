@@ -670,6 +670,77 @@ public class MvsmfBrowserWindowTests
     }
 
     [AvaloniaFact]
+    public async Task Escape_in_the_dialog_cancels_a_create_in_flight_and_keeps_the_dialog()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+        t.Vm.Form.Name = "MVSCE02.NEW";
+        t.Host.Gate = new TaskCompletionSource();
+        try
+        {
+            var create = t.Vm.CreateCommand.ExecuteAsync(null);
+            await Wait.UntilAsync(() => t.Vm.IsBusy, "the create to start");
+
+            dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            await create;
+
+            Assert.Equal("– Cancelled.", t.Vm.StatusText);
+            Assert.True(t.Vm.IsCreating);
+            Assert.Same(dialog, window.NewDatasetDialog);
+            Assert.True(dialog.IsVisible);
+            Assert.DoesNotContain(t.Vm.Datasets, d => d.Name == "MVSCE02.NEW");
+        }
+        finally
+        {
+            t.Host.Gate.TrySetResult();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_dialogs_close_box_cancels_a_create_in_flight()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var dialog = await OpenNewDatasetAsync(window, t);
+        t.Vm.Form.Name = "MVSCE02.NEW";
+        t.Host.Gate = new TaskCompletionSource();
+        try
+        {
+            var create = t.Vm.CreateCommand.ExecuteAsync(null);
+            await Wait.UntilAsync(() => t.Vm.IsBusy, "the create to start");
+
+            dialog.Close();
+            await create;
+
+            Assert.Equal("– Cancelled.", t.Vm.StatusText);
+            Assert.True(t.Vm.IsCreating);
+            Assert.Same(dialog, window.NewDatasetDialog);
+        }
+        finally
+        {
+            t.Host.Gate.TrySetResult();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_form_closed_and_opened_again_in_one_turn_gets_a_new_dialog()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        var first = await OpenNewDatasetAsync(window, t);
+
+        t.Vm.CloseFormCommand.Execute(null);
+        t.Vm.NewDatasetCommand.Execute(null);
+        await Wait.UntilAsync(() => window.NewDatasetDialog is { IsVisible: true }, "the second dialog");
+
+        Assert.NotSame(first, window.NewDatasetDialog);
+        Dispatcher.UIThread.RunJobs();
+        Assert.NotNull(window.NewDatasetDialog);
+        Assert.True(t.Vm.IsCreating);
+    }
+
+    [AvaloniaFact]
     public async Task The_dialogs_close_box_is_the_forms_close()
     {
         var (window, t) = Show();

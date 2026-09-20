@@ -979,7 +979,9 @@ constructor captured.
   bound to the same view model: the window opens it when `IsCreating` turns on (`ShowNewDatasetAsync`, through
   `ShowDialogAbove`) and the dialog closes itself when `IsCreating` turns off; its close box is `CloseFormCommand`,
   executed from a posted callback because the notification would otherwise close a window still inside `Closing`.
-  A refused create leaves `IsCreating` on and the dialog open with `Form.Message`.
+  A refused create leaves `IsCreating` on and the dialog open with `Form.Message`. The modal dialog keeps the
+  browser window's Cancel and Escape from the user, so while the create runs the dialog's Escape (a tunnelled
+  handler, not an `IsCancel` button, which would be off with Close) and its close box run `CancelCommand` instead.
 - **ETag memory** (`HostFileAccess.Etags`, `EtagMemory`): a download remembers the stamp once the file is in
   place; a write remembers the write's stamp; a member delete forgets, a dataset delete forgets everything under
   it, a rename moves. An upload sends the stamp as `ifMatch` only for a member it is replacing; a `Conflict` is

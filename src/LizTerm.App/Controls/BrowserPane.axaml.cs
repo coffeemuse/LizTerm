@@ -69,7 +69,8 @@ public partial class BrowserPane : UserControl
         set => SetValue(FooterTextProperty, value);
     }
 
-    /// <summary>The footer's right-hand control, such as Load more; the cell collapses when null.</summary>
+    /// <summary>The footer's right-hand control, such as Load more; the cell collapses when null, and the control
+    /// carries its own left margin so that one hidden with its IsVisible leaves no gap either.</summary>
     public object? FooterAction
     {
         get => GetValue(FooterActionProperty);

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using LizTerm.App.ViewModels;
+using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.Tests.ViewModels;
 
@@ -21,7 +22,8 @@ public class MvsmfBrowserPaneTextTests
     public async Task The_footers_count_what_is_listed_and_selected()
     {
         var t = BrowserTestHost.Create();
-        Assert.Equal("No datasets", t.Vm.DatasetsFooter);
+        // Nothing listed yet is not the same as an empty list.
+        Assert.Equal("", t.Vm.DatasetsFooter);
         Assert.Equal("Members", t.Vm.MembersTitle);
         Assert.Equal("", t.Vm.MembersFooter);
 
@@ -129,6 +131,44 @@ public class MvsmfBrowserPaneTextTests
         Assert.Equal("MVSCE02.CNTL", t.Vm.SelectedDataset?.Name);
         Assert.Equal(4, t.Vm.Members.Count);
         Assert.Equal("4 members", t.Vm.StatusText);
+    }
+
+    [Fact]
+    public async Task The_footers_stay_empty_until_a_listing_lands()
+    {
+        var t = BrowserTestHost.Create();
+        t.Host.Gate = new TaskCompletionSource();
+        var listing = t.Vm.ListCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => t.Vm.IsBusy, "the listing to start");
+        Assert.Equal("", t.Vm.DatasetsFooter);
+        t.Host.Gate.SetResult();
+        await listing;
+        t.Host.Gate = null;
+
+        t.Host.Failures["members:MVSCE02.CNTL"] = new HostFileException(HostFileErrorKind.Unreachable, "cannot reach the host (refused).");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        Assert.True(t.Vm.HasError);
+        Assert.Equal("", t.Vm.MembersFooter);
+
+        t.Host.Failures.Clear();
+        t.Host.Members["MVSCE02.CNTL"].Clear();
+        await t.ChooseAsync("MVSCE02.LOAD");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        Assert.Equal("No members", t.Vm.MembersFooter);
+    }
+
+    [Fact]
+    public async Task Refresh_keeps_the_transfer_mode_the_user_chose()
+    {
+        var t = BrowserTestHost.Create();
+        await t.ChooseAsync("MVSCE02.CNTL");
+        t.Vm.Mode = HostTransferMode.Binary;
+
+        await t.Vm.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Equal("MVSCE02.CNTL", t.Vm.SelectedDataset?.Name);
+        Assert.Equal(HostTransferMode.Binary, t.Vm.Mode);
+        Assert.Equal("3 members", t.Vm.StatusText);
     }
 
     [Fact]

@@ -39,11 +39,6 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _filter = access.Userid is { Length: > 0 } userid ? userid + ".**" : "";
         _access.PinSaveFailed += OnPinSaveFailed;
         WatchForm();
-        // The footers count the collections, so they follow every add, clear and refill.
-        Datasets.CollectionChanged += (_, _) => OnPropertyChanged(nameof(DatasetsFooter));
-        Members.CollectionChanged += (_, _) => OnPropertyChanged(nameof(MembersFooter));
-        VisibleMembers.CollectionChanged += (_, _) => OnPropertyChanged(nameof(MembersFooter));
-        Uploads.CollectionChanged += (_, _) => OnPropertyChanged(nameof(MembersFooter));
     }
 
     /// <summary>The operation that accepted the pin goes on; the warning replaces its status line when it ends.</summary>
@@ -121,20 +116,24 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         : SelectedDataset is { IsSupported: true } dataset ? dataset.Name
         : "Members";
 
-    /// <summary>The Datasets pane's footer: the count, a plus while the host has more, and the selection.</summary>
-    public string DatasetsFooter => Datasets.Count == 0 ? "No datasets"
+    /// <summary>The Datasets pane's footer: the count, a plus while the host has more, and the selection. Empty until
+    /// a listing has landed, so a list not yet listed never reads as an empty one. Each operation that refills the
+    /// list raises it once at the end, rather than on every row added.</summary>
+    public string DatasetsFooter => Datasets.Count == 0 ? (_listedPattern is null ? "" : "No datasets")
         : $"{Counted(Datasets.Count, HasMoreDatasets, "dataset")} · {(SelectedDataset is null ? "none" : "1")} selected";
 
     /// <summary>The Members pane's footer: the files under review, else the members shown (with a plus while the
     /// host has more, "matching" when the host applied the filter, "n of m" when the filter narrowed the list
-    /// here) and how many are selected. Empty for a dataset that has no member list.</summary>
+    /// here) and how many are selected. Empty for a dataset that has no member list, and until a listing has landed
+    /// (still running, failed, cancelled), so an unlisted library never reads as an empty one, DescribeForDelete's
+    /// rule. Raised once by whatever refills or narrows the list (RefreshVisibleMembers, SetSelectedMembers).</summary>
     public string MembersFooter
     {
         get
         {
             if (IsReviewingUpload) return Plural(Uploads.Count, "file");
             if (SelectedDataset is not { IsPartitioned: true }) return "";
-            if (Members.Count == 0) return _memberPattern is null ? "No members" : "No matching members";
+            if (Members.Count == 0) return _memberPattern is not null ? "No matching members" : _allMembersLoaded ? "No members" : "";
             var shown = _memberPattern is not null ? $"{Members.Count}{(HasMoreMembers ? "+" : "")} matching"
                 : VisibleMembers.Count < Members.Count ? $"{VisibleMembers.Count} of {Plural(Members.Count, "member")}"
                 : Counted(Members.Count, HasMoreMembers, "member");
@@ -205,14 +204,16 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     [RelayCommand(CanExecute = nameof(CanChooseDataset))]
     private Task ListAsync() => RunExclusiveAsync(ListCoreAsync, () => ListAsync());
 
-    private async Task ListCoreAsync(CancellationToken token)
+    /// <summary>False when the listing was refused (a review open, a filter the rules reject, with the reason on the
+    /// status line), so an operation that lists on the way to something else knows to stop there.</summary>
+    private async Task<bool> ListCoreAsync(CancellationToken token)
     {
         // The command is off during a review; a Retry left over from an earlier failed listing is not.
-        if (IsReviewingUpload) return;
+        if (IsReviewingUpload) return false;
         if (HostPath.DatasetPatternError(Filter) is { } problem)
         {
             StatusText = "✗ " + problem;
-            return;
+            return false;
         }
         var pattern = Filter.Trim().ToUpperInvariant();
         StatusText = $"⟳ Listing {pattern}…";
@@ -223,7 +224,9 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _listedPattern = pattern;
         _datasetContinuation = listing.Continuation;
         HasMoreDatasets = !listing.IsComplete;
+        OnPropertyChanged(nameof(DatasetsFooter));
         StatusText = DatasetsStatus();
+        return true;
     }
 
     private Task LoadMembersAsync(DatasetRow? row)
@@ -256,6 +259,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         {
             if (pattern is null || HostPath.MemberPatternMatches(pattern, member.Name)) VisibleMembers.Add(member);
         }
+        OnPropertyChanged(nameof(MembersFooter));
     }
 
     /// <summary>Drops a pending Retry with its banner: the operation it belongs to has been closed away from.</summary>

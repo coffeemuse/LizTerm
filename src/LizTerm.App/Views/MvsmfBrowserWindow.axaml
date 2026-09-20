@@ -118,7 +118,7 @@
         </controls:BrowserPane.Toolbar>
         <controls:BrowserPane.FooterAction>
           <Button x:Name="LoadMoreDatasetsButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreDatasetsCommand}"
-                  IsVisible="{Binding HasMoreDatasets}" />
+                  Margin="8,0,0,0" IsVisible="{Binding HasMoreDatasets}" />
         </controls:BrowserPane.FooterAction>
         <controls:BrowserPane.Body>
           <DockPanel>
@@ -200,7 +200,7 @@
         </controls:BrowserPane.Toolbar>
         <controls:BrowserPane.FooterAction>
           <Button x:Name="LoadMoreMembersButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreMembersCommand}"
-                  IsVisible="{Binding HasMoreMembers}" />
+                  Margin="8,0,0,0" IsVisible="{Binding HasMoreMembers}" />
         </controls:BrowserPane.FooterAction>
         <controls:BrowserPane.Body>
           <Panel>

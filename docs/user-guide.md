@@ -453,7 +453,8 @@ The **Datasets** pane's toolbar creates, renames and deletes datasets.
 and BLKSIZE, and the name starts with your filter's first qualifier, so a new library like the one selected is a
 name and **Create** away. Space is in tracks or cylinders, a primary and a secondary amount, and directory blocks
 for a partitioned dataset; the window keeps the space you last used while it is open. A value the host cannot take
-is marked **✗** under its box until you fix it. **Cancel** or **Escape** closes the window without creating anything.
+is marked **✗** under its box until you fix it. **Cancel** or **Escape** closes the window without creating anything;
+while the create runs, **Escape** or the close box cancels it and the window stays.
 
 mvsMF cannot say why an allocation failed: a name that already exists, no room on the volume and a missing
 authorization all come back as the same **The host could not allocate it** message, which stays in the window so

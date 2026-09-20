@@ -25,7 +25,7 @@
       <TextBlock x:Name="CreateMessage" Text="{Binding Form.Message}" Foreground="#FF8080" TextWrapping="Wrap"
                  IsVisible="{Binding Form.Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-        <Button x:Name="CancelButton" Content="Cancel" Command="{Binding CloseFormCommand}" IsCancel="True" />
+        <Button x:Name="CancelButton" Content="Cancel" Command="{Binding CloseFormCommand}" />
         <Button x:Name="CreateButton" Content="Create" Command="{Binding CreateCommand}" IsDefault="True" />
       </StackPanel>
     </StackPanel>

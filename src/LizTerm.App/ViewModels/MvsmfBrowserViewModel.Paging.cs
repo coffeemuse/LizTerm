@@ -58,30 +58,36 @@ public sealed partial class MvsmfBrowserViewModel
         foreach (var entry in listing.Entries) Datasets.Add(new DatasetRow(entry));
         _datasetContinuation = listing.Continuation;
         HasMoreDatasets = !listing.IsComplete;
+        OnPropertyChanged(nameof(DatasetsFooter));
         StatusText = DatasetsStatus();
     }
 
     private string DatasetsStatus() => Plural(Datasets.Count, "dataset") + (HasMoreDatasets ? " shown, more on the host" : "");
 
     /// <summary>Lists the filter again and keeps the chosen dataset when it is still listed, reloading its members
-    /// (pane-pattern spec §4.1). Off whenever List is.</summary>
+    /// and keeping the transfer mode (pane-pattern spec §4.1). Off whenever List is.</summary>
     [RelayCommand(CanExecute = nameof(CanChooseDataset))]
     private Task RefreshAsync() => RunExclusiveAsync(RefreshCoreAsync, () => RefreshAsync());
 
     private async Task RefreshCoreAsync(CancellationToken token)
     {
-        if (IsReviewingUpload) return;
-        if (HostPath.DatasetPatternError(Filter) is { } problem)
+        if (SelectedDataset is not { } kept)
         {
-            StatusText = "✗ " + problem;
+            await ListCoreAsync(token);
             return;
         }
-        var keep = SelectedDataset?.Name;
-        await ListCoreAsync(token);
-        if (keep is null) return;
-        if (Datasets.FirstOrDefault(row => row.Name == keep) is { } row) await SelectAsync(row, token);
-        else if (HasMoreDatasets) StatusText = $"⚠ {keep} is not on the first page of {_listedPattern}; load more datasets or narrow the filter. {DatasetsStatus()}";
-        else StatusText = $"⚠ {keep} is no longer listed. {DatasetsStatus()}";
+        var mode = Mode;
+        var (refused, row) = await ListAndSelectAsync(kept.Name, token);
+        if (refused) return;
+        if (row is null)
+        {
+            StatusText = HasMoreDatasets
+                ? $"⚠ {kept.Name} is not on the first page of {_listedPattern}; load more datasets or narrow the filter. {DatasetsStatus()}"
+                : $"⚠ {kept.Name} is no longer listed. {DatasetsStatus()}";
+        }
+        // Choosing the row again applied the dataset's own choice of mode; the user's choice stands while the record
+        // format that choice was made for is unchanged.
+        else if (row.Attributes.RecordFormat == kept.Attributes.RecordFormat) Mode = mode;
     }
 
     [RelayCommand(CanExecute = nameof(CanLoadMoreMembers))]
@@ -101,7 +107,6 @@ public sealed partial class MvsmfBrowserViewModel
         _memberContinuation = listing.Continuation;
         HasMoreMembers = !listing.IsComplete;
         RefreshVisibleMembers();
-        OnPropertyChanged(nameof(MembersFooter));
         StatusText = MembersStatus();
     }
 
@@ -130,7 +135,6 @@ public sealed partial class MvsmfBrowserViewModel
         if (pattern is null && listing.IsComplete) _allMembersLoaded = true;
         HasMoreMembers = !listing.IsComplete;
         RefreshVisibleMembers();
-        OnPropertyChanged(nameof(MembersFooter));
         StatusText = MembersStatus();
     }
 

@@ -194,6 +194,7 @@ public sealed partial class MvsmfBrowserViewModel
     {
         if (ReferenceEquals(SelectedDataset, dataset)) SelectedDataset = null;
         Datasets.Remove(dataset);
+        OnPropertyChanged(nameof(DatasetsFooter));
     }
 
     /// <summary>After a dataset is renamed (its old row already dropped) or created: if the filter in the box is one
@@ -208,14 +209,23 @@ public sealed partial class MvsmfBrowserViewModel
             StatusText = $"⚠ {what}. The list was not refreshed: {problem}";
             return;
         }
-        await ListCoreAsync(token);
-        if (Datasets.FirstOrDefault(row => row.Name == name) is { } row)
-        {
-            await SelectAsync(row, token);
-            StatusText = $"✓ {what}.";
-        }
-        else if (HasMoreDatasets) StatusText = $"✓ {what} (not on the first page of {_listedPattern}; load more datasets or narrow the filter).";
-        else StatusText = $"✓ {what} (not shown by the filter {_listedPattern}).";
+        var (refused, row) = await ListAndSelectAsync(name, token);
+        if (refused) return;
+        StatusText = row is not null ? $"✓ {what}."
+            : HasMoreDatasets ? $"✓ {what} (not on the first page of {_listedPattern}; load more datasets or narrow the filter)."
+            : $"✓ {what} (not shown by the filter {_listedPattern}).";
+    }
+
+    /// <summary>Lists the filter again and chooses <paramref name="name"/> when the first page shows it: the row, or
+    /// null with <see cref="HasMoreDatasets"/> saying whether the page ran out before it. Refused is a listing
+    /// <see cref="ListCoreAsync"/> would not run. The callers (Refresh, a rename's or a create's second half) word
+    /// the outcomes themselves.</summary>
+    private async Task<(bool Refused, DatasetRow? Row)> ListAndSelectAsync(string name, CancellationToken token)
+    {
+        if (!await ListCoreAsync(token)) return (true, null);
+        if (Datasets.FirstOrDefault(row => row.Name == name) is not { } row) return (false, null);
+        await SelectAsync(row, token);
+        return (false, row);
     }
 
     /// <summary>Chooses <paramref name="row"/> from inside a running operation. Setting SelectedDataset starts a

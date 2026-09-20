@@ -147,6 +147,10 @@ public partial class MvsmfBrowserWindow : Window
         if (NewDatasetDialog is not null) return;
         var dialog = new NewDatasetWindow { DataContext = vm };
         NewDatasetDialog = dialog;
+        // Freed on Closed, which Close raises at once: the await below resumes a turn later, and a form closed and
+        // opened again within one turn must find the slot free, and must not have its own dialog cleared by the
+        // finally of the one before.
+        dialog.Closed += (_, _) => { if (ReferenceEquals(NewDatasetDialog, dialog)) NewDatasetDialog = null; };
         try
         {
             await dialog.ShowDialogAbove(this);
@@ -158,7 +162,7 @@ public partial class MvsmfBrowserWindow : Window
         }
         finally
         {
-            NewDatasetDialog = null;
+            if (ReferenceEquals(NewDatasetDialog, dialog)) NewDatasetDialog = null;
         }
     }
 
