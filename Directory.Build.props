@@ -6,6 +6,6 @@
     <LangVersion>latest</LangVersion>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <RootNamespace>$(MSBuildProjectName)</RootNamespace>
-    <Version>0.6.1</Version>
+    <Version>0.7.0</Version>
   </PropertyGroup>
 </Project>
