@@ -4,6 +4,7 @@
 
 using System.Runtime.InteropServices;
 using Avalonia.Logging;
+using static LizTerm.App.Platform.LibObjc;
 
 namespace LizTerm.App.Menus;
 
@@ -19,13 +20,10 @@ namespace LizTerm.App.Menus;
 ///
 /// Installed is what SessionWindow.ApplyKeymap checks before giving a Keys item a gesture: a process where the
 /// class or the method was not found gets a Keys menu without shortcuts, never one that eats keys, and a warning
-/// in the trace log naming the step that failed, so the missing column is not a silent one. The imports
-/// are DllImport rather than LibraryImport because LibraryImport's generated stub is unsafe code, which the App
-/// project does not use; three of these signatures take a string, so they are not blittable and SystemBellRinger's
-/// other reason does not apply.</summary>
+/// in the trace log naming the step that failed, so the missing column is not a silent one. The runtime
+/// imports are Platform/LibObjc's.</summary>
 internal static class MacMenuKeyEquivalents
 {
-    private const string LibObjc = "/usr/lib/libobjc.A.dylib";
     private const string MenuClass = "AvnMenu";
     private const string PerformSelector = "performKeyEquivalent:";
 
@@ -64,8 +62,8 @@ internal static class MacMenuKeyEquivalents
                 if (originalImp == IntPtr.Zero) return Failed($"{PerformSelector} has no implementation");
                 _original = Marshal.GetDelegateForFunctionPointer<PerformKeyEquivalent>(originalImp);
                 _modifierFlags = sel_registerName("modifierFlags");
-                // BOOL is 'B' on arm64 and 'c' on x86_64; the rest is self, _cmd and the event.
-                var encoding = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "B@:@" : "c@:@";
+                // A BOOL return, then self, _cmd and the event.
+                var encoding = BoolEncoding + "@:@";
                 if (!class_addMethod(cls, selector, Marshal.GetFunctionPointerForDelegate(Replacement), encoding))
                     return Failed($"{MenuClass} already defines {PerformSelector}");
                 Installed = true;
@@ -97,12 +95,4 @@ internal static class MacMenuKeyEquivalents
         if (Declines(flags)) return 0;
         return _original!(self, selector, theEvent);
     }
-
-    [DllImport(LibObjc)] private static extern IntPtr objc_getClass(string name);
-    [DllImport(LibObjc)] private static extern IntPtr sel_registerName(string name);
-    [DllImport(LibObjc)] private static extern IntPtr class_getInstanceMethod(IntPtr cls, IntPtr selector);
-    [DllImport(LibObjc)] private static extern IntPtr method_getImplementation(IntPtr method);
-    [DllImport(LibObjc)] [return: MarshalAs(UnmanagedType.I1)]
-    private static extern bool class_addMethod(IntPtr cls, IntPtr selector, IntPtr imp, string types);
-    [DllImport(LibObjc, EntryPoint = "objc_msgSend")] private static extern ulong objc_msgSend_ulong(IntPtr self, IntPtr selector);
 }
