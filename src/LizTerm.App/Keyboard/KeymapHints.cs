@@ -7,9 +7,10 @@ using LizTerm.Core.Session;
 
 namespace LizTerm.App.Keyboard;
 
-/// <summary>The keyboard equivalents of a key as one line of text, for the keypad's tooltips (keypad spec §5), the
-/// Keyboard tab's chips and the Keys menu (#23). Pure: the keymap and the format are arguments, so a remap (#18)
-/// changes the answer and a test can pin the words.</summary>
+/// <summary>The keyboard equivalents of a key as one line of text, for the keypad's tooltips (keypad spec §5) and
+/// the Keyboard tab's chips, and as one chord for the Keys menu's shortcut (Keys menu shortcuts spec §3.2). Pure:
+/// the keymap, the platform and the format are arguments, so a remap (#18) changes the answer and a test can pin
+/// the words.</summary>
 public static class KeymapHints
 {
     /// <summary>The keymap reversed: every chord that sends each key. The one reversal the keypad, the Keys menu
@@ -17,15 +18,9 @@ public static class KeymapHints
     public static ILookup<TerminalKey, KeyChord> ByKey(Keymap keymap) =>
         keymap.Keys.ToLookup(pair => pair.Value, pair => pair.Key);
 
-    /// <summary>A Keys menu item's header (editable keymap spec §6.2, #23): the name, two spaces, then Describe's
-    /// line for the chords, so a menu item, a tooltip and a Keyboard tab chip cannot disagree; a key no chord sends
-    /// keeps its bare name. Header text, never a gesture: see the menu notes in CLAUDE.md.</summary>
-    public static string Label(string name, IEnumerable<KeyChord> chords, IFormatProvider? format = null) =>
-        Describe(chords, format) is { } hint ? name + "  " + hint : name;
-
     /// <summary>Every chord in the keymap that sends the key, or null when none does. Ordered without reference to
-    /// the table's insertion order (Keymap holds a Dictionary): unmodified chords first, then by KeyModifiers value
-    /// (Alt, Control, Shift, combinations after), function keys ahead of other keys within a group, taps last.
+    /// the table's insertion order (Keymap holds a Dictionary): in Ordered's order, unmodified chords first, then
+    /// Shift, Alt, Control and combinations, function keys ahead of other keys within a group, taps last.
     /// Ordinary chords are formatted by Avalonia's own platform formatter — glyphs on macOS, words elsewhere — and a
     /// null format means the platform's registration; taps, which it has no word for, are worded here.</summary>
     public static string? Describe(Keymap keymap, TerminalKey key, IFormatProvider? format = null) =>
@@ -47,13 +42,32 @@ public static class KeymapHints
     /// <summary>One chord as text, worded exactly as it is inside a tooltip's line, for the Keyboard tab's chips.</summary>
     public static string Describe(KeyChord chord, IFormatProvider? format = null) => Format(chord, format);
 
-    /// <summary>The order every list of chords is shown in, tooltips and the Keyboard tab alike: unmodified chords
-    /// first, then by KeyModifiers value, function keys ahead of other keys within a group, taps last.</summary>
+    /// <summary>The order every list of chords is shown in, tooltips, the Keyboard tab and the Keys menu alike:
+    /// unmodified chords first, then Shift, Alt, Control, then combinations; function keys ahead of other keys
+    /// within a group; taps last. Shift+F1 ahead of Ctrl+F1 is the order every 3270 user is taught PF13 in.</summary>
     public static IEnumerable<KeyChord> Ordered(IEnumerable<KeyChord> chords) => chords
         .OrderBy(chord => chord.Tap ? 1 : 0)
-        .ThenBy(chord => (int)chord.Modifiers)
+        .ThenBy(chord => ModifierRank(chord.Modifiers))
         .ThenBy(chord => IsFunctionKey(chord.Key) ? 0 : 1)
         .ThenBy(chord => (int)chord.Key);
+
+    /// <summary>The one chord a Keys menu item shows (Keys menu shortcuts spec §3.2): the first in Ordered's order
+    /// that is not a tap and whose key the platform's keyboard has. Apple keyboards have no Pause and no Insert.
+    /// Null when nothing qualifies, and the item shows no shortcut. No ⌘ filter is needed: ChordSyntax parses no
+    /// Cmd modifier and KeymapPolicy refuses one in the Keyboard tab, so a composed keymap never holds a ⌘
+    /// chord.</summary>
+    public static KeyChord? MenuChord(IEnumerable<KeyChord> chords, bool isMacOS) =>
+        Ordered(chords.Where(chord => !chord.Tap && !(isMacOS && chord.Key is Key.Pause or Key.Insert)))
+            .Select(chord => (KeyChord?)chord).FirstOrDefault();
+
+    private static int ModifierRank(KeyModifiers modifiers) => modifiers switch
+    {
+        KeyModifiers.None => 0,
+        KeyModifiers.Shift => 1,
+        KeyModifiers.Alt => 2,
+        KeyModifiers.Control => 3,
+        _ => 4 + (int)modifiers,
+    };
 
     private static bool IsFunctionKey(Key key) => key is >= Key.F1 and <= Key.F24;
 

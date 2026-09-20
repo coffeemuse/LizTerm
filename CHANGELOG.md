@@ -16,7 +16,7 @@ What changed in each LizTerm release, newest first. Downloads are on the
   pressing it, remove one with its **×**, move one to another row, or reset to the defaults. LizTerm refuses the keys
   it needs itself, such as Copy and Paste or a plain letter, and says why. Your changes are kept in `keymap.json`
   beside `settings.json`, and the on-screen keypad's tooltips follow them. So does the **Keys** menu, which now
-  shows each key's keystrokes beside its name, and the user guide's Keyboard table is now the default layout rather
+  shows each key's keystroke as a menu shortcut, and the user guide's Keyboard table is now the default layout rather
   than the only one
   ([#18](https://github.com/coffeemuse/LizTerm/issues/18), [#23](https://github.com/coffeemuse/LizTerm/issues/23)).
 - **Mono terminals.** A profile can now be a **Mono (3278)** as well as a **Colour (3279)**: the host is told it is a

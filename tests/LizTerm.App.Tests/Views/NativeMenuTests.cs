@@ -98,8 +98,8 @@ public class NativeMenuTests
         MenuLookup.Item(Item(window, "_View", "_Keypad").Menu, header)
         ?? throw new InvalidOperationException($"no native menu item _View > _Keypad > {header}");
 
-    /// <summary>A Keys item by the key it sends (#23): the header carries the keystroke hint and follows the keymap,
-    /// so "Insert" is a prefix of what the item reads, not the whole of it.</summary>
+    /// <summary>A Keys item by the key it sends (#23): found by CommandParameter so the test never depends on a
+    /// header or a gesture.</summary>
     private static NativeMenuItem KeysItem(SessionWindow window, TerminalKey key) =>
         MenuLookup.Item(NativeMenu.GetMenu(window), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
             .SingleOrDefault(item => Equals(item.CommandParameter, key))
@@ -854,12 +854,21 @@ public class NativeMenuTests
 
     /// <summary>Gestures come from the platform hotkey table, not a hardcoded modifier, so macOS shows Cmd and
     /// the others Ctrl from the one table ShowPlatformGestures already reads for the classic menu. Outside Edit
-    /// exactly two items carry one, both Cmd chords no 3270 keystroke uses (session switching spec §6):
-    /// Window &gt; Switch Session... and, on macOS, Window &gt; Minimize.</summary>
+    /// and Keys exactly two items carry one, both Cmd chords no 3270 keystroke uses (session switching spec §6):
+    /// Window &gt; Switch Session... and, on macOS, Window &gt; Minimize.
+    ///
+    /// The Keys items are the exception the Keys menu shortcuts spec makes (§3.1): their gestures are drawn by
+    /// AppKit and declined by MacMenuKeyEquivalents, which refuses every key-down without ⌘. That rule is only
+    /// safe while every other native gesture carries the command modifier. The first walk (AssertNoGestures)
+    /// catches any gesture on File at all; the second walk's unique contribution is Edit, which the first walk
+    /// skips, so an Edit gesture the platform table handed back without the command modifier is what the second
+    /// walk alone would catch.</summary>
     [AvaloniaFact]
-    public void Only_edit_and_two_window_items_carry_gestures()
+    public void Only_edit_two_window_items_and_the_Keys_items_carry_gestures()
     {
         var (window, _, _, _) = Show();
+        window.NativeGesturesAllowed = true;
+        window.AttachKeymap(new KeymapViewModel());
         var hotkeys = window.GetPlatformSettings()!.HotkeyConfiguration;
 
         Assert.Equal(hotkeys.Copy.FirstOrDefault(), Item(window, "_Edit", "_Copy").Gesture);
@@ -867,26 +876,46 @@ public class NativeMenuTests
         Assert.Equal(hotkeys.SelectAll.FirstOrDefault(), Item(window, "_Edit", "Select _All").Gesture);
         Assert.Equal(new KeyGesture(Key.K, hotkeys.CommandModifiers), Item(window, "_Window", "_Switch Session...").Gesture);
         Assert.Equal(new KeyGesture(Key.M, KeyModifiers.Meta), Item(window, "_Window", "_Minimize").Gesture);
+        Assert.Equal(new KeyGesture(Key.F1, KeyModifiers.Shift), KeysItem(window, TerminalKey.PF13).Gesture);
+        Assert.Null(KeysItem(window, TerminalKey.Dup).Gesture);
 
-        // A gesture anywhere else is a 3270 client that cannot send that key, silently, with nothing in the wire
-        // log: an AppKit key equivalent is dispatched ahead of the key window's responder chain, so TerminalScreen
-        // never sees it. Walked exhaustively rather than from a list of examples — a list only covers the items
-        // someone remembered to add to it, and View > Crosshair is precisely the submenu one would have missed.
-        foreach (var top in NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().Where(i => i.Header != "_Edit"))
+        // A ⌘-less gesture anywhere but Keys is a 3270 client that cannot send that key, silently, with nothing
+        // in the wire log: MacMenuKeyEquivalents declines it before the key window ever sees it. Walked
+        // exhaustively rather than from a list of examples — a list only covers the items someone remembered to
+        // add to it, and View > Crosshair is precisely the submenu one would have missed.
+        foreach (var top in NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().Where(i => i.Header is not ("_Edit" or "_Keys")))
             AssertNoGestures(top.Header!, top.Menu!);
+        foreach (var top in NativeMenu.GetMenu(window)!.Items.OfType<NativeMenuItem>().Where(i => i.Header != "_Keys"))
+            AssertEveryGestureCarriesCommand(top.Header!, top.Menu!, hotkeys.CommandModifiers);
     }
 
     private static readonly string[] GestureExceptions = ["_Window > _Switch Session...", "_Window > _Minimize"];
 
-    private static void AssertNoGestures(string path, NativeMenu menu)
+    private static void AssertNoGestures(string path, NativeMenu menu) =>
+        WalkItems(path, menu, (itemPath, item) =>
+        {
+            if (GestureExceptions.Contains(itemPath)) return;
+            Assert.True(item.Gesture is null,
+                $"{itemPath} carries a gesture, which takes that key away from the terminal");
+        });
+
+    private static void AssertEveryGestureCarriesCommand(string path, NativeMenu menu, KeyModifiers command) =>
+        WalkItems(path, menu, (itemPath, item) =>
+        {
+            if (item.Gesture is { } gesture)
+                Assert.True(gesture.KeyModifiers.HasFlag(command) || gesture.KeyModifiers.HasFlag(KeyModifiers.Meta),
+                    $"{itemPath} carries {gesture} without the command modifier, which MacMenuKeyEquivalents would decline");
+        });
+
+    /// <summary>Every item under the menu, separators aside, with its path: the one walk both gesture invariants
+    /// share, so they cannot come to cover different item sets.</summary>
+    private static void WalkItems(string path, NativeMenu menu, Action<string, NativeMenuItem> visit)
     {
         foreach (var item in menu.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator))
         {
             var itemPath = $"{path} > {item.Header}";
-            if (GestureExceptions.Contains(itemPath)) continue;
-            Assert.True(item.Gesture is null,
-                $"{itemPath} carries a gesture, which takes that key away from the terminal");
-            if (item.Menu is { } submenu) AssertNoGestures(itemPath, submenu);
+            visit(itemPath, item);
+            if (item.Menu is { } submenu) WalkItems(itemPath, submenu, visit);
         }
     }
 
@@ -935,18 +964,22 @@ public class NativeMenuTests
         Assert.Equal("Field Mark", KeysItem(window, TerminalKey.FieldMark).Header);
     }
 
-    /// <summary>#23: every Keys item names the keystrokes that send it, in its header text and never in a gesture (a
-    /// native gesture is a key equivalent that would take the keystroke from the screen; see
-    /// Only_edit_and_two_window_items_carry_gestures), in both menus alike so the parity walk stays a real guard.
-    /// The expectation is computed with the window's own keymap and the platform's own wording, exactly as the
-    /// window computes the header, because the headless platform's key names are not ours to assert. The name half
-    /// of each header is pinned exactly, in the menu's declared order, rather than checked only for the presence or
-    /// absence of a "  " separator — a check loose enough to pass a header with its name dropped.</summary>
+    /// <summary>Keys menu shortcuts spec §3.3: every Keys item's header is its bare name, in the menu's declared
+    /// order, pinned exactly rather than checked loosely — a check loose enough to pass a header with its name
+    /// dropped is no guard. The keystroke lives in the shortcut instead: the classic InputGesture always shows the
+    /// keymap's one chord for the key (computed with the window's own keymap, exactly as ApplyKeymap computes it,
+    /// because the headless platform's key names are not ours to assert), and the native Gesture is null because
+    /// this test sets NativeGesturesAllowed to false itself (see
+    /// Only_edit_two_window_items_and_the_Keys_items_carry_gestures for the case where it is true), rather than
+    /// relying on MacMenuKeyEquivalents.Installed being false on every headless run.</summary>
     [AvaloniaFact]
-    public void Every_keys_item_carries_its_keystrokes_in_its_header_on_both_menus()
+    public void Every_keys_item_has_a_bare_header_and_its_keystroke_as_the_classic_shortcut()
     {
         var (window, _, _, _) = Show();
+        window.NativeGesturesAllowed = false;
+        window.AttachKeymap(new KeymapViewModel());
         var map = window.FindControl<TerminalScreen>("Screen")!.Keymap;
+        var chords = KeymapHints.ByKey(map);
         var native = MenuLookup.Item(NativeMenu.GetMenu(window), "_Keys")!.Menu!.Items.OfType<NativeMenuItem>()
             .Where(item => item is not NativeMenuItemSeparator).ToList();
         var classic = window.FindControl<MenuItem>("KeysMenuItem")!.Items.OfType<MenuItem>().ToList();
@@ -963,15 +996,18 @@ public class NativeMenuTests
         {
             var (nativeItem, classicItem) = pair;
             var key = (TerminalKey)nativeItem.CommandParameter!;
-            var hint = KeymapHints.Describe(map, key);
-            var expected = hint is null ? names[i] : names[i] + "  " + hint;
-            Assert.Equal(expected, nativeItem.Header);
+            var gesture = KeymapHints.MenuChord(chords[key], isMacOS: true) is { } chord
+                ? new KeyGesture(chord.Key, chord.Modifiers)
+                : null;
+            Assert.Equal(names[i], nativeItem.Header);
             Assert.Equal(nativeItem.Header, classicItem.Header as string);
+            // Set explicitly above, rather than relied on: MacMenuKeyEquivalents.Installed is false on every
+            // headless run today, but that is not this test's invariant to assume.
             Assert.Null(nativeItem.Gesture);
-            Assert.Null(classicItem.InputGesture);
+            Assert.Equal(gesture, classicItem.InputGesture);
         }
-        Assert.Equal("PA2  " + KeymapHints.Describe(map, TerminalKey.PA2), KeysItem(window, TerminalKey.PA2).Header);
-        Assert.Equal("Insert  " + KeymapHints.Describe(map, TerminalKey.Insert), KeysItem(window, TerminalKey.Insert).Header);
+        Assert.Equal("PA2", KeysItem(window, TerminalKey.PA2).Header);
+        Assert.Equal("Insert", KeysItem(window, TerminalKey.Insert).Header);
     }
 
     /// <summary>#111: Insert was on the Insert key alone, which Apple's keyboards do not have. The Keys menu is the
