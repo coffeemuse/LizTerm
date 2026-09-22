@@ -55,7 +55,7 @@ public sealed partial class MvsmfBrowserViewModel
         // the member list to nothing while a failure's banner is still up, and Retry must not index an empty list.
         else if (_selectedMembers is [var only]) path = only.Path;
         else return;
-        var progress = new RowProgress(_dispatch, bytes => StatusText = $"⟳ Reading {path} · {Bytes(bytes)} bytes");
+        var progress = new BrowserTransfers.RowProgress(_dispatch, bytes => StatusText = $"⟳ Reading {path} · {BrowserTransfers.Bytes(bytes)} bytes");
         StatusText = $"⟳ Reading {path}…";
         // withEtag: false — a view can never write the content back, and a stamp costs the host a second pass over
         // it (browser spec §5.2). The stamp memory is left exactly as it was: a view is not a download.
