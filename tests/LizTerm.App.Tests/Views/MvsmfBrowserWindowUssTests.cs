@@ -73,6 +73,39 @@ public class MvsmfBrowserWindowUssTests
         Assert.Equal("✓ Listed /u/mvsce02 · 0 directories, 0 files.", Named<TextBlock>(window, "StatusLine").Text);
     }
 
+    /// <summary>Selecting the USS tab while the window's own opening dataset listing is still running is a no-op
+    /// in UssBrowserViewModel.EnsureListedAsync (it defers to the busy runner), so the window must list the USS
+    /// tab's start path itself once that listing ends, without the user pressing Go or switching tabs away and
+    /// back (fix for the gap the task-6 review found).</summary>
+    [AvaloniaFact]
+    public async Task The_uss_tab_lists_its_start_path_once_the_busy_dataset_listing_ends_even_if_selected_first()
+    {
+        var t = BrowserTestHost.Create(seed: host =>
+        {
+            BrowserTestHost.Standard(host);
+            UssTestHost.Standard(host);
+        });
+        t.Host.Gate = new TaskCompletionSource();
+        var window = new MvsmfBrowserWindow { DataContext = t.Vm };
+        window.Show();
+        await Wait.UntilAsync(() => t.Vm.IsBusy, "the dataset listing to start");
+        Assert.Empty(t.Vm.Datasets);
+
+        Named<TabControl>(window, "Tabs").SelectedIndex = 1;
+        window.UpdateLayout();
+        Assert.True(window.IsUssTab);
+        // The tab's own EnsureListedAsync is a no-op while the runner is still busy with the dataset listing.
+        Assert.Null(t.Vm.Uss.Current);
+
+        t.Host.Gate.SetResult();
+        await Wait.UntilAsync(() => t.Vm.Uss.Current is not null && !t.Vm.IsBusy, "the USS start listing");
+
+        Assert.Equal("/u/mvsce02", t.Vm.Uss.Current!.UnixPath);
+        Assert.Empty(t.Vm.Uss.Directories);
+        Assert.Empty(t.Vm.Uss.Files);
+        Assert.Equal("✓ Listed /u/mvsce02 · 0 directories, 0 files.", t.Vm.StatusText);
+    }
+
     [AvaloniaFact]
     public async Task Enter_in_the_path_box_lists_and_the_lists_fill()
     {

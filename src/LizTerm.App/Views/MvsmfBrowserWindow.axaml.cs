@@ -208,6 +208,10 @@ public partial class MvsmfBrowserWindow : Window
                 break;
             case nameof(MvsmfBrowserViewModel.IsBusy) when !vm.HasConfirmation:
                 PostRestoreFocus(forget: true);
+                // The USS tab's own listing (OnTabChanged) is a no-op while an operation on the shared runner is
+                // still busy, so a tab selected during the window's own opening listing never lists on its own;
+                // EnsureListedAsync is idempotent once listed, so this is a no-op after the tab's own listings.
+                if (IsUssTab) _ = vm.Uss.EnsureListedAsync();
                 break;
             case nameof(MvsmfBrowserViewModel.HasConfirmation) when vm.HasConfirmation:
                 // An input question takes the keyboard to its box, with the old name selected so typing replaces it;
