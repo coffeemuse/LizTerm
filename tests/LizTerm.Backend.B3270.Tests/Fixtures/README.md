@@ -71,3 +71,15 @@ Inbound side of `LiveHostTests.A_pinned_certificate_verifies_and_a_decoy_pin_fai
 true, caFile, <pin>, acceptHostname, any)` then `Connect`. It is `gateway-login-tls.jsonl` with `verified:true`
 in the `tls` indication, which is what `ReplayTests.Gateway_pinned_login_replays_to_a_verified_tls_connection`
 asserts. The decoy attempt that followed in the live run was cut. The address was replaced with `gateway.test`.
+
+## locale-comma-connect.jsonl
+
+Inbound side of the wire log attached to #170 (2026-09-22), made with `tools/wirelog-to-fixture.sh` and trimmed to
+the Connect run (tag 44) and the Disconnect (tag 86) that LizTerm's thirty-second timeout sent. The reporter's Linux
+Mint desktop runs in a language that writes decimals with a comma, and the engine formats its JSON doubles in that
+locale (`docs/engines.md`, "The engine's locale"), so its `run-result` reads `"time":0,039` and every `thumb` line is
+malformed too. Those lines are not JSON and the parser drops them; the connection states and the screen
+around them are intact, which is why the reporter saw a live ISPF panel under a timeout banner. The fixture keeps
+the malformed lines exactly as the engine wrote them. The address was replaced with `hercules.test` and the LAN IP
+with `192.0.2.10`; the Hercules banner on screen still names the reporter's machine `hercules`, as the issue does. The
+logon and the ISPF screens between the two runs were cut.

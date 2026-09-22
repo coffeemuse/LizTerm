@@ -190,6 +190,11 @@ See `src/LizTerm.Backend.Mvsmf/CLAUDE.md`, "Tests". Tests that pin an mvsMF work
   `BundledEngine.Require()` is the one place that decision is spelled out, called by every test in the project that
   needs the engine; `EngineRequirement.Decide(found, present, variable)` is the gate, unit tested on its own; and
   `B3270Locator.Candidates` is how the test tells found from present (`Find` throws the same type for both).
+- `EngineLocaleTests` starts the bundled engine with `LANG=hr_HR.UTF-8` in the test process's own environment and
+  connects to a refused loopback port, expecting the refusal rather than a hang (#170; the engine prints
+  `"time":0,003` under that locale unless `B3270ChildProcess` pins `LC_NUMERIC`). It sits in this project's
+  `EnvironmentCollection`, non-parallel, so no other engine is spawned under the changed variables. It is decisive on
+  macOS, which ships every locale; a Linux runner without `hr_HR` generated falls back to C; Windows skips.
 - The live tests carry a 10-minute xunit timeout. `gateway-pinned-login.jsonl` replays a verified pinned connect.
 - `ScreenWaiter` and `TsoNavigator` drive a TSO logon to READY by screen text only: LOGON, PASSWORD, `***` pauses
   answered with Enter, menus left with PF3, READY = the last non-blank line. Extend them with text rules, never

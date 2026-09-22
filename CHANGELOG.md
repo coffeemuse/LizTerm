@@ -3,6 +3,13 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
+## Unreleased
+
+- **Sessions no longer drop after thirty seconds on Linux desktops whose language writes decimals with a comma**
+  (Croatian, German, French and most of Europe). The emulation engine wrote its timings the local way, LizTerm could
+  not read them, and a connection that was working in every visible way was reported as timed out and closed, leaving
+  the TSO user logged on at the host ([#170](https://github.com/coffeemuse/LizTerm/issues/170)).
+
 ## 0.7.0
 
 - **Ctrl+Escape sends Clear on macOS**, which had no working Clear keystroke before: the chord never reached the
