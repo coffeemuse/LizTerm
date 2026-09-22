@@ -52,13 +52,6 @@
       </StackPanel>
     </Border>
 
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="12,8">
-      <TextBlock Text="Filter" VerticalAlignment="Center" Margin="0,0,8,0" />
-      <TextBox Grid.Column="1" x:Name="FilterBox" Text="{Binding Filter}" FontFamily="Menlo, Consolas, monospace"
-               PlaceholderText="HLQ.** — for example MVSCE02.**" IsEnabled="{Binding CanChooseDataset}" />
-      <Button Grid.Column="2" x:Name="ListButton" Content="List" Margin="8,0,0,0" Command="{Binding ListCommand}" />
-    </Grid>
-
     <Border x:Name="ErrorBanner" DockPanel.Dock="Top" Background="#402020" Padding="12,5" IsVisible="{Binding HasError}">
       <DockPanel>
         <Button x:Name="RetryButton" DockPanel.Dock="Right" Content="Retry" Command="{Binding RetryCommand}"
@@ -82,7 +75,8 @@
         </StackPanel>
         <StackPanel Spacing="4" Margin="0,0,8,0">
           <DockPanel>
-            <TextBox x:Name="ConfirmInputBox" DockPanel.Dock="Right" Width="240" MaxLength="44"
+            <!-- A UNIX path's length (HostPath.MaxUnixPathLength); each question's rule bounds what it accepts. -->
+            <TextBox x:Name="ConfirmInputBox" DockPanel.Dock="Right" Width="240" MaxLength="251"
                      FontFamily="Menlo, Consolas, monospace" Text="{Binding Confirmation.Input}"
                      IsVisible="{Binding Confirmation.HasInput, FallbackValue=False}" Margin="8,0,0,0" />
             <TextBlock Text="{Binding Confirmation.Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
@@ -106,169 +100,302 @@
       </DockPanel>
     </Border>
 
-    <Grid ColumnDefinitions="*,4,*" Margin="12,0,12,8">
-      <controls:BrowserPane x:Name="DatasetsPane" Grid.Column="0" Title="Datasets" FooterText="{Binding DatasetsFooter}">
-        <controls:BrowserPane.Toolbar>
-          <WrapPanel x:Name="DatasetToolbar" ItemSpacing="6" LineSpacing="4">
-            <Button x:Name="NewDatasetButton" Classes="pane-verb" Content="New…" Command="{Binding NewDatasetCommand}" />
-            <Button x:Name="RenameDatasetButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameDatasetCommand}" ToolTip.Tip="Rename the selected dataset" />
-            <Button x:Name="DeleteDatasetButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteDatasetCommand}" ToolTip.Tip="Delete the selected dataset (Delete)" />
-            <Button x:Name="RefreshButton" Classes="pane-verb" Content="↻ Refresh" Command="{Binding RefreshCommand}" />
-          </WrapPanel>
-        </controls:BrowserPane.Toolbar>
-        <controls:BrowserPane.FooterAction>
-          <Button x:Name="LoadMoreDatasetsButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreDatasetsCommand}"
-                  Margin="8,0,0,0" IsVisible="{Binding HasMoreDatasets}" />
-        </controls:BrowserPane.FooterAction>
-        <controls:BrowserPane.Body>
-          <DockPanel>
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,56,56,56" Margin="8,4">
-              <TextBlock Classes="header" Text="NAME" />
-              <TextBlock Classes="header" Grid.Column="1" Text="DSORG" />
-              <TextBlock Classes="header" Grid.Column="2" Text="RECFM" />
-              <TextBlock Classes="header" Grid.Column="3" Text="LRECL" />
-            </Grid>
-            <ListBox x:Name="DatasetList" ItemsSource="{Binding Datasets}" SelectedItem="{Binding SelectedDataset}"
-                     SelectionMode="Single" IsEnabled="{Binding CanChooseDataset}">
-              <ListBox.ContextMenu>
-                <ContextMenu x:Name="DatasetMenu">
-                  <MenuItem x:Name="DatasetMenuNew" Header="New…" Command="{Binding NewDatasetCommand}" />
-                  <MenuItem x:Name="DatasetMenuRename" Header="Rename…" Command="{Binding RenameDatasetCommand}" />
-                  <MenuItem x:Name="DatasetMenuDelete" Header="Delete…" Command="{Binding DeleteDatasetCommand}" InputGesture="Delete" />
-                  <Separator />
-                  <MenuItem x:Name="DatasetMenuRefresh" Header="Refresh" Command="{Binding RefreshCommand}" />
-                </ContextMenu>
-              </ListBox.ContextMenu>
-              <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:DatasetRow">
-                  <Grid ColumnDefinitions="*,56,56,56" Opacity="{Binding IsSupported, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
-                    <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Dsorg}" />
-                    <TextBlock Classes="cell" Grid.Column="2" Text="{Binding Recfm}" />
-                    <TextBlock Classes="cell" Grid.Column="3" Text="{Binding Lrecl}" />
+    <TabControl x:Name="Tabs" Margin="12,0,12,8">
+      <TabItem x:Name="DatasetsTab" Header="Datasets">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="0,8">
+            <TextBlock Text="Filter" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBox Grid.Column="1" x:Name="FilterBox" Text="{Binding Filter}" FontFamily="Menlo, Consolas, monospace"
+                     PlaceholderText="HLQ.** — for example MVSCE02.**" IsEnabled="{Binding CanChooseDataset}" />
+            <Button Grid.Column="2" x:Name="ListButton" Content="List" Margin="8,0,0,0" Command="{Binding ListCommand}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,4,*">
+            <controls:BrowserPane x:Name="DatasetsPane" Grid.Column="0" Title="Datasets" FooterText="{Binding DatasetsFooter}">
+              <controls:BrowserPane.Toolbar>
+                <WrapPanel x:Name="DatasetToolbar" ItemSpacing="6" LineSpacing="4">
+                  <Button x:Name="NewDatasetButton" Classes="pane-verb" Content="New…" Command="{Binding NewDatasetCommand}" />
+                  <Button x:Name="RenameDatasetButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameDatasetCommand}" ToolTip.Tip="Rename the selected dataset" />
+                  <Button x:Name="DeleteDatasetButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteDatasetCommand}" ToolTip.Tip="Delete the selected dataset (Delete)" />
+                  <Button x:Name="RefreshButton" Classes="pane-verb" Content="↻ Refresh" Command="{Binding RefreshCommand}" />
+                </WrapPanel>
+              </controls:BrowserPane.Toolbar>
+              <controls:BrowserPane.FooterAction>
+                <Button x:Name="LoadMoreDatasetsButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreDatasetsCommand}"
+                        Margin="8,0,0,0" IsVisible="{Binding HasMoreDatasets}" />
+              </controls:BrowserPane.FooterAction>
+              <controls:BrowserPane.Body>
+                <DockPanel>
+                  <Grid DockPanel.Dock="Top" ColumnDefinitions="*,56,56,56" Margin="8,4">
+                    <TextBlock Classes="header" Text="NAME" />
+                    <TextBlock Classes="header" Grid.Column="1" Text="DSORG" />
+                    <TextBlock Classes="header" Grid.Column="2" Text="RECFM" />
+                    <TextBlock Classes="header" Grid.Column="3" Text="LRECL" />
                   </Grid>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
-          </DockPanel>
-        </controls:BrowserPane.Body>
-      </controls:BrowserPane>
+                  <ListBox x:Name="DatasetList" ItemsSource="{Binding Datasets}" SelectedItem="{Binding SelectedDataset}"
+                           SelectionMode="Single" IsEnabled="{Binding CanChooseDataset}">
+                    <ListBox.ContextMenu>
+                      <ContextMenu x:Name="DatasetMenu">
+                        <MenuItem x:Name="DatasetMenuNew" Header="New…" Command="{Binding NewDatasetCommand}" />
+                        <MenuItem x:Name="DatasetMenuRename" Header="Rename…" Command="{Binding RenameDatasetCommand}" />
+                        <MenuItem x:Name="DatasetMenuDelete" Header="Delete…" Command="{Binding DeleteDatasetCommand}" InputGesture="Delete" />
+                        <Separator />
+                        <MenuItem x:Name="DatasetMenuRefresh" Header="Refresh" Command="{Binding RefreshCommand}" />
+                      </ContextMenu>
+                    </ListBox.ContextMenu>
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DatasetRow">
+                        <Grid ColumnDefinitions="*,56,56,56" Opacity="{Binding IsSupported, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                          <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Dsorg}" />
+                          <TextBlock Classes="cell" Grid.Column="2" Text="{Binding Recfm}" />
+                          <TextBlock Classes="cell" Grid.Column="3" Text="{Binding Lrecl}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </DockPanel>
+              </controls:BrowserPane.Body>
+            </controls:BrowserPane>
 
-      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="#33373D" />
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="#33373D" />
 
-      <controls:BrowserPane x:Name="MembersPane" Grid.Column="2" Title="{Binding MembersTitle}" FooterText="{Binding MembersFooter}">
-        <controls:BrowserPane.HeaderContent>
-          <TextBox x:Name="MemberFilterBox" Width="140" Text="{Binding MemberFilter}" PlaceholderText="Filter members"
-                   IsEnabled="{Binding ShowMemberPane}" />
-        </controls:BrowserPane.HeaderContent>
-        <controls:BrowserPane.Toolbar>
-          <!-- The transfer drop-down stays at the toolbar's right end whether or not an upload review is open
-               (pane-pattern spec §4.2): the mode can be changed and the queued files re-checked mid-review
-               (OnModeChanged → RecheckIfReviewing), so it must be reachable then too. -->
-          <DockPanel>
-            <DropDownButton x:Name="TransferButton" DockPanel.Dock="Right" Classes="pane-verb" Content="{Binding TransferModeLabel}" Margin="8,0,0,0" VerticalAlignment="Top"
-                            IsEnabled="{Binding IsIdle}">
-              <DropDownButton.Flyout>
-                <MenuFlyout>
-                  <MenuItem x:Name="TextModeItem" Header="Text" ToggleType="Radio" GroupName="TransferMode"
-                            IsChecked="{Binding IsTextMode, Mode=TwoWay}" />
-                  <MenuItem x:Name="BinaryModeItem" Header="Binary" ToggleType="Radio" GroupName="TransferMode"
-                            IsChecked="{Binding IsBinaryMode, Mode=TwoWay}" />
-                  <Separator />
-                  <MenuItem x:Name="TrimItem" Header="Trim trailing blanks" ToggleType="CheckBox"
-                            IsChecked="{Binding TrimTrailingBlanks, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
-                  <MenuItem x:Name="VerifyItem" Header="Verify after upload" ToggleType="CheckBox"
-                            IsChecked="{Binding VerifyUploads, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
-                </MenuFlyout>
-              </DropDownButton.Flyout>
-            </DropDownButton>
-            <Panel>
-              <WrapPanel x:Name="MemberToolbar" ItemSpacing="6" LineSpacing="4" IsVisible="{Binding !IsReviewingUpload}">
-                <Button x:Name="ViewButton" Classes="pane-verb" Content="View" Command="{Binding ViewCommand}"
-                        ToolTip.Tip="{Binding ViewHint}" ToolTip.ShowOnDisabled="True" />
-                <Button x:Name="DownloadButton" Classes="pane-verb" Content="⇣ Download…" Command="{Binding DownloadCommand}" ToolTip.Tip="Download the selected members (Enter)" />
-                <Button x:Name="UploadButton" Classes="pane-verb" Content="⇡ Upload…" Command="{Binding UploadCommand}" ToolTip.Tip="Upload files into this dataset" />
-                <Button x:Name="RenameMemberButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameMemberCommand}" ToolTip.Tip="Rename the selected member" />
-                <Button x:Name="DeleteButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete the selected members (Delete)" />
-              </WrapPanel>
-              <WrapPanel x:Name="ReviewToolbar" ItemSpacing="6" LineSpacing="4" IsVisible="{Binding IsReviewingUpload}">
-                <Button x:Name="CloseReviewButton" Classes="pane-verb" Content="Close" Command="{Binding CloseReviewCommand}" />
-                <Button x:Name="StartUploadButton" Classes="pane-verb" Content="Upload" Command="{Binding StartUploadCommand}" />
-                <CheckBox x:Name="ExpandTabsBox" Content="Expand tabs (every 8 columns)" IsChecked="{Binding ExpandTabs}"
-                          IsEnabled="{Binding IsTextMode}" Margin="8,0,0,0" />
-              </WrapPanel>
-            </Panel>
-          </DockPanel>
-        </controls:BrowserPane.Toolbar>
-        <controls:BrowserPane.FooterAction>
-          <Button x:Name="LoadMoreMembersButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreMembersCommand}"
-                  Margin="8,0,0,0" IsVisible="{Binding HasMoreMembers}" />
-        </controls:BrowserPane.FooterAction>
-        <controls:BrowserPane.Body>
-          <Panel>
-            <TextBlock x:Name="ChooseHint" Text="{Binding ChooseHint}" TextWrapping="Wrap" Margin="12"
-                       Foreground="#A0A0A0" IsVisible="{Binding ShowChooseHint}" />
-            <TextBlock x:Name="SequentialNote" Margin="12" TextWrapping="Wrap"
-                       Text="Sequential dataset: View, Download and Upload act on the dataset itself."
-                       IsVisible="{Binding ShowSequentialNote}" />
+            <controls:BrowserPane x:Name="MembersPane" Grid.Column="2" Title="{Binding MembersTitle}" FooterText="{Binding MembersFooter}">
+              <controls:BrowserPane.HeaderContent>
+                <TextBox x:Name="MemberFilterBox" Width="140" Text="{Binding MemberFilter}" PlaceholderText="Filter members"
+                         IsEnabled="{Binding ShowMemberPane}" />
+              </controls:BrowserPane.HeaderContent>
+              <controls:BrowserPane.Toolbar>
+                <!-- The transfer drop-down stays at the toolbar's right end whether or not an upload review is open
+                     (pane-pattern spec §4.2): the mode can be changed and the queued files re-checked mid-review
+                     (OnModeChanged → RecheckIfReviewing), so it must be reachable then too. -->
+                <DockPanel>
+                  <DropDownButton x:Name="TransferButton" DockPanel.Dock="Right" Classes="pane-verb" Content="{Binding TransferModeLabel}" Margin="8,0,0,0" VerticalAlignment="Top"
+                                  IsEnabled="{Binding IsIdle}">
+                    <DropDownButton.Flyout>
+                      <MenuFlyout>
+                        <MenuItem x:Name="TextModeItem" Header="Text" ToggleType="Radio" GroupName="TransferMode"
+                                  IsChecked="{Binding IsTextMode, Mode=TwoWay}" />
+                        <MenuItem x:Name="BinaryModeItem" Header="Binary" ToggleType="Radio" GroupName="TransferMode"
+                                  IsChecked="{Binding IsBinaryMode, Mode=TwoWay}" />
+                        <Separator />
+                        <MenuItem x:Name="TrimItem" Header="Trim trailing blanks" ToggleType="CheckBox"
+                                  IsChecked="{Binding TrimTrailingBlanks, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
+                        <MenuItem x:Name="VerifyItem" Header="Verify after upload" ToggleType="CheckBox"
+                                  IsChecked="{Binding VerifyUploads, Mode=TwoWay}" IsEnabled="{Binding IsTextMode}" />
+                      </MenuFlyout>
+                    </DropDownButton.Flyout>
+                  </DropDownButton>
+                  <Panel>
+                    <WrapPanel x:Name="MemberToolbar" ItemSpacing="6" LineSpacing="4" IsVisible="{Binding !IsReviewingUpload}">
+                      <Button x:Name="ViewButton" Classes="pane-verb" Content="View" Command="{Binding ViewCommand}"
+                              ToolTip.Tip="{Binding ViewHint}" ToolTip.ShowOnDisabled="True" />
+                      <Button x:Name="DownloadButton" Classes="pane-verb" Content="⇣ Download…" Command="{Binding DownloadCommand}" ToolTip.Tip="Download the selected members (Enter)" />
+                      <Button x:Name="UploadButton" Classes="pane-verb" Content="⇡ Upload…" Command="{Binding UploadCommand}" ToolTip.Tip="Upload files into this dataset" />
+                      <Button x:Name="RenameMemberButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameMemberCommand}" ToolTip.Tip="Rename the selected member" />
+                      <Button x:Name="DeleteButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteCommand}" ToolTip.Tip="Delete the selected members (Delete)" />
+                    </WrapPanel>
+                    <WrapPanel x:Name="ReviewToolbar" ItemSpacing="6" LineSpacing="4" IsVisible="{Binding IsReviewingUpload}">
+                      <Button x:Name="CloseReviewButton" Classes="pane-verb" Content="Close" Command="{Binding CloseReviewCommand}" />
+                      <Button x:Name="StartUploadButton" Classes="pane-verb" Content="Upload" Command="{Binding StartUploadCommand}" />
+                      <CheckBox x:Name="ExpandTabsBox" Content="Expand tabs (every 8 columns)" IsChecked="{Binding ExpandTabs}"
+                                IsEnabled="{Binding IsTextMode}" Margin="8,0,0,0" />
+                    </WrapPanel>
+                  </Panel>
+                </DockPanel>
+              </controls:BrowserPane.Toolbar>
+              <controls:BrowserPane.FooterAction>
+                <Button x:Name="LoadMoreMembersButton" Classes="pane-verb" Content="Load more" Command="{Binding LoadMoreMembersCommand}"
+                        Margin="8,0,0,0" IsVisible="{Binding HasMoreMembers}" />
+              </controls:BrowserPane.FooterAction>
+              <controls:BrowserPane.Body>
+                <Panel>
+                  <TextBlock x:Name="ChooseHint" Text="{Binding ChooseHint}" TextWrapping="Wrap" Margin="12"
+                             Foreground="#A0A0A0" IsVisible="{Binding ShowChooseHint}" />
+                  <TextBlock x:Name="SequentialNote" Margin="12" TextWrapping="Wrap"
+                             Text="Sequential dataset: View, Download and Upload act on the dataset itself."
+                             IsVisible="{Binding ShowSequentialNote}" />
 
-            <DockPanel x:Name="MemberPane" IsVisible="{Binding ShowMemberPane}">
-              <Grid DockPanel.Dock="Top" ColumnDefinitions="110,*" Margin="8,4">
-                <TextBlock Classes="header" Text="MEMBER" />
-                <TextBlock Classes="header" Grid.Column="1" Text="STATUS" />
-              </Grid>
-              <ListBox x:Name="MemberList" ItemsSource="{Binding VisibleMembers}" SelectionMode="Multiple"
-                       IsEnabled="{Binding IsIdle}">
-                <ListBox.ContextMenu>
-                  <ContextMenu x:Name="MemberMenu">
-                    <MenuItem x:Name="MemberMenuView" Header="View" Command="{Binding ViewCommand}" />
-                    <MenuItem x:Name="MemberMenuDownload" Header="Download…" Command="{Binding DownloadCommand}" InputGesture="Enter" />
-                    <MenuItem x:Name="MemberMenuUpload" Header="Upload…" Command="{Binding UploadCommand}" />
-                    <MenuItem x:Name="MemberMenuRename" Header="Rename…" Command="{Binding RenameMemberCommand}" />
-                    <MenuItem x:Name="MemberMenuDelete" Header="Delete…" Command="{Binding DeleteCommand}" InputGesture="Delete" />
-                  </ContextMenu>
-                </ListBox.ContextMenu>
-                <ListBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:MemberRow">
-                    <Grid ColumnDefinitions="110,*">
-                      <TextBlock Classes="cell" Text="{Binding Name}" />
-                      <TextBlock Grid.Column="1" Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
+                  <DockPanel x:Name="MemberPane" IsVisible="{Binding ShowMemberPane}">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="110,*" Margin="8,4">
+                      <TextBlock Classes="header" Text="MEMBER" />
+                      <TextBlock Classes="header" Grid.Column="1" Text="STATUS" />
                     </Grid>
-                  </DataTemplate>
-                </ListBox.ItemTemplate>
-              </ListBox>
-            </DockPanel>
+                    <ListBox x:Name="MemberList" ItemsSource="{Binding VisibleMembers}" SelectionMode="Multiple"
+                             IsEnabled="{Binding IsIdle}">
+                      <ListBox.ContextMenu>
+                        <ContextMenu x:Name="MemberMenu">
+                          <MenuItem x:Name="MemberMenuView" Header="View" Command="{Binding ViewCommand}" />
+                          <MenuItem x:Name="MemberMenuDownload" Header="Download…" Command="{Binding DownloadCommand}" InputGesture="Enter" />
+                          <MenuItem x:Name="MemberMenuUpload" Header="Upload…" Command="{Binding UploadCommand}" />
+                          <MenuItem x:Name="MemberMenuRename" Header="Rename…" Command="{Binding RenameMemberCommand}" />
+                          <MenuItem x:Name="MemberMenuDelete" Header="Delete…" Command="{Binding DeleteCommand}" InputGesture="Delete" />
+                        </ContextMenu>
+                      </ListBox.ContextMenu>
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:MemberRow">
+                          <Grid ColumnDefinitions="110,*">
+                            <TextBlock Classes="cell" Text="{Binding Name}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
+                          </Grid>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </DockPanel>
 
-            <DockPanel x:Name="ReviewPane" IsVisible="{Binding IsReviewingUpload}">
-              <TextBlock DockPanel.Dock="Bottom" Text="{Binding ReviewMessage}" Foreground="#FF8080" TextWrapping="Wrap" Margin="8,4"
-                         IsVisible="{Binding ReviewMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
-              <ScrollViewer>
-                <ItemsControl x:Name="UploadList" ItemsSource="{Binding Uploads}" Margin="8,0">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:UploadRow">
-                      <Border BorderBrush="#33373D" BorderThickness="0,0,0,1" Padding="0,6">
-                        <StackPanel Spacing="4">
-                          <DockPanel>
-                            <TextBox DockPanel.Dock="Right" Width="110" Text="{Binding MemberName}" MaxLength="8"
-                                     FontFamily="Menlo, Consolas, monospace" IsReadOnly="{Binding Sent}" />
-                            <TextBlock Text="{Binding FileName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                          </DockPanel>
-                          <TextBlock Text="{Binding NameProblem}" Foreground="#FF8080"
-                                     IsVisible="{Binding NameProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                          <TextBlock Text="{Binding Problems}" TextWrapping="Wrap" FontSize="12"
-                                     IsVisible="{Binding Problems, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                          <TextBlock Text="{Binding Status}" FontSize="12"
-                                     IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                        </StackPanel>
-                      </Border>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </ScrollViewer>
-            </DockPanel>
-          </Panel>
-        </controls:BrowserPane.Body>
-      </controls:BrowserPane>
-    </Grid>
+                  <DockPanel x:Name="ReviewPane" IsVisible="{Binding IsReviewingUpload}">
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding ReviewMessage}" Foreground="#FF8080" TextWrapping="Wrap" Margin="8,4"
+                               IsVisible="{Binding ReviewMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <ScrollViewer>
+                      <ItemsControl x:Name="UploadList" ItemsSource="{Binding Uploads}" Margin="8,0">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:UploadRow">
+                            <Border BorderBrush="#33373D" BorderThickness="0,0,0,1" Padding="0,6">
+                              <StackPanel Spacing="4">
+                                <DockPanel>
+                                  <TextBox DockPanel.Dock="Right" Width="110" Text="{Binding MemberName}" MaxLength="8"
+                                           FontFamily="Menlo, Consolas, monospace" IsReadOnly="{Binding Sent}" />
+                                  <TextBlock Text="{Binding FileName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+                                <TextBlock Text="{Binding NameProblem}" Foreground="#FF8080"
+                                           IsVisible="{Binding NameProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                <TextBlock Text="{Binding Problems}" TextWrapping="Wrap" FontSize="12"
+                                           IsVisible="{Binding Problems, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Text="{Binding Status}" FontSize="12"
+                                           IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                              </StackPanel>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </DockPanel>
+                </Panel>
+              </controls:BrowserPane.Body>
+            </controls:BrowserPane>
+          </Grid>
+        </DockPanel>
+      </TabItem>
+      <TabItem x:Name="UssTab" Header="USS">
+        <!-- The tab's content binds to the USS view model; the Panel carries the context, the DockPanel the compiled
+             binding type, so the DataContext binding itself resolves against the window's view model. -->
+        <Panel DataContext="{Binding Uss}">
+          <DockPanel x:DataType="vm:UssBrowserViewModel">
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,8">
+              <TextBlock Text="Path" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <TextBox Grid.Column="1" x:Name="PathBox" Text="{Binding Path}" FontFamily="Menlo, Consolas, monospace"
+                       PlaceholderText="/u/userid" IsEnabled="{Binding !IsBusy}" />
+              <Button Grid.Column="2" x:Name="GoButton" Content="Go" Margin="8,0,0,0" Command="{Binding GoCommand}" />
+              <Button Grid.Column="3" x:Name="UpButton" Content="↑ Up" Margin="8,0,0,0" Command="{Binding UpCommand}"
+                      ToolTip.Tip="Up one directory" />
+            </Grid>
+            <Grid ColumnDefinitions="*,4,1.35*">
+              <controls:BrowserPane x:Name="DirectoriesPane" Grid.Column="0" Title="Directories" FooterText="{Binding DirectoriesFooter}">
+                <controls:BrowserPane.Toolbar>
+                  <WrapPanel x:Name="DirectoryToolbar" ItemSpacing="6" LineSpacing="4">
+                    <Button x:Name="NewDirectoryButton" Classes="pane-verb" Content="New…" Command="{Binding NewDirectoryCommand}" />
+                    <Button x:Name="DeleteDirectoryButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteDirectoryCommand}"
+                            ToolTip.Tip="Delete the selected directory and everything in it (Delete)" />
+                    <Button x:Name="UssRefreshButton" Classes="pane-verb" Content="↻ Refresh" Command="{Binding RefreshCommand}" />
+                  </WrapPanel>
+                </controls:BrowserPane.Toolbar>
+                <controls:BrowserPane.Body>
+                  <DockPanel>
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,120" Margin="8,4">
+                      <TextBlock Classes="header" Text="NAME" />
+                      <TextBlock Classes="header" Grid.Column="1" Text="MODIFIED" />
+                    </Grid>
+                    <ListBox x:Name="DirectoryList" ItemsSource="{Binding Directories}" SelectedItem="{Binding SelectedDirectory}"
+                             SelectionMode="Single" IsEnabled="{Binding !IsBusy}">
+                      <ListBox.ContextMenu>
+                        <ContextMenu x:Name="DirectoryMenu">
+                          <MenuItem x:Name="DirectoryMenuOpen" Header="Open" Command="{Binding OpenDirectoryCommand}" InputGesture="Enter" />
+                          <MenuItem x:Name="DirectoryMenuNew" Header="New…" Command="{Binding NewDirectoryCommand}" />
+                          <MenuItem x:Name="DirectoryMenuDelete" Header="Delete…" Command="{Binding DeleteDirectoryCommand}" InputGesture="Delete" />
+                          <Separator />
+                          <MenuItem x:Name="DirectoryMenuRefresh" Header="Refresh" Command="{Binding RefreshCommand}" />
+                        </ContextMenu>
+                      </ListBox.ContextMenu>
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:DirectoryRow">
+                          <Grid ColumnDefinitions="*,120" Opacity="{Binding IsUsable, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                            <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Modified}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </DockPanel>
+                </controls:BrowserPane.Body>
+              </controls:BrowserPane>
+
+              <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="#33373D" />
+
+              <controls:BrowserPane x:Name="FilesPane" Grid.Column="2" Title="{Binding FilesTitle}" FooterText="{Binding FilesFooter}">
+                <controls:BrowserPane.Toolbar>
+                  <DockPanel>
+                    <DropDownButton x:Name="UssTransferButton" DockPanel.Dock="Right" Classes="pane-verb" Content="{Binding TransferModeLabel}"
+                                    Margin="8,0,0,0" VerticalAlignment="Top" IsEnabled="{Binding !IsBusy}">
+                      <DropDownButton.Flyout>
+                        <MenuFlyout>
+                          <MenuItem x:Name="UssTextModeItem" Header="Text" ToggleType="Radio" GroupName="UssTransferMode"
+                                    IsChecked="{Binding IsTextMode, Mode=TwoWay}" />
+                          <MenuItem x:Name="UssBinaryModeItem" Header="Binary" ToggleType="Radio" GroupName="UssTransferMode"
+                                    IsChecked="{Binding IsBinaryMode, Mode=TwoWay}" />
+                          <Separator />
+                          <MenuItem x:Name="UssVerifyItem" Header="Verify after upload" ToggleType="CheckBox"
+                                    IsChecked="{Binding VerifyUploads, Mode=TwoWay}" />
+                        </MenuFlyout>
+                      </DropDownButton.Flyout>
+                    </DropDownButton>
+                    <WrapPanel x:Name="FileToolbar" ItemSpacing="6" LineSpacing="4">
+                      <Button x:Name="UssViewButton" Classes="pane-verb" Content="View" Command="{Binding ViewCommand}"
+                              ToolTip.Tip="{Binding ViewHint}" ToolTip.ShowOnDisabled="True" />
+                      <Button x:Name="UssDownloadButton" Classes="pane-verb" Content="⇣ Download…" Command="{Binding DownloadCommand}" />
+                      <Button x:Name="UssUploadButton" Classes="pane-verb" Content="⇡ Upload…" Command="{Binding UploadCommand}" />
+                      <Button x:Name="DeleteFilesButton" Classes="pane-verb" Content="Delete…" Command="{Binding DeleteFilesCommand}"
+                              ToolTip.Tip="Delete the selected files (Delete)" />
+                    </WrapPanel>
+                  </DockPanel>
+                </controls:BrowserPane.Toolbar>
+                <controls:BrowserPane.Body>
+                  <DockPanel>
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,80,120" Margin="8,4">
+                      <TextBlock Classes="header" Text="NAME" />
+                      <TextBlock Classes="header" Grid.Column="1" Text="SIZE" HorizontalAlignment="Right" />
+                      <TextBlock Classes="header" Grid.Column="2" Text="MODIFIED" Margin="12,0,0,0" />
+                    </Grid>
+                    <ListBox x:Name="FileList" ItemsSource="{Binding Files}" SelectionMode="Multiple" IsEnabled="{Binding !IsBusy}">
+                      <ListBox.ContextMenu>
+                        <ContextMenu x:Name="FileMenu">
+                          <MenuItem x:Name="FileMenuView" Header="View" Command="{Binding ViewCommand}" />
+                          <MenuItem x:Name="FileMenuDownload" Header="Download…" Command="{Binding DownloadCommand}" InputGesture="Enter" />
+                          <MenuItem x:Name="FileMenuUpload" Header="Upload…" Command="{Binding UploadCommand}" />
+                          <MenuItem x:Name="FileMenuDelete" Header="Delete…" Command="{Binding DeleteFilesCommand}" InputGesture="Delete" />
+                        </ContextMenu>
+                      </ListBox.ContextMenu>
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:FileRow">
+                          <!-- A row with a result shows it where its size and time were: the result is what the
+                               user is waiting for, and the columns come back with the next listing. -->
+                          <Grid ColumnDefinitions="*,80,120" Opacity="{Binding IsFile, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                            <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Size}" HorizontalAlignment="Right"
+                                       IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
+                            <TextBlock Classes="cell" Grid.Column="2" Text="{Binding Modified}" Margin="12,0,0,0"
+                                       IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
+                            <TextBlock Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Status}" TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </DockPanel>
+                </controls:BrowserPane.Body>
+              </controls:BrowserPane>
+            </Grid>
+          </DockPanel>
+        </Panel>
+      </TabItem>
+    </TabControl>
   </DockPanel>
 </Window>

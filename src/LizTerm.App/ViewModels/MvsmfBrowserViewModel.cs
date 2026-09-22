@@ -36,6 +36,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _filter = access.Userid is { Length: > 0 } userid ? userid + ".**" : "";
         Ops = new BrowserOperations();
         Ops.PropertyChanged += OnOperationsChanged;
+        Uss = new UssBrowserViewModel(Ops, access, connection, picker, dispatch);
         _access.PinSaveFailed += OnPinSaveFailed;
         WatchForm();
     }
@@ -72,6 +73,9 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     /// <summary>The runner both tabs share (USS spec §4.4). The window binds to this view model's forwarding
     /// properties below, so its bindings and the older tests see the same names as before the extraction.</summary>
     public BrowserOperations Ops { get; }
+
+    /// <summary>The USS tab's view model, on the same runner (USS spec §4.4).</summary>
+    public UssBrowserViewModel Uss { get; }
 
     public bool IsBusy => Ops.IsBusy;
     public bool IsIdle => Ops.IsIdle;
