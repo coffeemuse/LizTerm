@@ -857,6 +857,7 @@ Create `tests/LizTerm.App.Tests/Views/MvsmfViewerWindowTests.cs`:
 // SPDX-License-Identifier: BSD-3-Clause
 
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using LizTerm.App.ViewModels;
@@ -971,10 +972,6 @@ public class MvsmfViewerWindowTests
     }
 }
 ```
-
-`KeyPressQwerty` is the headless helper the other window tests use; it is already imported through the test
-project's `<Using>` items (`Avalonia.Headless`). If the compiler cannot see it, add
-`using Avalonia.Headless;` to the file.
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -1320,6 +1317,18 @@ and extend the member-menu half of `The_context_menus_bind_the_same_commands_as_
             Assert.Same(t.Vm.ViewCommand, items["MemberMenuView"].Command);
             Assert.Equal(window.ViewGesture, items["MemberMenuView"].InputGesture);
 ```
+
+**One existing assertion must change with the toolbar.** In the same file, the test that enumerates the panes'
+verbs lists the member toolbar's buttons in order. View goes first, so update it:
+
+```csharp
+        var memberVerbs = Named<WrapPanel>(window, "MemberToolbar").Children.OfType<Button>()
+            .Select(b => b.Content).ToList();
+        Assert.Equal(new object?[] { "View", "⇣ Download…", "⇡ Upload…", "Rename…", "Delete…" }, memberVerbs);
+```
+
+Nothing else in the suite asserts the toolbar's contents or the sequential note's words — the note's text lives
+only in `MvsmfBrowserWindow.axaml` today, and the test that shows it asserts only that it is visible.
 
 - [ ] **Step 2: Run them to verify they fail**
 
