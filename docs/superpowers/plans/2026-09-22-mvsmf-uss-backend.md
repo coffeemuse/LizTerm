@@ -16,6 +16,8 @@
 - The binary cap is `HostFileTransfer.BinaryUploadProblem(sourceFile, maxBytes)`, a pure check returning the message or null, rather than an `UploadBinaryAsync` that throws: it is checked before any request, in the same place the text check runs, and the App composes the row's words from it.
 - `HostPath.Dataset` becomes `string?` (null on a UNIX path), as the spec says. The ten places that read it today all sit in code that already knows the path is a dataset or member; Task 1 lists each and adds `!`.
 
+**Ruling made during execution (2026-09-22, after Task 3 recorded the host):** the 64 KB cap is stale on the tested build (ufsd 1.2.2 stores 1 MB and reads it back intact; the real ceiling is the request-body allocation at about 2 MB, answered 400 "Failed to read request body" with nothing written; "No space left on device" is a 500 after a partial write and can happen at any size). `HostFileLimits.MaxUnixFileBytes` is therefore `1_048_576`, the messages read `1,048,576`/`1,048,577`, the fixture that answered 204 for 70,000 bytes is `uss-write-70000-204`, `uss-write-too-large` is a 2,200,000-byte PUT answered 400, and the USS 412 carries category 4 reason 1. Tasks 4, 6 and 7 read every `65_536`, `65,536`, `65,537`, `70,001`, `reason 10` and "Incomplete write to file" below through this note.
+
 ## Global Constraints
 
 - Every hand-written `.cs`, `.axaml` and `.sh` file starts with the three licence lines (after the shebang in a script, before the root element in `.axaml`): `This file is part of LizTerm.` / `Copyright 2026 by CoffeeMuse` / `SPDX-License-Identifier: BSD-3-Clause`. A new file needs them; `RepositoryHeadersTests` fails the suite for a missing one.
