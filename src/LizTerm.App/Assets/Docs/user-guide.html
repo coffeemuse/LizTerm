@@ -370,10 +370,11 @@ or uploaded to it. The footer says how many datasets are listed and whether one 
 <p>Choosing a partitioned dataset (a PDS) lists its members in the pane on the right, titled with the dataset's name,
 where <strong>Filter members</strong> narrows the list as you type and you can select several members at once. What you type
 matches anywhere in the name, so <code>IEF</code> keeps every member with IEF in it; inside it, <code>*</code> stands for any run of
-characters and <code>%</code> for exactly one, so <code>IEF%%14</code> keeps IEFBR14. Its toolbar has <strong>⇣ Download…</strong>, <strong>⇡ Upload…</strong>,
-<strong>Rename…</strong> and <strong>Delete…</strong>, and a <strong>Transfer</strong> drop-down that shows the current mode (<strong>Text</strong> or <strong>Binary</strong>) and
-holds <strong>Trim trailing blanks</strong> and <strong>Verify after upload</strong>. The footer says how many members are shown and how many
-are selected. For a sequential dataset, <strong>Download…</strong> and <strong>Upload…</strong> act on the dataset itself.</p>
+characters and <code>%</code> for exactly one, so <code>IEF%%14</code> keeps IEFBR14. Its toolbar has <strong>View</strong>, <strong>⇣ Download…</strong>,
+<strong>⇡ Upload…</strong>, <strong>Rename…</strong> and <strong>Delete…</strong>, and a <strong>Transfer</strong> drop-down that shows the current mode (<strong>Text</strong> or
+<strong>Binary</strong>) and holds <strong>Trim trailing blanks</strong> and <strong>Verify after upload</strong>. The footer says how many members are
+shown and how many are selected. For a sequential dataset, <strong>View</strong>, <strong>Download…</strong> and <strong>Upload…</strong> act on the
+dataset itself.</p>
 <p>Each list also has a right-click menu with the same actions, and these keys: <strong>Enter</strong> or a double-click on a
 member downloads it, <strong>Delete</strong> or <strong>Backspace</strong> deletes the selected members (or, in the Datasets pane, the
 selected dataset), <strong>Cmd+R</strong> (macOS) or <strong>Ctrl+R</strong> refreshes, <strong>Cmd+N</strong> or <strong>Ctrl+N</strong> opens <strong>New dataset</strong>, and
@@ -401,6 +402,17 @@ Lines end the way your system expects: LF on macOS and Linux, CRLF on Windows.</
 <li>In binary mode, a fixed-length dataset hands back whole records, so its last record is padded with zero bytes; a
 note in the window says so.</li>
 </ul>
+<h3 id="viewing-a-member">Viewing a member</h3>
+<p><strong>View</strong> in the Members pane opens a window showing the member as text, without downloading it. It acts on one
+member at a time; with a sequential dataset chosen it shows the dataset. Enter and a double-click still mean
+Download, and <strong>Cmd+Enter</strong> (<strong>Ctrl+Enter</strong> on Windows and Linux) is View.</p>
+<p>The text is read the way a Text download reads it, so <strong>Trim trailing blanks</strong> applies here too. The viewer is
+read-only: nothing you do in it changes the member. Select and copy work as they do anywhere else, <strong>Find</strong>
+searches what is shown, and <strong>Line numbers</strong> turns the gutter off if you would rather copy without it.</p>
+<p>View is off for a dataset whose records are undefined-length — a load library holds object code, not text — and
+the button says so when you point at it.</p>
+<p>A very long member is shown as far as its first 1,000 lines, and the footer says how many there are in all.
+Download it to read the rest.</p>
 <h3 id="uploading">Uploading</h3>
 <p><strong>Upload…</strong> on a partitioned dataset asks for one or more files and opens a review in place of the member list.
 Each file becomes the member named by its file name up to the first dot, in capitals (<code>hello.jcl</code> becomes <code>HELLO</code>).

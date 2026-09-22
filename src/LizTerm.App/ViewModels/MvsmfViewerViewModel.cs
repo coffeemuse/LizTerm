@@ -17,7 +17,7 @@ public sealed partial class MvsmfViewerViewModel : ObservableObject
     /// <summary>The most lines the text box is asked to lay out. mvsMF has no ranged read, so the whole member
     /// arrives whatever this is; the cap is only what Avalonia's TextBox, which builds one layout for the lot,
     /// is asked to draw (spec §6.4).</summary>
-    public const int MaxLines = 10_000;
+    public const int MaxLines = 1_000;
 
     private readonly int _totalLines;
 
@@ -120,6 +120,6 @@ public sealed partial class MvsmfViewerViewModel : ObservableObject
         return found;
     }
 
-    /// <summary>A count for the footer, grouped: 10,000. The gutter does not use it.</summary>
+    /// <summary>A count for the footer, grouped: 1,000. The gutter does not use it.</summary>
     private static string Count(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
 }

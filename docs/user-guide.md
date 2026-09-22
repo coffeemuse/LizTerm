@@ -380,10 +380,11 @@ or uploaded to it. The footer says how many datasets are listed and whether one 
 Choosing a partitioned dataset (a PDS) lists its members in the pane on the right, titled with the dataset's name,
 where **Filter members** narrows the list as you type and you can select several members at once. What you type
 matches anywhere in the name, so `IEF` keeps every member with IEF in it; inside it, `*` stands for any run of
-characters and `%` for exactly one, so `IEF%%14` keeps IEFBR14. Its toolbar has **⇣ Download…**, **⇡ Upload…**,
-**Rename…** and **Delete…**, and a **Transfer** drop-down that shows the current mode (**Text** or **Binary**) and
-holds **Trim trailing blanks** and **Verify after upload**. The footer says how many members are shown and how many
-are selected. For a sequential dataset, **Download…** and **Upload…** act on the dataset itself.
+characters and `%` for exactly one, so `IEF%%14` keeps IEFBR14. Its toolbar has **View**, **⇣ Download…**,
+**⇡ Upload…**, **Rename…** and **Delete…**, and a **Transfer** drop-down that shows the current mode (**Text** or
+**Binary**) and holds **Trim trailing blanks** and **Verify after upload**. The footer says how many members are
+shown and how many are selected. For a sequential dataset, **View**, **Download…** and **Upload…** act on the
+dataset itself.
 
 Each list also has a right-click menu with the same actions, and these keys: **Enter** or a double-click on a
 member downloads it, **Delete** or **Backspace** deletes the selected members (or, in the Datasets pane, the
@@ -416,6 +417,22 @@ only when it is complete, so a cancelled or failed download never leaves a half-
   Lines end the way your system expects: LF on macOS and Linux, CRLF on Windows.
 - In binary mode, a fixed-length dataset hands back whole records, so its last record is padded with zero bytes; a
   note in the window says so.
+
+### Viewing a member
+
+**View** in the Members pane opens a window showing the member as text, without downloading it. It acts on one
+member at a time; with a sequential dataset chosen it shows the dataset. Enter and a double-click still mean
+Download, and **Cmd+Enter** (**Ctrl+Enter** on Windows and Linux) is View.
+
+The text is read the way a Text download reads it, so **Trim trailing blanks** applies here too. The viewer is
+read-only: nothing you do in it changes the member. Select and copy work as they do anywhere else, **Find**
+searches what is shown, and **Line numbers** turns the gutter off if you would rather copy without it.
+
+View is off for a dataset whose records are undefined-length — a load library holds object code, not text — and
+the button says so when you point at it.
+
+A very long member is shown as far as its first 1,000 lines, and the footer says how many there are in all.
+Download it to read the rest.
 
 ### Uploading
 

@@ -5,6 +5,9 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **mvsMF Access can show a member without downloading it.** **View** in the Members pane opens a read-only window
+  with the member's text, with find and line numbers; a sequential dataset shows itself
+  ([#163](https://github.com/coffeemuse/LizTerm/issues/163)).
 - **Sessions no longer drop after thirty seconds on Linux desktops whose language writes decimals with a comma**
   (Croatian, German, French and most of Europe). The emulation engine wrote its timings the local way, LizTerm could
   not read them, and a connection that was working in every visible way was reported as timed out and closed, leaving
