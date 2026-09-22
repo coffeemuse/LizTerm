@@ -73,11 +73,9 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
   pure, and the file-reading wrapper is `HostFileTransfer.CheckTextFile`.
 - **The 1 MiB cap.** `HostFileLimits.MaxUnixFileBytes` is what the tested host was measured to store and read back
   intact, and it is enforced here, never left to the host, which writes what fits and then fails:
-  `TextUploadCheck.RunForUnixFile`
-  counts the lines' bytes (one per character, one per line, since every line is written with a line ending) as
-  `FileTooLarge`, and
-  `HostFileTransfer.BinaryUploadProblem` compares a file's length. A UNIX target has no record length, and its tabs
-  are neither warned about nor expanded unless asked.
+  `TextUploadCheck.RunForUnixFile` counts the lines' bytes (one per character, one per line, since every line is written
+  with a line ending) as `FileTooLarge`, and `HostFileTransfer.BinaryUploadProblem` compares a file's length. A UNIX
+  target has no record length, and its tabs are neither warned about nor expanded unless asked.
 - `IHostFileService.ListDirectoryAsync` lists one directory (`Directory` and `File` entries carrying
   `UnixFileAttributes`); a host that cuts it short sets `HostFileListing.Truncated`, which `IsComplete` reads, and
   hands back no continuation. `CreateDirectoryAsync` makes one directory under an existing parent. The read, write

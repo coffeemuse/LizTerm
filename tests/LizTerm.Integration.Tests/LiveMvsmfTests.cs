@@ -11,7 +11,7 @@ namespace LizTerm.Integration.Tests;
 /// LIZTERM_MVSMF_SCRATCH_PDS are all set. Writes, verifies and deletes the member LIZITEST in the scratch PDS, and
 /// allocates, renames and deletes datasets named &lt;user&gt;.LIZITEST.T&lt;hhmmss&gt; and .R&lt;hhmmss&gt;. The
 /// two <see cref="Connect"/> tests leave their one session to the host's idle timeout, as the browser does when the
-/// app is killed. …and, under <c>LIZTERM_MVSMF_SCRATCH_DIR</c> (default <c>/u/&lt;user&gt;</c>), creates and removes
+/// app is killed. Under <c>LIZTERM_MVSMF_SCRATCH_DIR</c> (default <c>/u/&lt;user&gt;</c>) it also creates and removes
 /// a directory named <c>liztest-&lt;hhmmss&gt;</c>.</summary>
 public class LiveMvsmfTests
 {
@@ -264,6 +264,9 @@ public class LiveMvsmfTests
             Assert.Equal(HostFileErrorKind.NotFound, missing.Kind);
             var directory = await Assert.ThrowsAsync<HostFileException>(() => service.ReadTextAsync(scratch, cancellationToken: ct));
             Assert.Equal(HostFileErrorKind.InvalidRequest, directory.Kind);
+
+            var orphan = await Assert.ThrowsAsync<HostFileException>(() => service.WriteTextAsync(scratch.Child("nope").Child("x.txt"), ["x"], cancellationToken: ct));
+            Assert.Equal(HostFileErrorKind.NotFound, orphan.Kind);
 
             await File.WriteAllBytesAsync(big, new byte[HostFileLimits.MaxUnixFileBytes + 1], ct);
             Assert.Equal("The file is 1,048,577 bytes; the host holds at most 1,048,576.", HostFileTransfer.BinaryUploadProblem(big, HostFileLimits.MaxUnixFileBytes));

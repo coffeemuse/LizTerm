@@ -177,14 +177,14 @@ rather than exporting them on a command line.
 
 ### Live mvsMF tests
 
-Set all four `LIZTERM_MVSMF_*` variables. The tests sign in, read the server information, list the scratch PDS,
-upload a small text member through the same checks the app uses, verify and download it, delete it, sign out and
-check the host refuses the ended session; create a small PDS under the user's own qualifier, write a member, check
-the host's stamp (a stale one is refused), rename the member and the dataset, and delete it; create a directory
-under `LIZTERM_MVSMF_SCRATCH_DIR`, write, list, read and stamp a small text file and a small binary file in it, and
-remove it; probe `/info` anonymously; and make one sign-in attempt with a wrong password. That wrong-password test fails one sign-in per
-run; on a host whose security product revokes a userid after failed attempts, point it at a userid that can take
-that. Keep them with the other live-test variables, in the file outside the repository that you `source`.
+Set all four `LIZTERM_MVSMF_*` variables. The tests sign in, read the server information, list the scratch PDS, upload a
+small text member through the same checks the app uses, verify and download it, delete it, sign out and check the host
+refuses the ended session; create a small PDS under the user's own qualifier, write a member, check the host's stamp (a
+stale one is refused), rename the member and the dataset, and delete it; create a directory under
+`LIZTERM_MVSMF_SCRATCH_DIR`, write, list, read and stamp a small text file and a small binary file in it, and remove it;
+probe `/info` anonymously; and make one sign-in attempt with a wrong password. That wrong-password test fails one
+sign-in per run; on a host whose security product revokes a userid after failed attempts, point it at a userid that can
+take that. Keep them with the other live-test variables, in the file outside the repository that you `source`.
 
 ### Replay fixtures
 

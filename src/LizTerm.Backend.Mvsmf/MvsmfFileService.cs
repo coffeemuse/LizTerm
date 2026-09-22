@@ -151,8 +151,9 @@ public sealed class MvsmfFileService : IHostFileService
         if (items.Count == 1 && items[0].Name!.StartsWith('/'))
             throw new HostFileException(HostFileErrorKind.InvalidRequest, $"{what}: is a file, not a directory.");
         var entries = items.Select(ToUnixEntry).ToList();
-        if (request.MaxItems > 0 && entries.Count > request.MaxItems) entries.RemoveRange(request.MaxItems, entries.Count - request.MaxItems);
-        return new HostFileListing(entries, null, Truncated: list.MoreRows == true);
+        var cut = request.MaxItems > 0 && entries.Count > request.MaxItems;
+        if (cut) entries.RemoveRange(request.MaxItems, entries.Count - request.MaxItems);
+        return new HostFileListing(entries, null, Truncated: list.MoreRows == true || cut);
     }
 
     private static HostFileEntry ToUnixEntry(MvsmfUnixEntry item) => new(

@@ -200,8 +200,11 @@ Entries marked *log only* change nothing in the code.
   about 2.1 MB a `PUT` answers 400 `{"rc":8,"category":2,"reason":1,"message":"Failed to read request body"}` with
   nothing written (`uss-write-too-large`, a 2,200,000-byte body; a `GET` of the path answers 404 afterwards).
   Separately, "No space left on device" (500, category 8, reason 1) can answer a write of any size when the file
-  system is full, and it arrives **after** a partial file has been written. The text translation changes nothing on
-  the wire: the body is Latin-1 both ways, as on the dataset routes (`text-body-is-latin1`).
+  system is full, and it arrives **after** a partial file has been written. On the tested host, space freed by
+  deleting a file was not observed to return to the file system: after a few multi-megabyte probes were written and
+  deleted, writes of 1 MB and 1.5 MB answered "No space left on device" while writes of 400 KB and less still
+  succeeded, so a host that has once held large files may refuse a later write of any size. The text translation
+  changes nothing on the wire: the body is Latin-1 both ways, as on the dataset routes (`text-body-is-latin1`).
 - **LizTerm:** `HostFileLimits.MaxUnixFileBytes` (1,048,576, the measured size the host stores and reads back
   intact, comfortably under its body ceiling) is checked before any upload request: `TextUploadCheck.RunForUnixFile`
   counts the lines' Latin-1 bytes plus one per line, and `HostFileTransfer.BinaryUploadProblem` the file's length;

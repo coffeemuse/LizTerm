@@ -83,6 +83,24 @@ public class MvsmfUnixTests
     }
 
     [Fact]
+    public async Task A_host_that_ignores_the_limit_is_still_reported_as_truncated()
+    {
+        const string threeItems = """{"items":[{"name":"one.txt","mode":"-rw-r--r--","size":1,"user":"","group":"","links":1,"mtime":"2026-09-22T09:12:00Z","inode":1},{"name":"two.txt","mode":"-rw-r--r--","size":2,"user":"","group":"","links":1,"mtime":"2026-09-22T09:12:00Z","inode":2},{"name":"three.txt","mode":"-rw-r--r--","size":3,"user":"","group":"","links":1,"mtime":"2026-09-22T09:12:00Z","inode":3}],"returnedRows":3,"totalRows":3,"JSONversion":1}""";
+
+        using var trimmed = Service(new RecordedHandler().Then("login-200").Then(HttpStatusCode.OK, threeItems));
+        var cut = await trimmed.ListDirectoryAsync(Home, new HostListRequest(MaxItems: 2), Ct);
+        Assert.Equal(2, cut.Entries.Count);
+        Assert.True(cut.Truncated);
+        Assert.False(cut.IsComplete);
+        Assert.Null(cut.Continuation);
+
+        using var whole = Service(new RecordedHandler().Then("login-200").Then(HttpStatusCode.OK, threeItems));
+        var untrimmed = await whole.ListDirectoryAsync(Home, new HostListRequest(MaxItems: 5), Ct);
+        Assert.Equal(3, untrimmed.Entries.Count);
+        Assert.False(untrimmed.Truncated);
+    }
+
+    [Fact]
     public async Task A_missing_directory_is_not_found()
     {
         using var service = Service(new RecordedHandler().Then("login-200").Then("uss-list-missing"));
@@ -284,7 +302,7 @@ public class MvsmfUnixTests
     [InlineData("/u/ibmuser/a?b&c=d", "/u/ibmuser/a%3Fb%26c%3Dd")]
     [InlineData("/u/ibmuser/Notes-1_2.txt~", "/u/ibmuser/Notes-1_2.txt~")]
     [InlineData("/café", "/caf%C3%A9")]
-    public void A_unix_path_is_escaped_segment_by_segment(string path, string expected) =>
+    public void A_unix_path_is_escaped_byte_by_byte_keeping_slashes(string path, string expected) =>
         Assert.Equal(expected, MvsmfFileService.EscapeUnixPath(path));
 
     [Fact]
