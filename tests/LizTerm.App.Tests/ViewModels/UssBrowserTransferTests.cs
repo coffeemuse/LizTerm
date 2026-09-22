@@ -23,6 +23,10 @@ public class UssBrowserTransferTests : IDisposable
 
     private string Local(string name, string text) => Local(name, Encoding.UTF8.GetBytes(text));
 
+    /// <summary>README.txt's row once downloaded as text: its lines end in the platform's line ending, so it is 12
+    /// bytes on macOS and Linux and 14 on Windows.</summary>
+    private static readonly string ReadmeDone = $"✓ Done · {("hello" + Environment.NewLine + "world" + Environment.NewLine).Length} bytes";
+
     private static async Task<UssTestHost> NotesAsync()
     {
         var t = UssTestHost.Create();
@@ -84,7 +88,7 @@ public class UssBrowserTransferTests : IDisposable
 
         Assert.Equal("folder:Download 2 files from /u/ibmuser/notes", t.Picker.Calls.Single());
         Assert.Equal("– Skipped: the file exists", t.Vm.Files.Single(f => f.Name == "todo.md").Status);
-        Assert.Equal("✓ Done · 12 bytes", t.Vm.Files.Single(f => f.Name == "README.txt").Status);
+        Assert.Equal(ReadmeDone, t.Vm.Files.Single(f => f.Name == "README.txt").Status);
         Assert.Equal("old", File.ReadAllText(Path.Combine(_dir, "todo.md")));
         Assert.Equal($"⚠ Downloaded 1 of 2 files to {_dir}.", t.Ops.StatusText);
     }
@@ -109,7 +113,7 @@ public class UssBrowserTransferTests : IDisposable
         await t.Vm.DownloadCommand.ExecuteAsync(null);
 
         Assert.Equal("– Skipped: the name cannot be a local file name.", t.Vm.Files.Single(f => f.Name == badName).Status);
-        Assert.Equal("✓ Done · 12 bytes", t.Vm.Files.Single(f => f.Name == "README.txt").Status);
+        Assert.Equal(ReadmeDone, t.Vm.Files.Single(f => f.Name == "README.txt").Status);
         Assert.Equal(["README.txt"], Directory.GetFiles(_dir).Select(Path.GetFileName));
         Assert.Equal($"⚠ Downloaded 1 of 2 files to {_dir}.", t.Ops.StatusText);
     }
@@ -125,7 +129,7 @@ public class UssBrowserTransferTests : IDisposable
         await t.Vm.DownloadCommand.ExecuteAsync(null);
 
         Assert.Equal(["README.txt", "todo.md"], Directory.GetFiles(_dir).Select(Path.GetFileName).Order(StringComparer.Ordinal));
-        Assert.Equal("✓ Done · 12 bytes", t.Vm.Files.Single(f => f.Name == "README.txt").Status);
+        Assert.Equal(ReadmeDone, t.Vm.Files.Single(f => f.Name == "README.txt").Status);
         Assert.Equal($"✓ Downloaded 2 of 2 files to {folder}.", t.Ops.StatusText);
     }
 
