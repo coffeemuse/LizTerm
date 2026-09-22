@@ -162,7 +162,7 @@ public class SessionWindowCloseTests
         var sessions = new SessionList();
         sessions.Add(TestSessions.Create("Other", state: ConnectionState.Connected3270).Entry);
         var quitPrompt = new FakeClosePrompt { Gate = new TaskCompletionSource() };
-        var guard = new QuitGuard(sessions, () => true, _ => quitPrompt, () => { });
+        var guard = new QuitGuard(sessions, () => true, () => false, _ => quitPrompt, () => { });
         window.AttachClosePrompt(prompt, guard);
         window.Show();
         session.RaiseConnection(ConnectionState.Connected3270);

@@ -15,6 +15,7 @@ using LizTerm.App.Files;
 using LizTerm.App.HostFiles;
 using LizTerm.App.Keyboard;
 using LizTerm.App.Menus;
+using LizTerm.App.Platform;
 using LizTerm.App.Sessions;
 using LizTerm.App.Startup;
 using LizTerm.App.Updates;
@@ -332,6 +333,7 @@ public partial class App : Application
     /// <summary>The process's one Quit guard (#151), over its session list and settings. Lazy for the reason
     /// Settings is: the headless test lifetime never runs OnFrameworkInitializationCompleted.</summary>
     private QuitGuard QuitGuard => _quitGuard ??= new QuitGuard(_sessions, () => Settings.ConfirmCloseWhileConnected,
+        () => MacQuitReason.IsSystemShutdown(OperatingSystem.IsMacOS()),
         entry => new AvaloniaClosePrompt((Window)entry.Host), Quit);
 
     /// <summary>TryShutdown, not Shutdown: the forced one closes every window past its Closing, so neither a

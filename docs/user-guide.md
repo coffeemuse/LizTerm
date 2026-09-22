@@ -30,9 +30,10 @@ Closing a window whose session is still connected asks first, so a stray click o
 meant for something else does not end a live session: **Keep Connected** (the default, and Escape) leaves the
 window and the session as they were, and **Disconnect** closes the window. Quitting with one or more sessions
 connected asks once, for all of them, and **Keep Connected** leaves every window open. A window that is not
-connected closes without a question, and **Disconnect** in the menu never asks. A system logout or shutdown skips
-the question where the system tells LizTerm it is one; macOS does not, so there a logout with connected sessions
-asks the same question and macOS cancels the logout until you answer. Log out again once you have. Turn the
+connected closes without a question, and **Disconnect** in the menu never asks. Logging out, restarting or
+shutting the machine down skips the question and disconnects the sessions, so LizTerm does not stand in the way
+of a system on its way down. A file transfer still running is the one exception: it holds its window open, and
+macOS says LizTerm interrupted the logout. Cancel the transfer or let it finish, then log out again. Turn the
 question off under **Closing** in [Preferences](#preferences).
 
 Right-click a profile (on macOS, Control-click or a two-finger tap) for **Connect**, **Edit...** and **Mark as

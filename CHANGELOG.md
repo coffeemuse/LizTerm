@@ -5,6 +5,13 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **Logging out of macOS no longer stops to ask.** A logout, restart or shut down with sessions connected used
+  to put LizTerm's "still connected" question up, and macOS read the wait as LizTerm refusing to quit and said
+  *"LizTerm" interrupted logout* beside it, so the logout took an extra click. LizTerm now recognises a quit the
+  system sent and disconnects the sessions without a word, the way it already did on Windows and Linux. Cmd+Q,
+  the **Quit** menu item and closing a connected window still ask
+  ([#169](https://github.com/coffeemuse/LizTerm/issues/169)).
+
 - **A hand-edited `keymap.json` says what went wrong.** A mistyped 3270 key or an unrecognised chord used to lose
   that binding without a word; **Preferences > Keyboard** now names each entry it skipped and what is wrong with it.
   A file that is not valid JSON at all costs every binding in it, so LizTerm now says so when it starts, names the

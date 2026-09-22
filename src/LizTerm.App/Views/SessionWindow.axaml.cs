@@ -639,7 +639,9 @@ public partial class SessionWindow : Window, ISessionHost
     /// <summary>Closing is synchronous, so a close that needs the question is cancelled here and repeated by
     /// <see cref="CloseQuestion"/> once Disconnect is chosen. A question already up, this window's own or Quit's,
     /// decides, and nothing more is asked meanwhile: Cmd+W again, Cmd+Q over an open Close question, or Cmd+W under
-    /// the Quit question all wait for the one answer. A shutdown close never asks the window's question
+    /// the Quit question all wait for the one answer — but a logout, restart or shut down arriving while one is up
+    /// is let through rather than made to wait, since holding it is what makes macOS report an interrupted logout
+    /// (#169). A shutdown close never asks the window's question
     /// (ClosePolicy): a Quit's is the guard's, asked once for every session, and an OS shutdown's is nobody's. The
     /// owned File Transfer dialog's cancel-first rule is asked last, after the questions (ClosingBehavior is
     /// OwnerWindowOnly, so Avalonia does not ask it first): a running transfer stays running under Keep Connected,
@@ -647,7 +649,12 @@ public partial class SessionWindow : Window, ISessionHost
     /// from a headless test, which is why QuitGuardTests take the reason directly.</summary>
     protected override void OnClosing(WindowClosingEventArgs e)
     {
-        if (_question.IsOpen || _quitGuard is { IsAsking: true })
+        // A question already up holds every other close, but not the system going down: cancelling that is what
+        // makes macOS report an interrupted logout, which is the whole of #169. The two tests after this one
+        // already let a system shutdown through, and the running-transfer refusal below is not a question and
+        // still stands.
+        var systemShutdown = _quitGuard is { } shutdown && shutdown.IsSystemShutdown(e.CloseReason);
+        if (!systemShutdown && (_question.IsOpen || _quitGuard is { IsAsking: true }))
         {
             e.Cancel = true;
             return;
