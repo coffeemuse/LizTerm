@@ -218,9 +218,17 @@ public partial class MvsmfBrowserWindow : Window
             case nameof(MvsmfBrowserViewModel.IsBusy) when !vm.HasConfirmation:
                 PostRestoreFocus(forget: true);
                 // The USS tab's own listing (OnTabChanged) is a no-op while an operation on the shared runner is
-                // still busy, so a tab selected during the window's own opening listing never lists on its own;
-                // EnsureListedAsync is a no-op once the start listing has been tried, whether or not it succeeded.
-                if (IsUssTab) _ = vm.Uss.EnsureListedAsync();
+                // still busy, so a tab selected during the window's own opening listing lists once that ends.
+                // Posted, because this notification comes from inside the ended operation's finally, where a new one
+                // would clear its line, banner and Retry. Not after a cancel, which would send a request straight
+                // after the user stopped one, nor over a banner, whose Retry belongs to the operation that failed:
+                // the tab then lists when a later operation ends cleanly or it is shown again. EnsureListedAsync is
+                // a no-op once the start listing has been tried, whether or not it succeeded.
+                if (IsUssTab) Dispatcher.UIThread.Post(() =>
+                {
+                    if (IsUssTab && _watched is { IsBusy: false, HasError: false, Ops.LastRunCancelled: false } watched)
+                        _ = watched.Uss.EnsureListedAsync();
+                });
                 break;
             case nameof(MvsmfBrowserViewModel.HasConfirmation) when vm.HasConfirmation:
                 // An input question takes the keyboard to its box, with the old name selected so typing replaces it;
@@ -432,7 +440,8 @@ public partial class MvsmfBrowserWindow : Window
                 e.Handled = true;
                 if (vm.Confirmation is { } question) question.CancelCommand.Execute(null);
                 else if (vm.IsBusy) vm.CancelCommand.Execute(null);
-                else if (vm.IsReviewingUpload) vm.CloseReviewCommand.Execute(null);
+                // A review on the hidden Datasets tab is not a rung: Escape on the USS tab would close it unseen.
+                else if (vm.IsReviewingUpload && !IsUssTab) vm.CloseReviewCommand.Execute(null);
                 else Close();
                 break;
             case Key.Enter when vm.Confirmation is { HasInput: true } inputQuestion && ConfirmInputBox.IsKeyboardFocusWithin:

@@ -97,6 +97,9 @@ internal static class BrowserTransfers
 
     public static string Bytes(long count) => count.ToString("N0", CultureInfo.InvariantCulture);
 
+    /// <summary>A count with its noun, for both tabs' status lines and footers: "1 file", "3 directories".</summary>
+    public static string Counted(int count, string one, string many) => count == 1 ? $"1 {one}" : $"{count} {many}";
+
     /// <summary>Progress arrives on a backend thread and goes through the dispatcher; once the transfer's result is
     /// shown, a report still in the queue must not overwrite it.</summary>
     public sealed class RowProgress(Action<Action> dispatch, Action<long> show) : IProgress<long>

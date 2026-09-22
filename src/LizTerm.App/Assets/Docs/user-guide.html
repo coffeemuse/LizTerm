@@ -488,8 +488,10 @@ and a <strong>Transfer</strong> drop-down with <strong>Text</strong> and <strong
 regular file (a link, say) is listed as <strong>(not a file)</strong>, and one whose name LizTerm cannot use as a path is listed
 as <strong>(not usable)</strong>; nothing can be done with either.</p>
 <p><strong>Download…</strong> saves the selected files under their own names, asking before it replaces a file you already have.
-<strong>Upload…</strong> sends the files you choose into the current directory under their own names; a file that already exists
-there is replaced after a question, and a file this window downloaded or uploaded earlier is checked against the
+Where your computer's file names ignore case, as they usually do on macOS and Windows, of two files whose names differ
+only in case the second is skipped. <strong>Upload…</strong> sends the files you choose into the current directory under their own
+names; a file that already exists there is replaced after a question, a name the directory already uses for a
+subdirectory or another entry that is not a file is refused, and a file this window downloaded or uploaded earlier is checked against the
 host's copy first, so a change made on the host meanwhile gets a question rather than being overwritten. <strong>View</strong>
 opens one file read-only, as it does a member.</p>
 <p>A UNIX file is a stream of bytes, not records, so the <strong>Text</strong> transfer keeps tabs and trailing blanks as they are

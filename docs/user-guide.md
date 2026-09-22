@@ -529,8 +529,10 @@ regular file (a link, say) is listed as **(not a file)**, and one whose name Liz
 as **(not usable)**; nothing can be done with either.
 
 **Download…** saves the selected files under their own names, asking before it replaces a file you already have.
-**Upload…** sends the files you choose into the current directory under their own names; a file that already exists
-there is replaced after a question, and a file this window downloaded or uploaded earlier is checked against the
+Where your computer's file names ignore case, as they usually do on macOS and Windows, of two files whose names differ
+only in case the second is skipped. **Upload…** sends the files you choose into the current directory under their own
+names; a file that already exists there is replaced after a question, a name the directory already uses for a
+subdirectory or another entry that is not a file is refused, and a file this window downloaded or uploaded earlier is checked against the
 host's copy first, so a change made on the host meanwhile gets a question rather than being overwritten. **View**
 opens one file read-only, as it does a member.
 

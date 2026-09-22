@@ -978,23 +978,30 @@ constructor captured.
   old properties and commands to it under their old names, re-raising the runner's changes as its own (IsBusy
   notifies the commands first, then the property, as the generated hook did), so the window's bindings never
   changed. `UssBrowserViewModel` runs on the same instance, which is what makes one operation at a time hold
-  across both tabs and puts every result on the one status line. `BrowserTransfers` is the download side both
-  share: one transfer reported where its caller says, and the two-at-a-time batch with its connection-failure stop.
+  across both tabs and puts every result on the one status line. A banner remembers the tab whose operation left it
+  (`owner`), and the Datasets tab's `DropRetry` (a dataset change, closing a review or the form) drops only its own,
+  never a USS operation's Retry. `BrowserTransfers` is the download side both share: one transfer reported where its
+  caller says, and the two-at-a-time batch with its connection-failure stop; its `Counted` words both tabs' counts.
 - **The USS tab** (`UssBrowserViewModel`, three partials): `Path` is the box, `Current` the listed directory (null
   until a listing lands), `Directories` and `Files` its rows, sorted by name here because the host lists in its own
   order. `ListCoreAsync` is the one listing: a path the rules refuse or the host does not have is a status line, and
   the box keeps its text while the panes keep the last good listing. `EnsureListedAsync` runs on the tab's first
-  show, once: a start listing that fails is not tried again (`/u/<userid>` may not exist). The window pushes the
+  show, once: a start listing that fails is not tried again (`/u/<userid>` may not exist). A tab shown while the
+  runner is busy lists once that operation ends, posted rather than from inside its `finally` (a run started there
+  would clear the ended one's banner and Retry), and not after a cancel (`LastRunCancelled`) or over a banner. The window pushes the
   file list's selection only while the tab is in front, since a hidden tab's list loses it, and gives it back on
   return. `DirectoryRow.Path`/`FileRow.Path` are null for a name the rules refuse and `FileRow.IsFile` is false for
   anything but a regular file; every verb needs usable rows, and Delete never sees the root because the rows are
   the current directory's children. Uploads check every file first (`CheckUnixTextFile` with tabs kept,
-  `BinaryUploadProblem`), list the directory again before calling a name existing, and put each file's result on
+  `BinaryUploadProblem`; a text file too long to fit however it decodes is refused from its length, unread), refuse a
+  name the directory uses for a subdirectory or any other entry that is not a regular file, list the directory
+  again before calling a name existing, and put each file's result on
   its row once the listing after the batch has given new files theirs; the refused ones are named on the status
   line, never as rows. `Mode` and `VerifyUploads` are the tab's own; trailing blanks are never trimmed and tabs
   never expanded. The window's `TabControl` hosts the Datasets tab's filter row and panes unchanged; the USS tab's
   keys go through `HandleUssKey` first while that tab is in front and no question is up, and Escape's ladder is
-  shared. The viewer window is shared: either tab's `Viewer` opens or reuses it.
+  shared, except that an upload review on the hidden Datasets tab is not a rung. A batch download skips the second of
+  two names that differ only in case, except on Linux, since the local file system would make them one file. The viewer window is shared: either tab's `Viewer` opens or reuses it.
 - **Connection failures** (`IsConnectionFailure`: cannot reach, sign-in, certificate, unsupported host) are the red banner with
   Retry; everything else is the status line or a row's status. They stop the whole operation. A download batch
   cancels its other transfers through a linked token and rethrows the first failure once; its rows say

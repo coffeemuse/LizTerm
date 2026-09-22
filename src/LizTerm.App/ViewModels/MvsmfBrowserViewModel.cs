@@ -110,11 +110,12 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     }
 
     private Task RunExclusiveAsync(Func<CancellationToken, Task> work, Func<Task>? retry = null, Func<Exception, string>? describe = null) =>
-        Ops.RunExclusiveAsync(work, retry, describe);
+        Ops.RunExclusiveAsync(work, retry, describe, owner: this);
 
     private Task<ConfirmOutcome> AskAsync(ConfirmationRequest request) => Ops.AskAsync(request);
 
-    private void DropRetry() => Ops.DropRetry();
+    /// <summary>Drops only a banner this tab's own operation left: a USS operation's Retry is not this tab's to drop.</summary>
+    private void DropRetry() => Ops.DropRetry(owner: this);
 
     public bool IsTextMode
     {
@@ -290,7 +291,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     /// <summary>A file dialog that fails to open is a status line, not a failed operation.</summary>
     private Task<T?> TryPickAsync<T>(Func<Task<T>> pick) => Ops.TryPickAsync(pick);
 
-    private static string Plural(int count, string noun) => count == 1 ? $"1 {noun}" : $"{count} {noun}s";
+    private static string Plural(int count, string noun) => BrowserTransfers.Counted(count, noun, noun + "s");
 
     /// <summary>Every command whose CanExecute reads the busy flag, the dataset or the selection. The transfer tasks
     /// add their commands here as they create them.</summary>

@@ -147,4 +147,37 @@ public class BrowserOperationsTests
     [InlineData(HostFileErrorKind.ServerError, false)]
     public void Connection_failures_are_the_four_kinds(HostFileErrorKind kind, bool expected) =>
         Assert.Equal(expected, BrowserOperations.IsConnectionFailure(new HostFileException(kind, "x")));
+
+    /// <summary>The two tabs share one banner: a tab dropping its own Retry (the Datasets tab's dataset change) must
+    /// leave one the other tab's operation left.</summary>
+    [Fact]
+    public async Task Dropping_a_tabs_own_retry_leaves_the_other_tabs_banner()
+    {
+        var ops = new BrowserOperations();
+        object datasets = new(), uss = new();
+        await ops.RunExclusiveAsync(_ => throw new HostFileException(HostFileErrorKind.Unreachable, "cannot reach the host."),
+            retry: () => Task.CompletedTask, owner: uss);
+        Assert.True(ops.CanRetry);
+
+        ops.DropRetry(owner: datasets);
+        Assert.True(ops.CanRetry);
+        Assert.Equal("cannot reach the host.", ops.ErrorText);
+
+        ops.DropRetry(owner: uss);
+        Assert.False(ops.CanRetry);
+        Assert.Null(ops.ErrorText);
+    }
+
+    [Fact]
+    public async Task The_last_run_is_known_to_have_been_cancelled_until_the_next_one()
+    {
+        var ops = new BrowserOperations();
+        var running = ops.RunExclusiveAsync(token => Task.Delay(Timeout.Infinite, token));
+        ops.CancelCommand.Execute(null);
+        await running;
+        Assert.True(ops.LastRunCancelled);
+
+        await ops.RunExclusiveAsync(_ => Task.CompletedTask);
+        Assert.False(ops.LastRunCancelled);
+    }
 }

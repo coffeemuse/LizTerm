@@ -19,6 +19,7 @@ public sealed partial class BrowserOperations : ObservableObject, IDisposable
 {
     private CancellationTokenSource? _cts;
     private Func<Task>? _retry;
+    private object? _retryOwner;
     private string? _pinSaveWarning;
     private readonly object _idleLock = new();
     private TaskCompletionSource? _idle;
@@ -44,6 +45,10 @@ public sealed partial class BrowserOperations : ObservableObject, IDisposable
     public bool HasConfirmation => Confirmation is not null;
     public bool IsDisposed { get; private set; }
 
+    /// <summary>Whether the last operation ended in a cancel, so a caller waiting for it to end (the USS tab's
+    /// start listing) does not send a request straight after the user stopped one.</summary>
+    public bool LastRunCancelled { get; private set; }
+
     partial void OnIsBusyChanged(bool value)
     {
         if (!value) SignalIdle();
@@ -51,9 +56,10 @@ public sealed partial class BrowserOperations : ObservableObject, IDisposable
 
     /// <summary>Runs one operation with the busy flag, its own cancellation, and the failure rules in the class
     /// summary. A second operation while one runs is ignored; the commands are disabled anyway.
-    /// <paramref name="describe"/> words the banner; the default is <see cref="HostFileMessages.Describe"/>.</summary>
+    /// <paramref name="describe"/> words the banner; the default is <see cref="HostFileMessages.Describe"/>.
+    /// <paramref name="owner"/> is the tab the banner belongs to, for <see cref="DropRetry"/>.</summary>
     public async Task RunExclusiveAsync(Func<CancellationToken, Task> work, Func<Task>? retry = null,
-        Func<Exception, string>? describe = null)
+        Func<Exception, string>? describe = null, object? owner = null)
     {
         if (IsBusy || IsDisposed) return;
         using var cts = new CancellationTokenSource();
@@ -61,17 +67,21 @@ public sealed partial class BrowserOperations : ObservableObject, IDisposable
         IsBusy = true;
         ErrorText = null;
         _retry = null;
+        _retryOwner = null;
+        LastRunCancelled = false;
         try
         {
             await work(cts.Token);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
+            LastRunCancelled = true;
             StatusText = "– Cancelled.";
         }
         catch (HostFileException ex) when (IsConnectionFailure(ex))
         {
             _retry = retry;
+            _retryOwner = owner;
             StatusText = "";
             ErrorText = (describe ?? HostFileMessages.Describe)(ex);
         }
@@ -95,10 +105,11 @@ public sealed partial class BrowserOperations : ObservableObject, IDisposable
     /// <summary>An operation whose second half is a listing (a create, a rename): once the host has done the first
     /// half, a connection failure in the listing must retry only the listing, never ask the host to do the first
     /// half again. The work calls <c>retryWith</c> with the listing's retry at that point.</summary>
-    public Task RunThenListAsync(Func<Action<Func<Task>>, CancellationToken, Task> work, Func<Task> retryAll)
+    public Task RunThenListAsync(Func<Action<Func<Task>>, CancellationToken, Task> work, Func<Task> retryAll,
+        object? owner = null)
     {
         var retry = retryAll;
-        return RunExclusiveAsync(token => work(next => retry = next, token), () => retry());
+        return RunExclusiveAsync(token => work(next => retry = next, token), () => retry(), owner: owner);
     }
 
     /// <summary>A closed window has no one to ask, so the answer is Cancel.</summary>
@@ -116,10 +127,13 @@ public sealed partial class BrowserOperations : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Drops a pending Retry with its banner: the operation it belongs to has been closed away from.</summary>
-    public void DropRetry()
+    /// <summary>Drops a pending Retry with its banner: the operation it belongs to has been closed away from. With an
+    /// <paramref name="owner"/>, only a banner that tab's own operation left: the other tab's Retry stays.</summary>
+    public void DropRetry(object? owner = null)
     {
+        if (owner is not null && !ReferenceEquals(_retryOwner, owner)) return;
         _retry = null;
+        _retryOwner = null;
         ErrorText = null;
         OnPropertyChanged(nameof(CanRetry));
     }

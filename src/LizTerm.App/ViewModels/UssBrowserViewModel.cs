@@ -64,9 +64,6 @@ public sealed partial class UssBrowserViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(DirectoriesFooter))]
     private DirectoryRow? _selectedDirectory;
 
-    /// <summary>The host cut the listing short and offers no way to continue it (USS spec §3).</summary>
-    [ObservableProperty] private bool _truncated;
-
     public bool IsBusy => _ops.IsBusy;
     public bool HasCurrent => Current is not null;
 
@@ -75,10 +72,10 @@ public sealed partial class UssBrowserViewModel : ObservableObject
 
     /// <summary>Empty until a listing has landed, so an unlisted directory never reads as an empty one.</summary>
     public string DirectoriesFooter => !_listed ? "" : Directories.Count == 0 ? "No directories"
-        : $"{Counted(Directories.Count, "directory", "directories")} · {(SelectedDirectory is null ? "none" : "1")} selected";
+        : $"{BrowserTransfers.Counted(Directories.Count, "directory", "directories")} · {(SelectedDirectory is null ? "none" : "1")} selected";
 
     public string FilesFooter => !_listed ? "" : Files.Count == 0 ? "No files"
-        : $"{Counted(Files.Count, "file", "files")} · {(_selectedFiles.Count == 0 ? "none" : _selectedFiles.Count.ToString(CultureInfo.InvariantCulture))} selected";
+        : $"{BrowserTransfers.Counted(Files.Count, "file", "files")} · {(_selectedFiles.Count == 0 ? "none" : _selectedFiles.Count.ToString(CultureInfo.InvariantCulture))} selected";
 
     public IReadOnlyList<FileRow> SelectedFiles => _selectedFiles;
 
@@ -178,15 +175,15 @@ public sealed partial class UssBrowserViewModel : ObservableObject
             if (entry.Kind == HostFileEntryKind.Directory) Directories.Add(new DirectoryRow(target, entry));
             else Files.Add(new FileRow(target, entry));
         }
-        Truncated = listing.Truncated;
         _listed = true;
         SelectedDirectory = Directories.FirstOrDefault(d => d.Name == keptDirectory);
         var kept = Files.Where(f => keptFiles.Contains(f.Name)).ToList();
         SetSelectedFiles(kept);
         if (kept.Count > 0) SelectFilesRequested?.Invoke(kept);
         OnPropertyChanged(nameof(DirectoriesFooter));
-        _ops.StatusText = $"✓ Listed {target} · {Counted(Directories.Count, "directory", "directories")}, {Counted(Files.Count, "file", "files")}"
-            + (Truncated ? " · more on the host" : "") + ".";
+        _ops.StatusText = $"✓ Listed {target} · {BrowserTransfers.Counted(Directories.Count, "directory", "directories")}, {BrowserTransfers.Counted(Files.Count, "file", "files")}"
+            // The host cut the listing short and offers no way to continue it (USS spec §3).
+            + (listing.Truncated ? " · more on the host" : "") + ".";
     }
 
     /// <summary>The entry's path under its directory, or null for a name the rules refuse: a host can list anything.</summary>
@@ -205,8 +202,6 @@ public sealed partial class UssBrowserViewModel : ObservableObject
     /// <summary>The MODIFIED column: local time to the minute, or empty when the host gave none.</summary>
     internal static string FormatModified(DateTimeOffset? when) =>
         when?.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "";
-
-    private static string Counted(int count, string one, string many) => count == 1 ? $"1 {one}" : $"{count} {many}";
 
     /// <summary>Every command whose CanExecute reads the busy flag or a selection. The other partials add theirs.</summary>
     private void NotifyCommands()

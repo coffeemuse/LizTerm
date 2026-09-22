@@ -82,11 +82,20 @@ public static class HostFileTransfer
     public static TextUploadResult CheckTextFile(string sourceFile, DatasetAttributes target, TextUploadOptions? options = null) =>
         TextUploadCheck.Run(File.ReadAllBytes(sourceFile), target, options);
 
-    /// <summary>Reads <paramref name="sourceFile"/> and runs <see cref="TextUploadCheck.RunForUnixFile"/> on it.</summary>
+    /// <summary>Reads <paramref name="sourceFile"/> and runs <see cref="TextUploadCheck.RunForUnixFile"/> on it. A file
+    /// too long to fit however it decodes is refused from its length, unread: after a byte-order mark, every byte the
+    /// host would store takes at most two of the file's (a two-byte UTF-8 character, a CR LF), and anything that
+    /// takes more is a character the check refuses anyway. So a picked log of gigabytes is never read into memory
+    /// only to be turned away.</summary>
     /// <exception cref="IOException">The local file could not be read; not a <see cref="HostFileException"/>.</exception>
     /// <exception cref="UnauthorizedAccessException">The local file is not readable.</exception>
-    public static TextUploadResult CheckUnixTextFile(string sourceFile, long maxBytes = HostFileLimits.MaxUnixFileBytes, TextUploadOptions? options = null) =>
-        TextUploadCheck.RunForUnixFile(File.ReadAllBytes(sourceFile), maxBytes, options);
+    public static TextUploadResult CheckUnixTextFile(string sourceFile, long maxBytes = HostFileLimits.MaxUnixFileBytes, TextUploadOptions? options = null)
+    {
+        var length = new FileInfo(sourceFile).Length;
+        if ((length - 3) / 2 > maxBytes)
+            return new TextUploadResult([], [new TextUploadProblem(TextUploadProblemKind.FileTooLarge, 0, TextUploadCheck.TooLarge(length, maxBytes))], []);
+        return TextUploadCheck.RunForUnixFile(File.ReadAllBytes(sourceFile), maxBytes, options);
+    }
 
     /// <summary>Why <paramref name="sourceFile"/> cannot be sent as bytes to a host holding at most
     /// <paramref name="maxBytes"/>, or null when it can: checked before any request, since the host would write what

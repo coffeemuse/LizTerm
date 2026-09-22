@@ -12,6 +12,7 @@ using LizTerm.App.Tests.Fakes;
 using LizTerm.App.Tests.ViewModels;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
+using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.Tests.Views;
 
@@ -107,6 +108,123 @@ public class MvsmfBrowserWindowUssTests
     }
 
     private static int StartListings(BrowserTestHost t) => t.Host.CallsSnapshot().Count(c => c == "listdir:/u/mvsce02");
+
+    /// <summary>The start listing waits for the opening listing, but not past the user's Cancel of it: the tab stays
+    /// unlisted with the Cancel's line until it is shown again.</summary>
+    [AvaloniaFact]
+    public async Task A_cancelled_opening_listing_does_not_start_the_uss_start_listing()
+    {
+        var t = BrowserTestHost.Create(seed: host =>
+        {
+            BrowserTestHost.Standard(host);
+            UssTestHost.Standard(host);
+        });
+        t.Host.Gate = new TaskCompletionSource();
+        var window = new MvsmfBrowserWindow { DataContext = t.Vm };
+        window.Show();
+        try
+        {
+            await Wait.UntilAsync(() => t.Vm.IsBusy, "the dataset listing to start");
+            Named<TabControl>(window, "Tabs").SelectedIndex = 1;
+            window.UpdateLayout();
+
+            t.Vm.CancelCommand.Execute(null);
+            await Wait.UntilAsync(() => !t.Vm.IsBusy, "the cancel");
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(0, StartListings(t));
+            Assert.Null(t.Vm.Uss.Current);
+            Assert.Equal("– Cancelled.", t.Vm.StatusText);
+
+            t.Host.Gate.SetResult();
+            Named<TabControl>(window, "Tabs").SelectedIndex = 0;
+            Named<TabControl>(window, "Tabs").SelectedIndex = 1;
+            await Wait.UntilAsync(() => t.Vm.Uss.Current is not null && !t.Vm.IsBusy, "the USS start listing");
+            Assert.Equal(1, StartListings(t));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>An opening listing that fails into the banner keeps its Retry: the start listing does not run over
+    /// it. Once the Retry lands cleanly, the tab lists.</summary>
+    [AvaloniaFact]
+    public async Task A_failed_opening_listing_keeps_its_banner_and_the_uss_tab_lists_after_its_retry()
+    {
+        var t = BrowserTestHost.Create(seed: host =>
+        {
+            BrowserTestHost.Standard(host);
+            UssTestHost.Standard(host);
+        });
+        t.Host.Gate = new TaskCompletionSource();
+        t.Host.Failures["list:MVSCE02.**"] = new HostFileException(HostFileErrorKind.Unreachable, "cannot reach the host.");
+        var window = new MvsmfBrowserWindow { DataContext = t.Vm };
+        window.Show();
+        try
+        {
+            await Wait.UntilAsync(() => t.Vm.IsBusy, "the dataset listing to start");
+            Named<TabControl>(window, "Tabs").SelectedIndex = 1;
+            window.UpdateLayout();
+
+            t.Host.Gate.SetResult();
+            await Wait.UntilAsync(() => !t.Vm.IsBusy, "the failure");
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(0, StartListings(t));
+            Assert.True(t.Vm.CanRetry);
+            Assert.Equal("cannot reach the host.", t.Vm.ErrorText);
+
+            t.Host.Failures.Clear();
+            await t.Vm.RetryCommand.ExecuteAsync(null);
+            await Wait.UntilAsync(() => t.Vm.Uss.Current is not null && !t.Vm.IsBusy, "the USS start listing");
+            Assert.Equal(4, t.Vm.Datasets.Count);
+            Assert.Equal(1, StartListings(t));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>Escape's ladder skips an upload review on the hidden Datasets tab: from the USS tab it closes the
+    /// window, rather than a review the user cannot see.</summary>
+    [AvaloniaFact]
+    public async Task Escape_on_the_uss_tab_closes_the_window_not_a_hidden_upload_review()
+    {
+        var t = BrowserTestHost.Create(seed: host =>
+        {
+            BrowserTestHost.Standard(host);
+            UssTestHost.Standard(host);
+        });
+        var window = new MvsmfBrowserWindow { DataContext = t.Vm };
+        window.Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first dataset listing");
+        t.Vm.SelectedDataset = t.Vm.Datasets[0];
+        await Wait.UntilAsync(() => !t.Vm.IsBusy, "the members");
+        var folder = Directory.CreateTempSubdirectory("lizterm-window-upload-").FullName;
+        try
+        {
+            var file = Path.Combine(folder, "newmem.jcl");
+            await File.WriteAllTextAsync(file, "//NEWMEM JOB\n", TestContext.Current.CancellationToken);
+            t.Picker.Results = [file];
+            await t.Vm.UploadCommand.ExecuteAsync(null);
+            Assert.True(t.Vm.IsReviewingUpload);
+            Named<TabControl>(window, "Tabs").SelectedIndex = 1;
+            window.UpdateLayout();
+            await Wait.UntilAsync(() => t.Vm.Uss.Current is not null && !t.Vm.IsBusy, "the USS start listing");
+
+            window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+
+            Assert.False(window.IsVisible);
+            Assert.True(t.Host.Disposed);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
 
     /// <summary>A host without /u/&lt;userid&gt; (USS spec §3) fails the start listing. First show means attempted,
     /// not succeeded: the failure must not start the next attempt when the busy flag falls. The gate is released

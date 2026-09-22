@@ -157,7 +157,7 @@ public sealed partial class UssBrowserViewModel
         }
         var names = string.Join(", ", files.Take(NamesInQuestion).Select(file => file.Name));
         if (files.Count > NamesInQuestion) names += $" and {files.Count - NamesInQuestion} more";
-        var label = $"Delete {Counted(files.Count, "file", "files")}";
+        var label = $"Delete {BrowserTransfers.Counted(files.Count, "file", "files")}";
         var answer = await _ops.AskAsync(new ConfirmationRequest($"Delete {names} from {directory}? This cannot be undone.", label));
         if (answer.Choice != ConfirmChoice.Primary)
         {
@@ -207,12 +207,12 @@ public sealed partial class UssBrowserViewModel
             // A delete cannot be undone, so the list and the line show what went before the cancel. The list is the
             // truth: a request the cancel interrupted may still have deleted its file on the host.
             await RefreshQuietlyAsync(directory);
-            _ops.StatusText = $"– Delete cancelled: deleted {deleted} of {Counted(files.Count, "file", "files")}.";
+            _ops.StatusText = $"– Delete cancelled: deleted {deleted} of {BrowserTransfers.Counted(files.Count, "file", "files")}.";
             return;
         }
         _ops.StatusText = failures.Count == 0
-            ? $"✓ Deleted {deleted} of {Counted(files.Count, "file", "files")}."
-            : $"⚠ Deleted {deleted} of {Counted(files.Count, "file", "files")}. ✗ {string.Join("; ", failures)}";
+            ? $"✓ Deleted {deleted} of {BrowserTransfers.Counted(files.Count, "file", "files")}."
+            : $"⚠ Deleted {deleted} of {BrowserTransfers.Counted(files.Count, "file", "files")}. ✗ {string.Join("; ", failures)}";
     }
 
     private void DropFile(FileRow row)

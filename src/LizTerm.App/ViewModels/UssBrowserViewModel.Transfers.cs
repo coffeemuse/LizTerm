@@ -92,6 +92,10 @@ public sealed partial class UssBrowserViewModel
         foreach (var row in files) row.Status = "";
 
         var plan = new List<DownloadItem>();
+        // A UNIX name is case-sensitive and the local file system usually is not (macOS, Windows), so README and
+        // readme would be two transfers into one file at once: the second of a pair is skipped. File.Exists cannot
+        // catch it, since neither file is there until the batch runs.
+        var planned = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
         bool? replaceAll = null;
         foreach (var row in files)
         {
@@ -104,6 +108,11 @@ public sealed partial class UssBrowserViewModel
             if (hasInvalidChars || escapesFolder)
             {
                 row.Status = "– Skipped: the name cannot be a local file name.";
+                continue;
+            }
+            if (!planned.Add(file))
+            {
+                row.Status = "– Skipped: another selected file has the same local name";
                 continue;
             }
             if (File.Exists(file))
@@ -138,7 +147,7 @@ public sealed partial class UssBrowserViewModel
             _ops.StatusText = "– Download cancelled.";
             return;
         }
-        _ops.StatusText = $"{(done == files.Count ? "✓" : "⚠")} Downloaded {done} of {Counted(files.Count, "file", "files")} to {folder}.";
+        _ops.StatusText = $"{(done == files.Count ? "✓" : "⚠")} Downloaded {done} of {BrowserTransfers.Counted(files.Count, "file", "files")} to {folder}.";
     }
 
     // ---- upload ----
@@ -226,9 +235,9 @@ public sealed partial class UssBrowserViewModel
         bool? replaceAll = null;
         foreach (var item in plan)
         {
-            // An entry that is not a regular file (a link, a FIFO, a device) is never written to (USS spec §4.6):
-            // refused like a file over the cap, never asked about or sent.
-            if (Files.Any(file => file.Name == item.Name && !file.IsFile))
+            // An entry that is not a regular file (a subdirectory, a link, a FIFO, a device) is never written to (USS
+            // spec §4.6): refused like a file over the cap, never asked about or sent.
+            if (Directories.Any(row => row.Name == item.Name) || Files.Any(file => file.Name == item.Name && !file.IsFile))
             {
                 refused.Add($"{item.Name}: the host has an entry of that name that is not a file");
                 continue;
@@ -336,8 +345,8 @@ public sealed partial class UssBrowserViewModel
             catch (HostFileException ex) when (BrowserOperations.IsConnectionFailure(ex))
             {
                 foreach (var each in sending.Skip(i + 1)) Show(each, "– Stopped");
-                Show(item, "– Stopped: the file may be partly written");
-                _uploadStoppedMidWrite = true;
+                Show(item, started ? "– Stopped: the file may be partly written" : "– Stopped");
+                _uploadStoppedMidWrite = started;
                 stoppedAt([.. sending.Skip(i).Select(each => each.LocalPath)]);
                 throw;
             }
@@ -359,7 +368,7 @@ public sealed partial class UssBrowserViewModel
         await ListCoreAsync(directory.UnixPath!, keepSelection: true, token);
         ApplyResults(results);
         var clean = refused.Count == 0 && sent == plan.Count && !differs;
-        var summary = $"{(clean ? "✓" : "⚠")} Uploaded {sent} of {Counted(files.Count, "file", "files")} to {directory}.";
+        var summary = $"{(clean ? "✓" : "⚠")} Uploaded {sent} of {BrowserTransfers.Counted(files.Count, "file", "files")} to {directory}.";
         if (refused.Count > 0)
         {
             summary += " ✗ Not sent: " + string.Join("; ", refused.Take(NamesInQuestion));
@@ -391,11 +400,14 @@ public sealed partial class UssBrowserViewModel
     // ---- view ----
 
     [RelayCommand(CanExecute = nameof(CanView))]
-    private Task ViewAsync() => _ops.RunExclusiveAsync(ViewCoreAsync, () => ViewAsync());
+    private Task ViewAsync() => _selectedFiles is [{ IsFile: true, Path: { } path }] ? ViewFileAsync(path) : Task.CompletedTask;
 
-    private async Task ViewCoreAsync(CancellationToken token)
+    /// <summary>A retry views the file it was asked for, as Download does, never the selection at the time.</summary>
+    private Task ViewFileAsync(HostPath path) =>
+        _ops.RunExclusiveAsync(token => ViewCoreAsync(path, token), () => ViewFileAsync(path));
+
+    private async Task ViewCoreAsync(HostPath path, CancellationToken token)
     {
-        if (_selectedFiles is not [{ IsFile: true, Path: { } path }]) return;
         var progress = new BrowserTransfers.RowProgress(_dispatch, bytes => _ops.StatusText = $"⟳ Reading {path} · {BrowserTransfers.Bytes(bytes)} bytes");
         _ops.StatusText = $"⟳ Reading {path}…";
         HostTextRead read;
@@ -409,7 +421,7 @@ public sealed partial class UssBrowserViewModel
             progress.Close();
         }
         // The result is written before the viewer opens: a window that cannot be shown puts its own message here.
-        _ops.StatusText = $"✓ Read {path} · {Counted(read.Lines.Count, "line", "lines")}.";
+        _ops.StatusText = $"✓ Read {path} · {BrowserTransfers.Counted(read.Lines.Count, "line", "lines")}.";
         Viewer = new MvsmfViewerViewModel(path.ToString(), read.Lines, trimTrailingBlanks: false);
     }
 }

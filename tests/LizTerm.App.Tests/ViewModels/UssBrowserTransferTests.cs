@@ -164,6 +164,37 @@ public class UssBrowserTransferTests : IDisposable
         Assert.Equal($"✓ Downloaded /u/ibmuser/notes/README.txt to {target}.", t.Ops.StatusText);
     }
 
+    /// <summary>README.txt and readme.txt are two files on the host and one on a file system that ignores case, so
+    /// the second is skipped there rather than downloaded into the first at the same time.</summary>
+    [Fact]
+    public async Task Two_names_that_differ_only_in_case_are_not_downloaded_into_one_local_file()
+    {
+        var t = UssTestHost.Create(seed: host =>
+        {
+            UssTestHost.Standard(host);
+            host.AddFile("/u/ibmuser/notes/readme.txt", "lower");
+        });
+        await t.ListAsync("/u/ibmuser/notes");
+        t.Select("README.txt", "readme.txt");
+        t.Picker.FolderResult = _dir;
+
+        await t.Vm.DownloadCommand.ExecuteAsync(null);
+
+        var lower = t.Vm.Files.Single(f => f.Name == "readme.txt").Status;
+        Assert.StartsWith("✓ Done · ", t.Vm.Files.Single(f => f.Name == "README.txt").Status);
+        if (OperatingSystem.IsLinux())
+        {
+            Assert.StartsWith("✓ Done · ", lower);
+            Assert.Equal($"✓ Downloaded 2 of 2 files to {_dir}.", t.Ops.StatusText);
+        }
+        else
+        {
+            Assert.Equal("– Skipped: another selected file has the same local name", lower);
+            Assert.DoesNotContain("readtext:/u/ibmuser/notes/readme.txt", t.Host.CallsSnapshot());
+            Assert.Equal($"⚠ Downloaded 1 of 2 files to {_dir}.", t.Ops.StatusText);
+        }
+    }
+
     [Fact]
     public async Task Download_is_off_without_a_regular_file_selected_and_a_cancelled_picker_does_nothing()
     {
@@ -306,6 +337,22 @@ public class UssBrowserTransferTests : IDisposable
     }
 
     [Fact]
+    public async Task An_upload_named_like_a_subdirectory_is_refused_and_never_asked_about()
+    {
+        var t = await NotesAsync();
+        Assert.Contains(t.Vm.Directories, d => d.Name == "drafts");
+        t.Picker.Results = [Local("drafts", "x\n")];
+
+        var uploading = t.Vm.UploadCommand.ExecuteAsync(null);
+        await t.AskedAsync(uploading);
+        Assert.Null(t.Ops.Confirmation);
+        await uploading;
+
+        Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("writetext:/u/ibmuser/notes/drafts", StringComparison.Ordinal));
+        Assert.Equal("⚠ Uploaded 0 of 1 file to /u/ibmuser/notes. ✗ Not sent: drafts: the host has an entry of that name that is not a file", t.Ops.StatusText);
+    }
+
+    [Fact]
     public async Task Verify_off_says_uploaded_and_a_differing_copy_is_a_warning()
     {
         var t = await NotesAsync();
@@ -362,5 +409,23 @@ public class UssBrowserTransferTests : IDisposable
         Assert.Equal("✓ Read /u/ibmuser/notes/README.txt · 2 lines.", t.Ops.StatusText);
         Assert.Empty(t.Host.EtagRequests);
         Assert.Equal("", t.Vm.Files.Single(f => f.Name == "README.txt").Status);
+    }
+
+    [Fact]
+    public async Task A_view_retry_reads_the_file_it_was_asked_for_not_the_selection_now()
+    {
+        var t = await NotesAsync();
+        t.Host.Failures["readtext:/u/ibmuser/notes/README.txt"] = new HostFileException(HostFileErrorKind.Unreachable, "cannot reach the host.");
+        t.Select("README.txt");
+
+        await t.Vm.ViewCommand.ExecuteAsync(null);
+        Assert.True(t.Ops.CanRetry);
+        t.Select("todo.md");
+        t.Host.Failures.Clear();
+        await t.Ops.RetryCommand.ExecuteAsync(null);
+
+        Assert.Equal("/u/ibmuser/notes/README.txt", t.Vm.Viewer!.Path);
+        Assert.Equal("✓ Read /u/ibmuser/notes/README.txt · 2 lines.", t.Ops.StatusText);
+        Assert.DoesNotContain("readtext:/u/ibmuser/notes/todo.md", t.Host.CallsSnapshot());
     }
 }

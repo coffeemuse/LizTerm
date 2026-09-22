@@ -179,7 +179,7 @@ public sealed partial class MvsmfBrowserViewModel
     /// <summary>An operation whose second half is a listing (a dataset rename, a create): see
     /// <see cref="BrowserOperations.RunThenListAsync"/>.</summary>
     private Task RunThenListAsync(Func<Action<Func<Task>>, CancellationToken, Task> work, Func<Task> retryAll) =>
-        Ops.RunThenListAsync(work, retryAll);
+        Ops.RunThenListAsync(work, retryAll, owner: this);
 
     private Task ListAgainAsync(string name, string what) =>
         RunExclusiveAsync(token => ShowAfterChangeAsync(name, what, token), () => ListAgainAsync(name, what));
