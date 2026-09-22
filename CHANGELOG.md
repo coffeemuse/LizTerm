@@ -22,6 +22,7 @@ What changed in each LizTerm release, newest first. Downloads are on the
   (Croatian, German, French and most of Europe). The emulation engine wrote its timings the local way, LizTerm could
   not read them, and a connection that was working in every visible way was reported as timed out and closed, leaving
   the TSO user logged on at the host ([#170](https://github.com/coffeemuse/LizTerm/issues/170)).
+- **About LizTerm's engine line can be copied**, like the version line above it, so a bug report can quote both.
 
 ## 0.7.0
 

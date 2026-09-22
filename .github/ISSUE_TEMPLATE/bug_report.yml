@@ -12,7 +12,9 @@ body:
     id: what-happened
     attributes:
       label: What happened
-      description: What you did, what LizTerm did, and what you expected instead.
+      description: >
+        What you did, what LizTerm did, and what you expected instead. A screenshot of the window helps, especially
+        when the screen and the status bar disagree; drop it in here.
       placeholder: |
         1. Connected to my MVS 3.8j host over TLS
         2. Chose File > Transfer...
@@ -22,20 +24,53 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does it happen?
+      options:
+        - Every time
+        - Sometimes
+        - Once so far
+    validations:
+      required: true
+
   - type: input
     id: lizterm-version
     attributes:
       label: LizTerm version
-      description: Shown in **About LizTerm** — the Help menu in a session window, or the LizTerm menu on macOS.
-      placeholder: "0.5.0"
+      description: >
+        Shown in **About LizTerm** — the Help menu in a session window, or the LizTerm menu on macOS. The line can be
+        copied. A build from source reads `0.7.0-DEV (a1b2c3d)`; include the commit.
+      placeholder: "0.7.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: How you installed it
+      description: The file you downloaded from the Releases page.
+      options:
+        - macOS disk image (.dmg)
+        - macOS zip
+        - Linux .deb
+        - Linux .rpm
+        - Linux zip
+        - Windows installer (.exe)
+        - Windows zip
+        - Built from source
     validations:
       required: true
 
   - type: input
     id: os
     attributes:
-      label: Operating system and version
-      placeholder: "macOS 15.2 (Apple Silicon) / Ubuntu 24.04 x86-64 / Windows 11 24H2 ARM64"
+      label: Operating system, processor and language
+      description: >
+        Say whether the machine is Apple Silicon or Intel, x64 or ARM64, and which language your desktop runs in:
+        the language decides things like the decimal separator and the keyboard layout, and has caused a bug before.
+      placeholder: "macOS 15.2, Apple Silicon, English / Linux Mint 22.1, x64, German / Windows 11 24H2, ARM64, English"
     validations:
       required: true
 
@@ -43,8 +78,10 @@ body:
     id: host
     attributes:
       label: Host and its type
-      description: What you are connecting to. Do not include a public address you would rather not publish.
-      placeholder: "MVS 3.8j (TK5) on my LAN / VM/370 / z/OS 3.1"
+      description: >
+        What you are connecting to. Do not include a public address you would rather not publish. For a problem in
+        mvsMF Access, add the mvsMF version too.
+      placeholder: "MVS 3.8j (TK5) on my LAN / VM/370 / z/OS 3.1 / MVS 3.8j with mvsMF 1.1.0"
     validations:
       required: true
 
@@ -56,6 +93,8 @@ body:
         - "No — plain TN3270"
         - "Yes, verified against system roots"
         - "Yes, with a pinned certificate"
+        - "Yes, with Verify host certificate turned off in the profile"
+        - "Yes, by choosing Connect Anyway after the certificate warning"
     validations:
       required: true
 
@@ -64,8 +103,8 @@ body:
     attributes:
       label: Engine source
       description: >
-        The last line of **About LizTerm**. "Bundled" is the b3270 that shipped with LizTerm and is what
-        almost everyone has; "Override" means LIZTERM_B3270_PATH is set.
+        The engine line of **About LizTerm**, under the version. "Bundled" is the b3270 that shipped with LizTerm and is
+        what almost everyone has; "Override" means LIZTERM_B3270_PATH is set.
       options:
         - Bundled
         - Override
@@ -74,10 +113,21 @@ body:
       required: true
 
   - type: textarea
+    id: settings
+    attributes:
+      label: Profile settings you changed from the defaults (optional)
+      description: >
+        Model, a custom screen size, Mono (3278), extended data stream, code page, LU name, keep-alive, and any
+        keyboard bindings you changed under **Preferences > Keyboard**. Leave it empty if you changed nothing.
+      placeholder: "Model 4, code page bracket, Ctrl+Home bound to PA1"
+
+  - type: textarea
     id: wire-log
     attributes:
       label: Wire log (optional, but it helps a lot)
       description: >
-        Turn on **Help > Wire Log** in the session window, reproduce the problem, turn it off, and attach the
-        file (**Help > Show Wire Logs...** opens the folder).
+        Turn on **Help > Wire Log** in the session window, reproduce the problem, turn it off, and drop the file in
+        here (**Help > Show Wire Logs...** opens the folder). Turn it on before you connect if the problem happens at
+        connect time; the log starts from the moment it is turned on. It covers the terminal session only, not
+        mvsMF Access.
         **A wire log records everything you type, including passwords** — check it before you share it.
