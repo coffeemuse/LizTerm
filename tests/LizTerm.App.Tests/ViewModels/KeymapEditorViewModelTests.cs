@@ -56,7 +56,7 @@ public class KeymapEditorViewModelTests : IDisposable
         var titles = editor.Rows.Select(row => row.Title).ToList();
 
         Assert.Equal(["Enter", "Newline", "Clear", "Reset", "Attn", "SysReq", "PF1", "PF2"], titles.Take(8));
-        Assert.Equal(["PF23", "PF24", "PA1", "PA2", "PA3", "Tab", "Back Tab", "Insert", "Home", "Erase EOF", "Erase Input",
+        Assert.Equal(["PF23", "PF24", "PA1", "PA2", "PA3", "Tab", "Back Tab", "Insert", "Home", "Field End", "Erase EOF", "Erase Input",
                       "Delete", "Backspace, erasing", "Backspace, moving left", "Dup", "Field Mark", "Up", "Down", "Left", "Right",
                       "Type ¢", "Type ¬"],
                      titles.Skip(titles.IndexOf("PF23")));

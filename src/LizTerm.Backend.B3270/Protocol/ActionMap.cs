@@ -26,6 +26,7 @@ public static class ActionMap
             TerminalKey.Tab => new("Tab"),
             TerminalKey.BackTab => new("BackTab"),
             TerminalKey.Home => new("Home"),
+            TerminalKey.FieldEnd => new("FieldEnd"),
             TerminalKey.EraseEof => new("EraseEOF"),
             TerminalKey.EraseInput => new("EraseInput"),
             TerminalKey.Delete => new("Delete"),

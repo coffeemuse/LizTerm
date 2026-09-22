@@ -17,6 +17,9 @@ public enum TerminalKey
     Tab,
     BackTab,
     Home,
+    /// <summary>Moves the cursor to the end of what is already typed in the current field; no 3270 keyboard
+    /// had this key, but every emulator since offers it (#177).</summary>
+    FieldEnd,
     EraseEof,
     EraseInput,
     Delete,
