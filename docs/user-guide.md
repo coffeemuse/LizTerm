@@ -194,11 +194,16 @@ binding in **Preferences > Keyboard**; see [Changing a binding](#changing-a-bind
 | Insert, or Ctrl+I | Toggle insert mode |
 | Home | Home |
 | End | Erase EOF |
+| Shift+End | Field End |
 | Delete | Delete |
 | Backspace | Erase the previous character, or move left (see the profile's Backspace setting) |
 | Arrow keys | Move the cursor |
 | Ctrl+[ | Types `¬` |
 | Ctrl+6 | Types `¢` |
+
+**Field End** moves the cursor to the end of what you have already typed in the field you are in, so you can add
+to an entry without arrowing across the blanks. No 3270 keyboard had this key — it is a convenience every
+emulator since has offered — and Shift+End is where Vista TN3270 puts it. End itself stays Erase EOF.
 
 On a Mac, Alt is the Option key. A "tap" means pressing and releasing the key on its own, with nothing else in
 between. On Windows, Ctrl+Escape opens the Start menu before LizTerm can see it, so Clear there is Pause — or
@@ -646,7 +651,7 @@ type, or to `null` to take that key away:
 ```
 
 Key names in a chord are Avalonia's (`Home`, `PageUp`, `D1` for the 1 key, `OemOpenBrackets` for `[`). The 3270 keys
-are `Enter`, `Clear`, `PF1` to `PF24`, `PA1` to `PA3`, `Attn`, `SysReq`, `Reset`, `Tab`, `BackTab`, `Home`, `EraseEof`,
+are `Enter`, `Clear`, `PF1` to `PF24`, `PA1` to `PA3`, `Attn`, `SysReq`, `Reset`, `Tab`, `BackTab`, `Home`, `FieldEnd`, `EraseEof`,
 `EraseInput`, `Delete`, `Backspace`, `Erase`, `Insert`, `Dup`, `FieldMark`, `Newline`, `Up`, `Down`, `Left` and `Right`,
 spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default;
 Preferences > Keyboard names each one it skipped and keeps it in the file as you wrote it. A file that is not valid

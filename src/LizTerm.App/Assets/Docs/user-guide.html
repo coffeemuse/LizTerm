@@ -211,6 +211,7 @@ binding in <strong>Preferences &gt; Keyboard</strong>; see <a href="#changing-a-
 <tr><td>Insert, or Ctrl+I</td><td>Toggle insert mode</td></tr>
 <tr><td>Home</td><td>Home</td></tr>
 <tr><td>End</td><td>Erase EOF</td></tr>
+<tr><td>Shift+End</td><td>Field End</td></tr>
 <tr><td>Delete</td><td>Delete</td></tr>
 <tr><td>Backspace</td><td>Erase the previous character, or move left (see the profile's Backspace setting)</td></tr>
 <tr><td>Arrow keys</td><td>Move the cursor</td></tr>
@@ -218,6 +219,9 @@ binding in <strong>Preferences &gt; Keyboard</strong>; see <a href="#changing-a-
 <tr><td>Ctrl+6</td><td>Types <code>¢</code></td></tr>
 </tbody>
 </table>
+<p><strong>Field End</strong> moves the cursor to the end of what you have already typed in the field you are in, so you can add
+to an entry without arrowing across the blanks. No 3270 keyboard had this key — it is a convenience every
+emulator since has offered — and Shift+End is where Vista TN3270 puts it. End itself stays Erase EOF.</p>
 <p>On a Mac, Alt is the Option key. A "tap" means pressing and releasing the key on its own, with nothing else in
 between. On Windows, Ctrl+Escape opens the Start menu before LizTerm can see it, so Clear there is Pause — or
 any keystroke you give it in <strong>Preferences &gt; Keyboard</strong>.</p>
@@ -604,7 +608,7 @@ type, or to <code>null</code> to take that key away:</p>
 }
 </code></pre>
 <p>Key names in a chord are Avalonia's (<code>Home</code>, <code>PageUp</code>, <code>D1</code> for the 1 key, <code>OemOpenBrackets</code> for <code>[</code>). The 3270 keys
-are <code>Enter</code>, <code>Clear</code>, <code>PF1</code> to <code>PF24</code>, <code>PA1</code> to <code>PA3</code>, <code>Attn</code>, <code>SysReq</code>, <code>Reset</code>, <code>Tab</code>, <code>BackTab</code>, <code>Home</code>, <code>EraseEof</code>,
+are <code>Enter</code>, <code>Clear</code>, <code>PF1</code> to <code>PF24</code>, <code>PA1</code> to <code>PA3</code>, <code>Attn</code>, <code>SysReq</code>, <code>Reset</code>, <code>Tab</code>, <code>BackTab</code>, <code>Home</code>, <code>FieldEnd</code>, <code>EraseEof</code>,
 <code>EraseInput</code>, <code>Delete</code>, <code>Backspace</code>, <code>Erase</code>, <code>Insert</code>, <code>Dup</code>, <code>FieldMark</code>, <code>Newline</code>, <code>Up</code>, <code>Down</code>, <code>Left</code> and <code>Right</code>,
 spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default;
 Preferences &gt; Keyboard names each one it skipped and keeps it in the file as you wrote it. A file that is not valid

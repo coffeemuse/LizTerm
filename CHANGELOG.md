@@ -5,6 +5,12 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **Shift+End jumps the cursor to the end of a field.** Adding to something already typed meant arrowing across
+  the blanks to reach the end of it; **Field End** goes straight there. It is on Shift+End, where Vista TN3270 has
+  it, and End itself still erases to the end of the field. Like every other key, you can move it in
+  **Preferences > Keyboard** ([#177](https://github.com/coffeemuse/LizTerm/issues/177), reported by
+  [@mgrossmann](https://github.com/mgrossmann)).
+
 - **Logging out of macOS no longer stops to ask.** A logout, restart or shut down with sessions connected used
   to put LizTerm's "still connected" question up, and macOS read the wait as LizTerm refusing to quit and said
   *"LizTerm" interrupted logout* beside it, so the logout took an extra click. LizTerm now recognises a quit the

@@ -25,7 +25,7 @@ public sealed class KeymapEditorViewModel : ObservableObject, IDisposable
         TerminalKey.Enter, TerminalKey.Newline, TerminalKey.Clear, TerminalKey.Reset, TerminalKey.Attn, TerminalKey.SysReq,
         .. Enumerable.Range((int)TerminalKey.PF1, 24).Select(i => (TerminalKey)i),
         .. Enumerable.Range((int)TerminalKey.PA1, 3).Select(i => (TerminalKey)i),
-        TerminalKey.Tab, TerminalKey.BackTab, TerminalKey.Insert, TerminalKey.Home, TerminalKey.EraseEof,
+        TerminalKey.Tab, TerminalKey.BackTab, TerminalKey.Insert, TerminalKey.Home, TerminalKey.FieldEnd, TerminalKey.EraseEof,
         TerminalKey.EraseInput, TerminalKey.Delete, TerminalKey.Erase, TerminalKey.Backspace, TerminalKey.Dup,
         TerminalKey.FieldMark, TerminalKey.Up, TerminalKey.Down, TerminalKey.Left, TerminalKey.Right,
     ];

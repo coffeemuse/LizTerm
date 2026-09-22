@@ -37,6 +37,7 @@ public class MappersTests
     [InlineData(TerminalKey.PA3, "PA", new[] { "3" })]
     [InlineData(TerminalKey.Backspace, "BackSpace", new string[0])]
     [InlineData(TerminalKey.EraseEof, "EraseEOF", new string[0])]
+    [InlineData(TerminalKey.FieldEnd, "FieldEnd", new string[0])]
     [InlineData(TerminalKey.Insert, "ToggleInsert", new string[0])]
     [InlineData(TerminalKey.BackTab, "BackTab", new string[0])]
     [InlineData(TerminalKey.Erase, "Erase", new string[0])]

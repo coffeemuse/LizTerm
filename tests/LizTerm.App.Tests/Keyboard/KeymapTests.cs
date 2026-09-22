@@ -42,6 +42,7 @@ public class KeymapTests
         { Key.I, KeyModifiers.Control, TerminalKey.Insert },
         { Key.Home, KeyModifiers.None, TerminalKey.Home },
         { Key.End, KeyModifiers.None, TerminalKey.EraseEof },
+        { Key.End, KeyModifiers.Shift, TerminalKey.FieldEnd },
         { Key.Delete, KeyModifiers.None, TerminalKey.Delete },
         { Key.Back, KeyModifiers.None, TerminalKey.Erase },
         { Key.Up, KeyModifiers.None, TerminalKey.Up },

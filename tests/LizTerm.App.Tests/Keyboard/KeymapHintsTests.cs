@@ -25,6 +25,7 @@ public class KeymapHintsTests
     [InlineData(TerminalKey.PA1, "Alt+1")]
     [InlineData(TerminalKey.Attn, "Escape")]
     [InlineData(TerminalKey.EraseEof, "End")]
+    [InlineData(TerminalKey.FieldEnd, "Shift+End")]
     public void A_key_with_one_chord_is_that_chord(TerminalKey key, string expected)
     {
         Assert.Equal(expected, Hint(key));
