@@ -129,6 +129,39 @@ public sealed class MvsmfFileService : IHostFileService
             .Select(m => new HostFileEntry(m.Member!.Trim(), HostFileEntryKind.Member)), list.MoreRows, request, what);
     }
 
+    public async Task<HostFileListing> ListDirectoryAsync(HostPath directory, HostListRequest request, CancellationToken cancellationToken = default)
+    {
+        if (directory.Kind != HostPathKind.Unix) throw new ArgumentException("Only a UNIX path names a directory.", nameof(directory));
+        // mvsMF-compat: uss-list-no-continuation — the file system listing has X-IBM-Max-Items and moreRows but no
+        // start=, so a cut listing cannot be continued: a continuation is refused here, and a cut is reported as
+        // Truncated. Without the header the host stops at 1,000 entries, and 0 asks for all, so it is always sent.
+        if (request.Continuation is not null) throw new ArgumentException("A directory listing cannot be continued.", nameof(request));
+        var what = directory.ToString();
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        using var response = await SendAsync(() =>
+        {
+            var message = new HttpRequestMessage(HttpMethod.Get, Url($"restfiles/fs?path={EscapeUnixPath(directory.UnixPath!)}"));
+            message.Headers.Add("X-IBM-Max-Items", Math.Max(request.MaxItems, 0).ToString(CultureInfo.InvariantCulture));
+            return message;
+        }, what, idle, cancellationToken);
+        var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfUnixList, what, idle, cancellationToken);
+        var items = (list.Items ?? []).Where(i => !string.IsNullOrWhiteSpace(i.Name)).ToList();
+        // mvsMF-compat: uss-stat-for-file-path — a listing of a file path answers 200 with one item naming the full
+        // path (a stat), never an error; LizTerm reads that shape as "not a directory".
+        if (items.Count == 1 && items[0].Name!.StartsWith('/'))
+            throw new HostFileException(HostFileErrorKind.InvalidRequest, $"{what}: is a file, not a directory.");
+        var entries = items.Select(ToUnixEntry).ToList();
+        if (request.MaxItems > 0 && entries.Count > request.MaxItems) entries.RemoveRange(request.MaxItems, entries.Count - request.MaxItems);
+        return new HostFileListing(entries, null, Truncated: list.MoreRows == true);
+    }
+
+    private static HostFileEntry ToUnixEntry(MvsmfUnixEntry item) => new(
+        item.Name!.Trim(),
+        item.Mode is { Length: > 0 } mode && mode[0] == 'd' ? HostFileEntryKind.Directory : HostFileEntryKind.File,
+        Unix: new UnixFileAttributes(
+            long.TryParse(item.Size, NumberStyles.None, CultureInfo.InvariantCulture, out var size) ? size : 0,
+            DateTimeOffset.TryParse(item.Mtime, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var modified) ? modified : null));
+
     /// <summary>A continued page names the entry it follows. <c>start=</c> is inclusive on mvsMF and z/OSMF alike,
     /// so the page asks for one item more than its size and <see cref="Page"/> drops the repeat.</summary>
     // mvsMF-compat: paging — start= is inclusive, so ListRequest asks for one more than the page and Page drops the
@@ -215,7 +248,7 @@ public sealed class MvsmfFileService : IHostFileService
 
     private HttpRequestMessage Get(HostPath path, string dataType, bool withEtag)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, Url(DatasetPath(path)));
+        var request = new HttpRequestMessage(HttpMethod.Get, Url(Route(path)));
         request.Headers.Add("X-IBM-Data-Type", dataType);
         // mvsMF-compat: etag — the stamp comes only when asked for, and asking costs the host a second full pass over
         // the member, so only a read whose caller may write back asks (a download); the verify read-back does not.
@@ -278,8 +311,23 @@ public sealed class MvsmfFileService : IHostFileService
         }, what, idle, cancellationToken);
     }
 
+    public async Task CreateDirectoryAsync(HostPath directory, CancellationToken cancellationToken = default)
+    {
+        if (directory.Kind != HostPathKind.Unix) throw new ArgumentException("Only a UNIX path names a directory.", nameof(directory));
+        var what = directory.ToString();
+        var body = JsonSerializer.SerializeToUtf8Bytes(new MvsmfUnixCreate("directory"), MvsmfJsonContext.Default.MvsmfUnixCreate);
+        using var idle = new IdleTimeout(_idle, cancellationToken);
+        // mvsMF-compat: uss-create-errors-400 — an existing name is 400 "File or directory already exists", which
+        // MvsmfErrors maps to AlreadyExists by the message; a missing parent is the host's not-found answer.
+        using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Post, Url(Route(directory)))
+        {
+            Content = new ByteArrayContent(body) { Headers = { ContentType = new MediaTypeHeaderValue(JsonContentType) } },
+        }, what, idle, cancellationToken);
+    }
+
     public async Task RenameAsync(HostPath from, string newName, CancellationToken cancellationToken = default)
     {
+        if (from.Kind == HostPathKind.Unix) throw new ArgumentException("The host cannot rename a UNIX file.", nameof(from));
         // ForMember and ForDataset fold the name and throw ArgumentException for one the rules refuse, so nothing
         // the host would fold differently is ever sent.
         var target = from.Kind == HostPathKind.Member ? HostPath.ForMember(from.Dataset!, newName) : HostPath.ForDataset(newName);
@@ -300,7 +348,14 @@ public sealed class MvsmfFileService : IHostFileService
     {
         var what = path.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
-        using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Delete, Url(DatasetPath(path))), what, idle, cancellationToken);
+        using var response = await SendAsync(() =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Delete, Url(Route(path)));
+            // A directory with anything in it needs X-IBM-Option: recursive; it is sent for every UNIX path, so a
+            // delete never fails for being non-empty, and the App's question owns that fact.
+            if (path.Kind == HostPathKind.Unix) request.Headers.Add("X-IBM-Option", "recursive");
+            return request;
+        }, what, idle, cancellationToken);
     }
 
     private async Task<string?> PutAsync(HostPath path, byte[] body, string dataType, string contentType, string? ifMatch, CancellationToken cancellationToken)
@@ -309,7 +364,7 @@ public sealed class MvsmfFileService : IHostFileService
         using var idle = new IdleTimeout(_idle, cancellationToken);
         using var response = await SendAsync(() =>
         {
-            var request = new HttpRequestMessage(HttpMethod.Put, Url(DatasetPath(path)))
+            var request = new HttpRequestMessage(HttpMethod.Put, Url(Route(path)))
             {
                 // mvsMF-compat: put-json-is-rename — Content-Type application/json turns a PUT into a rename, so a
                 // write only ever sends text/plain or application/octet-stream.
@@ -363,6 +418,29 @@ public sealed class MvsmfFileService : IHostFileService
     /// <summary>Validated names hold only A-Z 0-9 . - # $ @ and, in filters, * and %. Of those only # and % mean
     /// something in a URL; the rest go as they are, exactly as curl sends them.</summary>
     internal static string EscapeName(string name) => name.Replace("%", "%25").Replace("#", "%23");
+
+    /// <summary>The route for a path of any kind: <c>restfiles/fs/&lt;path&gt;</c> for a UNIX path, else
+    /// <see cref="DatasetPath"/>.</summary>
+    // mvsMF-compat: uss-limits — a UNIX file holds at most HostFileLimits.MaxUnixFileBytes (measured; the
+    // documented 64 KB is stale), and a body past the host's own ceiling is refused with 400 and nothing written,
+    // so Core checks the size before any write reaches this route.
+    private static string Route(HostPath path) =>
+        path.Kind == HostPathKind.Unix ? "restfiles/fs" + EscapeUnixPath(path.UnixPath!) : DatasetPath(path);
+
+    /// <summary>A UNIX path for a URL: <c>/</c> and the RFC 3986 unreserved characters kept, everything else
+    /// percent-encoded from UTF-8, so a name with a space, <c>#</c>, <c>%</c> or <c>?</c> round-trips (the host
+    /// percent-decodes the path and the query alike).</summary>
+    internal static string EscapeUnixPath(string path)
+    {
+        var builder = new StringBuilder(path.Length);
+        foreach (var b in Encoding.UTF8.GetBytes(path))
+        {
+            var c = (char)b;
+            if (char.IsAsciiLetterOrDigit(c) || c is '/' or '-' or '.' or '_' or '~') builder.Append(c);
+            else builder.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
+        }
+        return builder.ToString();
+    }
 
     private async Task<HttpResponseMessage> SendAsync(Func<HttpRequestMessage> build, string what, IdleTimeout idle, CancellationToken cancellationToken)
     {
