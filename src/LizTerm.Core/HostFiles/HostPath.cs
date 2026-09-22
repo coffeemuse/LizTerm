@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace LizTerm.Core.HostFiles;
@@ -10,13 +11,15 @@ public enum HostPathKind { Dataset, Member, Unix }
 
 /// <summary>Where a file lives on the host: a dataset, a member of a partitioned one, or a UNIX path. Dataset and
 /// member names are trimmed, folded to upper case and checked against the MVS naming rules when the path is made; a
-/// UNIX path is trimmed, kept in its case and checked against <see cref="UnixPathError"/>. A path that exists is
-/// always one the host could accept.</summary>
+/// UNIX path is kept exactly as given, case and blanks alike, since a blank is a name character on a UNIX file
+/// system, and checked against <see cref="UnixPathError"/>. A path that exists is always one the host could accept.
+/// Only <see cref="TryParse"/>, which reads typed text, trims.</summary>
 public sealed record HostPath
 {
     public const int MaxDatasetLength = 44;
     public const int MaxMemberLength = 8;
-    /// <summary>One under the length at which the host's path buffer overflows.</summary>
+    /// <summary>One under the length at which the host's path buffer overflows. The host counts bytes, and a UNIX
+    /// path holds only characters up to U+00FF, each one byte on the wire, so characters and bytes agree.</summary>
     public const int MaxUnixPathLength = 251;
     private const int MaxQualifierLength = 8;
 
@@ -45,7 +48,7 @@ public sealed record HostPath
 
     /// <exception cref="ArgumentException">The path breaks a rule (<see cref="UnixPathError"/>); the message says which.</exception>
     public static HostPath ForUnix(string path) =>
-        UnixPathError(path) is { } error ? throw new ArgumentException(error) : new HostPath(HostPathKind.Unix, null, null, path.Trim());
+        UnixPathError(path) is { } error ? throw new ArgumentException(error) : new HostPath(HostPathKind.Unix, null, null, path);
 
     /// <exception cref="InvalidOperationException">This is a UNIX path.</exception>
     public HostPath WithMember(string member) => Kind == HostPathKind.Unix
@@ -82,7 +85,8 @@ public sealed record HostPath
         return ForUnix(UnixPath == "/" ? "/" + name : UnixPath + "/" + name);
     }
 
-    /// <summary>Reads <c>DSN</c>, <c>DSN(MEMBER)</c>, or a path starting with <c>/</c>.</summary>
+    /// <summary>Reads <c>DSN</c>, <c>DSN(MEMBER)</c>, or a path starting with <c>/</c>, as typed: surrounding
+    /// blanks are dropped, so a UNIX name that begins or ends with one is reached through a listing, not typed.</summary>
     public static bool TryParse(string? text, out HostPath? path, out string? error)
     {
         path = null;
@@ -114,22 +118,23 @@ public sealed record HostPath
     }
 
     /// <summary>Why <paramref name="path"/> is not a UNIX path the host could take, or null when it is one: it must be
-    /// absolute, hold no empty, <c>.</c> or <c>..</c> segment, no control character, not end in <c>/</c> (except the
-    /// root itself), and be at most <see cref="MaxUnixPathLength"/> characters. Surrounding blanks are ignored; case
-    /// is kept.</summary>
+    /// absolute, hold no empty, <c>.</c> or <c>..</c> segment, no control character and no character above U+00FF
+    /// (the host keeps one byte per character), not end in <c>/</c> (except the root itself), and be at most
+    /// <see cref="MaxUnixPathLength"/> characters. It is judged exactly as given: blanks are name characters.</summary>
     public static string? UnixPathError(string path)
     {
-        var trimmed = (path ?? "").Trim();
-        if (trimmed.Length == 0) return "Enter a path.";
-        if (trimmed[0] != '/') return "A path must start with '/'.";
-        if (trimmed.Length > MaxUnixPathLength) return $"A path is at most {MaxUnixPathLength} characters.";
-        foreach (var c in trimmed)
+        path ??= "";
+        if (path.Length == 0) return "Enter a path.";
+        if (path[0] != '/') return "A path must start with '/'.";
+        if (path.Length > MaxUnixPathLength) return $"A path is at most {MaxUnixPathLength} characters.";
+        foreach (var rune in path.EnumerateRunes())
         {
-            if (char.IsControl(c)) return "A path cannot contain control characters.";
+            if (Rune.IsControl(rune)) return "A path cannot contain control characters.";
+            if (rune.Value > 0xFF) return $"A path cannot contain “{rune}” (U+{rune.Value:X4}), which the host can't store.";
         }
-        if (trimmed == "/") return null;
-        if (trimmed.EndsWith('/')) return "A path cannot end with '/'.";
-        foreach (var segment in trimmed[1..].Split('/'))
+        if (path == "/") return null;
+        if (path.EndsWith('/')) return "A path cannot end with '/'.";
+        foreach (var segment in path[1..].Split('/'))
         {
             if (segment.Length == 0) return "A path cannot have an empty segment.";
             if (segment is "." or "..") return "A path cannot contain a '.' or '..' segment.";

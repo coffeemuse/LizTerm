@@ -63,10 +63,12 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - `LizTerm.Core.HostFiles` is file access outside the 3270 session, host-neutral: it never names a product.
   `IHostFileService` is the contract; `LizTerm.Backend.Mvsmf` implements it.
 - `HostPath` folds dataset and member names to upper case and checks the MVS rules when it is made, and keeps a UNIX
-  path (`HostPathKind.Unix`, `ForUnix`) in its case under `UnixPathError` (absolute, no empty or `.`/`..` segment,
-  no control character, at most `MaxUnixPathLength` characters), so a `HostPath` is always a name the host could
-  accept. `Dataset` and `Member` are null on a UNIX path, `UnixPath` on the others; `Parent`, `Name` and `Child`
-  walk a UNIX path. `DatasetPatternError` is the filter rule.
+  path (`HostPathKind.Unix`, `ForUnix`) exactly as given, case and blanks alike, under `UnixPathError` (absolute, no
+  empty or `.`/`..` segment, no control character, nothing above U+00FF, at most `MaxUnixPathLength` characters,
+  which are then bytes), so a `HostPath` is always a name the host could accept. Never trim a UNIX name: a blank is
+  a name character, and a trimmed name addresses a different file. Only `TryParse`, which reads typed text, trims.
+  `Dataset` and `Member` are null on a UNIX path, `UnixPath` on the others; `Parent`, `Name` and `Child` walk a UNIX
+  path. `DatasetPatternError` is the filter rule.
 - Text crosses the interface as one string per record; the wire encoding is the backend's business.
 - `TextUploadCheck` runs before any upload: invalid UTF-8, a character above U+00FF, or a line longer than the
   record (`DatasetAttributes.UsableLineLength`) blocks it; tabs are a warning and are expanded by default. It is
@@ -74,17 +76,23 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
 - **The 1 MiB cap.** `HostFileLimits.MaxUnixFileBytes` is what the tested host was measured to store and read back
   intact, and it is enforced here, never left to the host, which writes what fits and then fails:
   `TextUploadCheck.RunForUnixFile` counts the lines' bytes (one per character, one per line, since every line is written
-  with a line ending) as `FileTooLarge`, and `HostFileTransfer.BinaryUploadProblem` compares a file's length. A UNIX
-  target has no record length, and its tabs are neither warned about nor expanded unless asked.
-- `IHostFileService.ListDirectoryAsync` lists one directory (`Directory` and `File` entries carrying
-  `UnixFileAttributes`); a host that cuts it short sets `HostFileListing.Truncated`, which `IsComplete` reads, and
-  hands back no continuation. `CreateDirectoryAsync` makes one directory under an existing parent. The read, write
-  and delete verbs take a UNIX path unchanged; a dataset verb given one, or `RenameAsync` given one, throws
+  with a line ending) as `FileTooLarge`, and `HostFileTransfer.BinaryUploadProblem` compares a file's length; both,
+  and `CheckUnixTextFile`, take the cap by default, so a caller cannot skip it by leaving it out. The checks are the
+  friendly early answer; `UploadTextAsync` and `UploadBinaryAsync` enforce it themselves for a UNIX path, throwing
+  `InvalidOperationException` with the same sentence before anything is read or sent. A UNIX target has no record
+  length, and its tabs are neither warned about nor expanded unless the options ask: with no options,
+  `RunForUnixFile` keeps them.
+- `IHostFileService.ListDirectoryAsync` lists one directory (`Directory` and `File` entries, and `Other` for a link,
+  a device or anything else that is neither, all carrying `UnixFileAttributes`); a host that cuts it short sets
+  `HostFileListing.Truncated`, which `IsComplete` reads, and hands back no continuation. `CreateDirectoryAsync` makes
+  one directory under an existing parent. The read, write and delete verbs take a UNIX path unchanged; a dataset verb
+  given one, `RenameAsync` given one, or `DeleteAsync` given the root (every UNIX delete is recursive), throws
   `ArgumentException` before any request.
 - `HostFileTransfer.DownloadAsync` writes a dot-prefixed `.part` file (hidden on macOS and Linux) beside the
   destination and renames it only on success. Text downloads trim trailing blanks by default and end lines with the
   platform's newline unless told otherwise. `UploadTextAsync` refuses text that failed its check and, when asked,
-  reads it back and compares with trailing blanks ignored.
+  reads it back and compares, with trailing blanks ignored for a dataset or member (fixed records come back padded)
+  and exactly for a UNIX file, whose trailing blanks are data.
 - `DatasetAllocation` is what a create sends. `Problems()` holds the local rules only (a record format of F, V or
   U plus B, S, A, M at most once each; LRECL 1–32760, or 0–32760 for U; BLKSIZE 1–32760; primary ≥ 1; secondary
   ≥ 0; a partitioned dataset needs a directory block); every DCB combination beyond that is the host's to judge,
@@ -95,7 +103,8 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
   opaque: never parsed, only echoed, quotes and all. A write whose `ifMatch` no longer holds is
   `HostFileErrorKind.Conflict` and writes nothing. `HostFileTransfer` carries it through: `DownloadResult.Etag`
   (the download asks), `UploadOutcome.Etag` (the write's stamp; the verify read-back does not ask).
-- `RenameAsync` renames a member within its library or a dataset; `DeleteAsync` takes a member or a whole dataset.
+- `RenameAsync` renames a member within its library or a dataset; `DeleteAsync` takes a member, a whole dataset, a
+  UNIX file or a UNIX directory with everything under it, never the root.
 - `HostCredentials` is a class, not a record, so no generated `ToString` can print the password.
 
 ## Profiles

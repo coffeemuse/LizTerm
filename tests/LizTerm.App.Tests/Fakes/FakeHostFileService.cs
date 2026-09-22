@@ -284,6 +284,8 @@ public sealed class FakeHostFileService : IHostFileService
 
     public async Task DeleteAsync(HostPath path, CancellationToken cancellationToken = default)
     {
+        // As the backend: the root is refused before anything is sent or logged.
+        if (path.Kind == HostPathKind.Unix && path.Parent is null) throw new ArgumentException("The root directory cannot be deleted.", nameof(path));
         await EnterAsync($"delete:{path}", $"delete:{path}", cancellationToken);
         try
         {

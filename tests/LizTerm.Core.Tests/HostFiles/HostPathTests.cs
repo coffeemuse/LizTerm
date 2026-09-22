@@ -98,7 +98,7 @@ public class HostPathTests
     [Fact]
     public void A_unix_path_keeps_its_case_and_has_no_dataset()
     {
-        var path = HostPath.ForUnix("  /u/IBMUSER/Notes.txt ");
+        var path = HostPath.ForUnix("/u/IBMUSER/Notes.txt");
         Assert.Equal(HostPathKind.Unix, path.Kind);
         Assert.Equal("/u/IBMUSER/Notes.txt", path.UnixPath);
         Assert.Null(path.Dataset);
@@ -176,6 +176,31 @@ public class HostPathTests
         Assert.Null(HostPath.UnixPathError(longest));
         Assert.Equal("A path is at most 251 characters.", HostPath.UnixPathError(longest + "b"));
         Assert.Equal(251, HostPath.MaxUnixPathLength);
+    }
+
+    [Fact]
+    public void A_unix_path_keeps_its_blanks_exactly_and_only_typed_text_is_trimmed()
+    {
+        var lead = HostPath.ForUnix("/u/me/ lead");
+        var trail = HostPath.ForUnix("/u/me").Child("trail ");
+
+        Assert.Equal("/u/me/ lead", lead.UnixPath);
+        Assert.Equal(" lead", lead.Name);
+        Assert.Equal("/u/me/trail ", trail.UnixPath);
+        Assert.NotEqual(HostPath.ForUnix("/u/me/trail"), trail);
+        Assert.Equal("A path must start with '/'.", HostPath.UnixPathError(" /u/me"));
+        Assert.True(HostPath.TryParse(" /u/me/trail ", out var typed, out _));
+        Assert.Equal("/u/me/trail", typed!.UnixPath);
+    }
+
+    [Fact]
+    public void A_unix_path_holds_latin1_only_so_its_length_is_its_bytes()
+    {
+        Assert.Null(HostPath.UnixPathError("/u/me/café ¬"));
+        Assert.Null(HostPath.UnixPathError("/" + new string('é', 250)));
+        Assert.Equal("A path cannot contain “€” (U+20AC), which the host can't store.", HostPath.UnixPathError("/u/me/€.txt"));
+        Assert.Equal("A path cannot contain “😀” (U+1F600), which the host can't store.", HostPath.UnixPathError("/u/😀"));
+        Assert.Throws<ArgumentException>(() => HostPath.ForUnix("/u/me").Child("naïve€"));
     }
 
     [Fact]

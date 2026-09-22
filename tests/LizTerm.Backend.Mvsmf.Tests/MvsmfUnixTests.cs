@@ -67,6 +67,37 @@ public class MvsmfUnixTests
     }
 
     [Fact]
+    public async Task Uss_names_latin1_so_a_listing_reads_raw_latin1_names_exactly_and_they_address_their_entries()
+    {
+        // The host sends "caf\xE9" as one raw byte, not UTF-8; " lead" keeps its leading blank, and "sp" was made as
+        // "sp " (the host dropped the trailing blank when it made the directory).
+        var handler = new RecordedHandler().Then("login-200").Then("uss-list-names").Then("uss-delete-204").Then("uss-delete-204");
+        using var service = Service(handler);
+
+        var listing = await service.ListDirectoryAsync(Fix, HostListRequest.All, Ct);
+        await service.DeleteAsync(Fix.Child(listing.Entries[0].Name), Ct);
+        await service.DeleteAsync(Fix.Child(listing.Entries[1].Name), Ct);
+
+        Assert.Equal(new[] { " lead", "café", "sp" }, listing.Entries.Select(e => e.Name));
+        Assert.Equal("/zosmf/restfiles/fs/u/ibmuser/liztest-fix/%20lead", handler.Requests[2].Uri.PathAndQuery);
+        Assert.Equal("/zosmf/restfiles/fs/u/ibmuser/liztest-fix/caf%E9", handler.Requests[3].Uri.PathAndQuery);
+    }
+
+    [Fact]
+    public async Task Only_d_and_dash_are_a_directory_and_a_file_and_every_other_mode_is_other()
+    {
+        var handler = new RecordedHandler().Then("login-200").Then(HttpStatusCode.OK,
+            """{"items":[{"name":"link","mode":"lrwxrwxrwx","size":9},{"name":"tty","mode":"crw-rw-rw-","size":0},{"name":"fifo","mode":"prw-r--r--","size":0},{"name":"plain","mode":"-rw-r--r--","size":1},{"name":"nomode","size":2}],"returnedRows":5,"totalRows":5,"JSONversion":1}""");
+        using var service = Service(handler);
+
+        var entries = (await service.ListDirectoryAsync(Home, HostListRequest.All, Ct)).Entries;
+
+        Assert.Equal(new[] { HostFileEntryKind.Other, HostFileEntryKind.Other, HostFileEntryKind.Other, HostFileEntryKind.File, HostFileEntryKind.File },
+            entries.Select(e => e.Kind));
+        Assert.All(entries, e => Assert.NotNull(e.Unix));
+    }
+
+    [Fact]
     public async Task Uss_list_no_continuation_so_a_cut_listing_is_truncated_and_a_continuation_is_refused()
     {
         var handler = new RecordedHandler().Then("login-200").Then("uss-list-truncated");
@@ -286,6 +317,18 @@ public class MvsmfUnixTests
     }
 
     [Fact]
+    public async Task The_root_is_never_deleted_and_nothing_is_sent()
+    {
+        var handler = new RecordedHandler().Then("login-200");
+        using var service = Service(handler);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => service.DeleteAsync(HostPath.ForUnix("/"), Ct));
+
+        Assert.StartsWith("The root directory cannot be deleted.", ex.Message);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task A_dataset_delete_sends_no_option()
     {
         var handler = new RecordedHandler().Then("login-200").Then("delete-204");
@@ -301,8 +344,9 @@ public class MvsmfUnixTests
     [InlineData("/u/ibmuser/100%.txt", "/u/ibmuser/100%25.txt")]
     [InlineData("/u/ibmuser/a?b&c=d", "/u/ibmuser/a%3Fb%26c%3Dd")]
     [InlineData("/u/ibmuser/Notes-1_2.txt~", "/u/ibmuser/Notes-1_2.txt~")]
-    [InlineData("/café", "/caf%C3%A9")]
-    public void A_unix_path_is_escaped_byte_by_byte_keeping_slashes(string path, string expected) =>
+    [InlineData("/u/ibmuser/a+b", "/u/ibmuser/a%2Bb")]
+    [InlineData("/café ¬", "/caf%E9%20%AC")]
+    public void A_unix_path_is_escaped_one_latin1_byte_per_character_keeping_slashes(string path, string expected) =>
         Assert.Equal(expected, MvsmfFileService.EscapeUnixPath(path));
 
     [Fact]

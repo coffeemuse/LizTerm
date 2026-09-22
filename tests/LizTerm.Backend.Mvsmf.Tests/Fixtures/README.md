@@ -47,6 +47,7 @@ re-recording against a newer build: a changed fixture is a changed behaviour.
 | `uss-list-empty` | `GET restfiles/fs?path=/u/ibmuser` — no items |
 | `uss-list-missing` | `GET restfiles/fs?path=/u/nobody` — 404, category 6, reason 1 |
 | `uss-list-truncated` | `GET restfiles/fs?path=/u` with `X-IBM-Max-Items: 1` — one of three, `moreRows: true` |
+| `uss-list-names` | `GET restfiles/fs?path=/u/ibmuser/liztest-fix` after making `caf%E9`, `%20lead` and `sp%20` in it — the names as raw Latin-1 bytes (`caf` then byte `E9`), ` lead` with its blank, `sp` without |
 | `uss-stat-file` | `GET restfiles/fs?path=<a file>` — 200 with one item naming the full path |
 | `uss-read-text` | `GET restfiles/fs/u/ibmuser/liztest-fix/hello.txt`, text, with `X-IBM-Return-Etag: true` |
 | `uss-read-binary` | the same, binary — the same `ETag` |

@@ -24,8 +24,9 @@ public interface IHostFileService : IDisposable
     Task<HostFileListing> ListMembersAsync(HostPath dataset, HostListRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>The entries of one directory, directories and files together, in the host's order, each a
-    /// <see cref="HostFileEntryKind.Directory"/> or <see cref="HostFileEntryKind.File"/> with
-    /// <see cref="HostFileEntry.Unix"/> set. A missing path is <see cref="HostFileErrorKind.NotFound"/>; a path that
+    /// <see cref="HostFileEntryKind.Directory"/>, a <see cref="HostFileEntryKind.File"/> or, for anything else the
+    /// host lists (a link, a device), <see cref="HostFileEntryKind.Other"/>, with <see cref="HostFileEntry.Unix"/>
+    /// set. Names are exactly the host's, blanks included. A missing path is <see cref="HostFileErrorKind.NotFound"/>; a path that
     /// is a file is <see cref="HostFileErrorKind.InvalidRequest"/>. <paramref name="request"/>'s <c>MaxItems</c>
     /// caps the answer; a host that cut the list short says so with <see cref="HostFileListing.Truncated"/> and
     /// hands back no continuation, and a request carrying one is an <see cref="ArgumentException"/>.</summary>
@@ -67,6 +68,7 @@ public interface IHostFileService : IDisposable
     Task RenameAsync(HostPath from, string newName, CancellationToken cancellationToken = default);
 
     /// <summary>Deletes a member, a whole dataset with everything in it, a file, or a directory with everything under it.</summary>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is the UNIX root, which is never deleted.</exception>
     Task DeleteAsync(HostPath path, CancellationToken cancellationToken = default);
 
     /// <summary>Ends the session the token names. Best effort: a host that has already forgotten the token is a

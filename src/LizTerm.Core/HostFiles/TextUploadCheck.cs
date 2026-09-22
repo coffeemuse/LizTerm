@@ -40,13 +40,14 @@ public static class TextUploadCheck
     public static TextUploadResult Run(ReadOnlySpan<byte> file, DatasetAttributes target, TextUploadOptions? options = null) =>
         Run(file, target.UsableLineLength, null, warnTabs: true, options);
 
-    /// <summary>For a byte-stream target: no record length, tabs kept without a warning when not expanded (the host
-    /// stores them), and with <paramref name="maxBytes"/> the bytes the lines will take on the host, one per
-    /// character plus one per line, since every line is written with a line ending whether or not the source's
-    /// last line had one, counted against it as <see cref="TextUploadProblemKind.FileTooLarge"/>.</summary>
+    /// <summary>For a byte-stream target: no record length, and tabs kept without a warning (the host stores them)
+    /// unless <paramref name="options"/> asks for them to be expanded; with no options, nothing is expanded. The bytes
+    /// the lines will take on the host, one per character plus one per line, since every line is written with a line
+    /// ending whether or not the source's last line had one, are counted against <paramref name="maxBytes"/> as
+    /// <see cref="TextUploadProblemKind.FileTooLarge"/>.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="TextUploadOptions.TabWidth"/> is less than 1.</exception>
-    public static TextUploadResult RunForUnixFile(ReadOnlySpan<byte> file, long? maxBytes = null, TextUploadOptions? options = null) =>
-        Run(file, null, maxBytes, warnTabs: false, options);
+    public static TextUploadResult RunForUnixFile(ReadOnlySpan<byte> file, long maxBytes = HostFileLimits.MaxUnixFileBytes, TextUploadOptions? options = null) =>
+        Run(file, null, maxBytes, warnTabs: false, options ?? new TextUploadOptions(ExpandTabs: false));
 
     private static TextUploadResult Run(ReadOnlySpan<byte> file, int? lineLimit, long? maxBytes, bool warnTabs, TextUploadOptions? options)
     {
@@ -100,11 +101,19 @@ public static class TextUploadCheck
         var errors = new List<TextUploadProblem>([.. tooLong.All(), .. unsupported.All()]);
         if (maxBytes is long cap)
         {
-            long bytes = 0;
-            foreach (var line in lines) bytes += line.Length + 1;
+            var bytes = StoredBytes(lines);
             if (bytes > cap) errors.Add(new TextUploadProblem(TextUploadProblemKind.FileTooLarge, 0, TooLarge(bytes, cap)));
         }
         return new TextUploadResult(lines, errors, warnings);
+    }
+
+    /// <summary>What <paramref name="lines"/> take on a byte-stream target: one byte per character (the check has
+    /// refused anything above U+00FF) and one per line ending.</summary>
+    internal static long StoredBytes(IReadOnlyList<string> lines)
+    {
+        long bytes = 0;
+        foreach (var line in lines) bytes += line.Length + 1;
+        return bytes;
     }
 
     /// <summary>The one sentence for a file past the host's size, shared with the binary check.</summary>

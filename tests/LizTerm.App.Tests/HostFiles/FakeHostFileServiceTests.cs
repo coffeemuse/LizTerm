@@ -343,4 +343,18 @@ public class FakeHostFileServiceTests
         await Assert.ThrowsAsync<ArgumentException>(() => host.RenameAsync(HostPath.ForUnix("/u/ibmuser/other.txt"), "z.txt", ct));
         Assert.DoesNotContain(host.Calls, c => c.StartsWith("rename:", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task Deleting_the_root_is_refused_before_it_is_logged()
+    {
+        var host = new FakeHostFileService();
+        host.AddFile("/u/ibmuser/a.txt", "a");
+        var ct = TestContext.Current.CancellationToken;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => host.DeleteAsync(HostPath.ForUnix("/"), ct));
+
+        Assert.Contains("/", host.Directories);
+        Assert.True(host.Text.ContainsKey("/u/ibmuser/a.txt"));
+        Assert.Empty(host.Calls);
+    }
 }

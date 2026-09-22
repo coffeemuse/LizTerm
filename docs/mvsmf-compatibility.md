@@ -207,8 +207,10 @@ Entries marked *log only* change nothing in the code.
   changes nothing on the wire: the body is Latin-1 both ways, as on the dataset routes (`text-body-is-latin1`).
 - **LizTerm:** `HostFileLimits.MaxUnixFileBytes` (1,048,576, the measured size the host stores and reads back
   intact, comfortably under its body ceiling) is checked before any upload request: `TextUploadCheck.RunForUnixFile`
-  counts the lines' Latin-1 bytes plus one per line, and `HostFileTransfer.BinaryUploadProblem` the file's length;
-  a file over the cap is refused with its size and the limit, and nothing is sent. A full file system is the
+  counts the lines' Latin-1 bytes plus one per line, and `HostFileTransfer.BinaryUploadProblem` the file's length,
+  both at that cap unless told otherwise; `HostFileTransfer.UploadTextAsync` and `UploadBinaryAsync` apply it again
+  to every UNIX target, so a caller that skipped the check still sends nothing. A file over the cap is refused with
+  its size and the limit. A full file system is the
   host's answer and can leave a partial file, which the next listing shows. Raise the constant when the host
   grows.
 
@@ -241,6 +243,21 @@ Entries marked *log only* change nothing in the code.
   found", not the 400 the docs list.
 - **LizTerm:** a 400 whose message says "already exists" is `AlreadyExists`, whose sentence for a file system path
   reads "a file or directory of that name already exists"; the missing parent maps by its 404 to `NotFound`.
+
+### `uss-names-latin1`
+
+- **Source:** HTTPD's `http_decode` turns each `%XX` in the path and the query into one byte through its ASCII to
+  EBCDIC table, and a raw `+` into a space; `ussListHandler` prints each name into the listing with `%s`, through
+  the same table the other way, unescaped.
+- **Observed (2026-09-22):** a directory made as `caf%E9` is listed as `caf` then the raw byte `E9` (Latin-1 `é`),
+  which is not UTF-8, so a strict UTF-8 JSON reader refuses the whole listing (`uss-list-names`). A name made as
+  `%20lead` keeps its leading blank; one made as `sp%20` is stored and listed as `sp`, and a request for `sp%20`
+  answers 404: the host drops a trailing blank when it makes a name.
+- **LizTerm:** `EscapeUnixPath` sends one `%XX` per character, of its Latin-1 byte, and `HostPath.UnixPathError`
+  refuses a character above U+00FF, so a path's length in characters is its length in the host's bytes. A listing is
+  read as Latin-1 before it is parsed. Names are kept exactly, blanks included, by the backend and by `HostPath`.
+  Since the source does not escape a name, a `"` or `\` in one would still break the listing's JSON; LizTerm reports
+  that as the host's unreadable answer.
 
 ### `uss-owner-blank` (log only)
 

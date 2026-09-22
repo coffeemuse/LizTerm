@@ -157,9 +157,9 @@ public class TextUploadCheckTests
     }
 
     [Fact]
-    public void A_unix_file_has_no_record_length_and_keeps_its_tabs()
+    public void A_unix_file_has_no_record_length_and_keeps_its_tabs_by_default()
     {
-        var result = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes("A\tB\n" + new string('x', 500) + "\n"), maxBytes: null, new TextUploadOptions(ExpandTabs: false));
+        var result = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes("A\tB\n" + new string('x', 500) + "\n"));
         Assert.True(result.CanUpload);
         Assert.Equal("A\tB", result.Lines[0]);
         Assert.Equal(500, result.Lines[1].Length);
@@ -197,7 +197,7 @@ public class TextUploadCheckTests
         Assert.False(result.CanUpload);
         Assert.Equal("The file is 10 bytes; the host holds at most 8.", Assert.Single(result.Errors).Message);
 
-        var big = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes(new string('x', 1_100_000) + "\n"), maxBytes: HostFileLimits.MaxUnixFileBytes);
+        var big = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes(new string('x', 1_100_000) + "\n"));
         Assert.Equal("The file is 1,100,001 bytes; the host holds at most 1,048,576.", Assert.Single(big.Errors).Message);
     }
 

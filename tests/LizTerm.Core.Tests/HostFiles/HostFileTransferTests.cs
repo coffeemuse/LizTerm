@@ -154,6 +154,46 @@ public sealed class HostFileTransferTests : IDisposable
     }
 
     [Fact]
+    public async Task A_verified_unix_upload_counts_a_lost_trailing_blank_as_a_difference()
+    {
+        _host.StoreTransform = lines => [.. lines.Select(l => l.TrimEnd(' '))];
+        var file = HostPath.ForUnix("/u/me/notes.md");
+        var checkedText = HostFileTransfer.CheckUnixTextFile(await WriteLocal("notes.md", "hard break  \nend\n"));
+
+        var outcome = await HostFileTransfer.UploadTextAsync(_host, file, checkedText, verify: true, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal((UploadVerification.Differs, 1), (outcome.Verification, outcome.DiffersAtLine));
+    }
+
+    [Fact]
+    public async Task Unix_text_over_the_cap_is_never_sent_whatever_check_made_it()
+    {
+        // A dataset check counts no bytes, so only the upload itself can catch this.
+        var checkedText = HostFileTransfer.CheckTextFile(await WriteLocal("big.txt", new string('x', (int)HostFileLimits.MaxUnixFileBytes) + "\n"), new DatasetAttributes("PS", "U", null, null, null));
+        Assert.True(checkedText.CanUpload);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            HostFileTransfer.UploadTextAsync(_host, HostPath.ForUnix("/u/me/big.txt"), checkedText, verify: false, cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal("The file is 1,048,577 bytes; the host holds at most 1,048,576.", ex.Message);
+        Assert.Empty(_host.Calls);
+    }
+
+    [Fact]
+    public async Task A_binary_file_over_the_cap_is_never_sent_to_a_unix_path_but_is_to_a_dataset()
+    {
+        var source = Local("big.bin");
+        await File.WriteAllBytesAsync(source, new byte[HostFileLimits.MaxUnixFileBytes + 1], TestContext.Current.CancellationToken);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            HostFileTransfer.UploadBinaryAsync(_host, HostPath.ForUnix("/u/me/big.bin"), source, cancellationToken: TestContext.Current.CancellationToken));
+        await HostFileTransfer.UploadBinaryAsync(_host, Jes2, source, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("The file is 1,048,577 bytes; the host holds at most 1,048,576.", ex.Message);
+        Assert.Equal(new[] { "writebinary:SYS1.PROCLIB(JES2)" }, _host.Calls);
+    }
+
+    [Fact]
     public async Task A_binary_upload_sends_the_file_bytes()
     {
         var source = Local("load.bin");
@@ -239,7 +279,7 @@ public sealed class HostFileTransferTests : IDisposable
             Assert.Null(HostFileTransfer.BinaryUploadProblem(file, 10));
             Assert.Equal("The file is 10 bytes; the host holds at most 9.", HostFileTransfer.BinaryUploadProblem(file, 9));
             File.WriteAllBytes(file, new byte[HostFileLimits.MaxUnixFileBytes + 1]);
-            Assert.Equal("The file is 1,048,577 bytes; the host holds at most 1,048,576.", HostFileTransfer.BinaryUploadProblem(file, HostFileLimits.MaxUnixFileBytes));
+            Assert.Equal("The file is 1,048,577 bytes; the host holds at most 1,048,576.", HostFileTransfer.BinaryUploadProblem(file));
         }
         finally
         {
@@ -256,6 +296,8 @@ public sealed class HostFileTransferTests : IDisposable
             File.WriteAllText(file, new string('x', 200) + "\n");
             Assert.True(HostFileTransfer.CheckUnixTextFile(file).CanUpload);
             Assert.False(HostFileTransfer.CheckUnixTextFile(file, maxBytes: 100).CanUpload);
+            File.WriteAllText(file, new string('x', (int)HostFileLimits.MaxUnixFileBytes) + "\n");
+            Assert.Equal(TextUploadProblemKind.FileTooLarge, Assert.Single(HostFileTransfer.CheckUnixTextFile(file).Errors).Kind);
         }
         finally
         {

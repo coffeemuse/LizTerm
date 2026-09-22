@@ -144,8 +144,10 @@ public sealed class MvsmfFileService : IHostFileService
             message.Headers.Add("X-IBM-Max-Items", Math.Max(request.MaxItems, 0).ToString(CultureInfo.InvariantCulture));
             return message;
         }, what, idle, cancellationToken);
-        var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfUnixList, what, idle, cancellationToken);
-        var items = (list.Items ?? []).Where(i => !string.IsNullOrWhiteSpace(i.Name)).ToList();
+        // mvsMF-compat: uss-names-latin1 — the names are the file system's bytes in Latin-1, unescaped and never
+        // UTF-8, so the answer is read as Latin-1; a name is kept exactly, blanks included.
+        var list = await ReadJsonAsync(response, MvsmfJsonContext.Default.MvsmfUnixList, what, idle, cancellationToken, latin1: true);
+        var items = (list.Items ?? []).Where(i => !string.IsNullOrEmpty(i.Name)).ToList();
         // mvsMF-compat: uss-stat-for-file-path — a listing of a file path answers 200 with one item naming the full
         // path (a stat), never an error; LizTerm reads that shape as "not a directory".
         if (items.Count == 1 && items[0].Name!.StartsWith('/'))
@@ -156,9 +158,14 @@ public sealed class MvsmfFileService : IHostFileService
         return new HostFileListing(entries, null, Truncated: list.MoreRows == true || cut);
     }
 
+    /// <summary>The kind is <c>mode</c>'s first character: <c>d</c> a directory, <c>-</c> (or no mode at all) a
+    /// regular file, anything else (<c>l</c>, <c>c</c>, <c>p</c>, <c>s</c>) <see cref="HostFileEntryKind.Other"/>.
+    /// mvsMF itself only ever sends the first two.</summary>
     private static HostFileEntry ToUnixEntry(MvsmfUnixEntry item) => new(
-        item.Name!.Trim(),
-        item.Mode is { Length: > 0 } mode && mode[0] == 'd' ? HostFileEntryKind.Directory : HostFileEntryKind.File,
+        item.Name!,
+        item.Mode is { Length: > 0 } mode
+            ? mode[0] switch { 'd' => HostFileEntryKind.Directory, '-' => HostFileEntryKind.File, _ => HostFileEntryKind.Other }
+            : HostFileEntryKind.File,
         Unix: new UnixFileAttributes(
             long.TryParse(item.Size, NumberStyles.None, CultureInfo.InvariantCulture, out var size) ? size : 0,
             DateTimeOffset.TryParse(item.Mtime, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var modified) ? modified : null));
@@ -173,17 +180,7 @@ public sealed class MvsmfFileService : IHostFileService
     /// <summary>A query value the host must read back exactly: a pattern, or a continuation that is whatever name
     /// the host last answered, checked by nobody. Everything a query cannot carry raw is percent-encoded; <c>*</c>
     /// stays, since it is the pattern wildcard and the host takes it as it is.</summary>
-    private static string EscapeQueryValue(string value)
-    {
-        var builder = new StringBuilder(value.Length);
-        foreach (var b in Encoding.UTF8.GetBytes(value))
-        {
-            var c = (char)b;
-            if (char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_' or '~' or '*' or '$' or '@') builder.Append(c);
-            else builder.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
-        }
-        return builder.ToString();
-    }
+    private static string EscapeQueryValue(string value) => PercentEncode(value, "-._~*$@");
 
     private HttpRequestMessage ListRequest(string relative, HostListRequest request, bool attributes)
     {
@@ -347,6 +344,8 @@ public sealed class MvsmfFileService : IHostFileService
 
     public async Task DeleteAsync(HostPath path, CancellationToken cancellationToken = default)
     {
+        // Every UNIX delete is recursive (below), so the root would be the whole file system.
+        if (path.Kind == HostPathKind.Unix && path.Parent is null) throw new ArgumentException("The root directory cannot be deleted.", nameof(path));
         var what = path.ToString();
         using var idle = new IdleTimeout(_idle, cancellationToken);
         using var response = await SendAsync(() =>
@@ -429,16 +428,22 @@ public sealed class MvsmfFileService : IHostFileService
         path.Kind == HostPathKind.Unix ? "restfiles/fs" + EscapeUnixPath(path.UnixPath!) : DatasetPath(path);
 
     /// <summary>A UNIX path for a URL: <c>/</c> and the RFC 3986 unreserved characters kept, everything else
-    /// percent-encoded from UTF-8, so a name with a space, <c>#</c>, <c>%</c> or <c>?</c> round-trips (the host
-    /// percent-decodes the path and the query alike).</summary>
-    internal static string EscapeUnixPath(string path)
+    /// percent-encoded, so a name with a space, <c>+</c>, <c>#</c>, <c>%</c> or <c>?</c> round-trips.</summary>
+    internal static string EscapeUnixPath(string path) => PercentEncode(path, "/-._~");
+
+    /// <summary>ASCII letters and digits and the characters in <paramref name="keep"/> as they are; every other
+    /// character as one <c>%XX</c> of its Latin-1 byte.</summary>
+    /// <exception cref="ArgumentException">A character is above U+00FF.</exception>
+    // mvsMF-compat: uss-names-latin1 — the host decodes each %XX to one byte and reads it as Latin-1 (and a raw '+'
+    // as a space), so a character is one escape, never its UTF-8 bytes; HostPath refuses a path above U+00FF.
+    private static string PercentEncode(string value, string keep)
     {
-        var builder = new StringBuilder(path.Length);
-        foreach (var b in Encoding.UTF8.GetBytes(path))
+        var builder = new StringBuilder(value.Length);
+        foreach (var c in value)
         {
-            var c = (char)b;
-            if (char.IsAsciiLetterOrDigit(c) || c is '/' or '-' or '.' or '_' or '~') builder.Append(c);
-            else builder.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
+            if (char.IsAsciiLetterOrDigit(c) || keep.Contains(c)) builder.Append(c);
+            else if (c <= 'ÿ') builder.Append('%').Append(((int)c).ToString("X2", CultureInfo.InvariantCulture));
+            else throw new ArgumentException($"“{c}” has no Latin-1 byte.", nameof(value));
         }
         return builder.ToString();
     }
@@ -692,14 +697,17 @@ public sealed class MvsmfFileService : IHostFileService
         }
     }
 
+    /// <summary>The answer as JSON: UTF-8, or with <paramref name="latin1"/> a body whose bytes are Latin-1
+    /// characters, re-encoded before it is parsed.</summary>
     private async Task<T> ReadJsonAsync<T>(HttpResponseMessage response, JsonTypeInfo<T> type, string what,
-        IdleTimeout idle, CancellationToken cancellationToken)
+        IdleTimeout idle, CancellationToken cancellationToken, bool latin1 = false)
     {
         using var body = new MemoryStream();
         await CopyBodyAsync(response, body, idle, null, what, cancellationToken);
+        var json = latin1 ? Encoding.UTF8.GetBytes(Encoding.Latin1.GetString(body.GetBuffer(), 0, (int)body.Length)) : body.ToArray();
         try
         {
-            return JsonSerializer.Deserialize(body.ToArray(), type)
+            return JsonSerializer.Deserialize(json, type)
                 ?? throw new JsonException("empty");
         }
         catch (JsonException ex)

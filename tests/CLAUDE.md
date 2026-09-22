@@ -105,7 +105,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   from the content), cut to `MaxItems` with `Truncated` and never a continuation, `NotFound` for a missing path
   and `InvalidRequest` for a file; `mkdir:<path>` needs an existing parent and refuses an existing name as
   `AlreadyExists`; a write under a missing parent is `NotFound`; `delete:<path>` on a directory takes everything
-  under it; and a rename of a UNIX path throws `ArgumentException` unlogged, as the backend does.
+  under it; and a rename of a UNIX path, or a delete of the root, throws `ArgumentException` unlogged, as the
+  backend does.
   Core.Tests has a smaller fake of the same name for `HostFileTransfer` (see "Core tests").
 - `BrowserTestHost` (`ViewModels/`) builds an `MvsmfBrowserViewModel` over a `FakeHostFileService` seeded by
   `Standard` (a PDS of three members, a load library, a sequential dataset and a `DA` dataset) or `Large` (those

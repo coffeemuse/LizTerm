@@ -1,0 +1,49 @@
+HTTP/1.1 200 OK
+Server: HTTPD Server
+X-Powered-By: MVSLOVERS
+Connection: keep-alive
+Cache-Control: no-store
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
+Content-Type: application/json
+Transfer-Encoding: chunked
+
+{
+  "items": [
+    {
+      "name": " lead",
+      "mode": "drwxr-xr-x",
+      "size": 128,
+      "user": "IBMUSER",
+      "group": "ADMIN",
+      "links": 2,
+      "mtime": "2026-09-22T17:15:00Z",
+      "inode": 66
+    }
+   ,{
+      "name": "café",
+      "mode": "drwxr-xr-x",
+      "size": 128,
+      "user": "IBMUSER",
+      "group": "ADMIN",
+      "links": 2,
+      "mtime": "2026-09-22T17:15:00Z",
+      "inode": 65
+    }
+   ,{
+      "name": "sp",
+      "mode": "drwxr-xr-x",
+      "size": 128,
+      "user": "IBMUSER",
+      "group": "ADMIN",
+      "links": 2,
+      "mtime": "2026-09-22T17:15:00Z",
+      "inode": 64
+    }
+  ],
+  "returnedRows": 3,
+  "totalRows": 3,
+  "JSONversion": 1
+}
