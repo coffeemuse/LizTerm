@@ -477,10 +477,13 @@ public sealed class TerminalScreen : Control
                 context.DrawLine(pen, new Point(run.Rect.Left, y), new Point(run.Rect.Right, y));
             }
         }
-        DrawCrosshair(context, snapshot, g);
         DrawSelection(context, snapshot, g);
         DrawFindMatches(context, snapshot, g);
         DrawCursor(context, snapshot, g);
+        // Last of the overlays, over the cursor block and not under it: the ruler's lines sit on the cursor
+        // cell's own bottom and left edges, and the opaque block DrawCursor paints over that whole cell used to
+        // erase most of them — the crossing point, which is the one place the crosshair has to be readable.
+        DrawCrosshair(context, snapshot, g);
         if (BellFlashing) context.FillRectangle(Palette.BellFlash, bounds);
     }
 
@@ -553,9 +556,11 @@ public sealed class TerminalScreen : Control
 
     private void DrawCrosshair(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
     {
-        var (horizontal, vertical) = CrosshairGeometry.Rects(Crosshair, snapshot.Cursor, g, snapshot.Rows, snapshot.Columns);
-        if (horizontal is { } h) context.FillRectangle(Palette.Crosshair, h);
-        if (vertical is { } v) context.FillRectangle(Palette.Crosshair, v);
+        var (horizontal, vertical) = CrosshairGeometry.Rects(
+            Crosshair, snapshot.Cursor, g, snapshot.Rows, snapshot.Columns, TopLevel.GetTopLevel(this)?.RenderScaling ?? 1);
+        var brush = Palette.CrosshairBrush(Monochrome);
+        if (horizontal is { } h) context.FillRectangle(brush, h);
+        if (vertical is { } v) context.FillRectangle(brush, v);
     }
 
     private void DrawSelection(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)

@@ -8,32 +8,59 @@ using LizTerm.Core.Settings;
 
 namespace LizTerm.App.Rendering;
 
-/// <summary>Where the crosshair's bars go. Pure math with no Avalonia rendering in it, the same shape as
+/// <summary>Where the crosshair's lines go. Pure math with no Avalonia rendering in it, the same shape as
 /// CellGeometry.Fit, so the rule is asserted on rectangles rather than on pixels.</summary>
 public static class CrosshairGeometry
 {
-    /// <summary>The horizontal and vertical bars for <paramref name="mode"/>, either of which may be null.
+    /// <summary>How thick a ruler line is, in device-independent pixels. A constant rather than a fraction of the
+    /// cell: a hairline should stay a hairline at any font size, and a shaded cell is what #180 replaced. It is a
+    /// floor rather than the answer: <see cref="Rects"/> widens it to the next whole device pixel, since half a
+    /// device pixel of colour is the smear the snapping exists to avoid.</summary>
+    public const double Thickness = 1;
+
+    /// <summary>The horizontal and vertical lines for <paramref name="mode"/>, either of which may be null.
     /// A hidden cursor still gets a crosshair; a cursor outside the grid, or a geometry that has not been
     /// measured yet, gets none.</summary>
+    /// <param name="scaling">The render scaling the lines will be drawn at
+    /// (<c>TopLevel.GetTopLevel(this)?.RenderScaling</c>), which is what makes an edge land on a device pixel
+    /// rather than merely on a whole DIP. Anything but a positive number is taken as 1.</param>
     public static (Rect? Horizontal, Rect? Vertical) Rects(
-        CrosshairMode mode, CursorPosition cursor, CellGeometry geometry, int rows, int columns)
+        CrosshairMode mode, CursorPosition cursor, CellGeometry geometry, int rows, int columns, double scaling = 1)
     {
         if (mode == CrosshairMode.None) return (null, null);
         if (geometry.CellWidth <= 0 || geometry.CellHeight <= 0) return (null, null);
         if ((uint)cursor.Row >= (uint)rows || (uint)cursor.Column >= (uint)columns) return (null, null);
 
         var cell = geometry.CellRect(cursor.Row, cursor.Column);
-        var width = columns * geometry.CellWidth;
-        var height = rows * geometry.CellHeight;
 
+        // Every edge is snapped to a whole DEVICE pixel, not to a whole DIP. A cell is a fraction of one tall —
+        // CellGeometry.Fit multiplies the font size by the font's own ratios — and a hairline spread across two
+        // rows of pixels at partial coverage draws as a soft grey smear rather than a line. A whole DIP is a whole
+        // device pixel only where the render scaling is an integer, so on a 125% or 150% Windows display rounding
+        // in DIPs alone brings the smear straight back; these coordinates are multiplied by the scaling on their
+        // way to the GPU, so the rounding has to happen on the other side of that multiplication.
+        if (!(scaling > 0)) scaling = 1;
+        var left = Snap(geometry.OriginX, scaling);
+        var top = Snap(geometry.OriginY, scaling);
+        var right = Snap(geometry.OriginX + columns * geometry.CellWidth, scaling);
+        var bottom = Snap(geometry.OriginY + rows * geometry.CellHeight, scaling);
+
+        // A whole number of device pixels, expressed back in DIPs, so both edges of the line land on a boundary:
+        // 1 DIP at 100% and at 200%, and two device pixels (1.33 DIP) at 150%, where 1 DIP would be one and a half.
+        var thickness = Math.Max(1, Math.Round(Thickness * scaling)) / scaling;
+
+        // Both lines sit on a cell boundary rather than through the middle of the cursor cell: a line down the
+        // centre of a row would strike through every glyph on it, and a boundary is what lining up a column wants.
         var horizontal = mode is CrosshairMode.Horizontal or CrosshairMode.Both
-            ? new Rect(geometry.OriginX, cell.Y, width, geometry.CellHeight)
+            ? new Rect(left, Snap(cell.Bottom, scaling) - thickness, right - left, thickness)
             : (Rect?)null;
 
         var vertical = mode is CrosshairMode.Vertical or CrosshairMode.Both
-            ? new Rect(cell.X, geometry.OriginY, geometry.CellWidth, height)
+            ? new Rect(Snap(cell.X, scaling), top, thickness, bottom - top)
             : (Rect?)null;
 
         return (horizontal, vertical);
     }
+
+    private static double Snap(double dip, double scaling) => Math.Round(dip * scaling) / scaling;
 }

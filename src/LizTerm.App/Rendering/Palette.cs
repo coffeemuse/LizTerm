@@ -16,9 +16,10 @@ public static class Palette
     /// <summary>Overlay for the mouse selection: muted blue at 40% opacity so host colors stay readable under it.</summary>
     public static readonly IBrush Selection = new ImmutableSolidColorBrush(Color.FromArgb(0x66, 0x60, 0x90, 0xE0));
 
-    /// <summary>The crosshair ruler. Dimmer than Selection because it is on screen continuously rather than
-    /// for as long as a drag lasts, and host text has to stay readable straight through it.</summary>
-    public static readonly IBrush Crosshair = new ImmutableSolidColorBrush(Color.FromArgb(0x30, 0xE0, 0xE0, 0x60));
+    /// <summary>The crosshair ruler: a hairline on a cell boundary rather than a shaded cell (#180), so unlike
+    /// Selection it never covers host text and can afford to be nearly opaque. At the 0x30 it carried while it
+    /// was a full-cell wash, one device pixel of it would be invisible.</summary>
+    public static readonly IBrush Crosshair = new ImmutableSolidColorBrush(Color.FromArgb(0xC0, 0xE0, 0xE0, 0x60));
 
     /// <summary>A find match, and the one the user is on. Amber rather than Selection's blue so a search over a
     /// selected region stays readable, and the current match is opaque enough to pick out of a screenful.</summary>
@@ -35,6 +36,10 @@ public static class Palette
     /// FindMatchGeometry) rather than pixels, and neither of those can see which brush a rectangle got, so the
     /// choice itself has to be reachable some other way to be testable at all.</summary>
     public static IBrush FindMatchBrush(bool isCurrent) => isCurrent ? FindCurrent : FindMatch;
+
+    /// <summary>Which brush paints the crosshair, for the same reason <see cref="FindMatchBrush"/> exists: the
+    /// ruler is asserted through CrosshairGeometry's rectangles, which cannot see what painted them.</summary>
+    public static IBrush CrosshairBrush(bool monochrome) => monochrome ? CrosshairMono : Crosshair;
 
     private static readonly Dictionary<HostColor, Color> Colors = new()
     {
@@ -70,6 +75,12 @@ public static class Palette
     private static readonly IBrush PhosphorBright = new ImmutableSolidColorBrush(Color.FromRgb(Blend(Phosphor.R), Blend(Phosphor.G), Blend(Phosphor.B)));
 
     public static IBrush PhosphorBrush(bool bright) => bright ? PhosphorBright : PhosphorPlain;
+
+    /// <summary>The crosshair hairline on a mono (3278) screen, which draws in <see cref="Phosphor"/> alone: a
+    /// yellow ruler went unnoticed while it was a faint wash and would not now. It is declared here, below
+    /// Phosphor, because static field initializers run in textual order — above it, this would be black.</summary>
+    private static readonly IBrush CrosshairMono =
+        new ImmutableSolidColorBrush(Color.FromArgb(0xC0, Phosphor.R, Phosphor.G, Phosphor.B));
 
     /// <param name="bright">Intensified (highlight) rendition: blend 35% toward white.</param>
     public static IBrush Brush(HostColor color, bool bright)

@@ -271,6 +271,19 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - The crosshair is an app-wide setting (`SettingsViewModel.Crosshair`, remembered across sessions) and deliberately
   does not use b3270's own `CROSSHAIR` toggle: the engine has no display, and routing a display preference through a
   child process would only make the crosshair unavailable while disconnected.
+- **The crosshair is a hairline on a cell boundary, not a shaded cell** (#180): the horizontal line on the cursor
+  cell's bottom edge, the vertical on its left, `CrosshairGeometry.Thickness` (1 DIP) thick at any font size. A line
+  through the middle of the row would strike through every glyph on it, and a boundary is what lining up a column
+  wants. It is painted **last of the overlays, after `DrawCursor`**, because the cursor's block fills the whole
+  cursor cell opaquely and drawing the ruler under it erased most of the crossing point — the one place a hairline
+  has to read. `Rects` snaps every edge to a whole **device** pixel and widens the line to a whole number of them,
+  which is why it takes the top level's `RenderScaling`: a cell is a fraction of one tall, a hairline spread over two
+  rows of pixels at partial coverage draws as a soft smear rather than a line, and a whole DIP is a whole device
+  pixel only at integer scaling — at 125% or 150% rounding in DIPs alone brings the smear back. The run plan's
+  underline still rounds in DIPs and carries that limitation.
+  Because it no longer covers host text it is nearly opaque where the old wash was 0x30, which is also why it now
+  follows `Monochrome` — `Palette.CrosshairBrush(bool)`, `FindMatchBrush`'s shape, so the choice is reachable from a
+  test that cannot see pixels. A yellow ruler on a 3278 screen went unnoticed while it was faint and would not now.
 - It raises `KeyRequested`, `TextEntered` and `CellClicked`, which `SessionWindow` wires to the view model.
 - **Colours are decided in `Rendering/CellColors`, not in the control** (#123). `Monochrome` (a styled property the
   window binds from `SessionViewModel.Monochrome`, that is `Profile.Display == TerminalDisplay.Mono`) makes every run
