@@ -120,6 +120,9 @@ public sealed class MvsmfBrowserViewTests
 
         await t.Vm.ViewCommand.ExecuteAsync(null);
 
+        // The request itself, not just the memory: asking costs the host a second pass over the content, and
+        // Remember is never called here either way, so the memory alone would pass with withEtag: true.
+        Assert.Empty(t.Host.EtagRequests);
         Assert.Null(t.Access.Etags.TryGet(HostPath.ForMember("MVSCE02.CNTL", "HELLO")));
     }
 

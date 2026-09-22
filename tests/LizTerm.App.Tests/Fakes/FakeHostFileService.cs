@@ -40,6 +40,9 @@ public sealed class FakeHostFileService : IHostFileService
     /// <summary>When set, every call waits for it (and for its token) after being logged.</summary>
     public TaskCompletionSource? Gate { get; set; }
     public List<string> Calls { get; } = [];
+    /// <summary>The paths of the reads that asked for a stamp (<c>withEtag: true</c>). A read that must not cost
+    /// the host a second pass over the content is pinned by its absence from this list.</summary>
+    public List<string> EtagRequests { get; } = [];
     /// <summary>Every list call's request, in order, beside its "list:" or "members:" entry in <see cref="Calls"/>.</summary>
     public List<HostListRequest> ListRequests { get; } = [];
     public int MaxConcurrent { get; private set; }
@@ -106,6 +109,7 @@ public sealed class FakeHostFileService : IHostFileService
             {
                 lines = Text.TryGetValue(path.ToString(), out var found) ? [.. found] : throw Missing(path);
                 etag = withEtag ? Etags.GetValueOrDefault(path.ToString()) : null;
+                if (withEtag) EtagRequests.Add(path.ToString());
             }
             progress?.Report(lines.Sum(l => l.Length + 1));
             return new HostTextRead(lines, etag);
@@ -124,6 +128,7 @@ public sealed class FakeHostFileService : IHostFileService
             {
                 bytes = Binary.TryGetValue(path.ToString(), out var found) ? found : throw Missing(path);
                 etag = withEtag ? Etags.GetValueOrDefault(path.ToString()) : null;
+                if (withEtag) EtagRequests.Add(path.ToString());
             }
             await destination.WriteAsync(bytes, cancellationToken);
             progress?.Report(bytes.Length);
