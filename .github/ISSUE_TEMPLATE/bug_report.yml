@@ -41,8 +41,8 @@ body:
       label: LizTerm version
       description: >
         Shown in **About LizTerm** — the Help menu in a session window, or the LizTerm menu on macOS. The line can be
-        copied. A build from source reads `0.7.0-DEV (a1b2c3d)`; include the commit.
-      placeholder: "0.7.0"
+        copied. A build from source reads `0.7.1-DEV (a1b2c3d)`; include the commit.
+      placeholder: "0.7.1"
     validations:
       required: true
 

@@ -557,8 +557,8 @@ red banner with **Retry**. A status line that reports an outcome starts with a m
 ## Which build you are running
 
 **Help > About LizTerm...** names the version, and so does the splash screen. A build that is not a release — one
-made from source, or from a pull request — shows it as `0.7.0-DEV (a1b2c3d)`, where `a1b2c3d` is the commit it was
-built from; a build made outside a git checkout, such as one from a downloaded source archive, says `0.7.0-DEV` with
+made from source, or from a pull request — shows it as `0.7.1-DEV (a1b2c3d)`, where `a1b2c3d` is the commit it was
+built from; a build made outside a git checkout, such as one from a downloaded source archive, says `0.7.1-DEV` with
 no commit. A release shows its plain version, with no `-DEV` and no commit. The version line and the engine line
 under it can be selected and copied, so a bug report can say exactly which build and engine it was filed against.
 
