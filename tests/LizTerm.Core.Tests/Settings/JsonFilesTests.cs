@@ -73,6 +73,27 @@ public class JsonFilesTests
         }
     }
 
+    /// <summary>A file that is there but will not open costs every binding just as a broken one does, and the
+    /// user can chmod it, so it is reported rather than read as "no file" (#168). A directory in the file's place
+    /// is the portable way to make the read throw; a mode of 000 would not fail on Windows.</summary>
+    [Fact]
+    public void ReadLenient_reports_a_file_it_could_not_open_at_all()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "lizterm-tests-" + Guid.NewGuid().ToString("N") + ".json");
+        Directory.CreateDirectory(path);
+        try
+        {
+            Assert.Null(JsonFiles.ReadLenient(path, out var problem));
+
+            Assert.NotNull(problem);
+            Assert.EndsWith(".", problem);
+        }
+        finally
+        {
+            Directory.Delete(path);
+        }
+    }
+
     [Fact]
     public void ReadLenient_reports_no_problem_for_a_missing_file()
     {

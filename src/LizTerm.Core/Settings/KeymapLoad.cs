@@ -11,7 +11,4 @@ namespace LizTerm.Core.Settings;
 /// <param name="Problem">Sentences naming the file and what is wrong with it, for the user to act on, or null when
 /// the file read — which includes a file that is simply absent, or one holding no "bindings" at all. The caller
 /// adds what it means for them; this says only what the file is.</param>
-public sealed record KeymapLoad(KeymapFile File, string? Problem)
-{
-    public static KeymapLoad Empty { get; } = new(KeymapFile.Empty, null);
-}
+public sealed record KeymapLoad(KeymapFile File, string? Problem);

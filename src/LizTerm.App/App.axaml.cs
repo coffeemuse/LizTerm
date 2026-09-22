@@ -155,13 +155,15 @@ public partial class App : Application
                     break;
                 case StartupPlan.OpenSession open:
                     // The notice goes over the window this plan just opened, named rather than looked up: it is
-                    // the only window there is at launch, and reading App.Keymap here is what makes the keymap
-                    // load now rather than when Preferences is first opened.
+                    // the only window there is at launch. OpenSession loads the keymap itself, through
+                    // AttachKeymap; it is the picker branch that needs the read below to load it at all.
                     ShowKeymapNotice(KeymapNotice.For(plan, Keymap.LoadError, Keymap.KeymapFilePath),
                                      OpenSession(open.Profile, open.FromStore));
                     _ = CheckForUpdatesOnStartupAsync();
                     break;
                 default:
+                    // Reading App.Keymap here is what makes the keymap load at launch on this path: nothing the
+                    // picker opens touches it, so without this it would first load when Preferences is opened.
                     ShowPicker();
                     ShowKeymapNotice(KeymapNotice.For(plan, Keymap.LoadError, Keymap.KeymapFilePath), _picker);
                     _ = CheckForUpdatesOnStartupAsync();

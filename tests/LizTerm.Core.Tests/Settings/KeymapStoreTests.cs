@@ -137,6 +137,20 @@ public class KeymapStoreTests : IDisposable
         Assert.Equal("keymap.json could not be read. Its \"bindings\" is not a JSON object.", load.Problem);
     }
 
+    /// <summary>A keymap that is there but will not open loses every binding too, so it is reported rather than
+    /// read as "no file" (#168). A directory in the file's place makes the read throw on every platform.</summary>
+    [Fact]
+    public void A_file_that_will_not_open_at_all_is_reported_too()
+    {
+        Directory.CreateDirectory(FilePath);
+
+        var load = Store.Load();
+
+        Assert.Empty(load.File.Bindings);
+        Assert.NotNull(load.Problem);
+        Assert.StartsWith("keymap.json could not be read.", load.Problem);
+    }
+
     [Fact]
     public void A_load_that_failed_leaves_the_file_alone()
     {

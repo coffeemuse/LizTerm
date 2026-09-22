@@ -155,7 +155,9 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
   will not parse costs *every* binding and nothing else in the app would have said so; `KeymapStore.MoveAside`
   renames it to `keymap.json.bad`, the way back to the defaults that keeps a hand-written file. `BindingsProblem`
   is the one home of "is this `bindings` usable", asked by `Load` and `Update` alike. A key that is simply absent is
-  an empty keymap, not a problem: that is what a fresh file and a newer build's file both look like.
+  an empty keymap, not a problem: that is what a fresh file and a newer build's file both look like. A file that is
+  *there* but will not open (a mode of 000, an owner from another machine) is reported too, in the OS's own words —
+  read as "no file" it was the same silent loss; only a genuinely missing file stays quiet.
 
 ## Security (`LizTerm.Core.Security`)
 

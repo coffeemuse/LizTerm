@@ -283,8 +283,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   `LoadErrorPanel` (the reason, the file, and `RestoreCommand`, which moves the file to `keymap.json.bad`) in place
   of the rows, and `App.Execute` puts `KeymapNoticeWindow` over whatever the startup plan opened, the picker
   included. That notice only tells; the one destructive action lives in the tab. `KeymapNotice.For` is the pure
-  decision, and reading `App.Keymap` in `Execute` is what makes the keymap load at launch rather than when
-  Preferences first opens. A file that merely holds entries this build skipped keeps its editor and gets the tab's
+  decision, and reading `App.Keymap` in `Execute`'s picker branch is what makes the keymap load at launch on that
+  path, where nothing else touches it; the session branch already loads it through `AttachKeymap`. A file that merely holds entries this build skipped keeps its editor and gets the tab's
   note, which names them and what is wrong with each (`KeymapOverlay.Skipped`, `KeymapSkip`). The tab is `KeymapEditorViewModel` (a
   `KeymapRow` per action, a `KeymapChip` per chord, all answered from `KeymapViewModel`'s `ChordsFor`/`ActionOf`,
   never its dictionary) laid out by `Views/KeyboardTab`. A row's `TryCapture` calls `KeymapPolicy.Check` before every

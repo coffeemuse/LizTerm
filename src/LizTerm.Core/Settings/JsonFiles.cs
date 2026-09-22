@@ -19,8 +19,8 @@ internal static class JsonFiles
     public static JsonObject? ReadLenient(string path) => ReadLenient(path, out _);
 
     /// <param name="problem">Why the file would not read, as sentences about the file ("It is not valid JSON.
-    /// Line 4: …"), or null when it read, is missing, or could not be opened at all — a missing file is the empty
-    /// file by design, and an IO error is not something the user can fix by editing.</param>
+    /// Line 4: …"), or null when it read or is simply missing — a missing file is the empty file by design, and
+    /// the only one of these a caller should stay quiet about.</param>
     public static JsonObject? ReadLenient(string path, out string? problem)
     {
         string text;
@@ -28,9 +28,22 @@ internal static class JsonFiles
         {
             text = File.ReadAllText(path);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (FileNotFoundException)
         {
             problem = null;
+            return null;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            problem = null;
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A file that is there but will not open costs a keymap every binding, just as a broken one does, and
+            // the user can chmod it: read as "no file" this was the silent loss #168 is about. The OS says it
+            // better than we could, and names the path itself.
+            problem = ex.Message.EndsWith('.') ? ex.Message : ex.Message + '.';
             return null;
         }
         return Parse(text, out problem);
@@ -48,10 +61,9 @@ internal static class JsonFiles
 
     /// <summary>The text as a JSON object, or null for anything else: not JSON, JSON that is not an object, or an
     /// object with a duplicated key.</summary>
-    public static JsonObject? Parse(string text) => Parse(text, out _);
-
     /// <param name="problem">Null when the text is a JSON object; otherwise sentences about it, in the shape the
-    /// stores pass on to the user.</param>
+    /// stores pass on to the user. There is no overload that drops it: discarding the reader's diagnosis is the
+    /// mistake #168 was about.</param>
     public static JsonObject? Parse(string text, out string? problem)
     {
         try
