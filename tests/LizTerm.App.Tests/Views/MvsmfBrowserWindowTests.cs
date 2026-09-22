@@ -81,6 +81,27 @@ public class MvsmfBrowserWindowTests
         Assert.DoesNotContain(t.Picker.Calls, c => c.StartsWith("save:"));
     }
 
+    /// <summary>A sequential dataset has no Members pane, so MemberList cannot hold the focus and the gesture has
+    /// to be taken from the dataset list instead — the View button's own tooltip offers it there.</summary>
+    [AvaloniaFact]
+    public async Task The_command_gesture_views_a_sequential_dataset_from_the_dataset_list()
+    {
+        var (window, t) = await ViewableAsync();
+        t.Host.Text["MVSCE02.NOTES"] = ["Notes on the batch run."];
+        await t.ChooseAsync("MVSCE02.NOTES");
+        window.UpdateLayout();
+        Assert.False(Named<DockPanel>(window, "MemberPane").IsVisible);
+        var datasets = Named<ListBox>(window, "DatasetList");
+        datasets.ContainerFromItem(t.Vm.SelectedDataset!)!.Focus();
+        var modifiers = window.ViewGesture.KeyModifiers == KeyModifiers.Meta
+            ? RawInputModifiers.Meta : RawInputModifiers.Control;
+
+        window.KeyPress(Key.Enter, modifiers, PhysicalKey.Enter, null);
+
+        await Wait.UntilAsync(() => window.ViewerWindow is { IsVisible: true }, "the viewer window");
+        Assert.Equal("MVSCE02.NOTES — mvsMF Access", window.ViewerWindow!.Title);
+    }
+
     [AvaloniaFact]
     public async Task Plain_enter_in_the_member_list_still_downloads()
     {

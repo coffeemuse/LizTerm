@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using LizTerm.App.ViewModels;
 using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.Tests.ViewModels;
@@ -124,6 +125,26 @@ public sealed class MvsmfBrowserViewTests
         // Remember is never called here either way, so the memory alone would pass with withEtag: true.
         Assert.Empty(t.Host.EtagRequests);
         Assert.Null(t.Access.Etags.TryGet(HostPath.ForMember("MVSCE02.CNTL", "HELLO")));
+    }
+
+    /// <summary>The window opens the viewer from the Viewer property change, synchronously, and writes its own
+    /// message there when the window cannot be shown (MvsmfBrowserWindow.ShowViewer). The read's own
+    /// "✓ Read …" is written before that, so it cannot overwrite the failure and report a success with no
+    /// window to show for it.</summary>
+    [Fact]
+    public async Task A_viewer_that_cannot_be_shown_keeps_its_own_message_on_the_status_line()
+    {
+        var t = await ChosenAsync();
+        t.Select("HELLO");
+        t.Vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MvsmfBrowserViewModel.Viewer) && t.Vm.Viewer is not null)
+                t.Vm.StatusText = "✗ Could not open the viewer window: no window.";
+        };
+
+        await t.Vm.ViewCommand.ExecuteAsync(null);
+
+        Assert.Equal("✗ Could not open the viewer window: no window.", t.Vm.StatusText);
     }
 
     [Fact]

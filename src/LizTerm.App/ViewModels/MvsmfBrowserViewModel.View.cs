@@ -72,8 +72,10 @@ public sealed partial class MvsmfBrowserViewModel
             progress.Close();
         }
         // Progress and the result go on the status line, never on the member's row: a row saying "Done · n bytes"
-        // after a view would read like a transfer that happened.
-        Viewer = new MvsmfViewerViewModel(path.ToString(), read.Lines, TrimTrailingBlanks);
+        // after a view would read like a transfer that happened. The result is written first because setting
+        // Viewer opens the window synchronously, and a window that cannot be shown puts its own message here
+        // (MvsmfBrowserWindow.ShowViewer); a "✓ Read …" written afterwards would overwrite that failure.
         StatusText = $"✓ Read {path} · {Plural(read.Lines.Count, "line")}.";
+        Viewer = new MvsmfViewerViewModel(path.ToString(), read.Lines, TrimTrailingBlanks);
     }
 }

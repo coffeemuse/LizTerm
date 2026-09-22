@@ -26,7 +26,8 @@ public partial class MvsmfBrowserWindow : Window
     internal KeyGesture NewDatasetGesture { get; private set; } = new(Key.N, KeyModifiers.Control);
 
     /// <summary>Cmd+Enter on macOS, Ctrl+Enter elsewhere. Plain Enter stays Download, so this case is matched
-    /// first in the key tunnel.</summary>
+    /// first in the key tunnel, and it is taken from whichever list owns the target: the member list for a
+    /// member, the dataset list for a sequential dataset, whose Members pane is not shown at all.</summary>
     internal KeyGesture ViewGesture { get; private set; } = new(Key.Enter, KeyModifiers.Control);
 
     public MvsmfBrowserWindow()
@@ -314,7 +315,12 @@ public partial class MvsmfBrowserWindow : Window
                 e.Handled = true;
                 if (inputQuestion.PrimaryCommand.CanExecute(null)) inputQuestion.PrimaryCommand.Execute(null);
                 break;
-            case Key.Enter when e.KeyModifiers == ViewGesture.KeyModifiers && MemberList.IsKeyboardFocusWithin:
+            // The member list for a member; the dataset list for a sequential dataset, whose Members pane — and
+            // with it MemberList — is collapsed, so the gesture would otherwise never reach the one verb the
+            // button's own tooltip offers there. The dataset list's plain Enter is untouched: it has no case.
+            case Key.Enter when e.KeyModifiers == ViewGesture.KeyModifiers
+                && (MemberList.IsKeyboardFocusWithin
+                    || (DatasetList.IsKeyboardFocusWithin && vm.SelectedDataset is { IsSequential: true })):
                 e.Handled = true;
                 if (vm.ViewCommand.CanExecute(null)) _ = vm.ViewCommand.ExecuteAsync(null);
                 break;

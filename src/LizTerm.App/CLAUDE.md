@@ -996,7 +996,9 @@ constructor captured.
   (Download takes many) and refuses a dataset whose `RecordFormat` is `Undefined`; `ViewHint` carries that reason
   and is shown on the disabled button through `ToolTip.ShowOnDisabled`, with the gesture text handed to the view
   model by the window (`ViewGestureText`), since a view model cannot ask the platform. ⌘⏎/Ctrl+Enter is matched
-  before the plain-Enter case in the key tunnel, which reads `e.Key` alone and would otherwise download.
+  before the plain-Enter case in the key tunnel, which reads `e.Key` alone and would otherwise download, and it is
+  taken from whichever list owns the target: `MemberList` for a member, `DatasetList` for a sequential dataset,
+  whose Members pane (and with it `MemberList`) is collapsed, so the gesture could not otherwise reach it.
 - The viewer window is owned and non-blocking (`ShowAbove`), one per browser window
   (`MvsmfBrowserWindow.ViewerWindow`): a second View sets its `DataContext` and fronts it. `MvsmfViewerViewModel`
   holds finished lines and no Avalonia type; it caps what it lays out at `MaxLines`, because Avalonia's `TextBox`
