@@ -85,8 +85,15 @@ public partial class MvsmfBrowserWindow : Window
     /// <summary>The USS tab lists its start path the first time it is shown, never at window open (USS spec §4.5).</summary>
     private void OnTabChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (!IsUssTab || ViewModel is not { } vm) return;
+        // SelectionChanged bubbles: a list's own selection inside a tab reaches the TabControl too.
+        if (!ReferenceEquals(e.Source, Tabs) || !IsUssTab || ViewModel is not { } vm) return;
         _ = vm.Uss.EnsureListedAsync();
+        // The file list came back without the selection it lost while hidden (PushSelectedFiles kept the view
+        // model's); it is given back once the list has its items again.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (IsUssTab && _watched is { } watched && watched.Uss.SelectedFiles.Count > 0) SelectFiles(watched.Uss.SelectedFiles);
+        }, DispatcherPriority.Loaded);
     }
 
     /// <summary>A double-click on a directory row opens it, as Enter does; on a file row it downloads. On a row
@@ -105,10 +112,12 @@ public partial class MvsmfBrowserWindow : Window
         if (vm.Uss.DownloadCommand.CanExecute(null)) _ = vm.Uss.DownloadCommand.ExecuteAsync(null);
     }
 
-    /// <summary>The file list is the selection's owner, as the member list is (PushSelectedMembers).</summary>
+    /// <summary>The file list is the selection's owner, as the member list is (PushSelectedMembers), but only while
+    /// its tab is in front: a hidden tab's panel loses its context, the list its items and so its selection, and
+    /// that must not empty the view model's (a Retry, or a verb after the round trip, would act on nothing).</summary>
     private void PushSelectedFiles()
     {
-        if (ViewModel is not { } vm) return;
+        if (!IsUssTab || ViewModel is not { } vm) return;
         vm.Uss.SetSelectedFiles(FileList.SelectedItems?.OfType<FileRow>() ?? []);
     }
 
@@ -210,7 +219,7 @@ public partial class MvsmfBrowserWindow : Window
                 PostRestoreFocus(forget: true);
                 // The USS tab's own listing (OnTabChanged) is a no-op while an operation on the shared runner is
                 // still busy, so a tab selected during the window's own opening listing never lists on its own;
-                // EnsureListedAsync is idempotent once listed, so this is a no-op after the tab's own listings.
+                // EnsureListedAsync is a no-op once the start listing has been tried, whether or not it succeeded.
                 if (IsUssTab) _ = vm.Uss.EnsureListedAsync();
                 break;
             case nameof(MvsmfBrowserViewModel.HasConfirmation) when vm.HasConfirmation:

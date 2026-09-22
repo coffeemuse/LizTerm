@@ -106,6 +106,97 @@ public class MvsmfBrowserWindowUssTests
         Assert.Equal("✓ Listed /u/mvsce02 · 0 directories, 0 files.", t.Vm.StatusText);
     }
 
+    private static int StartListings(BrowserTestHost t) => t.Host.CallsSnapshot().Count(c => c == "listdir:/u/mvsce02");
+
+    /// <summary>A host without /u/&lt;userid&gt; (USS spec §3) fails the start listing. First show means attempted,
+    /// not succeeded: the failure must not start the next attempt when the busy flag falls. The gate is released
+    /// one listing at a time, so each failure lands asynchronously, as it does over a network.</summary>
+    [AvaloniaFact]
+    public async Task A_missing_start_path_is_listed_once_and_its_reason_stays()
+    {
+        var t = BrowserTestHost.Create(seed: BrowserTestHost.Standard);
+        t.Host.Gate = new TaskCompletionSource();
+        var window = new MvsmfBrowserWindow { DataContext = t.Vm };
+        window.Show();
+        try
+        {
+            await Wait.UntilAsync(() => t.Vm.IsBusy, "the dataset listing to start");
+            Named<TabControl>(window, "Tabs").SelectedIndex = 1;
+            window.UpdateLayout();
+
+            for (var round = 0; round < 4; round++)
+            {
+                var gate = t.Host.Gate!;
+                t.Host.Gate = new TaskCompletionSource();
+                var before = StartListings(t);
+                gate.SetResult();
+                await Wait.UntilAsync(() => StartListings(t) > before || (!t.Vm.IsBusy && t.Vm.StatusText.StartsWith('✗')),
+                    "the next listing or the failure");
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.Equal(1, StartListings(t));
+            Assert.False(t.Vm.IsBusy);
+            Assert.Equal("✗ File not found: /u/mvsce02", Named<TextBlock>(window, "StatusLine").Text);
+            Assert.True(Named<Button>(window, "GoButton").IsEffectivelyEnabled);
+            Assert.True(Named<TextBox>(window, "PathBox").IsEffectivelyEnabled);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>The same, with the failure synchronous: it must not recurse inside the runner's own finally.</summary>
+    [AvaloniaFact]
+    public async Task A_missing_start_path_that_fails_at_once_is_listed_once()
+    {
+        var t = BrowserTestHost.Create(seed: BrowserTestHost.Standard);
+        var window = new MvsmfBrowserWindow { DataContext = t.Vm };
+        window.Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4 && !t.Vm.IsBusy, "the first dataset listing");
+
+        Named<TabControl>(window, "Tabs").SelectedIndex = 1;
+        window.UpdateLayout();
+        await Wait.UntilAsync(() => StartListings(t) > 0 && !t.Vm.IsBusy, "the start listing");
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(1, StartListings(t));
+        Assert.Equal("✗ File not found: /u/mvsce02", t.Vm.StatusText);
+        Assert.True(Named<Button>(window, "GoButton").IsEffectivelyEnabled);
+    }
+
+    /// <summary>While the tab is hidden its panel loses its context and the file list its selection; that must not
+    /// reach the view model, or a Retry or a verb after the round trip acts on nothing.</summary>
+    [AvaloniaFact]
+    public async Task The_file_selection_survives_a_round_trip_to_the_datasets_tab()
+    {
+        var (window, t) = await UssAsync();
+        await ListAsync(t, "/u/ibmuser/notes");
+        window.UpdateLayout();
+        var list = Named<ListBox>(window, "FileList");
+        list.SelectedIndex = 0;
+        await Wait.UntilAsync(() => t.Vm.Uss.SelectedFiles.Count == 1, "the pushed selection");
+        var selected = t.Vm.Uss.SelectedFiles[0];
+
+        var tabs = Named<TabControl>(window, "Tabs");
+        tabs.SelectedIndex = 0;
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(selected, Assert.Single(t.Vm.Uss.SelectedFiles));
+
+        tabs.SelectedIndex = 1;
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Same(selected, Assert.Single(t.Vm.Uss.SelectedFiles));
+        Assert.Same(selected, Assert.Single(list.SelectedItems!.OfType<FileRow>()));
+        Assert.Equal("3 files · 1 selected", Named<BrowserPane>(window, "FilesPane").FooterText);
+        Assert.True(Named<Button>(window, "UssDownloadButton").IsEffectivelyEnabled);
+    }
+
     [AvaloniaFact]
     public async Task Enter_in_the_path_box_lists_and_the_lists_fill()
     {
@@ -190,6 +281,101 @@ public class MvsmfBrowserWindowUssTests
 
         Assert.Equal("✓ Listed /u/ibmuser · 2 directories, 0 files.", Named<TextBlock>(window, "StatusLine").Text);
         Assert.True(Named<Button>(window, "ListButton").IsEffectivelyEnabled);
+    }
+
+    /// <summary>The strip is the window's, not the tab's: a USS question stays up over the Datasets tab and is
+    /// answered there.</summary>
+    [AvaloniaFact]
+    public async Task A_uss_question_is_answered_in_the_shared_strip_from_the_datasets_tab()
+    {
+        var (window, t) = await UssAsync();
+        await ListAsync(t, "/u/ibmuser/notes");
+        window.UpdateLayout();
+        var list = Named<ListBox>(window, "FileList");
+        list.SelectedIndex = 0;
+        list.ContainerFromIndex(0)!.Focus();
+        await Wait.UntilAsync(() => t.Vm.Uss.SelectedFiles.Count == 1, "the pushed selection");
+        window.KeyPress(Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null);
+        await Wait.UntilAsync(() => t.Vm.HasConfirmation, "the question");
+
+        Named<TabControl>(window, "Tabs").SelectedIndex = 0;
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(window.IsUssTab);
+        Assert.True(Named<Border>(window, "ConfirmationStrip").IsEffectivelyVisible);
+        Assert.Equal("Delete README.txt from /u/ibmuser/notes? This cannot be undone.", t.Vm.Confirmation!.Message);
+
+        var primary = Named<Button>(window, "ConfirmPrimaryButton");
+        primary.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        await Wait.UntilAsync(() => !t.Vm.IsBusy && !t.Vm.HasConfirmation, "the delete");
+
+        Assert.Contains("delete:/u/ibmuser/notes/README.txt", t.Host.CallsSnapshot());
+        Assert.DoesNotContain(t.Vm.Uss.Files, f => f.Name == "README.txt");
+        Assert.Equal("✓ Deleted 1 of 1 file.", Named<TextBlock>(window, "StatusLine").Text);
+    }
+
+    [AvaloniaFact]
+    public async Task The_uss_context_menus_bind_the_same_commands_and_gestures_as_the_toolbars()
+    {
+        var (window, t) = await UssAsync();
+        await ListAsync(t, "/u/ibmuser/notes");
+        window.UpdateLayout();
+        var uss = t.Vm.Uss;
+
+        var directoryList = Named<ListBox>(window, "DirectoryList");
+        var directoryMenu = directoryList.ContextMenu!;
+        directoryMenu.Open(directoryList);
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            var items = directoryMenu.Items.OfType<MenuItem>().ToDictionary(i => i.Name!);
+            Assert.Same(uss.OpenDirectoryCommand, items["DirectoryMenuOpen"].Command);
+            Assert.Same(uss.NewDirectoryCommand, items["DirectoryMenuNew"].Command);
+            Assert.Same(uss.DeleteDirectoryCommand, items["DirectoryMenuDelete"].Command);
+            Assert.Same(uss.RefreshCommand, items["DirectoryMenuRefresh"].Command);
+            Assert.Same(uss.NewDirectoryCommand, Named<Button>(window, "NewDirectoryButton").Command);
+            Assert.Same(uss.DeleteDirectoryCommand, Named<Button>(window, "DeleteDirectoryButton").Command);
+            Assert.Same(uss.RefreshCommand, Named<Button>(window, "UssRefreshButton").Command);
+            Assert.Equal(new KeyGesture(Key.Enter), items["DirectoryMenuOpen"].InputGesture);
+            Assert.Equal(window.NewDatasetGesture, items["DirectoryMenuNew"].InputGesture);
+            Assert.Equal(new KeyGesture(Key.Delete), items["DirectoryMenuDelete"].InputGesture);
+            Assert.Equal(window.RefreshGesture, items["DirectoryMenuRefresh"].InputGesture);
+            // The toolbar names the same gestures in its tooltips.
+            Assert.Contains(window.NewDatasetGesture.ToString("p", null), (string)ToolTip.GetTip(Named<Button>(window, "NewDirectoryButton"))!);
+            Assert.Contains("(Delete)", (string)ToolTip.GetTip(Named<Button>(window, "DeleteDirectoryButton"))!);
+            Assert.Contains(window.RefreshGesture.ToString("p", null), (string)ToolTip.GetTip(Named<Button>(window, "UssRefreshButton"))!);
+        }
+        finally
+        {
+            directoryMenu.Close();
+        }
+
+        var fileList = Named<ListBox>(window, "FileList");
+        var fileMenu = fileList.ContextMenu!;
+        fileMenu.Open(fileList);
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            var items = fileMenu.Items.OfType<MenuItem>().ToDictionary(i => i.Name!);
+            Assert.Same(uss.ViewCommand, items["FileMenuView"].Command);
+            Assert.Same(uss.DownloadCommand, items["FileMenuDownload"].Command);
+            Assert.Same(uss.UploadCommand, items["FileMenuUpload"].Command);
+            Assert.Same(uss.DeleteFilesCommand, items["FileMenuDelete"].Command);
+            Assert.Same(uss.ViewCommand, Named<Button>(window, "UssViewButton").Command);
+            Assert.Same(uss.DownloadCommand, Named<Button>(window, "UssDownloadButton").Command);
+            Assert.Same(uss.UploadCommand, Named<Button>(window, "UssUploadButton").Command);
+            Assert.Same(uss.DeleteFilesCommand, Named<Button>(window, "DeleteFilesButton").Command);
+            Assert.Equal(window.ViewGesture, items["FileMenuView"].InputGesture);
+            Assert.Equal(new KeyGesture(Key.Enter), items["FileMenuDownload"].InputGesture);
+            Assert.Equal(new KeyGesture(Key.Delete), items["FileMenuDelete"].InputGesture);
+            Assert.Contains(window.ViewGesture.ToString("p", null), (string)ToolTip.GetTip(Named<Button>(window, "UssViewButton"))!);
+            Assert.Contains("(Delete)", (string)ToolTip.GetTip(Named<Button>(window, "DeleteFilesButton"))!);
+        }
+        finally
+        {
+            fileMenu.Close();
+        }
     }
 
     [AvaloniaFact]

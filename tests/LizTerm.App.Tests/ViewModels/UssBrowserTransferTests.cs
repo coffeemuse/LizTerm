@@ -115,6 +115,56 @@ public class UssBrowserTransferTests : IDisposable
     }
 
     [Fact]
+    public async Task Several_files_download_into_a_folder_named_with_a_trailing_separator()
+    {
+        var t = await NotesAsync();
+        t.Select("README.txt", "todo.md");
+        var folder = _dir + Path.DirectorySeparatorChar;
+        t.Picker.FolderResult = folder;
+
+        await t.Vm.DownloadCommand.ExecuteAsync(null);
+
+        Assert.Equal(["README.txt", "todo.md"], Directory.GetFiles(_dir).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.Equal("✓ Done · 12 bytes", t.Vm.Files.Single(f => f.Name == "README.txt").Status);
+        Assert.Equal($"✓ Downloaded 2 of 2 files to {folder}.", t.Ops.StatusText);
+    }
+
+    [Fact]
+    public void A_file_under_a_root_folder_is_under_it_and_a_name_that_climbs_out_is_not()
+    {
+        // The root of this platform's temp folder: "/" here, a drive such as "C:\" on Windows.
+        var root = Path.GetPathRoot(Path.GetTempPath())!;
+        Assert.True(UssBrowserViewModel.IsUnder(root, Path.Combine(root, "a.txt")));
+        var temp = Path.GetTempPath();
+        Assert.True(UssBrowserViewModel.IsUnder(temp, Path.Combine(temp, "a.txt")));
+        var trimmed = Path.TrimEndingDirectorySeparator(temp);
+        Assert.True(UssBrowserViewModel.IsUnder(trimmed, Path.Combine(trimmed, "a.txt")));
+        Assert.False(UssBrowserViewModel.IsUnder(trimmed, trimmed + "x" + Path.DirectorySeparatorChar + "a.txt"));
+        Assert.False(UssBrowserViewModel.IsUnder(temp, Path.Combine(temp, "..", "a.txt")));
+    }
+
+    [Fact]
+    public async Task A_download_retry_fetches_the_files_it_was_asked_for_not_the_selection_now()
+    {
+        var t = await NotesAsync();
+        t.Host.Failures["readtext:/u/ibmuser/notes/README.txt"] = new HostFileException(HostFileErrorKind.Unreachable, "cannot reach the host.");
+        t.Select("README.txt");
+        var target = Path.Combine(_dir, "README.txt");
+        t.Picker.Result = target;
+
+        await t.Vm.DownloadCommand.ExecuteAsync(null);
+        Assert.True(t.Ops.CanRetry);
+        t.Vm.SetSelectedFiles([]);
+        t.Host.Failures.Clear();
+        await t.Ops.RetryCommand.ExecuteAsync(null);
+
+        Assert.Equal(["save:README.txt", "save:README.txt"], t.Picker.Calls);
+        Assert.Equal(2, t.Host.CallsSnapshot().Count(c => c == "readtext:/u/ibmuser/notes/README.txt"));
+        Assert.Equal("hello" + Environment.NewLine + "world" + Environment.NewLine, await File.ReadAllTextAsync(target, TestContext.Current.CancellationToken));
+        Assert.Equal($"✓ Downloaded /u/ibmuser/notes/README.txt to {target}.", t.Ops.StatusText);
+    }
+
+    [Fact]
     public async Task Download_is_off_without_a_regular_file_selected_and_a_cancelled_picker_does_nothing()
     {
         var t = await NotesAsync();
@@ -216,6 +266,43 @@ public class UssBrowserTransferTests : IDisposable
 
         Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("writebinary:", StringComparison.Ordinal));
         Assert.Equal("⚠ Uploaded 0 of 1 file to /u/ibmuser/notes. ✗ Not sent: big.bin: The file is 1,048,577 bytes; the host holds at most 1,048,576.", t.Ops.StatusText);
+    }
+
+    [Fact]
+    public async Task A_text_file_over_the_cap_is_refused_before_any_request()
+    {
+        var t = await NotesAsync();
+        Assert.True(t.Vm.IsTextMode);
+        t.Picker.Results = [Local("big.txt", new string('a', (int)HostFileLimits.MaxUnixFileBytes) + "\n")];
+
+        await t.Vm.UploadCommand.ExecuteAsync(null);
+
+        Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("writetext:", StringComparison.Ordinal));
+        Assert.DoesNotContain(t.Vm.Files, f => f.Name == "big.txt");
+        Assert.Equal("⚠ Uploaded 0 of 1 file to /u/ibmuser/notes. ✗ Not sent: big.txt: The file is 1,048,577 bytes; the host holds at most 1,048,576.", t.Ops.StatusText);
+    }
+
+    [Fact]
+    public async Task An_upload_over_an_entry_that_is_not_a_file_is_refused_and_never_asked_about()
+    {
+        var t = UssTestHost.Create(seed: host =>
+        {
+            UssTestHost.Standard(host);
+            host.Others.Add("/u/ibmuser/notes/link");
+        });
+        await t.ListAsync("/u/ibmuser/notes");
+        Assert.False(t.Vm.Files.Single(f => f.Name == "link").IsFile);
+        t.Picker.Results = [Local("link", "x\n"), Local("new.txt", "y\n")];
+
+        var uploading = t.Vm.UploadCommand.ExecuteAsync(null);
+        await t.AskedAsync(uploading);
+        Assert.Null(t.Ops.Confirmation);
+        await uploading;
+
+        Assert.DoesNotContain(t.Host.CallsSnapshot(), c => c.StartsWith("writetext:/u/ibmuser/notes/link", StringComparison.Ordinal));
+        Assert.Contains("writetext:/u/ibmuser/notes/new.txt:1", t.Host.CallsSnapshot());
+        Assert.Equal("", t.Vm.Files.Single(f => f.Name == "link").Status);
+        Assert.Equal("⚠ Uploaded 1 of 2 files to /u/ibmuser/notes. ✗ Not sent: link: the host has an entry of that name that is not a file", t.Ops.StatusText);
     }
 
     [Fact]

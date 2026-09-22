@@ -55,11 +55,26 @@ public sealed partial class UssBrowserViewModel
     // ---- download ----
 
     [RelayCommand(CanExecute = nameof(CanDownload))]
-    private Task DownloadAsync() => _ops.RunExclusiveAsync(DownloadCoreAsync, () => DownloadAsync());
+    private Task DownloadAsync() => DownloadFilesAsync([.. _selectedFiles]);
 
-    private async Task DownloadCoreAsync(CancellationToken token)
+    /// <summary>A retry downloads the files it was asked for, as delete and upload do, never the selection at the
+    /// time: a tab round trip or a relist may have changed it.</summary>
+    private Task DownloadFilesAsync(IReadOnlyList<FileRow> files) =>
+        _ops.RunExclusiveAsync(token => DownloadCoreAsync(files, token), () => DownloadFilesAsync(files));
+
+    /// <summary>Whether <paramref name="target"/> lies inside <paramref name="folder"/>. A separator is added only
+    /// when the folder does not already end in one, or a root (<c>/</c>, <c>D:\</c>) or a folder picked with a
+    /// trailing separator would read as <c>//</c> and nothing would be under it. (TrimEndingDirectorySeparator
+    /// cannot do this: it never trims a root's.)</summary>
+    internal static bool IsUnder(string folder, string target)
     {
-        var files = _selectedFiles.ToList();
+        var full = System.IO.Path.GetFullPath(folder);
+        var prefix = System.IO.Path.EndsInDirectorySeparator(full) ? full : full + System.IO.Path.DirectorySeparatorChar;
+        return System.IO.Path.GetFullPath(target).StartsWith(prefix, StringComparison.Ordinal);
+    }
+
+    private async Task DownloadCoreAsync(IReadOnlyList<FileRow> files, CancellationToken token)
+    {
         var options = new DownloadOptions(Mode, TrimTrailingBlanks: false);
         if (files is [var only])
         {
@@ -77,7 +92,6 @@ public sealed partial class UssBrowserViewModel
         foreach (var row in files) row.Status = "";
 
         var plan = new List<DownloadItem>();
-        var fullFolder = System.IO.Path.GetFullPath(folder) + System.IO.Path.DirectorySeparatorChar;
         bool? replaceAll = null;
         foreach (var row in files)
         {
@@ -86,7 +100,7 @@ public sealed partial class UssBrowserViewModel
             // with the folder, resolve outside it (a rooted name, or one built from '..' segments); the rules
             // HostPath enforces do not rule either out, so both are caught here, before anything is written.
             var hasInvalidChars = row.Name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0;
-            var escapesFolder = !System.IO.Path.GetFullPath(file).StartsWith(fullFolder, StringComparison.Ordinal);
+            var escapesFolder = !IsUnder(folder, file);
             if (hasInvalidChars || escapesFolder)
             {
                 row.Status = "– Skipped: the name cannot be a local file name.";
@@ -212,6 +226,13 @@ public sealed partial class UssBrowserViewModel
         bool? replaceAll = null;
         foreach (var item in plan)
         {
+            // An entry that is not a regular file (a link, a FIFO, a device) is never written to (USS spec §4.6):
+            // refused like a file over the cap, never asked about or sent.
+            if (Files.Any(file => file.Name == item.Name && !file.IsFile))
+            {
+                refused.Add($"{item.Name}: the host has an entry of that name that is not a file");
+                continue;
+            }
             if (Files.Any(file => file.Name == item.Name))
             {
                 var replace = replaceAll;

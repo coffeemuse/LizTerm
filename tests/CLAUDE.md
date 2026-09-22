@@ -101,7 +101,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   `NotFound` when there is nothing to remove. A create or rename the local rules refuse throws
   `ArgumentException` before it is logged, as the backend does.
   It also plays the file system: `Directories` (the root always) and `AddDirectory`/`AddFile`/`AddBinaryFile`
-  seed a tree, `listdir:<path>` lists a directory's subdirectories then its files (each in ordinal order, sizes
+  seed a tree, `Others` holds paths listed as `Other` (a link, a device) after the files, `listdir:<path>` lists a
+  directory's subdirectories then its files (each in ordinal order, sizes
   from the content), cut to `MaxItems` with `Truncated` and never a continuation, `NotFound` for a missing path
   and `InvalidRequest` for a file; `mkdir:<path>` needs an existing parent and refuses an existing name as
   `AlreadyExists`; a write under a missing parent is `NotFound`; `delete:<path>` on a directory takes everything

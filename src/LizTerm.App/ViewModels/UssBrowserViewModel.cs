@@ -26,6 +26,7 @@ public sealed partial class UssBrowserViewModel : ObservableObject
     private readonly Action<Action> _dispatch;
     private List<FileRow> _selectedFiles = [];
     private bool _listed;
+    private bool _startAttempted;
 
     public UssBrowserViewModel(BrowserOperations ops, HostFileAccess access, HostFileConnection connection, IFilePicker picker,
         Action<Action> dispatch)
@@ -120,8 +121,15 @@ public sealed partial class UssBrowserViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRefresh))]
     private Task RefreshAsync() => Current is { } current ? ListPathAsync(current.UnixPath!, keepSelection: true) : Task.CompletedTask;
 
-    /// <summary>The first time the tab is shown: lists the start path, once, so a dataset-only user pays nothing.</summary>
-    public Task EnsureListedAsync() => _listed || IsBusy ? Task.CompletedTask : ListPathAsync(Path);
+    /// <summary>The first time the tab is shown: lists the start path, once, so a dataset-only user pays nothing.
+    /// Once means attempted, not succeeded: a start path the host does not have (USS spec §3), a refusal, a
+    /// connection failure or a Cancel leaves its reason on the status line and never starts the next attempt.</summary>
+    public Task EnsureListedAsync()
+    {
+        if (_startAttempted || IsBusy) return Task.CompletedTask;
+        _startAttempted = true;
+        return ListPathAsync(Path);
+    }
 
     private Task ListPathAsync(string text, bool keepSelection = false) =>
         _ops.RunExclusiveAsync(token => ListCoreAsync(text, keepSelection, token), () => ListPathAsync(text, keepSelection));
