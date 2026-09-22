@@ -144,7 +144,7 @@ Beside it, a line-number gutter: a right-aligned `TextBlock` of `1\n2\n3…` in 
 one-pixel `#33373D` rule, as the panes are.
 
 **Line numbers toggle**: `ShowLineNumbers`, a `CheckBox` at the right of the find row, on by default. It is the
-viewer view model's state and survives a second View (§6.4); it is not a saved preference — Preferences has no
+viewer view model's state, and the window carries it across a second View (§7); it is not a saved preference — Preferences has no
 mvsMF display group and this does not earn one.
 
 ### 6.3 Find
