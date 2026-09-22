@@ -525,7 +525,8 @@ and **↻ Refresh**.
 The pane on the right, titled with the current path, lists the files with their **NAME**, **SIZE** and **MODIFIED**
 time, and you can select several at once. Its toolbar has **View**, **⇣ Download…**, **⇡ Upload…** and **Delete…**,
 and a **Transfer** drop-down with **Text** and **Binary** and **Verify after upload**. An entry that is not a
-regular file (a link, say) is listed as **(not a file)**, and nothing can be done with it.
+regular file (a link, say) is listed as **(not a file)**, and one whose name LizTerm cannot use as a path is listed
+as **(not usable)**; nothing can be done with either.
 
 **Download…** saves the selected files under their own names, asking before it replaces a file you already have.
 **Upload…** sends the files you choose into the current directory under their own names; a file that already exists

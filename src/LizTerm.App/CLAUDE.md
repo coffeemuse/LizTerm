@@ -966,13 +966,13 @@ constructor captured.
   certificate the pin in force already trusts (an expired one, say) fails without asking, since trusting it again
   cannot help. When Remember is on offer but the certificate cannot be pinned, the prompt says why in a full
   sentence. A replaced service is disposed only with the connection, since an operation may still be using it.
-- `MvsmfBrowserViewModel` runs one operation at a time (`RunExclusiveAsync`, which ignores a second); only a
-  download batch runs two transfers at once (`ParallelDownloads`). Results are set after `await` on the UI
-  context; progress goes through `dispatch`, and a closed `RowProgress` drops late reports. Questions are an inline
-  `ConfirmationRequest` strip, awaited by the operation that asked; a disposed window shows none and answers
-  Cancel. A question with a text box (`ConfirmationRequest` with `input` and an `inputRule`) is how a rename asks;
-  its primary is allowed only for an acceptable, changed value, and `Primary()` checks that itself because the
-  window's Enter goes through `Execute`.
+- One operation runs at a time, on the runner (`BrowserOperations.RunExclusiveAsync`, which ignores a second; see
+  below); only a download batch runs two transfers at once (`ParallelDownloads`). Results are set after `await` on the
+  UI context; progress goes through `dispatch`, and a closed `RowProgress` drops late reports. Questions are an inline
+  `ConfirmationRequest` strip, awaited by the operation that asked; a disposed window shows none and answers Cancel. A
+  question with a text box (`ConfirmationRequest` with `input` and an `inputRule`) is how a rename asks; its primary
+  is allowed only for an acceptable, changed value, and `Primary()` checks that itself because the window's Enter goes
+  through `Execute`.
 - **The runner is `BrowserOperations`** (USS spec §4.4): the busy flag and its cancellation, the status line, the
   banner with Retry, the confirmation strip, `WhenIdle` and `TryPickAsync`. `MvsmfBrowserViewModel` forwards its
   old properties and commands to it under their old names, re-raising the runner's changes as its own (IsBusy
@@ -984,7 +984,9 @@ constructor captured.
   until a listing lands), `Directories` and `Files` its rows, sorted by name here because the host lists in its own
   order. `ListCoreAsync` is the one listing: a path the rules refuse or the host does not have is a status line, and
   the box keeps its text while the panes keep the last good listing. `EnsureListedAsync` runs on the tab's first
-  show. `DirectoryRow.Path`/`FileRow.Path` are null for a name the rules refuse and `FileRow.IsFile` is false for
+  show, once: a start listing that fails is not tried again (`/u/<userid>` may not exist). The window pushes the
+  file list's selection only while the tab is in front, since a hidden tab's list loses it, and gives it back on
+  return. `DirectoryRow.Path`/`FileRow.Path` are null for a name the rules refuse and `FileRow.IsFile` is false for
   anything but a regular file; every verb needs usable rows, and Delete never sees the root because the rows are
   the current directory's children. Uploads check every file first (`CheckUnixTextFile` with tabs kept,
   `BinaryUploadProblem`), list the directory again before calling a name existing, and put each file's result on
