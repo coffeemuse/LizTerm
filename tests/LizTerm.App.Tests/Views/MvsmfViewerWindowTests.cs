@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using LizTerm.App.ViewModels;
 using LizTerm.App.Views;
 
@@ -79,6 +80,24 @@ public class MvsmfViewerWindowTests
 
         window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.Shift);
         Assert.Equal("1 of 2", vm.CountText);
+    }
+
+    /// <summary>With no matches, Enter has nothing to step to and must not be marked handled — harmless today, but
+    /// it would otherwise quietly swallow a future default button's Enter. The bubble-phase handler below, added
+    /// with handledEventsToo, sees the flag as OnKeyDownTunnel's own Tunnel-phase handler left it.</summary>
+    [AvaloniaFact]
+    public void Enter_is_left_unhandled_when_there_are_no_matches()
+    {
+        var (window, _) = Show("//HELLO JOB");
+        bool? handled = null;
+        window.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Key.Enter) handled = e.Handled;
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.False(handled);
     }
 
     [AvaloniaFact]

@@ -102,6 +102,10 @@ public sealed partial class MvsmfViewerViewModel : ObservableObject
 
     partial void OnTermChanged(string value)
     {
+        // CurrentIndex first: setting Matches republishes MatchStart against whatever index is current, and a stale
+        // one from the previous term would select and scroll to it before the line below corrects it to the first
+        // match — one keystroke, two scrolls.
+        CurrentIndex = -1;
         Matches = FindAll(Text, value);
         CurrentIndex = Matches.Count > 0 ? 0 : -1;
     }

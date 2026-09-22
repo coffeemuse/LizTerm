@@ -130,9 +130,6 @@ public partial class MvsmfBrowserWindow : Window
             case nameof(MvsmfBrowserViewModel.IsCreating) when vm.IsCreating:
                 _ = ShowNewDatasetAsync(vm);
                 break;
-            case nameof(MvsmfBrowserViewModel.Viewer) when vm.Viewer is { } viewer:
-                ShowViewer(viewer);
-                break;
             case nameof(MvsmfBrowserViewModel.IsCreating) when !vm.IsBusy:
                 // Closed without an operation (Cancel, Escape, the close box): the dialog gave the keyboard back to
                 // this window, which puts it where the window opens. A form an operation closes is handled by the
@@ -143,6 +140,9 @@ public partial class MvsmfBrowserWindow : Window
                     if (FocusManager?.GetFocusedElement() is Control { IsEffectivelyVisible: true }) return;
                     FilterBox.Focus();
                 }, DispatcherPriority.Loaded);
+                break;
+            case nameof(MvsmfBrowserViewModel.Viewer) when vm.Viewer is { } viewer:
+                ShowViewer(viewer);
                 break;
         }
     }

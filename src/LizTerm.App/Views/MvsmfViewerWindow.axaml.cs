@@ -41,7 +41,10 @@ public partial class MvsmfViewerWindow : Window
                 ?? TextArea.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
             if (_scroller is not null) _scroller.ScrollChanged += (_, _) => SyncGutter();
         };
-        Opened += (_, _) => FindBox.Focus();
+        // The document, not the find box: a read-only TextBox is still focusable and caret-navigable, so Page Down,
+        // Home, End and the arrows scroll it and Cmd/Ctrl+A and +C work without a click first. The Escape and
+        // Cmd/Ctrl+F handlers below are what earn their place instead — Find is a deliberate move away from here.
+        Opened += (_, _) => TextArea.Focus();
     }
 
     private void SyncGutter()
@@ -104,7 +107,9 @@ public partial class MvsmfViewerWindow : Window
     }
 
     /// <summary>Escape closes; the command modifier with F goes to the find box; Enter and Shift+Enter step the
-    /// matches from anywhere but a button, which has its own Enter.</summary>
+    /// matches from anywhere but a button, which has its own Enter. Left unhandled with no matches to step to —
+    /// the find commands take no CanExecute, so that check is Matches.Count, not CanExecute — so a future default
+    /// button's Enter is not quietly swallowed by an empty find.</summary>
     private void OnKeyDownTunnel(object? sender, KeyEventArgs e)
     {
         if (_watched is not { } vm) return;
@@ -119,10 +124,10 @@ public partial class MvsmfViewerWindow : Window
                 FindBox.Focus();
                 FindBox.SelectAll();
                 break;
-            case Key.Enter when FocusManager?.GetFocusedElement() is not Button:
+            case Key.Enter when vm.Matches.Count > 0 && FocusManager?.GetFocusedElement() is not Button:
                 e.Handled = true;
                 var command = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? vm.FindPreviousCommand : vm.FindNextCommand;
-                if (command.CanExecute(null)) command.Execute(null);
+                command.Execute(null);
                 break;
         }
     }

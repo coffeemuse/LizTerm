@@ -155,4 +155,27 @@ public sealed class MvsmfBrowserViewTests
         Assert.StartsWith("✗ ", t.Vm.StatusText);
         Assert.Null(t.Vm.Viewer);
     }
+
+    /// <summary>The stale-retry race: a failed View leaves the retry set, and a member filter keystroke on a
+    /// fully-loaded library can narrow the selection to nothing (SetSelectedMembers([])) without clearing it.
+    /// Retry must not index the now-empty selection; the command is already disabled in that state, so it returns
+    /// quietly rather than crashing the status line with a raw ArgumentOutOfRangeException.</summary>
+    [Fact]
+    public async Task Retry_after_the_selection_narrows_to_nothing_returns_quietly()
+    {
+        var t = await ChosenAsync();
+        t.Select("HELLO");
+        t.Host.Failures["readtext:MVSCE02.CNTL(HELLO)"] =
+            new HostFileException(HostFileErrorKind.Unreachable, "cannot reach the host (refused).");
+        await t.Vm.ViewCommand.ExecuteAsync(null);
+        Assert.True(t.Vm.CanRetry);
+
+        t.Select();
+        Assert.False(t.Vm.ViewCommand.CanExecute(null));
+
+        await t.Vm.RetryCommand.ExecuteAsync(null);
+
+        Assert.False(t.Vm.HasError);
+        Assert.Null(t.Vm.Viewer);
+    }
 }

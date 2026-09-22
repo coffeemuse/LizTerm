@@ -177,4 +177,30 @@ public sealed class MvsmfViewerViewModelTests
 
         Assert.Equal("No matches", viewer.CountText);
     }
+
+    /// <summary>A changed term must not publish a MatchStart read against the old CurrentIndex and the new Matches
+    /// together — the ordering finding: setting Matches first republishes MatchStart at whatever index is still
+    /// current, which can be a legal index into the new list that names the wrong match, before CurrentIndex is
+    /// reset to the real first one. Here the previous term's second match (index 1) stays a legal index into the
+    /// new term's three matches, so the stale read (its second match) is easy to tell from the correct one (its
+    /// first).</summary>
+    [Fact]
+    public void Changing_the_term_never_publishes_a_match_from_the_old_index_into_the_new_list()
+    {
+        var viewer = Viewer("hello world hello", "world world");
+        viewer.Term = "hello";
+        viewer.FindNextCommand.Execute(null); // CurrentIndex = 1, the second "hello"
+
+        var published = new List<int?>();
+        viewer.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MvsmfViewerViewModel.MatchStart)) published.Add(viewer.MatchStart);
+        };
+
+        viewer.Term = "world"; // three matches; index 1 is still in range, but names the second, not the first
+
+        var correctFirstMatch = viewer.MatchStart;
+        Assert.All(published, value => Assert.True(value is null || value == correctFirstMatch,
+            $"Published a stale MatchStart {value} before the correct one ({correctFirstMatch})."));
+    }
 }

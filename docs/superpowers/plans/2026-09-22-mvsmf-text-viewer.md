@@ -1627,5 +1627,11 @@ live host and password are in the developer's own notes) and check:
 2. **Find scrolls to the match** in a member longer than the window, and the match is visible rather than at the
    very bottom edge.
 
-Also worth a look while there: an 80-column member at the default window width needs no horizontal scrolling, and
-a member of one line looks right.
+3. **The wheel over the gutter** does not move the numbers on their own, leaving them beside the wrong records.
+4. **A wide record** (an LRECL 133 listing, or the window dragged toward its minimum width) can be scrolled
+   sideways, and says so.
+
+Also worth a look while there: an 80-column member at the default window width needs no horizontal scrolling, a
+member of one line looks right, and a member past the 2,000-line cap appears without a noticeable wait — the cap
+was measured headless, where the text stub costs about twice a real font, so this is the only real-machine
+reading of it.

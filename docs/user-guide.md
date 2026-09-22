@@ -434,6 +434,9 @@ the button says so when you point at it.
 A very long member is shown as far as its first 2,000 lines, and the footer says how many there are in all.
 Download it to read the rest.
 
+The window has its own keys: **Escape** closes it, **Cmd+F** (macOS) or **Ctrl+F** moves to **Find**, and
+**Enter** or **Shift+Enter** steps to the next or previous match.
+
 ### Uploading
 
 **Upload…** on a partitioned dataset asks for one or more files and opens a review in place of the member list.

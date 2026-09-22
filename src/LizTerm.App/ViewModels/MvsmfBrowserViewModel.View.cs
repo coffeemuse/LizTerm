@@ -49,13 +49,28 @@ public sealed partial class MvsmfBrowserViewModel
     private async Task ViewCoreAsync(CancellationToken token)
     {
         var dataset = SelectedDataset!;
-        var path = dataset.IsSequential ? dataset.Path : _selectedMembers[0].Path;
+        HostPath path;
+        if (dataset.IsSequential) path = dataset.Path;
+        // The retry set by a failed View can outlive the selection it was built for: a filter keystroke can narrow
+        // the member list to nothing while a failure's banner is still up, and Retry must not index an empty list.
+        else if (_selectedMembers is [var only]) path = only.Path;
+        else return;
         var progress = new RowProgress(_dispatch, bytes => StatusText = $"⟳ Reading {path} · {Bytes(bytes)} bytes");
         StatusText = $"⟳ Reading {path}…";
         // withEtag: false — a view can never write the content back, and a stamp costs the host a second pass over
         // it (browser spec §5.2). The stamp memory is left exactly as it was: a view is not a download.
-        var read = await _connection.RunAsync(service => service.ReadTextAsync(path, progress, withEtag: false, token));
-        progress.Close();
+        HostTextRead read;
+        try
+        {
+            read = await _connection.RunAsync(service => service.ReadTextAsync(path, progress, withEtag: false, token));
+        }
+        finally
+        {
+            // A cancelled or failed read must not leave the status line reading a stale "⟳ Reading …": RowProgress
+            // exists precisely so a report still in the queue cannot overwrite the outcome RunExclusiveAsync writes
+            // next, and that only holds if Close runs on every path, not just the success one (Downloads.cs does).
+            progress.Close();
+        }
         // Progress and the result go on the status line, never on the member's row: a row saying "Done · n bytes"
         // after a view would read like a transfer that happened.
         Viewer = new MvsmfViewerViewModel(path.ToString(), read.Lines, TrimTrailingBlanks);

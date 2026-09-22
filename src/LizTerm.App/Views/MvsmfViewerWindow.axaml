@@ -33,13 +33,18 @@
          both are pinned to the same line height, so a number always sits beside its record. -->
     <Grid ColumnDefinitions="Auto,*" Margin="12,0,12,8">
       <ScrollViewer x:Name="GutterScroller" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled"
-                    BorderBrush="#33373D" BorderThickness="0,0,1,0" Padding="0,0,6,0"
+                    IsHitTestVisible="False" BorderBrush="#33373D" BorderThickness="0,0,1,0" Padding="0,0,6,0"
                     IsVisible="{Binding ShowLineNumbers}">
         <TextBlock x:Name="Gutter" Text="{Binding LineNumbers}" TextAlignment="Right" Foreground="#A0A0A0"
                    FontFamily="Menlo, Consolas, monospace" FontSize="13" />
       </ScrollViewer>
+      <!-- No AcceptsReturn: the box is read-only and never edits a newline in, and with the document focused by
+           default (finding 3 of the fix wave), AcceptsReturn's own Enter handling would otherwise mark the key
+           handled before OnKeyDownTunnel's "nothing to step to" case ever reaches the window, swallowing it
+           just the same. -->
       <TextBox Grid.Column="1" x:Name="TextArea" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True"
-               AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Menlo, Consolas, monospace" FontSize="13"
+               TextWrapping="NoWrap" ScrollViewer.HorizontalScrollBarVisibility="Auto"
+               FontFamily="Menlo, Consolas, monospace" FontSize="13"
                BorderThickness="0" Background="Transparent" Padding="6,0,0,0" />
     </Grid>
   </DockPanel>
