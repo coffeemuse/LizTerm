@@ -85,6 +85,7 @@ public class SignInWindowTests
     [AvaloniaTheory]
     [InlineData(null, "", "✗ Enter your userid and password.")]
     [InlineData(null, "secret", "✗ Enter your userid.")]
+    [InlineData("   ", "secret", "✗ Enter your userid.")]
     [InlineData("MVSCE02", "", "✗ Enter your password.")]
     public void A_blank_box_keeps_the_window_open_and_names_the_box(string? userid, string password, string expected)
     {
@@ -97,6 +98,31 @@ public class SignInWindowTests
         var missing = window.FindControl<TextBlock>("MissingText")!;
         Assert.True(missing.IsVisible);
         Assert.Equal(expected, missing.Text);
+    }
+
+    [AvaloniaFact]
+    public void A_userid_box_holding_only_spaces_is_emptied_so_it_agrees_with_the_message()
+    {
+        var window = Show(userid: "   ");
+        window.FindControl<TextBox>("PasswordBox")!.Text = "secret";
+
+        window.SignIn();
+
+        Assert.Equal("✗ Enter your userid.", window.FindControl<TextBlock>("MissingText")!.Text);
+        // Naming the box is worse than the old flat message if the box it names still looks filled.
+        Assert.Empty(window.FindControl<TextBox>("UseridBox")!.Text!);
+    }
+
+    [AvaloniaFact]
+    public void The_privacy_note_still_says_the_password_is_never_saved_to_disk()
+    {
+        // docs/privacy.md's guarantee is that LizTerm never writes a password anywhere, and this window is the one
+        // screen where a password is typed. "Never saved to disk." has to stay its own sentence: joined to the
+        // clause before it, it qualifies only the session token.
+        Assert.Equal(
+            "Used once to sign in, then discarded. Only the session token is kept, until this session window "
+            + "closes. Never saved to disk.",
+            Show().FindControl<TextBlock>("PrivacyText")!.Text);
     }
 
     [AvaloniaFact]

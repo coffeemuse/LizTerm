@@ -56,6 +56,10 @@ public partial class SignInWindow : Window
         };
         if (missing is not null)
         {
+            // A box holding nothing but spaces is empty to the check above but looks filled, and the message now
+            // names the box: empty it on screen so the two agree. Only the whitespace case, so this stays layout
+            // and wording — a typed userid is not upper-cased until it is sent.
+            if (userid.Length == 0) UseridBox.Text = "";
             MissingText.Text = missing;
             MissingText.IsVisible = true;
             return;
