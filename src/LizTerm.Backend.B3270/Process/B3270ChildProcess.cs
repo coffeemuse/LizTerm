@@ -34,6 +34,7 @@ public sealed class B3270ChildProcess(string executablePath) : IB3270Process
             StandardErrorEncoding = utf8,
         };
         foreach (var arg in arguments) psi.ArgumentList.Add(arg);
+        ConfigureLocale(psi.Environment);
         try
         {
             _process = System.Diagnostics.Process.Start(psi) ?? throw new BackendUnavailableException($"Could not start {executablePath}");
@@ -73,6 +74,26 @@ public sealed class B3270ChildProcess(string executablePath) : IB3270Process
         Kill();
         _process?.Dispose();
     }
+
+    /// <summary>Pins the engine's decimal point to JSON's (#170). b3270 formats its JSON doubles in the process
+    /// locale, so under a comma-decimal desktop a run-result reads <c>"time":0,039</c> and is dropped as malformed;
+    /// see docs/engines.md, "The engine's locale". <c>LC_NUMERIC=C</c> is the whole fix. <c>LC_ALL</c> would outrank
+    /// it, so a value there is spelled out into the categories it stood for and the variable removed; an empty
+    /// <c>LC_ALL</c> is unset by POSIX's rule and stands for nothing. Internal so a test can hand it a dictionary;
+    /// <see cref="Start"/> hands it the real environment.</summary>
+    internal static void ConfigureLocale(IDictionary<string, string?> environment)
+    {
+        if (environment.TryGetValue("LC_ALL", out var all) && !string.IsNullOrEmpty(all))
+        {
+            foreach (var category in LocaleCategories) environment[category] = all;
+        }
+        environment.Remove("LC_ALL");
+        environment["LC_NUMERIC"] = "C";
+    }
+
+    /// <summary>What <c>LC_ALL</c> stands for, less <c>LC_NUMERIC</c>: the categories POSIX defines. The GNU extras
+    /// (LC_PAPER and the rest) are left to their own variables or LANG; the engine reads none of them.</summary>
+    private static readonly string[] LocaleCategories = ["LC_CTYPE", "LC_COLLATE", "LC_MESSAGES", "LC_MONETARY", "LC_TIME"];
 
     private static InvalidOperationException NotStarted() => new("Process not started");
 }

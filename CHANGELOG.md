@@ -5,6 +5,15 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **The mvsMF sign-in window reads more clearly.** The profile and the host address are on separate lines, the
+  window says why it is asking, and an expired session is now shown as the routine timeout it is rather than in
+  the same red as a refused password. A blank box says which one is blank
+  ([#164](https://github.com/coffeemuse/LizTerm/issues/164)).
+
+- **Sessions no longer drop after thirty seconds on Linux desktops whose language writes decimals with a comma**
+  (Croatian, German, French and most of Europe). The emulation engine wrote its timings the local way, LizTerm could
+  not read them, and a connection that was working in every visible way was reported as timed out and closed, leaving
+  the TSO user logged on at the host ([#170](https://github.com/coffeemuse/LizTerm/issues/170)).
 - **About LizTerm's engine line can be copied**, like the version line above it, so a bug report can quote both.
 
 ## 0.7.0
