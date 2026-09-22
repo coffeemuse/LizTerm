@@ -5,6 +5,10 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **mvsMF Access can show a member without downloading it.** **View** in the Members pane opens a read-only window
+  with the member's text, with find and line numbers; a sequential dataset shows itself
+  ([#163](https://github.com/coffeemuse/LizTerm/issues/163)).
+
 - **The crosshair is a thin line instead of a shaded row and column.** **View > Crosshair** used to tint the
   cursor's whole row and column, which sat over the host's text and was a heavy way to point at one line; it now
   draws a hairline along the edge of the cursor's cell, so it rules the screen without covering anything. A

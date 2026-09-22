@@ -184,6 +184,8 @@
             </DropDownButton>
             <Panel>
               <WrapPanel x:Name="MemberToolbar" ItemSpacing="6" LineSpacing="4" IsVisible="{Binding !IsReviewingUpload}">
+                <Button x:Name="ViewButton" Classes="pane-verb" Content="View" Command="{Binding ViewCommand}"
+                        ToolTip.Tip="{Binding ViewHint}" ToolTip.ShowOnDisabled="True" />
                 <Button x:Name="DownloadButton" Classes="pane-verb" Content="⇣ Download…" Command="{Binding DownloadCommand}" ToolTip.Tip="Download the selected members (Enter)" />
                 <Button x:Name="UploadButton" Classes="pane-verb" Content="⇡ Upload…" Command="{Binding UploadCommand}" ToolTip.Tip="Upload files into this dataset" />
                 <Button x:Name="RenameMemberButton" Classes="pane-verb" Content="Rename…" Command="{Binding RenameMemberCommand}" ToolTip.Tip="Rename the selected member" />
@@ -207,7 +209,7 @@
             <TextBlock x:Name="ChooseHint" Text="{Binding ChooseHint}" TextWrapping="Wrap" Margin="12"
                        Foreground="#A0A0A0" IsVisible="{Binding ShowChooseHint}" />
             <TextBlock x:Name="SequentialNote" Margin="12" TextWrapping="Wrap"
-                       Text="Sequential dataset: Download and Upload act on the dataset itself."
+                       Text="Sequential dataset: View, Download and Upload act on the dataset itself."
                        IsVisible="{Binding ShowSequentialNote}" />
 
             <DockPanel x:Name="MemberPane" IsVisible="{Binding ShowMemberPane}">
@@ -219,6 +221,7 @@
                        IsEnabled="{Binding IsIdle}">
                 <ListBox.ContextMenu>
                   <ContextMenu x:Name="MemberMenu">
+                    <MenuItem x:Name="MemberMenuView" Header="View" Command="{Binding ViewCommand}" />
                     <MenuItem x:Name="MemberMenuDownload" Header="Download…" Command="{Binding DownloadCommand}" InputGesture="Enter" />
                     <MenuItem x:Name="MemberMenuUpload" Header="Upload…" Command="{Binding UploadCommand}" />
                     <MenuItem x:Name="MemberMenuRename" Header="Rename…" Command="{Binding RenameMemberCommand}" />

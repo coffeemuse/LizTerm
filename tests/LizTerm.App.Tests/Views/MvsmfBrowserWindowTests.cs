@@ -35,6 +35,128 @@ public class MvsmfBrowserWindowTests
 
     private static T Named<T>(Window window, string name) where T : Control => window.FindControl<T>(name)!;
 
+    private static async Task<(MvsmfBrowserWindow Window, BrowserTestHost T)> ViewableAsync()
+    {
+        var (window, t) = Show(seed: host =>
+        {
+            BrowserTestHost.Standard(host);
+            host.AddDataset("MVSCE02.NOTES", dsorg: "PS", recfm: "FB", lrecl: 80, blksize: 3120);
+        });
+        t.Host.Text["MVSCE02.CNTL(HELLO)"] = ["//HELLO JOB"];
+        t.Host.Text["MVSCE02.CNTL(ALLOC)"] = ["//ALLOC JOB"];
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 5, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+        return (window, t);
+    }
+
+    [AvaloniaFact]
+    public async Task The_view_button_explains_itself_even_when_it_is_off()
+    {
+        var (window, t) = await ViewableAsync();
+        var button = Named<Button>(window, "ViewButton");
+
+        Assert.Equal(t.Vm.ViewHint, ToolTip.GetTip(button));
+        Assert.True(ToolTip.GetShowOnDisabled(button));
+        Assert.Contains(window.ViewGesture.ToString("p", null), t.Vm.ViewHint);
+
+        await t.ChooseAsync("MVSCE02.LOAD");
+        Assert.False(button.IsEffectivelyEnabled);
+        Assert.Equal("MVSCE02.LOAD holds undefined-length records, which are not text.", t.Vm.ViewHint);
+    }
+
+    [AvaloniaFact]
+    public async Task The_command_gesture_views_and_plain_enter_still_downloads()
+    {
+        var (window, t) = await ViewableAsync();
+        t.Select("HELLO");
+        window.UpdateLayout();
+        Named<ListBox>(window, "MemberList").ContainerFromIndex(0)!.Focus();
+        var modifiers = window.ViewGesture.KeyModifiers == KeyModifiers.Meta
+            ? RawInputModifiers.Meta : RawInputModifiers.Control;
+
+        window.KeyPress(Key.Enter, modifiers, PhysicalKey.Enter, null);
+
+        await Wait.UntilAsync(() => window.ViewerWindow is { IsVisible: true }, "the viewer window");
+        Assert.Equal("MVSCE02.CNTL(HELLO) — mvsMF Access", window.ViewerWindow!.Title);
+        Assert.DoesNotContain(t.Picker.Calls, c => c.StartsWith("save:"));
+    }
+
+    /// <summary>A sequential dataset has no Members pane, so MemberList cannot hold the focus and the gesture has
+    /// to be taken from the dataset list instead — the View button's own tooltip offers it there.</summary>
+    [AvaloniaFact]
+    public async Task The_command_gesture_views_a_sequential_dataset_from_the_dataset_list()
+    {
+        var (window, t) = await ViewableAsync();
+        t.Host.Text["MVSCE02.NOTES"] = ["Notes on the batch run."];
+        await t.ChooseAsync("MVSCE02.NOTES");
+        window.UpdateLayout();
+        Assert.False(Named<DockPanel>(window, "MemberPane").IsVisible);
+        var datasets = Named<ListBox>(window, "DatasetList");
+        datasets.ContainerFromItem(t.Vm.SelectedDataset!)!.Focus();
+        var modifiers = window.ViewGesture.KeyModifiers == KeyModifiers.Meta
+            ? RawInputModifiers.Meta : RawInputModifiers.Control;
+
+        window.KeyPress(Key.Enter, modifiers, PhysicalKey.Enter, null);
+
+        await Wait.UntilAsync(() => window.ViewerWindow is { IsVisible: true }, "the viewer window");
+        Assert.Equal("MVSCE02.NOTES — mvsMF Access", window.ViewerWindow!.Title);
+    }
+
+    [AvaloniaFact]
+    public async Task Plain_enter_in_the_member_list_still_downloads()
+    {
+        var (window, t) = await ViewableAsync();
+        t.Select("HELLO");
+        window.UpdateLayout();
+        Named<ListBox>(window, "MemberList").ContainerFromIndex(0)!.Focus();
+
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+
+        await Wait.UntilAsync(() => t.Picker.Calls.Contains("save:HELLO.txt"), "the save dialog");
+        Assert.Null(window.ViewerWindow);
+    }
+
+    [AvaloniaFact]
+    public async Task A_second_view_reuses_the_one_window()
+    {
+        var (window, t) = await ViewableAsync();
+        t.Select("HELLO");
+        await t.Vm.ViewCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => window.ViewerWindow is { IsVisible: true }, "the viewer window");
+        var first = window.ViewerWindow!;
+
+        t.Select("ALLOC");
+        await t.Vm.ViewCommand.ExecuteAsync(null);
+
+        Assert.Same(first, window.ViewerWindow);
+        Assert.Equal("MVSCE02.CNTL(ALLOC) — mvsMF Access", window.ViewerWindow!.Title);
+    }
+
+    [AvaloniaFact]
+    public async Task The_viewer_closes_with_the_browser_window()
+    {
+        var (window, t) = await ViewableAsync();
+        t.Select("HELLO");
+        await t.Vm.ViewCommand.ExecuteAsync(null);
+        await Wait.UntilAsync(() => window.ViewerWindow is { IsVisible: true }, "the viewer window");
+        var viewer = window.ViewerWindow!;
+
+        window.Close();
+
+        Assert.False(viewer.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task The_sequential_note_names_every_verb_that_acts_on_the_dataset()
+    {
+        var (window, t) = await ViewableAsync();
+
+        await t.ChooseAsync("MVSCE02.NOTES");
+
+        Assert.Equal("Sequential dataset: View, Download and Upload act on the dataset itself.",
+            Named<TextBlock>(window, "SequentialNote").Text);
+    }
+
     [AvaloniaFact]
     public async Task Opens_with_the_preview_strip_and_lists_the_users_datasets()
     {
@@ -260,7 +382,7 @@ public class MvsmfBrowserWindowTests
 
         var memberVerbs = Named<WrapPanel>(window, "MemberToolbar").Children.OfType<Button>()
             .Select(b => b.Content).ToList();
-        Assert.Equal(new object?[] { "⇣ Download…", "⇡ Upload…", "Rename…", "Delete…" }, memberVerbs);
+        Assert.Equal(new object?[] { "View", "⇣ Download…", "⇡ Upload…", "Rename…", "Delete…" }, memberVerbs);
 
         Assert.Null(window.FindControl<RadioButton>("TextModeButton"));
         Assert.Null(window.FindControl<TextBlock>("PaddingNote"));
@@ -844,6 +966,8 @@ public class MvsmfBrowserWindowTests
         try
         {
             var items = memberMenu.Items.OfType<MenuItem>().ToDictionary(i => i.Name!);
+            Assert.Same(t.Vm.ViewCommand, items["MemberMenuView"].Command);
+            Assert.Equal(window.ViewGesture, items["MemberMenuView"].InputGesture);
             Assert.Same(t.Vm.DownloadCommand, items["MemberMenuDownload"].Command);
             Assert.Same(t.Vm.UploadCommand, items["MemberMenuUpload"].Command);
             Assert.Same(t.Vm.RenameMemberCommand, items["MemberMenuRename"].Command);

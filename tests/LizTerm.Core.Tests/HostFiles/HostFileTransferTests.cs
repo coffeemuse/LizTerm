@@ -42,6 +42,19 @@ public sealed class HostFileTransferTests : IDisposable
     }
 
     [Fact]
+    public void Format_trims_trailing_blanks_when_the_option_is_on() =>
+        Assert.Equal("//HELLO JOB", new DownloadOptions(HostTransferMode.Text).Format("//HELLO JOB   "));
+
+    [Fact]
+    public void Format_keeps_them_when_it_is_off() =>
+        Assert.Equal("//HELLO JOB   ",
+            new DownloadOptions(HostTransferMode.Text, TrimTrailingBlanks: false).Format("//HELLO JOB   "));
+
+    [Fact]
+    public void Format_leaves_leading_blanks_and_tabs_alone() =>
+        Assert.Equal("\t  indented\t", new DownloadOptions(HostTransferMode.Text).Format("\t  indented\t  "));
+
+    [Fact]
     public void The_default_line_ending_is_the_platform_one() =>
         Assert.Equal("A" + Environment.NewLine, HostFileTransfer.FormatText(["A"], new DownloadOptions(HostTransferMode.Text)));
 

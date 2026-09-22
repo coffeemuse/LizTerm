@@ -1038,6 +1038,30 @@ constructor captured.
   the question `NAME changed on the host since you downloaded it.` with Replace anyway / Skip (Cancel stops the
   batch; a sequential dataset offers Replace anyway or Cancel), and Replace anyway sends again with no stamp. A
   member never downloaded or written here sends nothing and gets the old behaviour.
+- **View** (`View.cs`, `MvsmfViewerViewModel`, `MvsmfViewerWindow`): one member, or a sequential dataset, read
+  through `RunExclusiveAsync` like any other operation, so the banner, Retry, Cancel and the prompts are the ones
+  already there. Always `ReadTextAsync`, whatever `Mode` says — viewing is reading a document — and `withEtag:
+  false`, so the stamp memory is untouched: a view is not a download. Progress and the result go on the status
+  line, never on the member's row, which would otherwise read like a transfer. `CanView` wants exactly one member
+  (Download takes many) and refuses a dataset whose `RecordFormat` is `Undefined`; `ViewHint` carries that reason
+  and is shown on the disabled button through `ToolTip.ShowOnDisabled`, with the gesture text handed to the view
+  model by the window (`ViewGestureText`), since a view model cannot ask the platform. ⌘⏎/Ctrl+Enter is matched
+  before the plain-Enter case in the key tunnel, which reads `e.Key` alone and would otherwise download, and it is
+  taken from whichever list owns the target: `MemberList` for a member, `DatasetList` for a sequential dataset,
+  whose Members pane (and with it `MemberList`) is collapsed, so the gesture could not otherwise reach it.
+- The viewer window is owned and non-blocking (`ShowAbove`), one per browser window
+  (`MvsmfBrowserWindow.ViewerWindow`): a second View sets its `DataContext` and fronts it. `MvsmfViewerViewModel`
+  holds finished lines and no Avalonia type; it caps what it lays out at `MaxLines`, because Avalonia's `TextBox`
+  builds one layout for the whole text, and the footer says so when it bit. `MaxLines` was set by timing
+  `window.UpdateLayout()` over a fixture that size in the headless test host: 2,000 lines ≈ 1.4 s, 5,000 ≈ 3.2 s,
+  10,000 ≈ 6 s. The headless text stub runs about twice a real font's cost (`tests/CLAUDE.md`), so 1.4 s headless
+  is about 0.7 s on a real font — the spec's own "about a second" — which is why 2,000 is the cap. Those figures
+  are not real-machine ones, so whoever revisits this constant should re-time it there rather than trust the
+  number alone; the feel on a real machine is a hands-on pass's job, not another headless run. The line-number
+  gutter is a
+  `TextBlock` in a scrollbar-less `ScrollViewer` driven from the text box's own `PART_ScrollViewer`, with the line
+  height pinned on both from `TextLineHeight`; find scrolls by line index times that height rather than through
+  `CaretIndex`, because the text box does not hold the focus while the user types in the find box.
 - **The panes** (pane-pattern spec §4): `MvsmfBrowserWindow` is two `Controls/BrowserPane`s, a `UserControl` with
   six slots (`Title`, `HeaderContent`, `Toolbar`, `Body`, `FooterText`, `FooterAction`) that owns the frame and the
   `pane-verb` button style and binds only to its own properties; the window's controls in the slots bind to the

@@ -89,7 +89,10 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   `Gate` holds every call after it is logged (a call still honours its token), `MaxConcurrent` is the most calls seen running at
   once, and `Disposed` says whether the service was released. The operations take a lock the test cannot: seed
   everything before the view model runs, and read the log through `CallsSnapshot()` while calls may be running.
-  It also plays the manage contract, failing the way the host does: every write stamps its path `stamp-N`
+  `EtagRequests` names the reads (text or binary) that asked for a stamp (`withEtag: true`), so a test can pin a
+  read that must not cost the host a second pass over the content by its absence from this list, not just by the
+  stamp memory it never wrote. It also plays the manage contract, failing the way the host does: every write
+  stamps its path `stamp-N`
   (`Etags`, returned by writes and by reads asked `withEtag`; `IfMatches` keeps each write's `ifMatch`), and a
   write whose `ifMatch` is not the current stamp is `Conflict`; `create:<dsn>` adds a dataset with the
   allocation's attributes (`CannotAllocate` when the name exists); `rename:<from>:<new>` moves a member with its

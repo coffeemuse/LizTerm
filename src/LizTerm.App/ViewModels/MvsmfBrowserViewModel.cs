@@ -60,7 +60,8 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMembers), nameof(ShowSequentialNote), nameof(ShowChooseHint), nameof(ChooseHint),
-        nameof(MembersTitle), nameof(DatasetsFooter), nameof(MembersFooter), nameof(UploadHeader), nameof(ShowMemberPane))]
+        nameof(MembersTitle), nameof(DatasetsFooter), nameof(MembersFooter), nameof(UploadHeader), nameof(ShowMemberPane),
+        nameof(ViewHint))]
     private DatasetRow? _selectedDataset;
 
     [ObservableProperty]
@@ -375,6 +376,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         RefreshCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         DownloadCommand.NotifyCanExecuteChanged();
+        ViewCommand.NotifyCanExecuteChanged();
         UploadCommand.NotifyCanExecuteChanged();
         StartUploadCommand.NotifyCanExecuteChanged();
         CloseReviewCommand.NotifyCanExecuteChanged();

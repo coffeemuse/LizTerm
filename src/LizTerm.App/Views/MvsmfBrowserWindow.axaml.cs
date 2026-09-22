@@ -25,6 +25,11 @@ public partial class MvsmfBrowserWindow : Window
     /// <summary>Cmd+N on macOS, Ctrl+N elsewhere.</summary>
     internal KeyGesture NewDatasetGesture { get; private set; } = new(Key.N, KeyModifiers.Control);
 
+    /// <summary>Cmd+Enter on macOS, Ctrl+Enter elsewhere. Plain Enter stays Download, so this case is matched
+    /// first in the key tunnel, and it is taken from whichever list owns the target: the member list for a
+    /// member, the dataset list for a sequential dataset, whose Members pane is not shown at all.</summary>
+    internal KeyGesture ViewGesture { get; private set; } = new(Key.Enter, KeyModifiers.Control);
+
     public MvsmfBrowserWindow()
     {
         InitializeComponent();
@@ -40,8 +45,10 @@ public partial class MvsmfBrowserWindow : Window
         var modifiers = this.GetPlatformSettings()?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
         RefreshGesture = new KeyGesture(Key.R, modifiers);
         NewDatasetGesture = new KeyGesture(Key.N, modifiers);
+        ViewGesture = new KeyGesture(Key.Enter, modifiers);
         DatasetMenuRefresh.InputGesture = RefreshGesture;
         DatasetMenuNew.InputGesture = NewDatasetGesture;
+        MemberMenuView.InputGesture = ViewGesture;
         ToolTip.SetTip(RefreshButton, $"Refresh the list ({RefreshGesture.ToString("p", null)})");
         ToolTip.SetTip(NewDatasetButton, $"Allocate a new dataset ({NewDatasetGesture.ToString("p", null)})");
         MemberList.AddHandler(InputElement.DoubleTappedEvent, OnMemberDoubleTapped);
@@ -78,6 +85,7 @@ public partial class MvsmfBrowserWindow : Window
         {
             _watched.PropertyChanged += OnViewModelPropertyChanged;
             _watched.SelectMemberRequested += SelectMember;
+            _watched.ViewGestureText = ViewGesture.ToString("p", null);
         }
         base.OnDataContextChanged(e);
     }
@@ -134,6 +142,9 @@ public partial class MvsmfBrowserWindow : Window
                     FilterBox.Focus();
                 }, DispatcherPriority.Loaded);
                 break;
+            case nameof(MvsmfBrowserViewModel.Viewer) when vm.Viewer is { } viewer:
+                ShowViewer(viewer);
+                break;
         }
     }
 
@@ -163,6 +174,34 @@ public partial class MvsmfBrowserWindow : Window
         finally
         {
             if (ReferenceEquals(NewDatasetDialog, dialog)) NewDatasetDialog = null;
+        }
+    }
+
+    /// <summary>The open text viewer, if any (viewer spec §6.1); for the tests and for reuse.</summary>
+    internal MvsmfViewerWindow? ViewerWindow { get; private set; }
+
+    /// <summary>One viewer per browser window: a later View replaces its contents and fronts it. Owned and
+    /// non-blocking, so the browser stays usable behind it and the viewer closes with it. A window that cannot be
+    /// shown is a status line, as the New dataset dialog is.</summary>
+    private void ShowViewer(MvsmfViewerViewModel viewer)
+    {
+        if (ViewerWindow is { } open)
+        {
+            open.DataContext = viewer;
+            open.Activate();
+            return;
+        }
+        var window = new MvsmfViewerWindow { DataContext = viewer };
+        ViewerWindow = window;
+        window.Closed += (_, _) => { if (ReferenceEquals(ViewerWindow, window)) ViewerWindow = null; };
+        try
+        {
+            window.ShowAbove(this);
+        }
+        catch (Exception ex)
+        {
+            ViewerWindow = null;
+            if (_watched is { } vm) vm.StatusText = "✗ Could not open the viewer window: " + ex.Message;
         }
     }
 
@@ -275,6 +314,15 @@ public partial class MvsmfBrowserWindow : Window
             case Key.Enter when vm.Confirmation is { HasInput: true } inputQuestion && ConfirmInputBox.IsKeyboardFocusWithin:
                 e.Handled = true;
                 if (inputQuestion.PrimaryCommand.CanExecute(null)) inputQuestion.PrimaryCommand.Execute(null);
+                break;
+            // The member list for a member; the dataset list for a sequential dataset, whose Members pane — and
+            // with it MemberList — is collapsed, so the gesture would otherwise never reach the one verb the
+            // button's own tooltip offers there. The dataset list's plain Enter is untouched: it has no case.
+            case Key.Enter when e.KeyModifiers == ViewGesture.KeyModifiers
+                && (MemberList.IsKeyboardFocusWithin
+                    || (DatasetList.IsKeyboardFocusWithin && vm.SelectedDataset is { IsSequential: true })):
+                e.Handled = true;
+                if (vm.ViewCommand.CanExecute(null)) _ = vm.ViewCommand.ExecuteAsync(null);
                 break;
             case Key.Enter when FilterBox.IsFocused:
                 e.Handled = true;
