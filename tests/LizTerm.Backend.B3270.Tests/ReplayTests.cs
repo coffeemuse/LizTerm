@@ -201,6 +201,43 @@ public class ReplayTests
         Assert.Null(session.Tls);
     }
 
+    /// <summary>#170 as the reporter saw it. The engine answered the Connect run with <c>"time":0,039</c> — its
+    /// desktop's locale writes decimals with a comma — so the one line that would have completed the attempt is not
+    /// JSON and is dropped, while the connection indications and the screen around it are fine. The session is
+    /// therefore connected and painted, and the attempt still runs out its token: a live screen under a timeout
+    /// banner. The fixture is real engine output and stays that way; the fix lives in the engine's environment
+    /// (B3270ChildProcess.ConfigureLocale), proved against the real binary by the integration project.</summary>
+    [Fact]
+    public async Task A_comma_decimal_connect_answer_leaves_a_live_screen_and_a_timed_out_attempt()
+    {
+        var lines = File.ReadAllLines(Fixture("locale-comma-connect.jsonl"));
+        var fake = new FakeB3270Process
+        {
+            RunResponder = input =>
+            {
+                var tag = Regex.Match(input, "\"r-tag\":\"([^\"]+)\"").Groups[1].Value;
+                // The Set that precedes every Connect was answered in the log too (tag 43), instantly, with an
+                // integer time -- which is why that one parsed.
+                if (input.Contains("\"Set\"")) return ["{\"run-result\":{\"r-tag\":\"" + tag + "\",\"success\":true,\"time\":0}}"];
+                if (input.Contains("\"Connect\"")) return lines.TakeWhile(l => !l.Contains("not-connected")).Select(l => l.Replace("\"r-tag\":\"44\"", $"\"r-tag\":\"{tag}\"")).ToList();
+                if (input.Contains("\"Disconnect\"")) return lines.SkipWhile(l => !l.Contains("not-connected")).Select(l => l.Replace("\"r-tag\":\"86\"", $"\"r-tag\":\"{tag}\"")).ToList();
+                return [];
+            },
+        };
+
+        var profile = new SessionProfile { Name = "replay", Host = "hercules.test" };
+        await using var session = new B3270Session(profile, () => fake);
+        var states = new List<ConnectionState>();
+        session.ConnectionChanged += (_, s) => states.Add(s);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ConnectAsync(cancellationToken: cts.Token));
+
+        Assert.Contains(ConnectionState.Connected3270, states);
+        Assert.Equal("Hercules Version  :", session.CurrentScreen.GetText(0, 1, 19));
+        Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
+    }
+
     private static IReadOnlyList<string> Respond(string input, string[] fixture)
     {
         var tag = Regex.Match(input, "\"r-tag\":\"([^\"]+)\"").Groups[1].Value;

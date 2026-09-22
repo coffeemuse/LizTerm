@@ -11,6 +11,12 @@ in `src/LizTerm.Core/CLAUDE.md`; how the engine binary is built and located is i
 
 - `IB3270Process` abstracts the child. `B3270ChildProcess` is the real one and keeps a 50-line stderr tail for fault
   reports; `FakeB3270Process` in the tests is the other.
+- `B3270ChildProcess` starts the engine with `LC_NUMERIC=C` and no `LC_ALL` (`ConfigureLocale`; an `LC_ALL` value
+  is spelled out into the other categories first). b3270 4.5ga6 calls `setlocale(LC_ALL, "")` on macOS and Linux
+  and prints JSON doubles with `%g`, so under a comma-decimal locale a run that took a millisecond answers with
+  `"time":0,039`, which the parser drops, and the run hangs until the caller's timeout (#170). Upstream master is
+  the same. Do not loosen the parser instead: `A_comma_decimal_run_result_is_not_json_and_is_dropped` pins it, and
+  `EngineLocaleTests` in the integration project proves the environment fix against the real binary.
 - `B3270Locator.Find` returns a `B3270Location` with its source, resolving `LIZTERM_B3270_PATH`, then
   `runtimes/<rid>/native/`, then beside the app. It throws the same exception type for "nothing found" and "found but
   not executable"; `B3270Locator.Candidates` is how callers tell the two apart. Its not-found message ends by telling

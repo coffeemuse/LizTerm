@@ -223,6 +223,18 @@ public class IndicationParserTests
         Assert.False(IndicationParser.TryParse("{}", out _));
     }
 
+    /// <summary>The line that hid a successful connect in #170, verbatim from the reporter's wire log: b3270 under a
+    /// comma-decimal locale prints its run time as <c>0,039</c>. It is not JSON and the parser is right to drop it;
+    /// the fix is to start the engine with LC_NUMERIC=C (B3270ChildProcess.ConfigureLocale), not to guess at what
+    /// the engine meant. This test pins that the parser stays strict, so a lenient number reader cannot quietly
+    /// take the fix's place.</summary>
+    [Fact]
+    public void A_comma_decimal_run_result_is_not_json_and_is_dropped()
+    {
+        Assert.False(IndicationParser.TryParse("""{"run-result":{"r-tag":"44","success":true,"time":0,039}}""", out _));
+        Assert.False(IndicationParser.TryParse("""{"thumb":{"top":0,0465116,"shown":0,953488,"saved":192,"screen":32,"back":0}}""", out _));
+    }
+
     [Theory]
     [InlineData("""{"hello":"x"}""")]
     [InlineData("""{"screen-mode":123}""")]

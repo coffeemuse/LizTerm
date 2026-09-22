@@ -1,0 +1,24 @@
+{"connection":{"state":"resolving","host":"hercules.test","cause":"ui"}}
+{"thumb":{"top":0,0465116,"shown":0,953488,"saved":192,"screen":32,"back":0}}
+{"stats":{"bytes-received":0,"records-received":0,"bytes-sent":0,"records-sent":0}}
+{"erase":{"fg":"blue","bg":"neutralBlack"}}
+{"connect-attempt":{"host-ip":"192.0.2.10","port":"3270"}}
+{"connection":{"state":"tcp-pending","host":"hercules.test","cause":"ui"}}
+{"oia":{"field":"timing","value":"0.0"}}
+{"oia":{"field":"timing"}}
+{"connection":{"state":"telnet-pending","host":"hercules.test","cause":"ui"}}
+{"screen":{"cursor":{"enabled":true,"row":1,"column":1}}}
+{"oia":{"field":"timing","value":"0.0"}}
+{"oia":{"field":"timing"}}
+{"oia":{"field":"lock","value":"field"}}
+{"connection":{"state":"connected-3270","host":"hercules.test","cause":"ui"}}
+{"oia":{"field":"lock"}}
+{"erase":{"logical-rows":24,"logical-columns":80,"fg":"blue","bg":"neutralBlack"}}
+{"formatted":{"state":true}}
+{"screen":{"rows":[{"row":1,"changes":[{"column":2,"text":"Hercules Version  :"},{"column":21,"fg":"neutralWhite","gr":"highlight,selectable","text":" 4.9.1.11612-SDL-gee86c4de"},{"column":47,"fg":"neutralWhite","gr":"highlight,selectable","count":34}]},{"row":2,"changes":[{"column":2,"text":"Host name         :"},{"column":21,"fg":"neutralWhite","gr":"highlight,selectable","text":" hercules"},{"column":30,"fg":"neutralWhite","gr":"highlight,selectable","count":51}]},{"row":3,"changes":[{"column":2,"text":"Host OS           :"},{"column":21,"fg":"neutralWhite","gr":"highlight,selectable","text":" Linux-6.8.0-117-generic"},{"column":45,"fg":"neutralWhite","gr":"highlight,selectable","count":36}]},{"row":4,"changes":[{"column":2,"text":"Host Architecture :"},{"column":21,"fg":"neutralWhite","gr":"highlight,selectable","text":" x86_64"},{"column":28,"fg":"neutralWhite","gr":"highlight,selectable","count":53}]},{"row":5,"changes":[{"column":2,"text":"Processors        :"},{"column":21,"fg":"neutralWhite","gr":"highlight,selectable","text":" MP=2"},{"column":26,"fg":"neutralWhite","gr":"highlight,selectable","count":55}]},{"row":6,"changes":[{"column":2,"text":"LPAR Name         :"},{"column":21,"fg":"neutralWhite","gr":"highlight,selectable","text":" HERCULES"},{"column":30,"fg":"neutralWhite","gr":"highlight,selectable","count":51}]},{"row":7,"changes":[{"column":2,"text":"Device number     :"},{"column":21,"fg":"neutralWhite","gr":"highlight,selectable","text":" 0:00C2"},{"column":28,"fg":"neutralWhite","gr":"highlight,selectable","count":53}]},{"row":8,"changes":[{"column":2,"text":"Subchannel        :"},{"column":21,"fg":"neutralWhite","gr":"highlight,selectable","text":" 0025"},{"column":26,"fg":"neutralWhite","gr":"highlight,selectable","count":55}]},{"row":10,"changes":[{"column":11,"text":"The Hercules S/370, ESA/390 and z/Architecture Emulator"}]},{"row":11,"changes":[{"column":28,"text":"SDL 4.x Hyperion"}]},{"row":12,"changes":[{"column":13,"text":"_    _"},{"column":47,"text":"_"}]},{"row":13,"changes":[{"column":12,"text":"¦ ¦  ¦ ¦"},{"column":46,"text":"(_)"}]},{"row":14,"changes":[{"column":12,"text":"¦ ¦__¦ ¦ _   _  _ __    ___  _ __  _   ___   _ __"}]},{"row":15,"changes":[{"column":12,"text":"¦  __  ¦¦ ¦ ¦ ¦¦ '_ \\  / _ \\¦ '__¦¦ ¦ / _ \\ ¦ '_ \\"}]},{"row":16,"changes":[{"column":12,"text":"¦ ¦  ¦ ¦¦ ¦_¦ ¦¦ ¦_) ¦¦  __/¦ ¦   ¦ ¦¦ (_) ¦¦ ¦ ¦ ¦"}]},{"row":17,"changes":[{"column":12,"text":"¦_¦  ¦_¦ \\__, ¦¦ .__/  \\___¦¦_¦   ¦_¦ \\___/ ¦_¦ ¦_¦"}]},{"row":18,"changes":[{"column":22,"text":"__/ ¦¦ ¦"}]},{"row":19,"changes":[{"column":21,"text":"¦___/ ¦_¦"}]},{"row":21,"changes":[{"column":21,"text":"My PC thinks it's a MAINFRAME!"}]},{"row":23,"changes":[{"column":9,"text":"Copyright (C) 1999-2025 Roger Bowler, Jan Jaeger, and others"}]}]}}
+{"run-result":{"r-tag":"44","success":true,"time":0,039}}
+{"thumb":{"top":0,0542636,"shown":0,945736,"saved":224,"screen":32,"back":0}}
+{"oia":{"field":"lock","value":"not-connected"}}
+{"screen":{"cursor":{"enabled":false}}}
+{"run-result":{"r-tag":"86","success":true,"time":0,001}}
+{"connection":{"state":"not-connected"}}

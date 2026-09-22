@@ -30,6 +30,18 @@ engine lacks LizTerm's [patches](#patches), so the backend refuses ISPF (MVS) tr
 After building an engine, rebuild the .NET projects so the copy happens. `native/cache`, `native/build-tmp` and
 `native/out` are gitignored.
 
+## The engine's locale
+
+`B3270ChildProcess` starts every engine with `LC_NUMERIC=C` in its environment and without `LC_ALL` (whose value, if
+any, is spelled out into the other `LC_*` categories first, so the engine still reads the user's codeset). b3270
+4.5ga6 calls `setlocale(LC_ALL, "")` at start-up on macOS and Linux (`Common/codepage.c`; the Windows build skips it)
+and prints every JSON double with `%g` (`Common/json.c`), so on a desktop whose language writes decimals with a comma
+it answers a run that took a millisecond or more with `"time":0,039`. That is not JSON, LizTerm drops the line, and a
+connect that succeeded in every visible way times out thirty seconds later ([#170](https://github.com/coffeemuse/LizTerm/issues/170)).
+A Mac launched from the Finder has no locale variables, which is why it never showed there. Upstream master formats
+the same way, so this is not something a bump will remove; the integration project's `EngineLocaleTests` runs the
+bundled engine under `hr_HR.UTF-8` to prove the fix holds.
+
 ## Pinned sources
 
 Every downloaded source is a pin: a `fetch-*.sh` script holding a version, a checksum and a URL, which delegates
