@@ -5,6 +5,13 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **The crosshair is a thin line instead of a shaded row and column.** **View > Crosshair** used to tint the
+  cursor's whole row and column, which sat over the host's text and was a heavy way to point at one line; it now
+  draws a hairline along the edge of the cursor's cell, so it rules the screen without covering anything. A
+  monochrome (3278) session draws it in the same green as the rest of the screen
+  ([#180](https://github.com/coffeemuse/LizTerm/issues/180), reported by
+  [@mgrossmann](https://github.com/mgrossmann)).
+
 - **Shift+End jumps the cursor to the end of a field.** Adding to something already typed meant arrowing across
   the blanks to reach the end of it; **Field End** goes straight there. It is on Shift+End, where Vista TN3270 has
   it, and End itself still erases to the end of the field. Like every other key, you can move it in

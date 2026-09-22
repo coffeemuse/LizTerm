@@ -554,8 +554,9 @@ public sealed class TerminalScreen : Control
     private void DrawCrosshair(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
     {
         var (horizontal, vertical) = CrosshairGeometry.Rects(Crosshair, snapshot.Cursor, g, snapshot.Rows, snapshot.Columns);
-        if (horizontal is { } h) context.FillRectangle(Palette.Crosshair, h);
-        if (vertical is { } v) context.FillRectangle(Palette.Crosshair, v);
+        var brush = Palette.CrosshairBrush(Monochrome);
+        if (horizontal is { } h) context.FillRectangle(brush, h);
+        if (vertical is { } v) context.FillRectangle(brush, v);
     }
 
     private void DrawSelection(DrawingContext context, ScreenSnapshot snapshot, CellGeometry g)
