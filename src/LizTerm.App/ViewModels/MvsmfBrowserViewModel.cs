@@ -284,18 +284,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     }
 
     /// <summary>A file dialog that fails to open is a status line, not a failed operation.</summary>
-    private async Task<T?> TryPickAsync<T>(Func<Task<T>> pick)
-    {
-        try
-        {
-            return await pick();
-        }
-        catch (Exception ex)
-        {
-            StatusText = "✗ Could not open the file dialog: " + ex.Message;
-            return default;
-        }
-    }
+    private Task<T?> TryPickAsync<T>(Func<Task<T>> pick) => Ops.TryPickAsync(pick);
 
     private static string Plural(int count, string noun) => count == 1 ? $"1 {noun}" : $"{count} {noun}s";
 

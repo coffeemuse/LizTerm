@@ -62,4 +62,15 @@ public class HostFileMessagesTests
         Assert.Equal("Not authorized.",
             HostFileMessages.DescribeUploadFailure(new HostFileException(HostFileErrorKind.NotAuthorized, "x"), dataset: true));
     }
+
+    [Fact]
+    public void A_unix_upload_failure_that_can_happen_mid_write_says_the_file_may_be_partly_written()
+    {
+        Assert.Equal("Server error. The file may be partly written.",
+            HostFileMessages.DescribeUnixUploadFailure(new HostFileException(HostFileErrorKind.ServerError, "x")));
+        Assert.Equal("Changed on the host since you downloaded it.",
+            HostFileMessages.DescribeUnixUploadFailure(new HostFileException(HostFileErrorKind.Conflict, "x")));
+        Assert.Equal("The file is 2 bytes; the host holds at most 1.",
+            HostFileMessages.DescribeUnixUploadFailure(new InvalidOperationException("The file is 2 bytes; the host holds at most 1.")));
+    }
 }

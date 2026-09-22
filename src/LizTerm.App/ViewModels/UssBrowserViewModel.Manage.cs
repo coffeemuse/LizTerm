@@ -206,7 +206,7 @@ public sealed partial class UssBrowserViewModel
         {
             // A delete cannot be undone, so the list and the line show what went before the cancel. The list is the
             // truth: a request the cancel interrupted may still have deleted its file on the host.
-            await RefreshAfterDeleteAsync(directory);
+            await RefreshQuietlyAsync(directory);
             _ops.StatusText = $"– Delete cancelled: deleted {deleted} of {Counted(files.Count, "file", "files")}.";
             return;
         }
@@ -221,9 +221,9 @@ public sealed partial class UssBrowserViewModel
         SetSelectedFiles(_selectedFiles.Where(file => !ReferenceEquals(file, row)));
     }
 
-    /// <summary>A refresh on the way out of a stopped delete: its own failure would only hide the reason for the
-    /// stop, so it is ignored.</summary>
-    private async Task RefreshAfterDeleteAsync(HostPath directory)
+    /// <summary>A refresh on the way out of a stopped delete or upload: its own failure would only hide the reason
+    /// for the stop, so it is ignored.</summary>
+    private async Task RefreshQuietlyAsync(HostPath directory)
     {
         try
         {

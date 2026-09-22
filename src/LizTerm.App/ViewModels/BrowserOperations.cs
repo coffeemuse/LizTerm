@@ -132,6 +132,20 @@ public sealed partial class BrowserOperations : ObservableObject, IDisposable
         else StatusText = "⚠ " + message;
     }
 
+    /// <summary>A file dialog that fails to open is a status line, not a failed operation.</summary>
+    public async Task<T?> TryPickAsync<T>(Func<Task<T>> pick)
+    {
+        try
+        {
+            return await pick();
+        }
+        catch (Exception ex)
+        {
+            StatusText = "✗ Could not open the file dialog: " + ex.Message;
+            return default;
+        }
+    }
+
     [RelayCommand]
     private async Task RetryAsync()
     {
