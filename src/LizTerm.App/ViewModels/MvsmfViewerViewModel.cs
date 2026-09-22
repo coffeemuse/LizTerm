@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.ViewModels;
@@ -58,6 +59,66 @@ public sealed partial class MvsmfViewerViewModel : ObservableObject
           + (TrimmedTrailingBlanks ? " · trailing blanks trimmed" : "");
 
     [ObservableProperty] private bool _showLineNumbers = true;
+
+    /// <summary>The find term. Typing recomputes the matches and lands on the first; the window scrolls to it.
+    /// FindViewModel's shape without its screen types — that one searches a ScreenSnapshot.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CountText), nameof(MatchLength))]
+    private string _term = "";
+
+    /// <summary>Where each match starts in <see cref="Text"/>, in order, never overlapping.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CountText), nameof(MatchStart), nameof(MatchLine))]
+    private IReadOnlyList<int> _matches = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CountText), nameof(MatchStart), nameof(MatchLine))]
+    private int _currentIndex = -1;
+
+    public int? MatchStart => CurrentIndex >= 0 && CurrentIndex < Matches.Count ? Matches[CurrentIndex] : null;
+
+    public int MatchLength => Term.Length;
+
+    /// <summary>The 0-based line the current match starts on, so the window can scroll by line rather than by
+    /// caret: the text box is not focused while the user types in the find box.</summary>
+    public int? MatchLine => MatchStart is { } start ? Text.Take(start).Count(c => c == '\n') : null;
+
+    public string CountText => Term.Length == 0 ? ""
+        : Matches.Count == 0 ? "No matches"
+        : $"{Count(CurrentIndex + 1)} of {Count(Matches.Count)}";
+
+    [RelayCommand]
+    private void FindNext() => Step(1);
+
+    [RelayCommand]
+    private void FindPrevious() => Step(-1);
+
+    /// <summary>Wraps, so the last match's Next is the first.</summary>
+    private void Step(int by)
+    {
+        if (Matches.Count == 0) return;
+        CurrentIndex = ((CurrentIndex + by) % Matches.Count + Matches.Count) % Matches.Count;
+    }
+
+    partial void OnTermChanged(string value)
+    {
+        Matches = FindAll(Text, value);
+        CurrentIndex = Matches.Count > 0 ? 0 : -1;
+    }
+
+    private static IReadOnlyList<int> FindAll(string text, string term)
+    {
+        if (term.Length == 0) return [];
+        var found = new List<int>();
+        for (var at = 0; at <= text.Length - term.Length;)
+        {
+            var next = text.IndexOf(term, at, StringComparison.OrdinalIgnoreCase);
+            if (next < 0) break;
+            found.Add(next);
+            at = next + term.Length;
+        }
+        return found;
+    }
 
     /// <summary>A count for the footer, grouped: 10,000. The gutter does not use it.</summary>
     private static string Count(int value) => value.ToString("N0", CultureInfo.InvariantCulture);

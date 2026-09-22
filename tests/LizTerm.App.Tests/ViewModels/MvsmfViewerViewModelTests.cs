@@ -84,4 +84,97 @@ public sealed class MvsmfViewerViewModelTests
         Assert.Equal("⚠ Showing the first 10,000 lines of 10,001. Download the member to read it all.",
             viewer.FooterText);
     }
+
+    private static MvsmfViewerViewModel Jcl() =>
+        Viewer("//HELLO JOB", "//STEP EXEC PGM=IEFBR14", "//SYSIN DD *", "hello again");
+
+    [Fact]
+    public void An_empty_term_finds_nothing_and_says_nothing()
+    {
+        var viewer = Jcl();
+
+        Assert.Empty(viewer.Matches);
+        Assert.Equal(-1, viewer.CurrentIndex);
+        Assert.Null(viewer.MatchStart);
+        Assert.Equal("", viewer.CountText);
+    }
+
+    [Fact]
+    public void A_term_finds_every_match_ignoring_case_and_lands_on_the_first()
+    {
+        var viewer = Jcl();
+
+        viewer.Term = "HELLO";
+
+        Assert.Equal(2, viewer.Matches.Count);
+        Assert.Equal(0, viewer.CurrentIndex);
+        Assert.Equal(2, viewer.MatchStart);
+        Assert.Equal(5, viewer.MatchLength);
+        Assert.Equal(0, viewer.MatchLine);
+        Assert.Equal("1 of 2", viewer.CountText);
+    }
+
+    [Fact]
+    public void Next_and_previous_step_through_the_matches_and_wrap()
+    {
+        var viewer = Jcl();
+        viewer.Term = "hello";
+
+        viewer.FindNextCommand.Execute(null);
+        Assert.Equal("2 of 2", viewer.CountText);
+        Assert.Equal(3, viewer.MatchLine);
+
+        viewer.FindNextCommand.Execute(null);
+        Assert.Equal("1 of 2", viewer.CountText);
+
+        viewer.FindPreviousCommand.Execute(null);
+        Assert.Equal("2 of 2", viewer.CountText);
+    }
+
+    [Fact]
+    public void A_term_with_no_match_says_so_and_steps_nowhere()
+    {
+        var viewer = Jcl();
+
+        viewer.Term = "COBOL";
+
+        Assert.Empty(viewer.Matches);
+        Assert.Equal("No matches", viewer.CountText);
+        Assert.Null(viewer.MatchStart);
+        viewer.FindNextCommand.Execute(null);
+        Assert.Equal("No matches", viewer.CountText);
+    }
+
+    [Fact]
+    public void Clearing_the_term_clears_the_matches()
+    {
+        var viewer = Jcl();
+        viewer.Term = "HELLO";
+
+        viewer.Term = "";
+
+        Assert.Empty(viewer.Matches);
+        Assert.Equal("", viewer.CountText);
+    }
+
+    [Fact]
+    public void Matches_do_not_overlap()
+    {
+        var viewer = Viewer("AAAA");
+
+        viewer.Term = "AA";
+
+        Assert.Equal(new[] { 0, 2 }, viewer.Matches);
+    }
+
+    [Fact]
+    public void Find_searches_only_what_is_shown()
+    {
+        var lines = Enumerable.Range(1, MvsmfViewerViewModel.MaxLines + 1).Select(n => $"LINE {n}").ToArray();
+        var viewer = Viewer(lines);
+
+        viewer.Term = "LINE 10001";
+
+        Assert.Equal("No matches", viewer.CountText);
+    }
 }
