@@ -19,15 +19,23 @@ public partial class SignInWindow : Window
     public SignInWindow(CredentialPromptRequest request)
     {
         InitializeComponent();
-        HostText.Text = $"{request.ProfileName} · {request.Url}";
-        ReasonText.Text = request.Reason switch
+        // The profile is named in the title as well as in the header, because the window list and the taskbar show
+        // only the title, and two session windows on different hosts can each have a prompt up.
+        Title = $"Sign in to mvsMF — {request.ProfileName}";
+        ProfileText.Text = request.ProfileName;
+        UrlText.Text = request.Url;
+        // Every line leads with its own mark, so the three registers are told apart without their colours. The
+        // first ask carries a line of its own rather than a gap: opened from the profile editor's Test button, the
+        // window otherwise appears with no word about who wants a password. It names mvsMF, not what mvsMF is used
+        // for today, since jobs and USS are still to come (#17).
+        var (reason, severity) = request.Reason switch
         {
-            SignInReason.Rejected => "✗ The userid or password was not accepted. Try again.",
-            // Both lines are drawn in the error red, so both lead with a mark: colour never carries meaning alone.
-            SignInReason.Expired => "⚠ Your mvsMF session has expired. Sign in again.",
-            _ => "",
+            SignInReason.Rejected => ("✗ mvsMF did not accept that userid and password.", "error"),
+            SignInReason.Expired => ("⚠ Your mvsMF session timed out. Sign in to pick up where you left off.", "warning"),
+            _ => ("Sign in to access this host via mvsMF.", "note"),
         };
-        ReasonText.IsVisible = request.Reason != SignInReason.First;
+        ReasonText.Text = reason;
+        ReasonText.Classes.Add(severity);
         UseridBox.Text = request.Userid ?? "";
         // The first box the user has to type in takes the keyboard.
         Opened += (_, _) => (string.IsNullOrEmpty(UseridBox.Text) ? UseridBox : PasswordBox).Focus();
@@ -37,9 +45,18 @@ public partial class SignInWindow : Window
     {
         var userid = (UseridBox.Text ?? "").Trim().ToUpperInvariant();
         var password = PasswordBox.Text ?? "";
-        if (userid.Length == 0 || password.Length == 0)
+        // Which box is empty, rather than one message for both: the window has two, and the user has just filled in
+        // one of them.
+        var missing = (userid.Length == 0, password.Length == 0) switch
         {
-            MissingText.Text = "✗ Enter the userid and the password.";
+            (true, true) => "✗ Enter your userid and password.",
+            (true, false) => "✗ Enter your userid.",
+            (false, true) => "✗ Enter your password.",
+            _ => null,
+        };
+        if (missing is not null)
+        {
+            MissingText.Text = missing;
             MissingText.IsVisible = true;
             return;
         }

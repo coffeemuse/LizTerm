@@ -544,7 +544,9 @@ public partial class ProfileEditorViewModel : ObservableObject
         string result;
         try
         {
-            var name = string.IsNullOrWhiteSpace(Name) ? "This profile" : Name.Trim();
+            // Shown as the sign-in window's heading and in its title bar, so it reads as a name rather than
+            // as a sentence: the Test button works before the profile has been given one.
+            var name = string.IsNullOrWhiteSpace(Name) ? "Unnamed profile" : Name.Trim();
             var info = await _tester!(name, url, userid, MvsmfPinnedCertificate, CancellationToken.None);
             result = IsSupportedVersion(info.ProductVersion)
                 ? $"✓ Connected: {info.Product} {info.ProductVersion} on {info.SystemVersion}"

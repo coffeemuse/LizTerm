@@ -20,14 +20,29 @@ public class SignInWindowTests
     }
 
     [AvaloniaFact]
-    public void Shows_the_profile_and_url_and_prefills_the_userid()
+    public void Names_the_profile_and_the_url_on_their_own_lines_and_prefills_the_userid()
     {
         var window = Show();
-        Assert.Equal("MVS/CE · http://mvs:8080/zosmf", window.FindControl<TextBlock>("HostText")!.Text);
+        Assert.Equal("MVS/CE", window.FindControl<TextBlock>("ProfileText")!.Text);
+        Assert.Equal("http://mvs:8080/zosmf", window.FindControl<TextBlock>("UrlText")!.Text);
         Assert.Equal("MVSCE02", window.FindControl<TextBox>("UseridBox")!.Text);
-        Assert.False(window.FindControl<TextBlock>("ReasonText")!.IsVisible);
         Assert.Equal('•', window.FindControl<TextBox>("PasswordBox")!.PasswordChar);
-        Assert.Equal("Sign in to mvsMF", window.Title);
+    }
+
+    [AvaloniaFact]
+    public void The_title_names_the_profile_so_the_window_list_tells_two_prompts_apart()
+    {
+        Assert.Equal("Sign in to mvsMF — MVS/CE", Show().Title);
+    }
+
+    [AvaloniaFact]
+    public void The_first_ask_says_why_the_window_is_up_rather_than_showing_a_blank()
+    {
+        var text = Show().FindControl<TextBlock>("ReasonText")!;
+        Assert.True(text.IsVisible);
+        Assert.Equal("Sign in to access this host via mvsMF.", text.Text);
+        // Neither a failure nor a warning: no mark, and the neutral colour that goes with it.
+        Assert.Contains("note", text.Classes);
     }
 
     [AvaloniaFact]
@@ -35,15 +50,19 @@ public class SignInWindowTests
     {
         var text = Show(reason: SignInReason.Rejected).FindControl<TextBlock>("ReasonText")!;
         Assert.True(text.IsVisible);
-        Assert.Equal("✗ The userid or password was not accepted. Try again.", text.Text);
+        Assert.Equal("✗ mvsMF did not accept that userid and password.", text.Text);
+        Assert.Contains("error", text.Classes);
     }
 
     [AvaloniaFact]
-    public void An_expired_session_says_so_with_a_mark_rather_than_blaming_the_password()
+    public void An_expired_session_is_a_warning_not_an_error_and_never_blames_the_password()
     {
         var text = Show(reason: SignInReason.Expired).FindControl<TextBlock>("ReasonText")!;
         Assert.True(text.IsVisible);
-        Assert.Equal("⚠ Your mvsMF session has expired. Sign in again.", text.Text);
+        Assert.Equal("⚠ Your mvsMF session timed out. Sign in to pick up where you left off.", text.Text);
+        // The routine idle timeout is amber, not the refused-password red, and the mark agrees with the colour.
+        Assert.Contains("warning", text.Classes);
+        Assert.DoesNotContain("error", text.Classes);
     }
 
     [AvaloniaFact]
@@ -63,24 +82,21 @@ public class SignInWindowTests
         Assert.Equal("secret", credentials.Password);
     }
 
-    [AvaloniaFact]
-    public void A_blank_userid_or_password_keeps_the_window_open_and_says_why()
+    [AvaloniaTheory]
+    [InlineData(null, "", "✗ Enter your userid and password.")]
+    [InlineData(null, "secret", "✗ Enter your userid.")]
+    [InlineData("MVSCE02", "", "✗ Enter your password.")]
+    public void A_blank_box_keeps_the_window_open_and_names_the_box(string? userid, string password, string expected)
     {
-        var window = Show(userid: null);
-        window.FindControl<TextBox>("PasswordBox")!.Text = "secret";
+        var window = Show(userid: userid);
+        window.FindControl<TextBox>("PasswordBox")!.Text = password;
 
         window.SignIn();
 
         Assert.True(window.IsVisible);
-        Assert.True(window.FindControl<TextBlock>("MissingText")!.IsVisible);
-        Assert.Equal("✗ Enter the userid and the password.", window.FindControl<TextBlock>("MissingText")!.Text);
-
-        var noPassword = Show();
-        noPassword.SignIn();
-
-        Assert.True(noPassword.IsVisible);
-        Assert.True(noPassword.FindControl<TextBlock>("MissingText")!.IsVisible);
-        Assert.Equal("✗ Enter the userid and the password.", noPassword.FindControl<TextBlock>("MissingText")!.Text);
+        var missing = window.FindControl<TextBlock>("MissingText")!;
+        Assert.True(missing.IsVisible);
+        Assert.Equal(expected, missing.Text);
     }
 
     [AvaloniaFact]

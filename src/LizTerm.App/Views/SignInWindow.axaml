@@ -6,20 +6,47 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="LizTerm.App.Views.SignInWindow"
-        Title="Sign in to mvsMF" Width="420" SizeToContent="Height" CanResize="False"
+        Width="460" SizeToContent="Height" CanResize="False"
         WindowStartupLocation="CenterOwner">
-  <StackPanel Margin="16" Spacing="10">
-    <TextBlock x:Name="HostText" FontWeight="SemiBold" TextWrapping="Wrap" />
-    <TextBlock x:Name="ReasonText" Foreground="#FF8080" TextWrapping="Wrap" IsVisible="False" />
-    <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto" RowSpacing="8">
+  <Window.Styles>
+    <!-- The reason line's three registers. The code-behind pairs each with its own leading mark, so the colour is
+         reinforcement and never the only carrier: a refused password is a failure (red, ✗), an expired session is
+         the routine idle timeout rather than something the user got wrong (amber, ⚠, the shade CertificateWindow
+         already warns in), and the first ask is neither (grey, no mark). -->
+    <Style Selector="TextBlock.note">
+      <Setter Property="Foreground" Value="#A0A0A0" />
+    </Style>
+    <Style Selector="TextBlock.warning">
+      <Setter Property="Foreground" Value="#FFC080" />
+    </Style>
+    <Style Selector="TextBlock.error">
+      <Setter Property="Foreground" Value="#FF8080" />
+    </Style>
+  </Window.Styles>
+  <StackPanel Margin="16" Spacing="12">
+    <!-- Two lines, not one: the name says which profile is asking, the URL says where the password is about to go.
+         The second is the one worth reading carefully before typing, so it wraps rather than trims, and it is drawn
+         in the same monospace every other host identifier in mvsMF Access uses. -->
+    <StackPanel Spacing="2">
+      <TextBlock x:Name="ProfileText" FontWeight="SemiBold" TextWrapping="Wrap" />
+      <TextBlock x:Name="UrlText" Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap"
+                 FontFamily="Menlo, Consolas, monospace" />
+    </StackPanel>
+    <TextBlock x:Name="ReasonText" TextWrapping="Wrap" />
+    <Grid ColumnDefinitions="92,*" RowDefinitions="Auto,Auto" RowSpacing="8">
       <TextBlock Grid.Row="0" Grid.Column="0" Text="Userid" VerticalAlignment="Center" />
-      <TextBox Grid.Row="0" Grid.Column="1" x:Name="UseridBox" MaxLength="8" />
+      <TextBox Grid.Row="0" Grid.Column="1" x:Name="UseridBox" MaxLength="8"
+               FontFamily="Menlo, Consolas, monospace" />
       <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" VerticalAlignment="Center" />
       <TextBox Grid.Row="1" Grid.Column="1" x:Name="PasswordBox" PasswordChar="•" />
     </Grid>
-    <TextBlock x:Name="MissingText" Foreground="#FF8080" IsVisible="False" TextWrapping="Wrap" />
-    <TextBlock Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap"
-               Text="Used once to sign in, then discarded. Only the session token is kept, until this session window closes. Never saved to disk." />
+    <TextBlock x:Name="MissingText" Classes="error" IsVisible="False" TextWrapping="Wrap" />
+    <!-- Fine print, placed as fine print: below the rule, out of the path between the password box and Sign In.
+         The three facts are docs/privacy.md's, and must stay true to it. -->
+    <Border BorderBrush="#33373D" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+      <TextBlock Foreground="#8F8F8F" FontSize="12" TextWrapping="Wrap"
+                 Text="Used once to sign in, then discarded. Only the session token is kept, until this session window closes — never saved to disk." />
+    </Border>
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" Click="OnCancelClick" />
       <Button x:Name="SignInButton" Content="Sign In" IsDefault="True" Click="OnSignInClick" />
