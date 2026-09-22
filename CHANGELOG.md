@@ -3,6 +3,10 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
+## Unreleased
+
+- **About LizTerm's engine line can be copied**, like the version line above it, so a bug report can quote both.
+
 ## 0.7.0
 
 - **Ctrl+Escape sends Clear on macOS**, which had no working Clear keystroke before: the chord never reached the
