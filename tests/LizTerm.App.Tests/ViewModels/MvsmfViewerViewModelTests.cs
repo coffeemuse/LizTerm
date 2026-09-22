@@ -66,7 +66,7 @@ public sealed class MvsmfViewerViewModelTests
     {
         var viewer = Viewer(Enumerable.Range(1, 1001).Select(n => $"LINE {n}").ToArray());
 
-        Assert.Contains("999\n1000", viewer.LineNumbers);
+        Assert.Contains("\n1000\n", viewer.LineNumbers);
         Assert.DoesNotContain(",", viewer.LineNumbers);
     }
 
@@ -79,9 +79,9 @@ public sealed class MvsmfViewerViewModelTests
 
         Assert.True(viewer.IsTruncated);
         Assert.Equal(MvsmfViewerViewModel.MaxLines, viewer.LineCount);
-        Assert.EndsWith("LINE 1000", viewer.Text);
-        Assert.DoesNotContain("LINE 1001", viewer.Text);
-        Assert.Equal("⚠ Showing the first 1,000 lines of 1,001. Download the member to read it all.",
+        Assert.EndsWith("LINE 2000", viewer.Text);
+        Assert.DoesNotContain("LINE 2001", viewer.Text);
+        Assert.Equal("⚠ Showing the first 2,000 lines of 2,001. Download the member to read it all.",
             viewer.FooterText);
     }
 

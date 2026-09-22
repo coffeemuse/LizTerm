@@ -431,7 +431,7 @@ searches what is shown, and **Line numbers** turns the gutter off if you would r
 View is off for a dataset whose records are undefined-length — a load library holds object code, not text — and
 the button says so when you point at it.
 
-A very long member is shown as far as its first 1,000 lines, and the footer says how many there are in all.
+A very long member is shown as far as its first 2,000 lines, and the footer says how many there are in all.
 Download it to read the rest.
 
 ### Uploading

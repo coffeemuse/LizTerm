@@ -1000,7 +1000,12 @@ constructor captured.
 - The viewer window is owned and non-blocking (`ShowAbove`), one per browser window
   (`MvsmfBrowserWindow.ViewerWindow`): a second View sets its `DataContext` and fronts it. `MvsmfViewerViewModel`
   holds finished lines and no Avalonia type; it caps what it lays out at `MaxLines`, because Avalonia's `TextBox`
-  builds one layout for the whole text, and the footer says so when it bit. The line-number gutter is a
+  builds one layout for the whole text, and the footer says so when it bit. `MaxLines` was set by timing
+  `window.UpdateLayout()` over a fixture that size in the headless test host: 2,000 lines ≈ 1.4 s, 5,000 ≈ 3.2 s,
+  10,000 ≈ 6 s, so 2,000 is roughly where the window stops feeling instant. Those are headless figures, not
+  real-machine ones — `tests/CLAUDE.md` notes that host's text stub runs about twice a real font's cost — so
+  whoever revisits this constant should re-time it there rather than trust the number alone; the feel on a real
+  machine is a hands-on pass's job, not another headless run. The line-number gutter is a
   `TextBlock` in a scrollbar-less `ScrollViewer` driven from the text box's own `PART_ScrollViewer`, with the line
   height pinned on both from `TextLineHeight`; find scrolls by line index times that height rather than through
   `CaretIndex`, because the text box does not hold the focus while the user types in the find box.
