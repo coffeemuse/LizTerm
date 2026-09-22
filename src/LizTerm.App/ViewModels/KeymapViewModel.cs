@@ -16,8 +16,14 @@ namespace LizTerm.App.ViewModels;
 /// is the seam a chord-centric view would sit on. UI thread only: the windows and the tab that use it are.</summary>
 public sealed class KeymapViewModel : ObservableObject
 {
+    /// <summary>What the tab and the launch notice add to the store's account of a file they cannot use: that the
+    /// defaults are standing in, and that the file itself is untouched, which is what makes a repair worth trying
+    /// before a reset.</summary>
+    private const string UsingDefaults = "LizTerm is using the default keys until it is fixed; your file has not been changed.";
+
     private readonly KeymapStore? _store;
     private string? _lastSaveError;
+    private string? _loadError;
     private bool _unsaved;
     private Keymap? _erasing;
     private Keymap? _cursorLeft;
@@ -29,7 +35,9 @@ public sealed class KeymapViewModel : ObservableObject
     public KeymapViewModel(KeymapStore store)
     {
         _store = store;
-        Overlay = KeymapOverlay.Parse(store.Load());
+        var load = store.Load();
+        Overlay = KeymapOverlay.Parse(load.File);
+        _loadError = load.Problem is null ? null : load.Problem + " " + UsingDefaults;
     }
 
     /// <summary>The differences as this process sees them. Another process's later write is seen at the next
@@ -49,8 +57,24 @@ public sealed class KeymapViewModel : ObservableObject
         private set => SetProperty(ref _lastSaveError, value);
     }
 
+    /// <summary>Why this build could not use keymap.json at all, or null when it could (#168). While it is set the
+    /// overlay is empty, every default is in force, and every save would be refused by KeymapStore.Update, so the
+    /// Keyboard tab shows this in place of the rows rather than an editor whose every change fails.</summary>
+    public string? LoadError
+    {
+        get => _loadError;
+        private set => SetProperty(ref _loadError, value);
+    }
+
+    /// <summary>Where the bindings live, for a message that has to name the file to fix, or null for an in-memory
+    /// keymap, which has no file.</summary>
+    public string? KeymapFilePath => _store?.FilePath;
+
     /// <summary>Entries in the file this build left alone, for the tab's note.</summary>
     public int UnreadableEntries => Overlay.IgnoredCount;
+
+    /// <summary>Those same entries, named and explained, for the tab to list (#168).</summary>
+    public IReadOnlyList<KeymapSkip> Skipped => Overlay.Skipped;
 
     /// <summary>The map in force for one window: the profile's Backspace choice under the user's entries. Composed
     /// once per change: Keymap is immutable, and the tab asks once per row on every change, so every caller shares
@@ -85,6 +109,27 @@ public sealed class KeymapViewModel : ObservableObject
     public void Unbind(KeyChord chord) => Apply(overlay => overlay.Unbind(chord));
 
     public void ResetToDefaults() => Apply(overlay => overlay.Cleared());
+
+    /// <summary>The way out of a keymap.json this build cannot use (#168): the file goes aside under another name,
+    /// so the next load finds none and every default applies, and this object is editable again. The bindings are
+    /// kept rather than deleted, since a stray comma is a repair and not a reason to lose a hand-written file.
+    /// A move that fails leaves the error standing and reports itself through LastSaveError, the banner every
+    /// window already shows. Nothing to do when the file loaded.</summary>
+    public void RestoreDefaults()
+    {
+        if (_store is null || LoadError is null) return;
+        try
+        {
+            _store.MoveAside();
+            LoadError = null;
+            LastSaveError = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LastSaveError = "Could not reset the keymap: " + ex.Message;
+            SaveFailed?.Invoke(this, LastSaveError);
+        }
+    }
 
     /// <summary>In memory first, then the notifications, then the write. The notifications sit in a try/finally for the reason SettingsViewModel's do: a subscriber that throws must not cost the user the save. The count is announced only when it moved.</summary>
     private void Apply(Func<KeymapOverlay, KeymapOverlay> change)

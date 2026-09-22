@@ -16,42 +16,97 @@ internal static class JsonFiles
     public static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     /// <summary>The file as a JSON object, or null when it is missing, unreadable, not JSON or not an object.</summary>
-    public static JsonObject? ReadLenient(string path)
+    public static JsonObject? ReadLenient(string path) => ReadLenient(path, out _);
+
+    /// <param name="problem">Why the file would not read, as sentences about the file ("It is not valid JSON.
+    /// Line 4: …"), or null when it read or is simply missing — a missing file is the empty file by design, and
+    /// the only one of these a caller should stay quiet about.</param>
+    public static JsonObject? ReadLenient(string path, out string? problem)
     {
         string text;
         try
         {
             text = File.ReadAllText(path);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (FileNotFoundException)
         {
+            problem = null;
             return null;
         }
-        return Parse(text);
+        catch (DirectoryNotFoundException)
+        {
+            problem = null;
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A file that is there but will not open costs a keymap every binding, just as a broken one does, and
+            // the user can chmod it: read as "no file" this was the silent loss #168 is about. The OS says it
+            // better than we could, and names the path itself.
+            problem = ex.Message.EndsWith('.') ? ex.Message : ex.Message + '.';
+            return null;
+        }
+        return Parse(text, out problem);
     }
 
-    /// <summary>Null when the file is missing. Throws InvalidDataException, naming the file, when it exists and is
-    /// not a JSON object, rather than let a caller replace something the user may be editing by hand. IO and
-    /// permission errors propagate.</summary>
+    /// <summary>Null when the file is missing. Throws InvalidDataException, naming the file and why it would not
+    /// read, when it exists and is not a JSON object, rather than let a caller replace something the user may be
+    /// editing by hand. IO and permission errors propagate.</summary>
     public static JsonObject? ReadStrict(string path)
     {
         if (!File.Exists(path)) return null;
-        return Parse(File.ReadAllText(path))
-               ?? throw new InvalidDataException($"{Path.GetFileName(path)} is not valid JSON; fix or delete it: {path}");
+        return Parse(File.ReadAllText(path), out var problem)
+               ?? throw new InvalidDataException($"{Path.GetFileName(path)} could not be read. {problem} Fix or delete it: {path}");
     }
 
     /// <summary>The text as a JSON object, or null for anything else: not JSON, JSON that is not an object, or an
     /// object with a duplicated key.</summary>
-    public static JsonObject? Parse(string text)
+    /// <param name="problem">Null when the text is a JSON object; otherwise sentences about it, in the shape the
+    /// stores pass on to the user. There is no overload that drops it: discarding the reader's diagnosis is the
+    /// mistake #168 was about.</param>
+    public static JsonObject? Parse(string text, out string? problem)
     {
         try
         {
-            return JsonNode.Parse(text, documentOptions: new() { AllowDuplicateProperties = false }) as JsonObject;
-        }
-        catch (JsonException)
-        {
+            if (JsonNode.Parse(text, documentOptions: new() { AllowDuplicateProperties = false }) is JsonObject document)
+            {
+                problem = null;
+                return document;
+            }
+            problem = "It does not hold a JSON object.";
             return null;
         }
+        catch (JsonException ex)
+        {
+            problem = "It is not valid JSON. " + Describe(ex);
+            return null;
+        }
+    }
+
+    /// <summary>What the reader said, for someone holding the file in an editor. Its message carries developer
+    /// asides the user cannot act on — the position repeated in reader terms, an invitation to change the reader's
+    /// options, and the mode and deserialization it was doing — so those come off, and the line goes back on
+    /// counting from one, as an editor counts. The line only, never the column: BytePositionInLine counts bytes, so
+    /// on a line holding a text binding such as ¬ it is not the column the editor shows, while the line always is.
+    /// A duplicated property has no position at all, and names the property instead.</summary>
+    private static string Describe(JsonException ex)
+    {
+        var text = ex.Message;
+        var tail = text.IndexOf(" LineNumber:", StringComparison.Ordinal);
+        if (tail >= 0) text = text[..tail];
+        text = text.Replace(" which is not supported in this mode", string.Empty, StringComparison.Ordinal)
+                   .Replace(" encountered during deserialization", string.Empty, StringComparison.Ordinal)
+                   .Replace(" Change the reader options.", string.Empty, StringComparison.Ordinal)
+                   // An unclosed brace leads with the reader's own bookkeeping; the sentence after it is the one
+                   // that tells the user what to type.
+                   .Replace("Expected depth to be zero at the end of the JSON payload. ", string.Empty, StringComparison.Ordinal)
+                   .Trim();
+        if (!text.EndsWith('.')) text += '.';
+        if (ex.LineNumber is not { } line) return text;
+        // "The JSON object…" becomes "the JSON object…" after "Line 4: ", while "JSON" and "'P' is…" stay as they are.
+        if (text.Length > 1 && char.IsAsciiLetterUpper(text[0]) && char.IsAsciiLetterLower(text[1]))
+            text = char.ToLowerInvariant(text[0]) + text[1..];
+        return $"Line {line + 1}: {text}";
     }
 
     /// <summary>Through a sibling temp file renamed over the target, so a reader never sees a partial file, and

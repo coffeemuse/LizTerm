@@ -147,6 +147,17 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
   file is not a JSON object, rather than overwrite something the user may be editing.
 - `SettingsLayers` is pure; every merge and pinning case is a plain unit test. Only the user file is wired: a
   system layer is one more entry in `Merge`'s list, and an environment variable would be the topmost layer.
+- **A read says why it failed** (#168). `JsonFiles.Parse`/`ReadLenient` take an `out string? problem` — sentences
+  about the file, built from `System.Text.Json`'s own diagnosis with its developer asides stripped and the line
+  renumbered from one, as an editor counts (never the column: `BytePositionInLine` counts bytes). `ReadStrict`
+  carries it into the `InvalidDataException` both stores throw, so a refused save names the trailing comma rather
+  than just the file. `KeymapStore.Load` answers a `KeymapLoad` (the file, plus `Problem`), because a keymap that
+  will not parse costs *every* binding and nothing else in the app would have said so; `KeymapStore.MoveAside`
+  renames it to `keymap.json.bad`, the way back to the defaults that keeps a hand-written file. `BindingsProblem`
+  is the one home of "is this `bindings` usable", asked by `Load` and `Update` alike. A key that is simply absent is
+  an empty keymap, not a problem: that is what a fresh file and a newer build's file both look like. A file that is
+  *there* but will not open (a mode of 000, an owner from another machine) is reported too, in the OS's own words —
+  read as "no file" it was the same silent loss; only a genuinely missing file stays quiet.
 
 ## Security (`LizTerm.Core.Security`)
 

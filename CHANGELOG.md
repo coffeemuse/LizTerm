@@ -5,6 +5,14 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **A hand-edited `keymap.json` says what went wrong.** A mistyped 3270 key or an unrecognised chord used to lose
+  that binding without a word; **Preferences > Keyboard** now names each entry it skipped and what is wrong with it.
+  A file that is not valid JSON at all costs every binding in it, so LizTerm now says so when it starts, names the
+  line to look at, and keeps your file untouched — with **Reset keymap to defaults** in that tab as the way out,
+  which moves the file aside to `keymap.json.bad` rather than deleting it
+  ([#168](https://github.com/coffeemuse/LizTerm/issues/168)). A `settings.json` LizTerm will not overwrite now
+  names its own problem the same way.
+
 - **The mvsMF sign-in window reads more clearly.** The profile and the host address are on separate lines, the
   window says why it is asking, and an expired session is now shown as the routine timeout it is rather than in
   the same red as a refused password. A blank box says which one is blank

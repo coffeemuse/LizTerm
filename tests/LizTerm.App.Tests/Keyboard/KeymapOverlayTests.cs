@@ -35,6 +35,36 @@ public class KeymapOverlayTests
     }
 
     [Fact]
+    public void Parse_says_which_entry_it_skipped_and_why()
+    {
+        var overlay = KeymapOverlay.Parse(File("""{"Cmd+K": "PA1", "F1": "PF99", "F2": 7, "F3": {"text": ""}}"""));
+
+        Assert.Equal(
+            [
+                new KeymapSkip("Cmd+K", KeymapSkipReason.UnknownChord),
+                new KeymapSkip("F1", KeymapSkipReason.UnknownKey, "PF99"),
+                new KeymapSkip("F2", KeymapSkipReason.WrongShape),
+                new KeymapSkip("F3", KeymapSkipReason.EmptyText),
+            ],
+            overlay.Skipped);
+    }
+
+    [Fact]
+    public void An_unreadable_chord_is_named_before_its_action_is_judged()
+    {
+        // Both halves are wrong; the chord is what the user reads first, so it is the reason given.
+        var overlay = KeymapOverlay.Parse(File("""{"Cmd+K": "PF99"}"""));
+
+        Assert.Equal([new KeymapSkip("Cmd+K", KeymapSkipReason.UnknownChord)], overlay.Skipped);
+    }
+
+    [Fact]
+    public void Nothing_is_skipped_when_every_entry_reads()
+    {
+        Assert.Empty(KeymapOverlay.Parse(File("""{"ctrl+home": "PA1"}""")).Skipped);
+    }
+
+    [Fact]
     public void ToFile_writes_its_entries_in_the_canonical_spelling_and_the_ignored_ones_as_they_were()
     {
         var overlay = KeymapOverlay.Parse(File("""{"ctrl+home": "PA1", "F1": "PF99", "F2": 7}"""));

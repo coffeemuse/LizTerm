@@ -608,8 +608,10 @@ sit on five tabs:
 **Keyboard**
 
 - One row for each 3270 key, with the keys that send it and an **Add** slot. See [Changing a binding](#changing-a-binding).
-- **Reset to defaults** clears every change. The tab also says how many entries in `keymap.json` it could not read,
-  and keeps them as written.
+- **Reset to defaults** clears every change. The tab also names any entries in `keymap.json` it could not read,
+  with what is wrong with each, and keeps them as written.
+- When `keymap.json` cannot be read at all, the tab shows that instead of the rows, with the reason, the file, and
+  **Reset keymap to defaults**, which moves the file aside to `keymap.json.bad` and starts again from the defaults.
 
 ## Where LizTerm keeps its files
 
@@ -645,10 +647,11 @@ type, or to `null` to take that key away:
 Key names in a chord are Avalonia's (`Home`, `PageUp`, `D1` for the 1 key, `OemOpenBrackets` for `[`). The 3270 keys
 are `Enter`, `Clear`, `PF1` to `PF24`, `PA1` to `PA3`, `Attn`, `SysReq`, `Reset`, `Tab`, `BackTab`, `Home`, `EraseEof`,
 `EraseInput`, `Delete`, `Backspace`, `Erase`, `Insert`, `Dup`, `FieldMark`, `Newline`, `Up`, `Down`, `Left` and `Right`,
-spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default; a file that
-is not valid JSON (a trailing comma, a comment, the same chord twice) is skipped as a whole, and every default
-applies. LizTerm reads the file once, when the first session window or Preferences opens, so restart it after
-editing by hand. Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless
+spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default;
+Preferences > Keyboard names each one it skipped and keeps it in the file as you wrote it. A file that is not valid
+JSON at all (a trailing comma, a comment, the same chord twice) costs every binding in it, so LizTerm says so when
+it starts, naming the line to look at, and keeps the file untouched for you to fix. LizTerm reads the file once,
+when it starts, so restart it after editing by hand. Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless
 the file binds `Back` itself. A hand edit is not checked against what you type: binding a plain letter takes that
 key away from typing, which Preferences > Keyboard would have refused. The
 platform's Copy, Paste and Select All shortcuts, Find and Switch Session are handled before the keymap, so a binding

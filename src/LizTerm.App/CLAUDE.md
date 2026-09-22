@@ -277,7 +277,15 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   strings; `ChordSyntax` and `KeymapAction` read them), composed over the profile's default with `Without` then `With`.
   `KeymapViewModel` is the process's one live copy, write-through like `SettingsViewModel`;
   `SessionWindow.AttachKeymap` composes it for the screen, the keypad and the Keys menu's shortcuts on every change (`ApplyKeymap`).
-  `KeymapPolicy` is what the Keyboard tab refuses, with the reason. The tab is `KeymapEditorViewModel` (a
+  `KeymapPolicy` is what the Keyboard tab refuses, with the reason.
+  **A keymap.json this build cannot read at all is a state of its own** (#168): `KeymapViewModel.LoadError` carries
+  the reason, every default is in force, and `KeymapStore.Update` would refuse every save — so the tab shows
+  `LoadErrorPanel` (the reason, the file, and `RestoreCommand`, which moves the file to `keymap.json.bad`) in place
+  of the rows, and `App.Execute` puts `KeymapNoticeWindow` over whatever the startup plan opened, the picker
+  included. That notice only tells; the one destructive action lives in the tab. `KeymapNotice.For` is the pure
+  decision, and reading `App.Keymap` in `Execute`'s picker branch is what makes the keymap load at launch on that
+  path, where nothing else touches it; the session branch already loads it through `AttachKeymap`. A file that merely holds entries this build skipped keeps its editor and gets the tab's
+  note, which names them and what is wrong with each (`KeymapOverlay.Skipped`, `KeymapSkip`). The tab is `KeymapEditorViewModel` (a
   `KeymapRow` per action, a `KeymapChip` per chord, all answered from `KeymapViewModel`'s `ChordsFor`/`ActionOf`,
   never its dictionary) laid out by `Views/KeyboardTab`. A row's `TryCapture` calls `KeymapPolicy.Check` before every
   `Bind`, which is what keeps a Cmd chord out of the file, and answers the slot with a `CaptureResult`. There are two
