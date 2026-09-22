@@ -897,9 +897,16 @@ constructor captured.
 - **The holder owns the refused-password loop**, which is why `SignInReason` has three members rather than a
   boolean. The backend no longer tells a bad password from an expired token — a bad password is caught inside
   `SignInAsync` — so the reason is the loop's own variable: the first ask is `First`, or `Expired` ("your mvsMF
-  session has expired") when the caller named a rejected token, and every ask after an `Unauthenticated` from
-  `signIn` is `Rejected` ("the userid or password was not accepted"), until the host takes it or the user cancels.
-  Blaming the password for an expired session, which the old single retry line did, is the bug this replaced.
+  session timed out") when the caller named a rejected token, and every ask after an `Unauthenticated` from
+  `signIn` is `Rejected` ("mvsMF did not accept that userid and password"), until the host takes it or the user
+  cancels. Blaming the password for an expired session, which the old single retry line did, is the bug this
+  replaced.
+- **The three reasons are three registers, and the colour is never the carrier** (#164). `SignInWindow` draws
+  `First` grey with no mark ("Sign in to access this host via mvsMF." — it names mvsMF, not datasets, since jobs
+  and USS are still to come), `Expired` amber with `⚠` (the routine idle timeout, `CertificateWindow`'s warning
+  shade) and `Rejected` red with `✗`. The line is always shown: with `First` blank the window opened from the
+  profile editor's Test button said nothing about who wanted a password. The classes `note`, `warning` and `error`
+  carry the colours, and the code-behind adds one of them, so a test asserts the register rather than a brush.
 - `_lastUserid` is written **as soon as the prompt answers**, not once the host accepts it: a sign-in that fails for
   anything other than the password — an unreachable host, a host with no sign-in route — must still prefill the
   userid that was just typed.
