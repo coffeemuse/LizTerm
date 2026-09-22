@@ -9,7 +9,13 @@ namespace LizTerm.Core.HostFiles;
 /// <param name="TrimTrailingBlanks">Fixed-length records arrive padded with blanks; trimming them is what a local
 /// editor expects.</param>
 /// <param name="LineEnding">Null for the platform's own.</param>
-public sealed record DownloadOptions(HostTransferMode Mode, bool TrimTrailingBlanks = true, string? LineEnding = null);
+public sealed record DownloadOptions(HostTransferMode Mode, bool TrimTrailingBlanks = true, string? LineEnding = null)
+{
+    /// <summary>One record as it should read locally. The one home for the trimming rule: the file a download
+    /// writes (<see cref="HostFileTransfer.FormatText"/>) and the text the viewer shows both go through it, so
+    /// they can never disagree. Only blanks: a tab is content the host sent.</summary>
+    public string Format(string line) => TrimTrailingBlanks ? line.TrimEnd(' ') : line;
+}
 
 public enum UploadVerification { NotChecked, Matches, Differs }
 
@@ -111,7 +117,7 @@ public static class HostFileTransfer
     {
         var ending = options.LineEnding ?? Environment.NewLine;
         var text = new StringBuilder();
-        foreach (var line in lines) text.Append(options.TrimTrailingBlanks ? line.TrimEnd(' ') : line).Append(ending);
+        foreach (var line in lines) text.Append(options.Format(line)).Append(ending);
         return text.ToString();
     }
 
