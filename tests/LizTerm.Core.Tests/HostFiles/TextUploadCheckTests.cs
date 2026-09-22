@@ -197,8 +197,8 @@ public class TextUploadCheckTests
         Assert.False(result.CanUpload);
         Assert.Equal("The file is 10 bytes; the host holds at most 8.", Assert.Single(result.Errors).Message);
 
-        var big = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes(new string('x', 70_000) + "\n"), maxBytes: HostFileLimits.MaxUnixFileBytes);
-        Assert.Equal("The file is 70,001 bytes; the host holds at most 65,536.", Assert.Single(big.Errors).Message);
+        var big = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes(new string('x', 1_100_000) + "\n"), maxBytes: HostFileLimits.MaxUnixFileBytes);
+        Assert.Equal("The file is 1,100,001 bytes; the host holds at most 1,048,576.", Assert.Single(big.Errors).Message);
     }
 
     [Fact]

@@ -239,7 +239,7 @@ public sealed class HostFileTransferTests : IDisposable
             Assert.Null(HostFileTransfer.BinaryUploadProblem(file, 10));
             Assert.Equal("The file is 10 bytes; the host holds at most 9.", HostFileTransfer.BinaryUploadProblem(file, 9));
             File.WriteAllBytes(file, new byte[HostFileLimits.MaxUnixFileBytes + 1]);
-            Assert.Equal("The file is 65,537 bytes; the host holds at most 65,536.", HostFileTransfer.BinaryUploadProblem(file, HostFileLimits.MaxUnixFileBytes));
+            Assert.Equal("The file is 1,048,577 bytes; the host holds at most 1,048,576.", HostFileTransfer.BinaryUploadProblem(file, HostFileLimits.MaxUnixFileBytes));
         }
         finally
         {
