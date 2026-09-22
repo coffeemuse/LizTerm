@@ -45,4 +45,10 @@ public static class HostFileMessages
         ex is HostFileException { Kind: HostFileErrorKind.ServerError or HostFileErrorKind.Unreachable }
             ? Describe(ex) + (dataset ? " The dataset may be partly written." : " The member may be partly written.")
             : Describe(ex);
+
+    /// <summary>As <see cref="DescribeUploadFailure(Exception)"/>, for a UNIX file.</summary>
+    public static string DescribeUnixUploadFailure(Exception ex) =>
+        ex is HostFileException { Kind: HostFileErrorKind.ServerError or HostFileErrorKind.Unreachable }
+            ? Describe(ex) + " The file may be partly written."
+            : Describe(ex);
 }

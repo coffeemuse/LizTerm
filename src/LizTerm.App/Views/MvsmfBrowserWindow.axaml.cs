@@ -11,6 +11,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LizTerm.App.Dialogs;
 using LizTerm.App.ViewModels;
+using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.Views;
 
@@ -52,6 +53,15 @@ public partial class MvsmfBrowserWindow : Window
         ToolTip.SetTip(RefreshButton, $"Refresh the list ({RefreshGesture.ToString("p", null)})");
         ToolTip.SetTip(NewDatasetButton, $"Allocate a new dataset ({NewDatasetGesture.ToString("p", null)})");
         MemberList.AddHandler(InputElement.DoubleTappedEvent, OnMemberDoubleTapped);
+        FileList.SelectionChanged += (_, _) => PushSelectedFiles();
+        DirectoryList.AddHandler(InputElement.DoubleTappedEvent, OnDirectoryDoubleTapped);
+        FileList.AddHandler(InputElement.DoubleTappedEvent, OnFileDoubleTapped);
+        DirectoryMenuRefresh.InputGesture = RefreshGesture;
+        DirectoryMenuNew.InputGesture = NewDatasetGesture;
+        FileMenuView.InputGesture = ViewGesture;
+        ToolTip.SetTip(UssRefreshButton, $"List this directory again ({RefreshGesture.ToString("p", null)})");
+        ToolTip.SetTip(NewDirectoryButton, $"Create a directory here ({NewDatasetGesture.ToString("p", null)})");
+        Tabs.SelectionChanged += OnTabChanged;
 
         Opened += (_, _) =>
         {
@@ -69,6 +79,98 @@ public partial class MvsmfBrowserWindow : Window
         if (vm.DownloadCommand.CanExecute(null)) _ = vm.DownloadCommand.ExecuteAsync(null);
     }
 
+    /// <summary>Whether the USS tab is in front: the keys and the focus fallback go to its controls then.</summary>
+    internal bool IsUssTab => ReferenceEquals(Tabs.SelectedItem, UssTab);
+
+    /// <summary>The USS tab lists its start path the first time it is shown, never at window open (USS spec §4.5).</summary>
+    private void OnTabChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        // SelectionChanged bubbles: a list's own selection inside a tab reaches the TabControl too.
+        if (!ReferenceEquals(e.Source, Tabs) || !IsUssTab || ViewModel is not { } vm) return;
+        _ = vm.Uss.EnsureListedAsync();
+        // The file list came back without the selection it lost while hidden (PushSelectedFiles kept the view
+        // model's); it is given back once the list has its items again.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (IsUssTab && _watched is { } watched && watched.Uss.SelectedFiles.Count > 0) SelectFiles(watched.Uss.SelectedFiles);
+        }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>A double-click on a directory row opens it, as Enter does; on a file row it downloads. On a row
+    /// only: a double-click on the empty part of a list selects nothing and must do nothing.</summary>
+    private void OnDirectoryDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is null) return;
+        if (vm.Uss.OpenDirectoryCommand.CanExecute(null)) _ = vm.Uss.OpenDirectoryCommand.ExecuteAsync(null);
+    }
+
+    private void OnFileDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is null) return;
+        if (vm.Uss.DownloadCommand.CanExecute(null)) _ = vm.Uss.DownloadCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>The file list is the selection's owner, as the member list is (PushSelectedMembers), but only while
+    /// its tab is in front: a hidden tab's panel loses its context, the list its items and so its selection, and
+    /// that must not empty the view model's (a Retry, or a verb after the round trip, would act on nothing).</summary>
+    private void PushSelectedFiles()
+    {
+        if (!IsUssTab || ViewModel is not { } vm) return;
+        vm.Uss.SetSelectedFiles(FileList.SelectedItems?.OfType<FileRow>() ?? []);
+    }
+
+    /// <summary>A refresh keeping the selection: the list box takes the rows and pushes them back.</summary>
+    private void SelectFiles(IReadOnlyList<FileRow> rows)
+    {
+        if (FileList.SelectedItems is not { } selected) return;
+        selected.Clear();
+        foreach (var row in rows) selected.Add(row);
+    }
+
+    private void OnUssPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_watched is not { } vm) return;
+        if (e.PropertyName == nameof(UssBrowserViewModel.Viewer) && vm.Uss.Viewer is { } viewer) ShowViewer(viewer);
+    }
+
+    /// <summary>The USS tab's keys (USS spec §4.5), mirroring the Datasets tab's: handled only while it is in
+    /// front, and only the keys it owns; Escape's ladder is shared and stays in the caller.</summary>
+    private bool HandleUssKey(MvsmfBrowserViewModel vm, KeyEventArgs e)
+    {
+        var uss = vm.Uss;
+        switch (e.Key)
+        {
+            case Key.R when e.KeyModifiers == RefreshGesture.KeyModifiers:
+                if (uss.RefreshCommand.CanExecute(null)) _ = uss.RefreshCommand.ExecuteAsync(null);
+                return true;
+            case Key.N when e.KeyModifiers == NewDatasetGesture.KeyModifiers:
+                if (uss.NewDirectoryCommand.CanExecute(null)) _ = uss.NewDirectoryCommand.ExecuteAsync(null);
+                return true;
+            case Key.Delete or Key.Back when DirectoryList.IsKeyboardFocusWithin:
+                if (uss.DeleteDirectoryCommand.CanExecute(null)) _ = uss.DeleteDirectoryCommand.ExecuteAsync(null);
+                return true;
+            case Key.Delete or Key.Back when FileList.IsKeyboardFocusWithin:
+                if (uss.DeleteFilesCommand.CanExecute(null)) _ = uss.DeleteFilesCommand.ExecuteAsync(null);
+                return true;
+            case Key.Enter when e.KeyModifiers == ViewGesture.KeyModifiers && FileList.IsKeyboardFocusWithin:
+                if (uss.ViewCommand.CanExecute(null)) _ = uss.ViewCommand.ExecuteAsync(null);
+                return true;
+            case Key.Enter when e.KeyModifiers == KeyModifiers.None && PathBox.IsFocused:
+                if (uss.GoCommand.CanExecute(null)) _ = uss.GoCommand.ExecuteAsync(null);
+                return true;
+            case Key.Enter when e.KeyModifiers == KeyModifiers.None && DirectoryList.IsKeyboardFocusWithin:
+                if (uss.OpenDirectoryCommand.CanExecute(null)) _ = uss.OpenDirectoryCommand.ExecuteAsync(null);
+                return true;
+            case Key.Enter when e.KeyModifiers == KeyModifiers.None && FileList.IsKeyboardFocusWithin:
+                if (uss.DownloadCommand.CanExecute(null)) _ = uss.DownloadCommand.ExecuteAsync(null);
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private MvsmfBrowserViewModel? _watched;
 
     private MvsmfBrowserViewModel? ViewModel => DataContext as MvsmfBrowserViewModel;
@@ -79,6 +181,8 @@ public partial class MvsmfBrowserWindow : Window
         {
             _watched.PropertyChanged -= OnViewModelPropertyChanged;
             _watched.SelectMemberRequested -= SelectMember;
+            _watched.Uss.PropertyChanged -= OnUssPropertyChanged;
+            _watched.Uss.SelectFilesRequested -= SelectFiles;
         }
         _watched = ViewModel;
         if (_watched is not null)
@@ -86,6 +190,9 @@ public partial class MvsmfBrowserWindow : Window
             _watched.PropertyChanged += OnViewModelPropertyChanged;
             _watched.SelectMemberRequested += SelectMember;
             _watched.ViewGestureText = ViewGesture.ToString("p", null);
+            _watched.Uss.PropertyChanged += OnUssPropertyChanged;
+            _watched.Uss.SelectFilesRequested += SelectFiles;
+            _watched.Uss.ViewGestureText = ViewGesture.ToString("p", null);
         }
         base.OnDataContextChanged(e);
     }
@@ -110,6 +217,18 @@ public partial class MvsmfBrowserWindow : Window
                 break;
             case nameof(MvsmfBrowserViewModel.IsBusy) when !vm.HasConfirmation:
                 PostRestoreFocus(forget: true);
+                // The USS tab's own listing (OnTabChanged) is a no-op while an operation on the shared runner is
+                // still busy, so a tab selected during the window's own opening listing lists once that ends.
+                // Posted, because this notification comes from inside the ended operation's finally, where a new one
+                // would clear its line, banner and Retry. Not after a cancel, which would send a request straight
+                // after the user stopped one, nor over a banner, whose Retry belongs to the operation that failed:
+                // the tab then lists when a later operation ends cleanly or it is shown again. EnsureListedAsync is
+                // a no-op once the start listing has been tried, whether or not it succeeded.
+                if (IsUssTab) Dispatcher.UIThread.Post(() =>
+                {
+                    if (IsUssTab && _watched is { IsBusy: false, HasError: false, Ops.LastRunCancelled: false } watched)
+                        _ = watched.Uss.EnsureListedAsync();
+                });
                 break;
             case nameof(MvsmfBrowserViewModel.HasConfirmation) when vm.HasConfirmation:
                 // An input question takes the keyboard to its box, with the old name selected so typing replaces it;
@@ -139,7 +258,7 @@ public partial class MvsmfBrowserWindow : Window
                 {
                     if (_watched is not { IsCreating: false, IsBusy: false }) return;
                     if (FocusManager?.GetFocusedElement() is Control { IsEffectivelyVisible: true }) return;
-                    FilterBox.Focus();
+                    (IsUssTab ? PathBox : FilterBox).Focus();
                 }, DispatcherPriority.Loaded);
                 break;
             case nameof(MvsmfBrowserViewModel.Viewer) when vm.Viewer is { } viewer:
@@ -228,7 +347,11 @@ public partial class MvsmfBrowserWindow : Window
     }
 
     private ListBox? FocusedList() =>
-        DatasetList.IsKeyboardFocusWithin ? DatasetList : MemberList.IsKeyboardFocusWithin ? MemberList : null;
+        DatasetList.IsKeyboardFocusWithin ? DatasetList
+        : MemberList.IsKeyboardFocusWithin ? MemberList
+        : DirectoryList.IsKeyboardFocusWithin ? DirectoryList
+        : FileList.IsKeyboardFocusWithin ? FileList
+        : null;
 
     /// <summary>At Loaded priority, so a list refilled by the operation has its containers. Only when the keyboard
     /// has nowhere better to be: the user may have moved it on meanwhile. A question that closes while its operation
@@ -241,7 +364,7 @@ public partial class MvsmfBrowserWindow : Window
             if (forget && vm.IsBusy) return;
             if (FocusManager?.GetFocusedElement() is Control { IsEffectivelyVisible: true, IsEffectivelyEnabled: true }) return;
             // The pane it was in may have closed (the form after a Create); the filter box is where the window opens.
-            if (!target.IsEffectivelyVisible) target = FilterBox;
+            if (!target.IsEffectivelyVisible) target = IsUssTab ? PathBox : FilterBox;
             var (item, index) = (_focusedItemBefore, _focusedIndexBefore);
             if (forget)
             {
@@ -279,6 +402,8 @@ public partial class MvsmfBrowserWindow : Window
         {
             _watched.PropertyChanged -= OnViewModelPropertyChanged;
             _watched.SelectMemberRequested -= SelectMember;
+            _watched.Uss.PropertyChanged -= OnUssPropertyChanged;
+            _watched.Uss.SelectFilesRequested -= SelectFiles;
         }
         _watched = null;
         ViewModel?.Dispose();
@@ -288,6 +413,13 @@ public partial class MvsmfBrowserWindow : Window
     private void OnKeyDownTunnel(object? sender, KeyEventArgs e)
     {
         if (ViewModel is not { } vm) return;
+        // The confirmation strip's Enter and Escape are the window's whichever tab is in front, so they stay below;
+        // the USS tab's own keys are taken here first, and a key it does not own falls through to the shared cases.
+        if (IsUssTab && vm.Confirmation is null && HandleUssKey(vm, e))
+        {
+            e.Handled = true;
+            return;
+        }
         switch (e.Key)
         {
             case Key.R when e.KeyModifiers == RefreshGesture.KeyModifiers:
@@ -308,7 +440,8 @@ public partial class MvsmfBrowserWindow : Window
                 e.Handled = true;
                 if (vm.Confirmation is { } question) question.CancelCommand.Execute(null);
                 else if (vm.IsBusy) vm.CancelCommand.Execute(null);
-                else if (vm.IsReviewingUpload) vm.CloseReviewCommand.Execute(null);
+                // A review on the hidden Datasets tab is not a rung: Escape on the USS tab would close it unseen.
+                else if (vm.IsReviewingUpload && !IsUssTab) vm.CloseReviewCommand.Execute(null);
                 else Close();
                 break;
             case Key.Enter when vm.Confirmation is { HasInput: true } inputQuestion && ConfirmInputBox.IsKeyboardFocusWithin:

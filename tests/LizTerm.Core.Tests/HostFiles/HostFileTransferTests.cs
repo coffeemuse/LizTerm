@@ -306,6 +306,27 @@ public sealed class HostFileTransferTests : IDisposable
     }
 
     [Fact]
+    public void A_unix_text_file_too_long_to_fit_however_it_decodes_is_refused_from_its_length()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"liz-{Guid.NewGuid():N}.txt");
+        try
+        {
+            // A CR LF stores as one byte, so a file twice the cap can still fit, and is read and checked.
+            File.WriteAllText(file, string.Concat(Enumerable.Repeat("\r\n", 60)));
+            Assert.True(HostFileTransfer.CheckUnixTextFile(file, maxBytes: 60).CanUpload);
+            // Past that nothing can fit, so the file is refused by its length, in the same words as a binary one.
+            using (var stream = File.Create(file)) stream.SetLength(2 * HostFileLimits.MaxUnixFileBytes + 5);
+            var problem = Assert.Single(HostFileTransfer.CheckUnixTextFile(file).Errors);
+            Assert.Equal(TextUploadProblemKind.FileTooLarge, problem.Kind);
+            Assert.Equal("The file is 2,097,157 bytes; the host holds at most 1,048,576.", problem.Message);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
     public void A_listing_cut_short_without_a_continuation_is_not_complete()
     {
         Assert.True(new HostFileListing([], null).IsComplete);

@@ -101,7 +101,8 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   `NotFound` when there is nothing to remove. A create or rename the local rules refuse throws
   `ArgumentException` before it is logged, as the backend does.
   It also plays the file system: `Directories` (the root always) and `AddDirectory`/`AddFile`/`AddBinaryFile`
-  seed a tree, `listdir:<path>` lists a directory's subdirectories then its files (each in ordinal order, sizes
+  seed a tree, `Others` holds paths listed as `Other` (a link, a device) after the files, `listdir:<path>` lists a
+  directory's subdirectories then its files (each in ordinal order, sizes
   from the content), cut to `MaxItems` with `Truncated` and never a continuation, `NotFound` for a missing path
   and `InvalidRequest` for a file; `mkdir:<path>` needs an existing parent and refuses an existing name as
   `AlreadyExists`; a write under a missing parent is `NotFound`; `delete:<path>` on a directory takes everything
@@ -117,6 +118,13 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   member filter and waits out the host-side listing it may start. `Access` is the `HostFileAccess`, so
   `Access.Etags` reads the stamp memory. A window test can put a question up without an operation by setting
   `Vm.Confirmation` directly.
+- `UssTestHost` (`ViewModels/`) builds a `UssBrowserViewModel` on its own `BrowserOperations` over a fake seeded by
+  `Standard` (`/u/ibmuser` with `notes` — `drafts`, `README.txt`, `todo.md`, `data.bin` — and `old`, beside `/tmp`
+  and `/u/mvsce02`); `ListAsync(path)` types and presses Go, `Select` pushes a file selection, `AskedAsync` waits for
+  a question. The window tests for the tab (`MvsmfBrowserWindowUssTests`) seed the fake with both `Standard`s and
+  select the tab (`Tabs.SelectedIndex = 1` then `UpdateLayout()`) before reaching its controls through the visual
+  tree, since a `TabControl` hosts only the selected tab's content; the profile's userid there is `MVSCE02`, so the
+  start path is `/u/mvsce02`.
 - Drive native menu items through `((INativeMenuItemExporterEventsImplBridge)item).RaiseClicked()`; the menu notes in
   `src/LizTerm.App/CLAUDE.md` say why.
 - A Keys menu item is found by the key it sends (`NativeMenuTests.KeysItem(window, TerminalKey.Insert)` under the

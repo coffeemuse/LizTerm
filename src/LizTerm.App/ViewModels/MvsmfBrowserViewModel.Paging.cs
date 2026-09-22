@@ -26,8 +26,6 @@ public sealed partial class MvsmfBrowserViewModel
     /// <summary>True once an unfiltered member listing came back complete: the filter can then narrow it here.</summary>
     private bool _allMembersLoaded;
     private CancellationTokenSource? _filterDebounce;
-    private readonly object _idleLock = new();
-    private TaskCompletionSource? _idle;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DatasetsFooter))]
@@ -194,7 +192,7 @@ public sealed partial class MvsmfBrowserViewModel
         try
         {
             await Task.Delay(FilterDelay, debounce.Token);
-            if (WhenIdle() is { } idle) await idle.WaitAsync(debounce.Token);
+            if (Ops.WhenIdle() is { } idle) await idle.WaitAsync(debounce.Token);
         }
         catch (OperationCanceledException)
         {
@@ -204,30 +202,10 @@ public sealed partial class MvsmfBrowserViewModel
         {
             if (ReferenceEquals(_filterDebounce, debounce)) CancelHostFilter();
         }
-        if (_disposed || SelectedDataset is not { IsPartitioned: true } row || _allMembersLoaded) return;
+        if (Ops.IsDisposed || SelectedDataset is not { IsPartitioned: true } row || _allMembersLoaded) return;
         if (!TryHostPattern(out var pattern)) return;
         // The operation waited out may have listed this very pattern (a dataset's own load applies the filter).
         if (pattern == _memberPattern) return;
         await RunExclusiveAsync(token => LoadMemberPageAsync(row, pattern, token), () => LoadMembersAsync(SelectedDataset));
-    }
-
-    /// <summary>Null while nothing runs; otherwise a task that completes when the running operation ends, so a
-    /// waiting filter never polls.</summary>
-    private Task? WhenIdle()
-    {
-        lock (_idleLock)
-        {
-            if (!IsBusy) return null;
-            return (_idle ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
-        }
-    }
-
-    private void SignalIdle()
-    {
-        lock (_idleLock)
-        {
-            _idle?.TrySetResult();
-            _idle = null;
-        }
     }
 }

@@ -30,6 +30,9 @@ public sealed class FakeHostFileService : IHostFileService
     /// <summary>Every UNIX directory that exists, the root always; files are the <see cref="Text"/> and
     /// <see cref="Binary"/> keys that start with <c>/</c>.</summary>
     public HashSet<string> Directories { get; } = ["/"];
+    /// <summary>UNIX entries that are neither a directory nor a regular file (a link, a FIFO, a device): listed as
+    /// <see cref="HostFileEntryKind.Other"/> after the files, never read or written by the fake itself.</summary>
+    public HashSet<string> Others { get; } = [];
     /// <summary>HostPath.ToString() → the stamp of the last write, <c>stamp-N</c>; a read returns it and a write
     /// with another <c>ifMatch</c> is a conflict.</summary>
     public Dictionary<string, string> Etags { get; } = [];
@@ -141,6 +144,8 @@ public sealed class FakeHostFileService : IHostFileService
                     .Select(d => new HostFileEntry(NameOf(d), HostFileEntryKind.Directory, Unix: new UnixFileAttributes(128, null)))
                     .Concat(Text.Keys.Concat(Binary.Keys).Distinct().Where(k => k.StartsWith('/') && ParentOf(k) == path).Order(StringComparer.Ordinal)
                         .Select(k => new HostFileEntry(NameOf(k), HostFileEntryKind.File, Unix: new UnixFileAttributes(SizeOf(k), null))))
+                    .Concat(Others.Where(k => ParentOf(k) == path).Order(StringComparer.Ordinal)
+                        .Select(k => new HostFileEntry(NameOf(k), HostFileEntryKind.Other, Unix: new UnixFileAttributes(0, null))))
                     .ToList();
                 var truncated = request.MaxItems > 0 && entries.Count > request.MaxItems;
                 if (truncated) entries.RemoveRange(request.MaxItems, entries.Count - request.MaxItems);

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,11 +23,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     private readonly IFilePicker _picker;
     private readonly Action<Action> _dispatch;
     private readonly Func<Task>? _openGuide;
-    private CancellationTokenSource? _cts;
-    private Func<Task>? _retry;
     private List<MemberRow> _selectedMembers = [];
-    private bool _disposed;
-    private string? _pinSaveWarning;
 
     public MvsmfBrowserViewModel(HostFileAccess access, HostFileConnection connection, IFilePicker picker,
         Action<Action> dispatch, Func<Task>? openGuide = null)
@@ -37,6 +34,9 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         _dispatch = dispatch;
         _openGuide = openGuide;
         _filter = access.Userid is { Length: > 0 } userid ? userid + ".**" : "";
+        Ops = new BrowserOperations();
+        Ops.PropertyChanged += OnOperationsChanged;
+        Uss = new UssBrowserViewModel(Ops, access, connection, picker, dispatch);
         _access.PinSaveFailed += OnPinSaveFailed;
         WatchForm();
     }
@@ -44,9 +44,7 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     /// <summary>The operation that accepted the pin goes on; the warning replaces its status line when it ends.</summary>
     private void OnPinSaveFailed(object? sender, string message) => _dispatch(() =>
     {
-        if (_disposed) return;
-        if (IsBusy) _pinSaveWarning = message;
-        else StatusText = "⚠ " + message;
+        if (!Ops.IsDisposed) Ops.WarnWhenIdle(message);
     });
 
     public string Title => $"mvsMF Access — {_access.ProfileName} (Preview)";
@@ -72,24 +70,52 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private bool _verifyUploads = true;
     [ObservableProperty] private bool _expandTabs = true;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIdle), nameof(CanChooseDataset))]
-    private bool _isBusy;
+    /// <summary>The runner both tabs share (USS spec §4.4). The window binds to this view model's forwarding
+    /// properties below, so its bindings and the older tests see the same names as before the extraction.</summary>
+    public BrowserOperations Ops { get; }
 
-    [ObservableProperty] private string _statusText = "";
+    /// <summary>The USS tab's view model, on the same runner (USS spec §4.4).</summary>
+    public UssBrowserViewModel Uss { get; }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasError), nameof(CanRetry))]
-    private string? _errorText;
+    public bool IsBusy => Ops.IsBusy;
+    public bool IsIdle => Ops.IsIdle;
+    public string StatusText { get => Ops.StatusText; set => Ops.StatusText = value; }
+    public string? ErrorText { get => Ops.ErrorText; set => Ops.ErrorText = value; }
+    public bool HasError => Ops.HasError;
+    public bool CanRetry => Ops.CanRetry;
+    public ConfirmationRequest? Confirmation { get => Ops.Confirmation; set => Ops.Confirmation = value; }
+    public bool HasConfirmation => Ops.HasConfirmation;
+    public IAsyncRelayCommand RetryCommand => Ops.RetryCommand;
+    public IRelayCommand CancelCommand => Ops.CancelCommand;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasConfirmation))]
-    private ConfirmationRequest? _confirmation;
+    /// <summary>Re-raises the runner's changes under this view model's names. IsBusy first notifies the commands,
+    /// as the generated partial hook did before the extraction, then the property; IsIdle carries
+    /// CanChooseDataset with it, as its NotifyPropertyChangedFor did.</summary>
+    private void OnOperationsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(BrowserOperations.IsBusy):
+                NotifyCommands();
+                OnPropertyChanged(nameof(IsBusy));
+                break;
+            case nameof(BrowserOperations.IsIdle):
+                OnPropertyChanged(nameof(IsIdle));
+                OnPropertyChanged(nameof(CanChooseDataset));
+                break;
+            case { } name:
+                OnPropertyChanged(name);
+                break;
+        }
+    }
 
-    public bool IsIdle => !IsBusy;
-    public bool HasError => ErrorText is not null;
-    public bool CanRetry => HasError && _retry is not null;
-    public bool HasConfirmation => Confirmation is not null;
+    private Task RunExclusiveAsync(Func<CancellationToken, Task> work, Func<Task>? retry = null, Func<Exception, string>? describe = null) =>
+        Ops.RunExclusiveAsync(work, retry, describe, owner: this);
+
+    private Task<ConfirmOutcome> AskAsync(ConfirmationRequest request) => Ops.AskAsync(request);
+
+    /// <summary>Drops only a banner this tab's own operation left: a USS operation's Retry is not this tab's to drop.</summary>
+    private void DropRetry() => Ops.DropRetry(owner: this);
 
     public bool IsTextMode
     {
@@ -178,9 +204,8 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     {
         // A pending retry belongs to the dataset it failed on; Retry must never act on another one. So does a
         // filter keystroke still waiting to reach the host: the new dataset's own load applies the filter.
-        _retry = null;
+        DropRetry();
         CancelHostFilter();
-        OnPropertyChanged(nameof(CanRetry));
         // A review belongs to the dataset it was opened on; the window disables the list while one is open. Closed
         // before the mode changes, so the old review is not rechecked against the new dataset. A running upload keeps
         // its review, which holds its rows' results.
@@ -193,12 +218,6 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     {
         if (_allMembersLoaded || SelectedDataset is not { IsPartitioned: true }) RefreshVisibleMembers();
         else ScheduleHostFilter();
-    }
-
-    partial void OnIsBusyChanged(bool value)
-    {
-        NotifyCommands();
-        if (!value) SignalIdle();
     }
 
     /// <summary>Off while a review is open: a listing clears the chosen dataset the review belongs to.</summary>
@@ -263,110 +282,16 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(MembersFooter));
     }
 
-    /// <summary>Drops a pending Retry with its banner: the operation it belongs to has been closed away from.</summary>
-    private void DropRetry()
-    {
-        _retry = null;
-        ErrorText = null;
-        OnPropertyChanged(nameof(CanRetry));
-    }
-
-    [RelayCommand]
-    private async Task RetryAsync()
-    {
-        var retry = _retry;
-        _retry = null;
-        ErrorText = null;
-        if (retry is not null) await retry();
-    }
-
-    [RelayCommand(CanExecute = nameof(IsBusy))]
-    private void Cancel()
-    {
-        StatusText = "⟳ Cancelling…";
-        _cts?.Cancel();
-        Confirmation?.CancelCommand.Execute(null);
-    }
-
     [RelayCommand]
     private async Task OpenGuideAsync()
     {
         if (_openGuide is not null) await _openGuide();
     }
 
-    /// <summary>Runs one operation with the busy flag, its own cancellation, and the failure rules in the class
-    /// summary. A second operation while one runs is ignored; the commands are disabled anyway.
-    /// <paramref name="describe"/> words the banner; the default is <see cref="HostFileMessages.Describe"/>.</summary>
-    private async Task RunExclusiveAsync(Func<CancellationToken, Task> work, Func<Task>? retry = null,
-        Func<Exception, string>? describe = null)
-    {
-        if (IsBusy || _disposed) return;
-        using var cts = new CancellationTokenSource();
-        _cts = cts;
-        IsBusy = true;
-        ErrorText = null;
-        _retry = null;
-        try
-        {
-            await work(cts.Token);
-        }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested)
-        {
-            StatusText = "– Cancelled.";
-        }
-        catch (HostFileException ex) when (IsConnectionFailure(ex))
-        {
-            _retry = retry;
-            StatusText = "";
-            ErrorText = (describe ?? HostFileMessages.Describe)(ex);
-        }
-        catch (Exception ex)
-        {
-            StatusText = "✗ " + HostFileMessages.Describe(ex);
-        }
-        finally
-        {
-            _cts = null;
-            if (_pinSaveWarning is { } warning)
-            {
-                _pinSaveWarning = null;
-                StatusText = "⚠ " + warning;
-            }
-            IsBusy = false;
-            OnPropertyChanged(nameof(CanRetry));
-        }
-    }
-
-    /// <summary>A closed browser has no one to ask, so the answer is Cancel.</summary>
-    private async Task<ConfirmOutcome> AskAsync(ConfirmationRequest request)
-    {
-        if (_disposed) return new ConfirmOutcome(ConfirmChoice.Cancel, false);
-        Confirmation = request;
-        try
-        {
-            return await request.Answer;
-        }
-        finally
-        {
-            Confirmation = null;
-        }
-    }
-
     /// <summary>A file dialog that fails to open is a status line, not a failed operation.</summary>
-    private async Task<T?> TryPickAsync<T>(Func<Task<T>> pick)
-    {
-        try
-        {
-            return await pick();
-        }
-        catch (Exception ex)
-        {
-            StatusText = "✗ Could not open the file dialog: " + ex.Message;
-            return default;
-        }
-    }
+    private Task<T?> TryPickAsync<T>(Func<Task<T>> pick) => Ops.TryPickAsync(pick);
 
-    private static string Plural(int count, string noun) => count == 1 ? $"1 {noun}" : $"{count} {noun}s";
+    private static string Plural(int count, string noun) => BrowserTransfers.Counted(count, noun, noun + "s");
 
     /// <summary>Every command whose CanExecute reads the busy flag, the dataset or the selection. The transfer tasks
     /// add their commands here as they create them.</summary>
@@ -374,7 +299,6 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
     {
         ListCommand.NotifyCanExecuteChanged();
         RefreshCommand.NotifyCanExecuteChanged();
-        CancelCommand.NotifyCanExecuteChanged();
         DownloadCommand.NotifyCanExecuteChanged();
         ViewCommand.NotifyCanExecuteChanged();
         UploadCommand.NotifyCanExecuteChanged();
@@ -393,12 +317,10 @@ public sealed partial class MvsmfBrowserViewModel : ObservableObject, IDisposabl
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Ops.IsDisposed) return;
         _access.PinSaveFailed -= OnPinSaveFailed;
         _filterDebounce?.Cancel();
-        _cts?.Cancel();
-        Confirmation?.CancelCommand.Execute(null);
+        Ops.Dispose();
         _connection.Dispose();
     }
 }

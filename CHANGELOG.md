@@ -5,6 +5,8 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **mvsMF Access has a USS tab** for the host's UNIX file system: browse a directory at a time, create and delete
+  directories, download, upload, view and delete files ([#176](https://github.com/coffeemuse/LizTerm/issues/176)).
 - **mvsMF Access can show a member without downloading it.** **View** in the Members pane opens it read-only, with
   find and line numbers ([#163](https://github.com/coffeemuse/LizTerm/issues/163)).
 - **The crosshair is a thin line** along the edge of the cursor's cell, instead of a shaded row and column over the
