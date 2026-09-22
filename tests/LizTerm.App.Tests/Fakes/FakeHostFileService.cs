@@ -10,7 +10,8 @@ namespace LizTerm.App.Tests.Fakes;
 /// <summary>An in-memory mvsMF for the App tests. <c>list:&lt;pattern&gt;</c> returns the datasets the pattern
 /// matches. Every call is logged as "op:target" — list:&lt;pattern&gt;,
 /// members:&lt;dsn&gt;, readtext:&lt;path&gt;, readbinary:&lt;path&gt;, writetext:&lt;path&gt;:&lt;lines&gt;,
-/// writebinary:&lt;path&gt;, delete:&lt;path&gt;, create:&lt;dsn&gt;, rename:&lt;from&gt;:&lt;new&gt;, info, signout — and a
+/// writebinary:&lt;path&gt;, delete:&lt;path&gt;, create:&lt;dsn&gt;, rename:&lt;from&gt;:&lt;new&gt;, listdir:&lt;path&gt;,
+/// mkdir:&lt;path&gt;, info, signout — and a
 /// <see cref="Failures"/> entry under the same key (without the line count) makes that call throw. It fails the way
 /// the host does: a read or delete of what is not there is <see cref="HostFileErrorKind.NotFound"/>, a create or
 /// rename the local rules refuse throws <see cref="ArgumentException"/> before it is logged, and a stale
@@ -26,6 +27,9 @@ public sealed class FakeHostFileService : IHostFileService
     /// <summary>HostPath.ToString() → records.</summary>
     public Dictionary<string, List<string>> Text { get; } = [];
     public Dictionary<string, byte[]> Binary { get; } = [];
+    /// <summary>Every UNIX directory that exists, the root always; files are the <see cref="Text"/> and
+    /// <see cref="Binary"/> keys that start with <c>/</c>.</summary>
+    public HashSet<string> Directories { get; } = ["/"];
     /// <summary>HostPath.ToString() → the stamp of the last write, <c>stamp-N</c>; a read returns it and a write
     /// with another <c>ifMatch</c> is a conflict.</summary>
     public Dictionary<string, string> Etags { get; } = [];
@@ -52,6 +56,24 @@ public sealed class FakeHostFileService : IHostFileService
     {
         Datasets.Add(new HostFileEntry(name, HostFileEntryKind.Dataset, new DatasetAttributes(dsorg, recfm, lrecl, blksize, "PUB000")));
         if (dsorg == "PO") Members[name] = [.. members];
+    }
+
+    /// <summary>Makes <paramref name="path"/> and every directory above it exist.</summary>
+    public void AddDirectory(string path)
+    {
+        for (var current = HostPath.ForUnix(path); current is not null; current = current.Parent) Directories.Add(current.UnixPath!);
+    }
+
+    public void AddFile(string path, params string[] lines)
+    {
+        AddDirectory(HostPath.ForUnix(path).Parent!.UnixPath!);
+        Text[path] = [.. lines];
+    }
+
+    public void AddBinaryFile(string path, byte[] bytes)
+    {
+        AddDirectory(HostPath.ForUnix(path).Parent!.UnixPath!);
+        Binary[path] = bytes;
     }
 
     public string[] CallsSnapshot()
@@ -87,12 +109,60 @@ public sealed class FakeHostFileService : IHostFileService
         {
             lock (_lock)
             {
-                if (Members.TryGetValue(dataset.Dataset, out var names))
+                if (Members.TryGetValue(dataset.Dataset!, out var names))
                     return PageOf(names.Select(n => new HostFileEntry(n, HostFileEntryKind.Member)), request);
                 throw Datasets.Any(d => d.Name == dataset.Dataset)
                     ? new HostFileException(HostFileErrorKind.InvalidRequest,
                         $"{dataset}: the host refused the request (Dataset is not partitioned).", 1, "Dataset is not partitioned")
                     : Missing(dataset);
+            }
+        }
+        finally { Leave(); }
+    }
+
+    public async Task<HostFileListing> ListDirectoryAsync(HostPath directory, HostListRequest request, CancellationToken cancellationToken = default)
+    {
+        if (directory.Kind != HostPathKind.Unix) throw new ArgumentException("Only a UNIX path names a directory.", nameof(directory));
+        if (request.Continuation is not null) throw new ArgumentException("A directory listing cannot be continued.", nameof(request));
+        await EnterAsync($"listdir:{directory}", $"listdir:{directory}", cancellationToken);
+        try
+        {
+            lock (_lock)
+            {
+                var path = directory.UnixPath!;
+                if (!Directories.Contains(path))
+                {
+                    throw Text.ContainsKey(path) || Binary.ContainsKey(path)
+                        ? new HostFileException(HostFileErrorKind.InvalidRequest, $"{directory}: is a file, not a directory.")
+                        : Missing(directory);
+                }
+                ListRequests.Add(request);
+                var entries = Directories.Where(d => d != "/" && ParentOf(d) == path).Order(StringComparer.Ordinal)
+                    .Select(d => new HostFileEntry(NameOf(d), HostFileEntryKind.Directory, Unix: new UnixFileAttributes(128, null)))
+                    .Concat(Text.Keys.Concat(Binary.Keys).Distinct().Where(k => k.StartsWith('/') && ParentOf(k) == path).Order(StringComparer.Ordinal)
+                        .Select(k => new HostFileEntry(NameOf(k), HostFileEntryKind.File, Unix: new UnixFileAttributes(SizeOf(k), null))))
+                    .ToList();
+                var truncated = request.MaxItems > 0 && entries.Count > request.MaxItems;
+                if (truncated) entries.RemoveRange(request.MaxItems, entries.Count - request.MaxItems);
+                return new HostFileListing(entries, null, truncated);
+            }
+        }
+        finally { Leave(); }
+    }
+
+    public async Task CreateDirectoryAsync(HostPath directory, CancellationToken cancellationToken = default)
+    {
+        if (directory.Kind != HostPathKind.Unix) throw new ArgumentException("Only a UNIX path names a directory.", nameof(directory));
+        await EnterAsync($"mkdir:{directory}", $"mkdir:{directory}", cancellationToken);
+        try
+        {
+            lock (_lock)
+            {
+                var path = directory.UnixPath!;
+                if (Directories.Contains(path) || Text.ContainsKey(path) || Binary.ContainsKey(path))
+                    throw new HostFileException(HostFileErrorKind.AlreadyExists, $"{directory}: a file or directory of that name already exists.", 1, "File or directory already exists");
+                if (!Directories.Contains(ParentOf(path))) throw Missing(directory.Parent!);
+                Directories.Add(path);
             }
         }
         finally { Leave(); }
@@ -144,6 +214,7 @@ public sealed class FakeHostFileService : IHostFileService
         {
             lock (_lock)
             {
+                RequireParent(path);
                 CheckStamp(path, ifMatch);
                 Text[path.ToString()] = StoreTransform?.Invoke(path.ToString(), lines) ?? [.. lines];
                 AddMember(path);
@@ -162,6 +233,7 @@ public sealed class FakeHostFileService : IHostFileService
             await source.CopyToAsync(copy, cancellationToken);
             lock (_lock)
             {
+                RequireParent(path);
                 CheckStamp(path, ifMatch);
                 Binary[path.ToString()] = copy.ToArray();
                 AddMember(path);
@@ -185,9 +257,9 @@ public sealed class FakeHostFileService : IHostFileService
                 if (Datasets.Any(d => d.Name == dataset.Dataset))
                     throw new HostFileException(HostFileErrorKind.CannotAllocate, $"{dataset}: the host could not allocate it (it may already exist, there may be no space, or you may not be authorized).", 7, "Dynamic allocation Error");
                 var partitioned = allocation.Organization == DatasetOrganization.Partitioned;
-                Datasets.Add(new HostFileEntry(dataset.Dataset, HostFileEntryKind.Dataset,
+                Datasets.Add(new HostFileEntry(dataset.Dataset!, HostFileEntryKind.Dataset,
                     new DatasetAttributes(partitioned ? "PO" : "PS", allocation.FoldedRecfm, allocation.Lrecl, allocation.Blksize, "PUB000")));
-                if (partitioned) Members[dataset.Dataset] = [];
+                if (partitioned) Members[dataset.Dataset!] = [];
             }
         }
         finally { Leave(); }
@@ -196,7 +268,8 @@ public sealed class FakeHostFileService : IHostFileService
     public async Task RenameAsync(HostPath from, string newName, CancellationToken cancellationToken = default)
     {
         // As the backend: a new name the rules refuse throws ArgumentException before anything is sent or logged.
-        var target = from.Kind == HostPathKind.Member ? HostPath.ForMember(from.Dataset, newName) : HostPath.ForDataset(newName);
+        if (from.Kind == HostPathKind.Unix) throw new ArgumentException("The host cannot rename a UNIX file.", nameof(from));
+        var target = from.Kind == HostPathKind.Member ? HostPath.ForMember(from.Dataset!, newName) : HostPath.ForDataset(newName);
         await EnterAsync($"rename:{from}:{newName}", $"rename:{from}:{newName}", cancellationToken);
         try
         {
@@ -211,23 +284,37 @@ public sealed class FakeHostFileService : IHostFileService
 
     public async Task DeleteAsync(HostPath path, CancellationToken cancellationToken = default)
     {
+        // As the backend: the root is refused before anything is sent or logged.
+        if (path.Kind == HostPathKind.Unix && path.Parent is null) throw new ArgumentException("The root directory cannot be deleted.", nameof(path));
         await EnterAsync($"delete:{path}", $"delete:{path}", cancellationToken);
         try
         {
             lock (_lock)
             {
-                // Nothing to remove is the host's 404 (Missing: reason 5 for a member, 4 for a dataset).
-                if (path.Member is { } member)
+                // Nothing to remove is the host's 404 (Missing: reason 5 for a member, 4 for a dataset, 1 for a path).
+                if (path.Kind == HostPathKind.Unix)
                 {
-                    var listed = Members.TryGetValue(path.Dataset, out var names) && names.Remove(member);
+                    var unix = path.UnixPath!;
+                    var prefix = unix == "/" ? "/" : unix + "/";
+                    var wasDirectory = Directories.Remove(unix);
+                    if (wasDirectory)
+                    {
+                        Directories.RemoveWhere(d => d.StartsWith(prefix, StringComparison.Ordinal));
+                        foreach (var key in Text.Keys.Concat(Binary.Keys).Concat(Etags.Keys).Distinct().Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList()) Forget(key);
+                    }
+                    else if (!Forget(unix)) throw Missing(path);
+                }
+                else if (path.Member is { } member)
+                {
+                    var listed = Members.TryGetValue(path.Dataset!, out var names) && names.Remove(member);
                     var held = Forget(path.ToString());
                     if (!listed && !held) throw Missing(path);
                 }
                 else
                 {
                     var listed = Datasets.RemoveAll(d => d.Name == path.Dataset) > 0;
-                    listed |= Members.Remove(path.Dataset);
-                    var keys = KeysUnder(path.Dataset);
+                    listed |= Members.Remove(path.Dataset!);
+                    var keys = KeysUnder(path.Dataset!);
                     foreach (var key in keys) Forget(key);
                     if (!listed && keys.Count == 0) throw Missing(path);
                 }
@@ -284,7 +371,7 @@ public sealed class FakeHostFileService : IHostFileService
 
     private void RenameMember(HostPath from, string member, HostPath to)
     {
-        if (!Members.TryGetValue(from.Dataset, out var names) || !names.Contains(member))
+        if (!Members.TryGetValue(from.Dataset!, out var names) || !names.Contains(member))
             throw new HostFileException(HostFileErrorKind.NotFound, $"Rename {from} to {to.Member}: not found.", 5);
         if (names.Contains(to.Member!))
             throw new HostFileException(HostFileErrorKind.AlreadyExists, $"Rename {from} to {to.Member}: a member of that name already exists.", 7);
@@ -300,10 +387,10 @@ public sealed class FakeHostFileService : IHostFileService
         // failure's own 500, reason 8, a server error quoting it (rename-target-exists-400 in the compatibility log).
         if (Datasets.Any(d => d.Name == to.Dataset))
             throw new HostFileException(HostFileErrorKind.ServerError, $"Rename {from} to {to.Dataset}: Rename operation failed (reason 8).", 8, "Rename operation failed");
-        Datasets[index] = Datasets[index] with { Name = to.Dataset };
-        if (Members.Remove(from.Dataset, out var names)) Members[to.Dataset] = names;
+        Datasets[index] = Datasets[index] with { Name = to.Dataset! };
+        if (Members.Remove(from.Dataset!, out var names)) Members[to.Dataset!] = names;
         // KeysUnder includes the dataset's own key (a sequential dataset's content), so one loop moves everything.
-        foreach (var key in KeysUnder(from.Dataset)) Move(key, to.Dataset + key[from.Dataset.Length..]);
+        foreach (var key in KeysUnder(from.Dataset!)) Move(key, to.Dataset + key[from.Dataset!.Length..]);
     }
 
     /// <summary>Every content or stamp key that is the dataset itself or one of its members.</summary>
@@ -323,11 +410,28 @@ public sealed class FakeHostFileService : IHostFileService
 
     private void AddMember(HostPath path)
     {
-        if (path.Member is { } member && Members.TryGetValue(path.Dataset, out var names) && !names.Contains(member))
+        if (path.Member is { } member && Members.TryGetValue(path.Dataset!, out var names) && !names.Contains(member))
             names.Add(member);
     }
 
-    private static HostFileException Missing(HostPath path) => new(HostFileErrorKind.NotFound, $"{path}: not found.", path.Member is null ? 4 : 5);
+    private static HostFileException Missing(HostPath path) =>
+        new(HostFileErrorKind.NotFound, $"{path}: not found.", path.Kind == HostPathKind.Unix ? 1 : path.Member is null ? 4 : 5);
+
+    /// <summary>A UNIX file can only be written under a directory that exists, as the host answers not found.</summary>
+    private void RequireParent(HostPath path)
+    {
+        if (path.Kind == HostPathKind.Unix && !Directories.Contains(ParentOf(path.UnixPath!))) throw Missing(path.Parent!);
+    }
+
+    private static string ParentOf(string path)
+    {
+        var cut = path.LastIndexOf('/');
+        return cut == 0 ? "/" : path[..cut];
+    }
+
+    private static string NameOf(string path) => path[(path.LastIndexOf('/') + 1)..];
+
+    private long SizeOf(string key) => Text.TryGetValue(key, out var lines) ? lines.Sum(l => l.Length + 1) : Binary[key].Length;
 
     private async Task EnterAsync(string call, string failureKey, CancellationToken token)
     {

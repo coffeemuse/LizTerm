@@ -1,0 +1,11 @@
+HTTP/1.1 204 No Content
+Server: HTTPD Server
+X-Powered-By: MVSLOVERS
+Connection: close
+Cache-Control: no-store
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
+ETag: 8E7675AF0000000D
+

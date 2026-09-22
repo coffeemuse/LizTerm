@@ -225,4 +225,136 @@ public class FakeHostFileServiceTests
         Assert.Equal(new[] { "A.CNTL", "B.CNTL", "c.cntl" }, (await host.ListDatasetsAsync("%.CNTL", HostListRequest.All, token)).Entries.Select(e => e.Name));
         Assert.Empty((await host.ListDatasetsAsync("OTHER.**", HostListRequest.All, token)).Entries);
     }
+
+    [Fact]
+    public async Task A_directory_lists_its_subdirectories_then_its_files_with_sizes()
+    {
+        var host = new FakeHostFileService();
+        host.AddDirectory("/u/ibmuser/notes/drafts");
+        host.AddFile("/u/ibmuser/notes/b.txt", "hello", "world");
+        host.AddBinaryFile("/u/ibmuser/notes/a.bin", [1, 2, 3]);
+        var ct = TestContext.Current.CancellationToken;
+
+        var listing = await host.ListDirectoryAsync(HostPath.ForUnix("/u/ibmuser/notes"), HostListRequest.All, ct);
+
+        Assert.Equal(new[] { "drafts", "a.bin", "b.txt" }, listing.Entries.Select(e => e.Name));
+        Assert.Equal(new[] { HostFileEntryKind.Directory, HostFileEntryKind.File, HostFileEntryKind.File }, listing.Entries.Select(e => e.Kind));
+        Assert.Equal(3, listing.Entries[1].Unix!.Size);
+        Assert.Equal(12, listing.Entries[2].Unix!.Size);
+        Assert.True(listing.IsComplete);
+        Assert.Contains("listdir:/u/ibmuser/notes", host.Calls);
+        Assert.Equal(new[] { "ibmuser" }, (await host.ListDirectoryAsync(HostPath.ForUnix("/u"), HostListRequest.All, ct)).Entries.Select(e => e.Name));
+        Assert.Equal(new[] { "u" }, (await host.ListDirectoryAsync(HostPath.ForUnix("/"), HostListRequest.All, ct)).Entries.Select(e => e.Name));
+    }
+
+    [Fact]
+    public async Task A_cut_listing_is_truncated_and_a_continuation_is_refused()
+    {
+        var host = new FakeHostFileService();
+        host.AddFile("/u/a.txt", "a");
+        host.AddFile("/u/b.txt", "b");
+        var ct = TestContext.Current.CancellationToken;
+
+        var listing = await host.ListDirectoryAsync(HostPath.ForUnix("/u"), new HostListRequest(MaxItems: 1), ct);
+
+        Assert.Single(listing.Entries);
+        Assert.True(listing.Truncated);
+        Assert.Null(listing.Continuation);
+        await Assert.ThrowsAsync<ArgumentException>(() => host.ListDirectoryAsync(HostPath.ForUnix("/u"), new HostListRequest(MaxItems: 1, Continuation: "a.txt"), ct));
+    }
+
+    [Fact]
+    public async Task Listing_a_missing_path_is_not_found_and_a_file_is_an_invalid_request()
+    {
+        var host = new FakeHostFileService();
+        host.AddFile("/u/a.txt", "a");
+        var ct = TestContext.Current.CancellationToken;
+
+        var missing = await Assert.ThrowsAsync<HostFileException>(() => host.ListDirectoryAsync(HostPath.ForUnix("/nope"), HostListRequest.All, ct));
+        var file = await Assert.ThrowsAsync<HostFileException>(() => host.ListDirectoryAsync(HostPath.ForUnix("/u/a.txt"), HostListRequest.All, ct));
+
+        Assert.Equal(HostFileErrorKind.NotFound, missing.Kind);
+        Assert.Equal("/nope: not found.", missing.Message);
+        Assert.Equal(1, missing.Reason);
+        Assert.Equal(HostFileErrorKind.InvalidRequest, file.Kind);
+    }
+
+    [Fact]
+    public async Task A_directory_is_created_under_an_existing_parent_only_and_once()
+    {
+        var host = new FakeHostFileService();
+        host.AddDirectory("/u/ibmuser");
+        var ct = TestContext.Current.CancellationToken;
+
+        await host.CreateDirectoryAsync(HostPath.ForUnix("/u/ibmuser/notes"), ct);
+        var again = await Assert.ThrowsAsync<HostFileException>(() => host.CreateDirectoryAsync(HostPath.ForUnix("/u/ibmuser/notes"), ct));
+        var orphan = await Assert.ThrowsAsync<HostFileException>(() => host.CreateDirectoryAsync(HostPath.ForUnix("/u/nobody/notes"), ct));
+
+        Assert.Contains("/u/ibmuser/notes", host.Directories);
+        Assert.Contains("mkdir:/u/ibmuser/notes", host.Calls);
+        Assert.Equal(HostFileErrorKind.AlreadyExists, again.Kind);
+        Assert.Equal("/u/ibmuser/notes: a file or directory of that name already exists.", again.Message);
+        Assert.Equal(HostFileErrorKind.NotFound, orphan.Kind);
+        await Assert.ThrowsAsync<ArgumentException>(() => host.CreateDirectoryAsync(HostPath.ForDataset("A.B"), ct));
+    }
+
+    [Fact]
+    public async Task Unix_files_are_written_read_stamped_and_deleted_by_path()
+    {
+        var host = new FakeHostFileService();
+        host.AddDirectory("/u/ibmuser");
+        var file = HostPath.ForUnix("/u/ibmuser/a.txt");
+        var ct = TestContext.Current.CancellationToken;
+
+        var stamp = await host.WriteTextAsync(file, ["one"], cancellationToken: ct);
+        var read = await host.ReadTextAsync(file, withEtag: true, cancellationToken: ct);
+        var conflict = await Assert.ThrowsAsync<HostFileException>(() => host.WriteTextAsync(file, ["two"], ifMatch: "stale", ct));
+        var orphan = await Assert.ThrowsAsync<HostFileException>(() => host.WriteTextAsync(HostPath.ForUnix("/u/nobody/a.txt"), ["x"], cancellationToken: ct));
+        await host.DeleteAsync(file, ct);
+        var gone = await Assert.ThrowsAsync<HostFileException>(() => host.ReadTextAsync(file, cancellationToken: ct));
+
+        Assert.Equal(new[] { "one" }, read.Lines);
+        Assert.Equal(stamp, read.Etag);
+        Assert.Equal(HostFileErrorKind.Conflict, conflict.Kind);
+        Assert.Equal(HostFileErrorKind.NotFound, orphan.Kind);
+        Assert.Equal(HostFileErrorKind.NotFound, gone.Kind);
+        Assert.Contains("writetext:/u/ibmuser/a.txt:1", host.Calls);
+        Assert.Contains("delete:/u/ibmuser/a.txt", host.Calls);
+    }
+
+    [Fact]
+    public async Task Deleting_a_directory_takes_everything_under_it_and_rename_is_refused()
+    {
+        var host = new FakeHostFileService();
+        host.AddFile("/u/ibmuser/notes/drafts/x.txt", "x");
+        host.AddBinaryFile("/u/ibmuser/notes/y.bin", [1]);
+        host.AddFile("/u/ibmuser/other.txt", "o");
+        var ct = TestContext.Current.CancellationToken;
+
+        await host.DeleteAsync(HostPath.ForUnix("/u/ibmuser/notes"), ct);
+        var gone = await Assert.ThrowsAsync<HostFileException>(() => host.DeleteAsync(HostPath.ForUnix("/u/ibmuser/notes"), ct));
+
+        Assert.DoesNotContain("/u/ibmuser/notes", host.Directories);
+        Assert.DoesNotContain("/u/ibmuser/notes/drafts", host.Directories);
+        Assert.DoesNotContain(host.Text.Keys, k => k.StartsWith("/u/ibmuser/notes", StringComparison.Ordinal));
+        Assert.DoesNotContain(host.Binary.Keys, k => k.StartsWith("/u/ibmuser/notes", StringComparison.Ordinal));
+        Assert.True(host.Text.ContainsKey("/u/ibmuser/other.txt"));
+        Assert.Equal(HostFileErrorKind.NotFound, gone.Kind);
+        await Assert.ThrowsAsync<ArgumentException>(() => host.RenameAsync(HostPath.ForUnix("/u/ibmuser/other.txt"), "z.txt", ct));
+        Assert.DoesNotContain(host.Calls, c => c.StartsWith("rename:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Deleting_the_root_is_refused_before_it_is_logged()
+    {
+        var host = new FakeHostFileService();
+        host.AddFile("/u/ibmuser/a.txt", "a");
+        var ct = TestContext.Current.CancellationToken;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => host.DeleteAsync(HostPath.ForUnix("/"), ct));
+
+        Assert.Contains("/", host.Directories);
+        Assert.True(host.Text.ContainsKey("/u/ibmuser/a.txt"));
+        Assert.Empty(host.Calls);
+    }
 }

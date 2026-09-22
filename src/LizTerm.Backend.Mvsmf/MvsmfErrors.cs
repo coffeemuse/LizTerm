@@ -46,6 +46,10 @@ internal static class MvsmfErrors
         // mvsMF-compat: rename-target-exists-400 — a member rename onto an existing name is 400 reason 7.
         if (status == HttpStatusCode.BadRequest && category == DatasetCategory && reason == RenameTargetExistsReason)
             return HostFileErrorKind.AlreadyExists;
+        // mvsMF-compat: uss-create-errors-400 — a file system create onto an existing name is 400, category 4 (the
+        // security category, reused), reason 1, told from the route's other 400s only by its message.
+        if (status == HttpStatusCode.BadRequest && message?.Contains("already exists", StringComparison.OrdinalIgnoreCase) == true)
+            return HostFileErrorKind.AlreadyExists;
         if (status == HttpStatusCode.BadRequest) return HostFileErrorKind.InvalidRequest;
         return HostFileErrorKind.ServerError;
     }
@@ -58,7 +62,9 @@ internal static class MvsmfErrors
         HostFileErrorKind.NotAuthorized => $"{what}: not authorized.",
         HostFileErrorKind.CannotAllocate => $"{what}: the host could not allocate it (it may already exist, there may be no space, or you may not be authorized).",
         HostFileErrorKind.Conflict => $"{what}: changed on the host since it was read.",
-        HostFileErrorKind.AlreadyExists => $"{what}: a member of that name already exists.",
+        HostFileErrorKind.AlreadyExists => error?.Category == SecurityCategory
+            ? $"{what}: a file or directory of that name already exists."
+            : $"{what}: a member of that name already exists.",
         HostFileErrorKind.InvalidRequest => $"{what}: the host refused the request ({error?.Message ?? "bad request"}).",
         _ => (Quote(error?.Message), error?.Reason) switch
         {

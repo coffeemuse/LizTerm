@@ -4,12 +4,27 @@
 
 namespace LizTerm.Core.HostFiles;
 
-public enum HostFileEntryKind { Dataset, Member }
+public enum HostFileEntryKind
+{
+    Dataset,
+    Member,
+    Directory,
+    /// <summary>A regular UNIX file.</summary>
+    File,
+    /// <summary>A UNIX entry that is neither a directory nor a regular file (a symbolic link, a device, a FIFO,
+    /// a socket): listed, but never read, written or descended into as if it were one of those.</summary>
+    Other,
+}
 
 public enum RecordFormatFamily { Unknown, Fixed, Variable, Undefined }
 
-/// <summary>One row of a host listing. <paramref name="Attributes"/> is set for datasets only.</summary>
-public sealed record HostFileEntry(string Name, HostFileEntryKind Kind, DatasetAttributes? Attributes = null);
+/// <summary>What a directory listing says about an entry: its size in bytes (a directory's is whatever the host
+/// reports) and when it last changed, null when the host does not say.</summary>
+public sealed record UnixFileAttributes(long Size, DateTimeOffset? Modified);
+
+/// <summary>One row of a host listing. <paramref name="Attributes"/> is set for datasets only; <paramref name="Unix"/>
+/// for directories, files and other UNIX entries only.</summary>
+public sealed record HostFileEntry(string Name, HostFileEntryKind Kind, DatasetAttributes? Attributes = null, UnixFileAttributes? Unix = null);
 
 /// <summary>What a dataset listing says about a dataset. Every field is optional because hosts leave fields out.</summary>
 public sealed record DatasetAttributes(string? Dsorg, string? Recfm, int? Lrecl, int? Blksize, string? Volume)

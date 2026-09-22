@@ -6,8 +6,8 @@ using LizTerm.Core.HostFiles;
 
 namespace LizTerm.App.HostFiles;
 
-/// <summary>The stamps (<c>ETag</c> values) of the members and datasets this session window has downloaded or
-/// written, keyed by <see cref="HostPath.ToString"/> (spec §5.1). An upload that replaces a remembered member sends
+/// <summary>The stamps (<c>ETag</c> values) of the members, datasets and UNIX files this session window has downloaded
+/// or written, keyed by <see cref="HostPath.ToString"/> (spec §5.1). An upload that replaces a remembered member sends
 /// its stamp, so a change on the host since the download is caught. One per <see cref="HostFileAccess"/>, so per
 /// host by construction. Thread-safe: a download batch remembers from two transfers at once.</summary>
 public sealed class EtagMemory
@@ -35,16 +35,18 @@ public sealed class EtagMemory
         lock (_lock) _stamps.Remove(path.ToString());
     }
 
-    /// <summary>Drops the dataset's own entry and every member's: a deleted dataset.</summary>
-    public void ForgetUnder(HostPath dataset)
+    /// <summary>Drops the path's own entry and everything under it: a deleted dataset and its members, or a deleted
+    /// UNIX directory and every file below it.</summary>
+    public void ForgetUnder(HostPath path)
     {
         lock (_lock)
         {
-            foreach (var key in KeysUnder(dataset.Dataset)) _stamps.Remove(key);
+            foreach (var key in KeysUnder(path)) _stamps.Remove(key);
         }
     }
 
-    /// <summary>A rename: a member's entry moves to its new name; a dataset's moves with everything under it.</summary>
+    /// <summary>A rename: a member's entry moves to its new name; a dataset's (or a UNIX path's) moves with
+    /// everything under it.</summary>
     public void Move(HostPath from, HostPath to)
     {
         // A rename onto its own name moves nothing, and must not clear the stamps as stale ones.
@@ -59,13 +61,14 @@ public sealed class EtagMemory
                 if (had) _stamps[to.ToString()] = stamp!;
                 return;
             }
-            var moving = KeysUnder(from.Dataset);
-            foreach (var stale in KeysUnder(to.Dataset)) _stamps.Remove(stale);
+            var moving = KeysUnder(from);
+            foreach (var stale in KeysUnder(to)) _stamps.Remove(stale);
+            var (fromKey, toKey) = (from.ToString(), to.ToString());
             foreach (var key in moving)
             {
                 var stamp = _stamps[key];
                 _stamps.Remove(key);
-                _stamps[to.Dataset + key[from.Dataset.Length..]] = stamp;
+                _stamps[toKey + key[fromKey.Length..]] = stamp;
             }
         }
     }
@@ -75,8 +78,13 @@ public sealed class EtagMemory
         get { lock (_lock) return _stamps.Count; }
     }
 
-    /// <summary>The dataset's own key and its members' (<c>NAME</c> and <c>NAME(…)</c>), never a longer name's.
-    /// Materialised, since the callers remove while they walk.</summary>
-    private List<string> KeysUnder(string dataset) =>
-        _stamps.Keys.Where(key => key == dataset || key.StartsWith(dataset + "(", StringComparison.Ordinal)).ToList();
+    /// <summary>The path's own key and those under it, never a longer name's: a dataset's members
+    /// (<c>NAME</c> and <c>NAME(…)</c>), or a UNIX directory's descendants (<c>/a/b</c> and <c>/a/b/…</c>; every
+    /// key at the root). Materialised, since the callers remove while they walk.</summary>
+    private List<string> KeysUnder(HostPath path)
+    {
+        var own = path.ToString();
+        var below = path.Kind == HostPathKind.Unix ? (own == "/" ? "/" : own + "/") : own + "(";
+        return _stamps.Keys.Where(key => key == own || key.StartsWith(below, StringComparison.Ordinal)).ToList();
+    }
 }

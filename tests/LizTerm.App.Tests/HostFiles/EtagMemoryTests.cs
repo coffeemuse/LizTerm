@@ -70,6 +70,36 @@ public class EtagMemoryTests
     }
 
     [Fact]
+    public void ForgetUnder_drops_a_unix_directory_and_everything_below_it_but_not_a_longer_name()
+    {
+        var memory = new EtagMemory();
+        memory.Remember(HostPath.ForUnix("/u/me/d/a.txt"), "a");
+        memory.Remember(HostPath.ForUnix("/u/me/d/sub/b.txt"), "b");
+        memory.Remember(HostPath.ForUnix("/u/me/d2/c.txt"), "c");
+        memory.Remember(Hello, "member");
+
+        memory.ForgetUnder(HostPath.ForUnix("/u/me/d"));
+
+        Assert.Null(memory.TryGet(HostPath.ForUnix("/u/me/d/a.txt")));
+        Assert.Null(memory.TryGet(HostPath.ForUnix("/u/me/d/sub/b.txt")));
+        Assert.Equal("c", memory.TryGet(HostPath.ForUnix("/u/me/d2/c.txt")));
+        Assert.Equal("member", memory.TryGet(Hello));
+    }
+
+    [Fact]
+    public void ForgetUnder_the_unix_root_drops_every_unix_file_and_no_dataset()
+    {
+        var memory = new EtagMemory();
+        memory.Remember(HostPath.ForUnix("/u/me/a.txt"), "a");
+        memory.Remember(Cntl, "ds");
+
+        memory.ForgetUnder(HostPath.ForUnix("/"));
+
+        Assert.Null(memory.TryGet(HostPath.ForUnix("/u/me/a.txt")));
+        Assert.Equal("ds", memory.TryGet(Cntl));
+    }
+
+    [Fact]
     public void Move_carries_a_members_stamp_to_its_new_name()
     {
         var memory = new EtagMemory();

@@ -59,6 +59,21 @@ internal sealed record MvsmfRenameSource(
     [property: JsonPropertyName("dsn")] string Dsn,
     [property: JsonPropertyName("member"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Member);
 
+/// <summary>One entry of a file system listing. <c>size</c> is a number on mvsMF; read leniently in case a host
+/// quotes it. <c>user</c>, <c>group</c>, <c>links</c> and <c>inode</c> are not read: nothing shows them.</summary>
+internal sealed record MvsmfUnixEntry(
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("mode")] string? Mode,
+    [property: JsonPropertyName("size"), JsonConverter(typeof(LenientStringConverter))] string? Size,
+    [property: JsonPropertyName("mtime")] string? Mtime);
+
+internal sealed record MvsmfUnixList(
+    [property: JsonPropertyName("items")] List<MvsmfUnixEntry>? Items,
+    [property: JsonPropertyName("moreRows")] bool? MoreRows);
+
+/// <summary>A create's body on the file system route: <c>directory</c> is the only type LizTerm sends.</summary>
+internal sealed record MvsmfUnixCreate([property: JsonPropertyName("type")] string Type);
+
 internal sealed class LenientStringConverter : JsonConverter<string?>
 {
     public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => reader.TokenType switch
@@ -85,4 +100,6 @@ internal sealed class LenientStringConverter : JsonConverter<string?>
 [JsonSerializable(typeof(MvsmfError))]
 [JsonSerializable(typeof(MvsmfAllocation))]
 [JsonSerializable(typeof(MvsmfRename))]
+[JsonSerializable(typeof(MvsmfUnixList))]
+[JsonSerializable(typeof(MvsmfUnixCreate))]
 internal partial class MvsmfJsonContext : JsonSerializerContext;

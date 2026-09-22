@@ -9,7 +9,7 @@ against disagree, and what LizTerm does about each. When a newer mvsMF is availa
 | | |
 |---|---|
 | Reported version | `zosmf_full_version: 1.1.0` (`zosmf_version: 1`) |
-| Host | MVS/CE, HTTPD, probed 2026-09-18; the manage operations recorded 2026-09-19 |
+| Host | MVS/CE, HTTPD, probed 2026-09-18; the manage operations recorded 2026-09-19; the file system routes probed and recorded 2026-09-22 |
 | Source read alongside | mvsMF at commit `cf4d6d5` (1.1.1-dev, after the 1.1.0 release of 2026-09-14), `src/`, `docs/endpoints/`, `samplib/` and `CHANGELOG.md` |
 | Previous baseline | `1.0.0-dev`, probed 2026-09-16; the entries it needed are under *Resolved on 1.1.0* |
 | Minimum supported | 1.1.0 — see the user guide's "Signing in" |
@@ -107,7 +107,7 @@ Entries marked *log only* change nothing in the code.
   `charset=UTF-8` still stores UTF-8 `¬` (`C2 AC`) as two characters, and Latin-1 `AC` round-trips as `AC`.
   Responses say `text/plain` with no charset.
 - **LizTerm:** encodes to and decodes from Latin-1 in the backend. Local files are UTF-8; `TextUploadCheck` refuses
-  characters above U+00FF.
+  characters above U+00FF. The file system routes behave the same, and go through the same code.
 
 ### `text-read-keeps-trailing-blanks`
 
@@ -158,7 +158,8 @@ Entries marked *log only* change nothing in the code.
   the live round trip checks the write-then-read equality). The stamp costs the host a second full read of the
   member (`dataset_etag` in `dsapi.c` opens and reads it), so a read that asks for it does that work twice on
   the host; and an `If-Match` on a member that no longer exists answers 412, not 404, so a member
-  deleted since it was read reads as "changed".
+  deleted since it was read reads as "changed". On the file system routes (2026-09-22) the 412 body is category 4,
+  reason 1, with the same message (`uss-write-412`); the status, not the reason, is what LizTerm reads.
 - **LizTerm:** a read asks for the stamp only when its caller may write back (`withEtag`: a download does; the
   verify read-back after an upload does not), so the host's second pass is paid once per download rather than on
   every read; every write asks, since the write's answer is the stamp the next `If-Match` needs. The value is kept
@@ -189,10 +190,82 @@ Entries marked *log only* change nothing in the code.
 - **Observed:** not tested; no dataset or member with `#` was available.
 - **LizTerm:** escapes `#` as `%23` and `%` as `%25` and sends every other name character as it is.
 
-### `uss-limits` (log only, for later)
+### `uss-limits`
 
-- **Source:** USS files are limited to 64 KB, use IBM-1047, and USS create answers 400 for an existing file.
-- **LizTerm:** no USS support yet.
+- **Docs and source:** `docs/endpoints/uss/put.md` and mvsMF's `CHANGELOG.md` say a UNIX file is capped at 64 KB by
+  UFSD's direct-block layout, and that text is IBM-1047 on disk.
+- **Observed (2026-09-22):** the 64 KB figure is stale on the tested build (mvsMF 1.1.0 built against ufsd 1.2.2):
+  a 70,000-byte `PUT` answers 204 and the file is stored whole (`uss-write-70000-204`); a 1,048,576-byte file is
+  stored and read back byte-identical; 2,000,000 bytes store. The ceiling is the request body, not the file: from
+  about 2.1 MB a `PUT` answers 400 `{"rc":8,"category":2,"reason":1,"message":"Failed to read request body"}` with
+  nothing written (`uss-write-too-large`, a 2,200,000-byte body; a `GET` of the path answers 404 afterwards).
+  Separately, "No space left on device" (500, category 8, reason 1) can answer a write of any size when the file
+  system is full, and it arrives **after** a partial file has been written. On the tested host, space freed by
+  deleting a file was not observed to return to the file system: after a few multi-megabyte probes were written and
+  deleted, writes of 1 MB and 1.5 MB answered "No space left on device" while writes of 400 KB and less still
+  succeeded, so a host that has once held large files may refuse a later write of any size. The text translation
+  changes nothing on the wire: the body is Latin-1 both ways, as on the dataset routes (`text-body-is-latin1`).
+- **LizTerm:** `HostFileLimits.MaxUnixFileBytes` (1,048,576, the measured size the host stores and reads back
+  intact, comfortably under its body ceiling) is checked before any upload request: `TextUploadCheck.RunForUnixFile`
+  counts the lines' Latin-1 bytes plus one per line, and `HostFileTransfer.BinaryUploadProblem` the file's length,
+  both at that cap unless told otherwise; `HostFileTransfer.UploadTextAsync` and `UploadBinaryAsync` apply it again
+  to every UNIX target, so a caller that skipped the check still sends nothing. A file over the cap is refused with
+  its size and the limit. A full file system is the
+  host's answer and can leave a partial file, which the next listing shows. Raise the constant when the host
+  grows.
+
+### `uss-list-no-continuation`
+
+- **Docs and source:** `GET restfiles/fs?path=` takes `X-IBM-Max-Items` (default 1,000; `0` = unlimited) and
+  answers `moreRows: true` when it cut the list, but `ussListHandler` reads no `start=`: the route cannot be
+  continued, unlike the dataset and member listings (`paging`).
+- **Observed (2026-09-22):** `X-IBM-Max-Items: 1` on `/u` answers one of three with `moreRows: true`
+  (`uss-list-truncated`); the same request with `start=ibmuser` answers the same page.
+- **LizTerm:** `ListDirectoryAsync` always sends `X-IBM-Max-Items` (`0` for the whole directory, which is what
+  mvsMF Access asks for), refuses a `HostListRequest` carrying a continuation, and reports a cut listing as
+  `HostFileListing.Truncated` with no continuation, so the window says "more on the host" and offers no Load more.
+
+### `uss-stat-for-file-path`
+
+- **Docs and source:** a listing whose `path` names a file answers 200 with one item whose `name` is the full path,
+  the stat shape real z/OSMF uses.
+- **Observed (2026-09-22):** `uss-stat-file`.
+- **LizTerm:** `ListDirectoryAsync` reads a one-item answer whose name starts with `/` as "is a file, not a
+  directory" (`HostFileErrorKind.InvalidRequest`), since a caller listing a directory never wants a stat.
+
+### `uss-create-errors-400`
+
+- **Docs and source:** `POST restfiles/fs/{path}` with `{"type":"directory"}` answers 400 for an existing name,
+  for a missing parent and for a path too long, all category 2 reason 1 in the docs; the source sends the existing
+  name as category 4 (the security category, reused), reason 1, "File or directory already exists".
+- **Observed (2026-09-22):** an existing name (`uss-mkdir-exists`) is 400 category 4 reason 1 "File or directory
+  already exists"; a missing parent (`uss-mkdir-no-parent`) is 404 category 6 reason 1 "File or directory not
+  found", not the 400 the docs list.
+- **LizTerm:** a 400 whose message says "already exists" is `AlreadyExists`, whose sentence for a file system path
+  reads "a file or directory of that name already exists"; the missing parent maps by its 404 to `NotFound`.
+
+### `uss-names-latin1`
+
+- **Source:** HTTPD's `http_decode` turns each `%XX` in the path and the query into one byte through its ASCII to
+  EBCDIC table, and a raw `+` into a space; `ussListHandler` prints each name into the listing with `%s`, through
+  the same table the other way, unescaped.
+- **Observed (2026-09-22):** a directory made as `caf%E9` is listed as `caf` then the raw byte `E9` (Latin-1 `é`),
+  which is not UTF-8, so a strict UTF-8 JSON reader refuses the whole listing (`uss-list-names`). A name made as
+  `%20lead` keeps its leading blank; one made as `sp%20` is stored and listed as `sp`, and a request for `sp%20`
+  answers 404: the host drops a trailing blank when it makes a name.
+- **LizTerm:** `EscapeUnixPath` sends one `%XX` per character, of its Latin-1 byte, and `HostPath.UnixPathError`
+  refuses a character above U+00FF, so a path's length in characters is its length in the host's bytes. A listing is
+  read as Latin-1 before it is parsed. Names are kept exactly, blanks included, by the backend and by `HostPath`.
+  Since the source does not escape a name, a `"` or `\` in one would still break the listing's JSON; LizTerm reports
+  that as the host's unreadable answer.
+
+### `uss-owner-blank` (log only)
+
+- **Docs:** each listing item carries `user` and `group`, the owner and group names.
+- **Observed (2026-09-22):** both are `""` on every entry of `/`, `/u/mvsce01` and `/u/mvsce02`, and on `/tmp`
+  and `/www`; only `/u/ibmuser` carries `IBMUSER` and `USER`, and the recorded stat of a file under it carries
+  `IBMUSER` and `ADMIN`, so the blank is per-entry rather than per-host.
+- **LizTerm:** neither field is read or shown; the file pane has no owner or permissions column.
 
 ## Resolved on 1.1.0
 

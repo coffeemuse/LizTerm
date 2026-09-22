@@ -82,23 +82,49 @@ public static class HostFileTransfer
     public static TextUploadResult CheckTextFile(string sourceFile, DatasetAttributes target, TextUploadOptions? options = null) =>
         TextUploadCheck.Run(File.ReadAllBytes(sourceFile), target, options);
 
-    /// <summary>Sends text that passed its check and, with <paramref name="verify"/>, reads it back and compares.
-    /// <paramref name="ifMatch"/> is the stamp the target must still hold (see <see cref="IHostFileService.WriteTextAsync"/>).
-    /// The outcome carries the write's stamp, not the read-back's: the write's is the one the host promises for
-    /// the next <c>ifMatch</c>. <paramref name="written"/> is told the write's stamp the moment the host has
-    /// accepted it, before any read-back, so a read-back that fails or is cancelled cannot lose it.</summary>
-    /// <exception cref="InvalidOperationException">The check found errors.</exception>
+    /// <summary>Reads <paramref name="sourceFile"/> and runs <see cref="TextUploadCheck.RunForUnixFile"/> on it.</summary>
+    /// <exception cref="IOException">The local file could not be read; not a <see cref="HostFileException"/>.</exception>
+    /// <exception cref="UnauthorizedAccessException">The local file is not readable.</exception>
+    public static TextUploadResult CheckUnixTextFile(string sourceFile, long maxBytes = HostFileLimits.MaxUnixFileBytes, TextUploadOptions? options = null) =>
+        TextUploadCheck.RunForUnixFile(File.ReadAllBytes(sourceFile), maxBytes, options);
+
+    /// <summary>Why <paramref name="sourceFile"/> cannot be sent as bytes to a host holding at most
+    /// <paramref name="maxBytes"/>, or null when it can: checked before any request, since the host would write what
+    /// fits and only then fail.</summary>
+    /// <exception cref="IOException">The local file could not be examined; not a <see cref="HostFileException"/>.</exception>
+    public static string? BinaryUploadProblem(string sourceFile, long maxBytes = HostFileLimits.MaxUnixFileBytes)
+    {
+        var length = new FileInfo(sourceFile).Length;
+        return length > maxBytes ? TextUploadCheck.TooLarge(length, maxBytes) : null;
+    }
+
+    /// <summary>Sends text that passed its check and, with <paramref name="verify"/>, reads it back and compares:
+    /// with trailing blanks ignored for a dataset or member, whose fixed records come back padded, and exactly for
+    /// a UNIX file, whose trailing blanks are data. <paramref name="ifMatch"/> is the stamp the target must still
+    /// hold (see <see cref="IHostFileService.WriteTextAsync"/>). The outcome carries the write's stamp, not the
+    /// read-back's: the write's is the one the host promises for the next <c>ifMatch</c>. <paramref name="written"/>
+    /// is told the write's stamp the moment the host has accepted it, before any read-back, so a read-back that fails
+    /// or is cancelled cannot lose it.</summary>
+    /// <exception cref="InvalidOperationException">The check found errors, or the target is a UNIX file and the
+    /// text is over <see cref="HostFileLimits.MaxUnixFileBytes"/> (a check made for a dataset does not count it);
+    /// nothing is sent.</exception>
     public static async Task<UploadOutcome> UploadTextAsync(IHostFileService service, HostPath path,
         TextUploadResult checkedText, bool verify, string? ifMatch = null, CancellationToken cancellationToken = default,
         Action<string?>? written = null)
     {
         if (!checkedText.CanUpload) throw new InvalidOperationException("The text did not pass its upload check.");
+        var unix = path.Kind == HostPathKind.Unix;
+        if (unix)
+        {
+            var bytes = TextUploadCheck.StoredBytes(checkedText.Lines);
+            if (bytes > HostFileLimits.MaxUnixFileBytes) throw new InvalidOperationException(TextUploadCheck.TooLarge(bytes, HostFileLimits.MaxUnixFileBytes));
+        }
         var etag = await service.WriteTextAsync(path, checkedText.Lines, ifMatch, cancellationToken);
         written?.Invoke(etag);
         if (!verify) return new UploadOutcome(UploadVerification.NotChecked, null, etag);
         // Without the stamp: the write's is the one that matters, and asking would cost the host another pass.
         var stored = await service.ReadTextAsync(path, cancellationToken: cancellationToken);
-        return FirstDifference(checkedText.Lines, stored.Lines) is { } line
+        return FirstDifference(checkedText.Lines, stored.Lines, exact: unix) is { } line
             ? new UploadOutcome(UploadVerification.Differs, line, etag)
             : new UploadOutcome(UploadVerification.Matches, null, etag);
     }
@@ -106,9 +132,12 @@ public static class HostFileTransfer
     /// <summary>Sends <paramref name="sourceFile"/> as it is; returns the write's stamp.</summary>
     /// <exception cref="IOException">The local file could not be read; not a <see cref="HostFileException"/>.</exception>
     /// <exception cref="UnauthorizedAccessException">The local file is not readable.</exception>
+    /// <exception cref="InvalidOperationException">The target is a UNIX file and the file is over
+    /// <see cref="HostFileLimits.MaxUnixFileBytes"/> (<see cref="BinaryUploadProblem"/>); nothing is read or sent.</exception>
     public static async Task<string?> UploadBinaryAsync(IHostFileService service, HostPath path, string sourceFile,
         string? ifMatch = null, CancellationToken cancellationToken = default)
     {
+        if (path.Kind == HostPathKind.Unix && BinaryUploadProblem(sourceFile) is { } problem) throw new InvalidOperationException(problem);
         await using var source = File.OpenRead(sourceFile);
         return await service.WriteBinaryAsync(path, source, ifMatch, cancellationToken);
     }
@@ -121,14 +150,15 @@ public static class HostFileTransfer
         return text.ToString();
     }
 
-    /// <summary>The first 1-based line where the two differ once trailing blanks are ignored, counting a missing line
-    /// as a difference; null when they match.</summary>
-    internal static int? FirstDifference(IReadOnlyList<string> sent, IReadOnlyList<string> stored)
+    /// <summary>The first 1-based line where the two differ, trailing blanks ignored unless <paramref name="exact"/>,
+    /// counting a missing line as a difference; null when they match.</summary>
+    internal static int? FirstDifference(IReadOnlyList<string> sent, IReadOnlyList<string> stored, bool exact = false)
     {
         var common = Math.Min(sent.Count, stored.Count);
         for (var i = 0; i < common; i++)
         {
-            if (!string.Equals(sent[i].TrimEnd(' '), stored[i].TrimEnd(' '), StringComparison.Ordinal)) return i + 1;
+            var (a, b) = exact ? (sent[i], stored[i]) : (sent[i].TrimEnd(' '), stored[i].TrimEnd(' '));
+            if (!string.Equals(a, b, StringComparison.Ordinal)) return i + 1;
         }
         return sent.Count == stored.Count ? null : common + 1;
     }

@@ -48,6 +48,24 @@ Core only, is the only one that knows mvsMF exists, and never references `LizTer
   `TRK`/`CYL`, `dirblk` only for `PO`) after `DatasetAllocation.Problems()` passes. The host answers every
   allocation failure with the same 500, category 8, rc 900 (`create-failure-is-one-500`), mapped to
   `CannotAllocate`. `DeleteAsync` takes a dataset path as well as a member.
+- **The file system routes.** A `HostPathKind.Unix` path goes to `restfiles/fs/<path>` through `Route`, escaped
+  by `EscapeUnixPath` (`/` and the unreserved characters kept, everything else one `%XX` of its Latin-1 byte: the
+  host decodes each escape to one byte, and reads a raw `+` as a space), and the read, write and stamp code is the
+  dataset side's: the text body is Latin-1 both ways here too (the host translates to and from IBM-1047 rather than
+  the dataset routes' code page, which changes nothing on the wire), and a text and a binary read give the same
+  `ETag`. `ListDirectoryAsync` sends `GET restfiles/fs?path=<escaped>` with `X-IBM-Max-Items` always (`0` = all;
+  without it the host stops at 1,000) and reads the answer as Latin-1, since the names in it are raw file system
+  bytes, never UTF-8 (`uss-names-latin1`); a name is kept exactly, blanks included. `mode`'s first character is the
+  kind: `d` a directory, `-` (or no mode) a file, anything else `Other` (mvsMF only sends the first two). A cut
+  listing is `Truncated` with no continuation, since the route has no `start=` (`uss-list-no-continuation`); a file
+  path answers a one-item stat listing, read as `InvalidRequest` (`uss-stat-for-file-path`). `CreateDirectoryAsync`
+  is the one other request that sends `application/json`, a `POST` of `{"type":"directory"}`; an existing name is
+  400 "File or directory already exists", mapped to `AlreadyExists` by its message (`uss-create-errors-400`).
+  `DeleteAsync` sends `X-IBM-Option: recursive` on every UNIX path, and so refuses the root before any request.
+  `RenameAsync` refuses a UNIX path: the host has no rename. The cap (`uss-limits`) is Core's
+  `HostFileLimits.MaxUnixFileBytes`, 1 MiB as measured on the tested build (the documented 64 KB is stale),
+  enforced by `HostFileTransfer`'s uploads before a request; a body past the host's own ceiling, about 2 MB, is a
+  400 "Failed to read request body" with nothing written.
 - **Text is ISO-8859-1 on the wire** in both directions, whatever `charset` says. Lines go out as they are, LF
   ended; an empty line is stored as a blank record. `EncodeText` throws for a line break or a character above
   U+00FF; `TextUploadCheck` (Core) should have refused those first, and it also refuses over-long lines when the

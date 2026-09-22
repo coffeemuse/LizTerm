@@ -35,6 +35,12 @@ internal sealed class FakeHostFileService : IHostFileService
     public Task<HostFileListing> ListMembersAsync(HostPath dataset, HostListRequest request, CancellationToken cancellationToken = default) =>
         Task.FromResult(new HostFileListing([], null));
 
+    public Task<HostFileListing> ListDirectoryAsync(HostPath directory, HostListRequest request, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"listdir:{directory}");
+        return Task.FromResult(new HostFileListing([], null));
+    }
+
     public Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
         Calls.Add($"readtext:{path}{(withEtag ? ":etag" : "")}");
@@ -80,6 +86,12 @@ internal sealed class FakeHostFileService : IHostFileService
     public Task CreateDatasetAsync(HostPath dataset, DatasetAllocation allocation, CancellationToken cancellationToken = default)
     {
         Calls.Add($"create:{dataset}");
+        return Task.CompletedTask;
+    }
+
+    public Task CreateDirectoryAsync(HostPath directory, CancellationToken cancellationToken = default)
+    {
+        Calls.Add($"mkdir:{directory}");
         return Task.CompletedTask;
     }
 

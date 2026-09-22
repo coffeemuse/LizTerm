@@ -100,6 +100,13 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
   onto an existing name); `delete:<path>` removes a member, or a dataset with everything under it, and is
   `NotFound` when there is nothing to remove. A create or rename the local rules refuse throws
   `ArgumentException` before it is logged, as the backend does.
+  It also plays the file system: `Directories` (the root always) and `AddDirectory`/`AddFile`/`AddBinaryFile`
+  seed a tree, `listdir:<path>` lists a directory's subdirectories then its files (each in ordinal order, sizes
+  from the content), cut to `MaxItems` with `Truncated` and never a continuation, `NotFound` for a missing path
+  and `InvalidRequest` for a file; `mkdir:<path>` needs an existing parent and refuses an existing name as
+  `AlreadyExists`; a write under a missing parent is `NotFound`; `delete:<path>` on a directory takes everything
+  under it; and a rename of a UNIX path, or a delete of the root, throws `ArgumentException` unlogged, as the
+  backend does.
   Core.Tests has a smaller fake of the same name for `HostFileTransfer` (see "Core tests").
 - `BrowserTestHost` (`ViewModels/`) builds an `MvsmfBrowserViewModel` over a `FakeHostFileService` seeded by
   `Standard` (a PDS of three members, a load library, a sequential dataset and a `DA` dataset) or `Large` (those
@@ -173,7 +180,7 @@ Notes for working under `tests/`. Commands, the four test lanes and the environm
 - `FakeHostFileService` (`HostFiles/`) is an in-memory host keyed by `HostPath.ToString()`, with `StoreTransform` to
   play a host that alters what it stores and `ReadFailure` / `BytesBeforeFailure` for a read that dies part-way.
   Every write stamps its path `write-N` (`Etags`) and records its `ifMatch` (`IfMatches`); a read logs `:etag`
-  when it asked for the stamp and gets one only then; create and rename are logged only.
+  when it asked for the stamp and gets one only then; create, rename, `listdir` and `mkdir` are logged only.
 
 ## mvsMF backend tests
 

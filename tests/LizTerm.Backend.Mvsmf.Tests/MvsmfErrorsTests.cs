@@ -20,6 +20,8 @@ public class MvsmfErrorsTests
     [InlineData(HttpStatusCode.InternalServerError, 4, 8, 0, HostFileErrorKind.NotAuthorized)]
     [InlineData(HttpStatusCode.Forbidden, null, null, null, HostFileErrorKind.NotAuthorized)]
     [InlineData(HttpStatusCode.BadRequest, 6, 8, 1, HostFileErrorKind.InvalidRequest)]
+    [InlineData(HttpStatusCode.NotFound, 6, 8, 1, HostFileErrorKind.NotFound)]
+    [InlineData(HttpStatusCode.BadRequest, 2, 8, 1, HostFileErrorKind.InvalidRequest)]
     [InlineData(HttpStatusCode.InternalServerError, 8, 900, 7, HostFileErrorKind.CannotAllocate)]
     [InlineData(HttpStatusCode.PreconditionFailed, 6, 8, 10, HostFileErrorKind.Conflict)]
     [InlineData(HttpStatusCode.PreconditionFailed, null, null, null, HostFileErrorKind.Conflict)]
@@ -156,6 +158,13 @@ public class MvsmfErrorsTests
         Assert.Equal(HostFileErrorKind.Conflict, ex.Kind);
         Assert.Equal(10, ex.Reason);
         Assert.Equal("A.B(ONE): changed on the host since it was read.", ex.Message);
+    }
+
+    [Fact]
+    public void Uss_create_errors_400_so_already_exists_is_told_by_its_message()
+    {
+        Assert.Equal(HostFileErrorKind.AlreadyExists, MvsmfErrors.Classify(HttpStatusCode.BadRequest, 4, 8, 1, "File or directory already exists"));
+        Assert.Equal(HostFileErrorKind.InvalidRequest, MvsmfErrors.Classify(HttpStatusCode.BadRequest, 4, 8, 1, "Path name too long"));
     }
 
     [Fact]
