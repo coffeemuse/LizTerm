@@ -75,19 +75,12 @@ public sealed class B3270ChildProcess(string executablePath) : IB3270Process
         _process?.Dispose();
     }
 
-    /// <summary>The engine must print numbers the way JSON reads them, whatever the desktop's language (#170).
-    /// b3270 4.5ga6 calls <c>setlocale(LC_ALL, "")</c> at start-up on every platform but Windows
-    /// (<c>Common/codepage.c</c>) and then prints every JSON double with <c>%g</c> (<c>Common/json.c</c>), so under
-    /// a locale whose decimal separator is a comma — Croatian, German, French and most of Europe — a run that took
-    /// a millisecond or more is answered with <c>"time":0,039</c>. That is not JSON: the parser drops the line, the
-    /// run is never answered, and a Connect that succeeded in every visible way still times out thirty seconds
-    /// later. Upstream master still formats the same way. The fix is the child's environment: <c>LC_NUMERIC=C</c>,
-    /// which pins the decimal point and nothing else, so the engine keeps reading the codeset from the user's own
-    /// locale. <c>LC_ALL</c> outranks every <c>LC_*</c> variable, so a value there is spelled out into the
-    /// categories it stood for and the variable itself removed; an empty <c>LC_ALL</c> is unset by POSIX's rule and
-    /// stands for nothing. A Mac launched from the Finder carries no locale variables at all, which is why the
-    /// report came from a Linux desktop. Windows engines never call setlocale, and the variables cost nothing there.
-    /// Internal so a test can hand it a dictionary; <see cref="Start"/> hands it the real environment.</summary>
+    /// <summary>Pins the engine's decimal point to JSON's (#170). b3270 formats its JSON doubles in the process
+    /// locale, so under a comma-decimal desktop a run-result reads <c>"time":0,039</c> and is dropped as malformed;
+    /// see docs/engines.md, "The engine's locale". <c>LC_NUMERIC=C</c> is the whole fix. <c>LC_ALL</c> would outrank
+    /// it, so a value there is spelled out into the categories it stood for and the variable removed; an empty
+    /// <c>LC_ALL</c> is unset by POSIX's rule and stands for nothing. Internal so a test can hand it a dictionary;
+    /// <see cref="Start"/> hands it the real environment.</summary>
     internal static void ConfigureLocale(IDictionary<string, string?> environment)
     {
         if (environment.TryGetValue("LC_ALL", out var all) && !string.IsNullOrEmpty(all))

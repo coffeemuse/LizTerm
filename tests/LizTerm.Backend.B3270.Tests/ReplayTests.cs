@@ -226,7 +226,9 @@ public class ReplayTests
         };
 
         var profile = new SessionProfile { Name = "replay", Host = "hercules.test" };
-        await using var session = new B3270Session(profile, () => fake);
+        // The Disconnect's answer in the fixture is malformed too, so the cancel would otherwise wait out the whole
+        // DisconnectTimeout before this test could end; the app did exactly that, five seconds long.
+        await using var session = new B3270Session(profile, () => fake) { DisconnectTimeout = TimeSpan.FromMilliseconds(200) };
         var states = new List<ConnectionState>();
         session.ConnectionChanged += (_, s) => states.Add(s);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));

@@ -47,8 +47,11 @@ public class EngineLocaleTests
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(10));
 
+            // The exception's type is the proof: it is raised only from a parsed run-result. Its text is not asserted,
+            // because glibc translates strerror under LC_MESSAGES, which now follows LANG, so on a machine with hr_HR
+            // generated the refusal arrives in Croatian.
             var ex = await Assert.ThrowsAsync<ConnectionFailedException>(() => session.ConnectAsync(cancellationToken: cts.Token));
-            Assert.Contains(ex.Lines, line => line.Contains("refused", StringComparison.OrdinalIgnoreCase));
+            Assert.NotEmpty(ex.Lines);
         }
         finally
         {
