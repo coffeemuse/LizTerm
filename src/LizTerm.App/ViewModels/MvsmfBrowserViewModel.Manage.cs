@@ -176,14 +176,10 @@ public sealed partial class MvsmfBrowserViewModel
 
     // ---- shared ----
 
-    /// <summary>An operation whose second half is a listing (a dataset rename, a create): once the host has done the
-    /// first half, a connection failure in the listing must retry only the listing, never ask the host to do the
-    /// first half again. The work calls <c>retryWith</c> with the listing's retry at that point.</summary>
-    private Task RunThenListAsync(Func<Action<Func<Task>>, CancellationToken, Task> work, Func<Task> retryAll)
-    {
-        var retry = retryAll;
-        return RunExclusiveAsync(token => work(next => retry = next, token), () => retry());
-    }
+    /// <summary>An operation whose second half is a listing (a dataset rename, a create): see
+    /// <see cref="BrowserOperations.RunThenListAsync"/>.</summary>
+    private Task RunThenListAsync(Func<Action<Func<Task>>, CancellationToken, Task> work, Func<Task> retryAll) =>
+        Ops.RunThenListAsync(work, retryAll);
 
     private Task ListAgainAsync(string name, string what) =>
         RunExclusiveAsync(token => ShowAfterChangeAsync(name, what, token), () => ListAgainAsync(name, what));

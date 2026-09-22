@@ -92,6 +92,15 @@ public sealed partial class BrowserOperations : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>An operation whose second half is a listing (a create, a rename): once the host has done the first
+    /// half, a connection failure in the listing must retry only the listing, never ask the host to do the first
+    /// half again. The work calls <c>retryWith</c> with the listing's retry at that point.</summary>
+    public Task RunThenListAsync(Func<Action<Func<Task>>, CancellationToken, Task> work, Func<Task> retryAll)
+    {
+        var retry = retryAll;
+        return RunExclusiveAsync(token => work(next => retry = next, token), () => retry());
+    }
+
     /// <summary>A closed window has no one to ask, so the answer is Cancel.</summary>
     public async Task<ConfirmOutcome> AskAsync(ConfirmationRequest request)
     {

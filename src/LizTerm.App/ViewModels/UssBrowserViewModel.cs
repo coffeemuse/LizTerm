@@ -207,5 +207,8 @@ public sealed partial class UssBrowserViewModel : ObservableObject
         UpCommand.NotifyCanExecuteChanged();
         OpenDirectoryCommand.NotifyCanExecuteChanged();
         RefreshCommand.NotifyCanExecuteChanged();
+        NewDirectoryCommand.NotifyCanExecuteChanged();
+        DeleteDirectoryCommand.NotifyCanExecuteChanged();
+        DeleteFilesCommand.NotifyCanExecuteChanged();
     }
 }
