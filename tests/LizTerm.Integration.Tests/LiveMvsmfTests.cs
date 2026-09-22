@@ -158,7 +158,7 @@ public class LiveMvsmfTests
         {
             await service.CreateDatasetAsync(created,
                 new DatasetAllocation(DatasetOrganization.Partitioned, "FB", 80, 3120, SpaceUnit.Tracks, 1, 1, 1), ct);
-            var listed = Assert.Single((await service.ListDatasetsAsync(created.Dataset, HostListRequest.All, ct)).Entries);
+            var listed = Assert.Single((await service.ListDatasetsAsync(created.Dataset!, HostListRequest.All, ct)).Entries);
             Assert.Equal("PO", listed.Attributes!.Dsorg);
             Assert.Equal("FB", listed.Attributes.Recfm);
             Assert.Equal(80, listed.Attributes.Lrecl);
@@ -182,12 +182,12 @@ public class LiveMvsmfTests
             var exists = await Assert.ThrowsAsync<HostFileException>(() => service.RenameAsync(created.WithMember("TWO"), "TWO", ct));
             Assert.Equal(HostFileErrorKind.AlreadyExists, exists.Kind);
 
-            await service.RenameAsync(created, renamed.Dataset, ct);
-            Assert.Empty((await service.ListDatasetsAsync(created.Dataset, HostListRequest.All, ct)).Entries);
+            await service.RenameAsync(created, renamed.Dataset!, ct);
+            Assert.Empty((await service.ListDatasetsAsync(created.Dataset!, HostListRequest.All, ct)).Entries);
             Assert.Equal(new[] { "TWO" }, (await service.ListMembersAsync(renamed, HostListRequest.All, ct)).Entries.Select(e => e.Name));
 
             await service.DeleteAsync(renamed, ct);
-            Assert.Empty((await service.ListDatasetsAsync(renamed.Dataset, HostListRequest.All, ct)).Entries);
+            Assert.Empty((await service.ListDatasetsAsync(renamed.Dataset!, HostListRequest.All, ct)).Entries);
             var gone = await Assert.ThrowsAsync<HostFileException>(() => service.DeleteAsync(renamed, ct));
             Assert.Equal(HostFileErrorKind.NotFound, gone.Kind);
         }

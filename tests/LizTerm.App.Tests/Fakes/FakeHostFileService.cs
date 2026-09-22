@@ -87,7 +87,7 @@ public sealed class FakeHostFileService : IHostFileService
         {
             lock (_lock)
             {
-                if (Members.TryGetValue(dataset.Dataset, out var names))
+                if (Members.TryGetValue(dataset.Dataset!, out var names))
                     return PageOf(names.Select(n => new HostFileEntry(n, HostFileEntryKind.Member)), request);
                 throw Datasets.Any(d => d.Name == dataset.Dataset)
                     ? new HostFileException(HostFileErrorKind.InvalidRequest,
@@ -185,9 +185,9 @@ public sealed class FakeHostFileService : IHostFileService
                 if (Datasets.Any(d => d.Name == dataset.Dataset))
                     throw new HostFileException(HostFileErrorKind.CannotAllocate, $"{dataset}: the host could not allocate it (it may already exist, there may be no space, or you may not be authorized).", 7, "Dynamic allocation Error");
                 var partitioned = allocation.Organization == DatasetOrganization.Partitioned;
-                Datasets.Add(new HostFileEntry(dataset.Dataset, HostFileEntryKind.Dataset,
+                Datasets.Add(new HostFileEntry(dataset.Dataset!, HostFileEntryKind.Dataset,
                     new DatasetAttributes(partitioned ? "PO" : "PS", allocation.FoldedRecfm, allocation.Lrecl, allocation.Blksize, "PUB000")));
-                if (partitioned) Members[dataset.Dataset] = [];
+                if (partitioned) Members[dataset.Dataset!] = [];
             }
         }
         finally { Leave(); }
@@ -196,7 +196,7 @@ public sealed class FakeHostFileService : IHostFileService
     public async Task RenameAsync(HostPath from, string newName, CancellationToken cancellationToken = default)
     {
         // As the backend: a new name the rules refuse throws ArgumentException before anything is sent or logged.
-        var target = from.Kind == HostPathKind.Member ? HostPath.ForMember(from.Dataset, newName) : HostPath.ForDataset(newName);
+        var target = from.Kind == HostPathKind.Member ? HostPath.ForMember(from.Dataset!, newName) : HostPath.ForDataset(newName);
         await EnterAsync($"rename:{from}:{newName}", $"rename:{from}:{newName}", cancellationToken);
         try
         {
@@ -219,15 +219,15 @@ public sealed class FakeHostFileService : IHostFileService
                 // Nothing to remove is the host's 404 (Missing: reason 5 for a member, 4 for a dataset).
                 if (path.Member is { } member)
                 {
-                    var listed = Members.TryGetValue(path.Dataset, out var names) && names.Remove(member);
+                    var listed = Members.TryGetValue(path.Dataset!, out var names) && names.Remove(member);
                     var held = Forget(path.ToString());
                     if (!listed && !held) throw Missing(path);
                 }
                 else
                 {
                     var listed = Datasets.RemoveAll(d => d.Name == path.Dataset) > 0;
-                    listed |= Members.Remove(path.Dataset);
-                    var keys = KeysUnder(path.Dataset);
+                    listed |= Members.Remove(path.Dataset!);
+                    var keys = KeysUnder(path.Dataset!);
                     foreach (var key in keys) Forget(key);
                     if (!listed && keys.Count == 0) throw Missing(path);
                 }
@@ -284,7 +284,7 @@ public sealed class FakeHostFileService : IHostFileService
 
     private void RenameMember(HostPath from, string member, HostPath to)
     {
-        if (!Members.TryGetValue(from.Dataset, out var names) || !names.Contains(member))
+        if (!Members.TryGetValue(from.Dataset!, out var names) || !names.Contains(member))
             throw new HostFileException(HostFileErrorKind.NotFound, $"Rename {from} to {to.Member}: not found.", 5);
         if (names.Contains(to.Member!))
             throw new HostFileException(HostFileErrorKind.AlreadyExists, $"Rename {from} to {to.Member}: a member of that name already exists.", 7);
@@ -300,10 +300,10 @@ public sealed class FakeHostFileService : IHostFileService
         // failure's own 500, reason 8, a server error quoting it (rename-target-exists-400 in the compatibility log).
         if (Datasets.Any(d => d.Name == to.Dataset))
             throw new HostFileException(HostFileErrorKind.ServerError, $"Rename {from} to {to.Dataset}: Rename operation failed (reason 8).", 8, "Rename operation failed");
-        Datasets[index] = Datasets[index] with { Name = to.Dataset };
-        if (Members.Remove(from.Dataset, out var names)) Members[to.Dataset] = names;
+        Datasets[index] = Datasets[index] with { Name = to.Dataset! };
+        if (Members.Remove(from.Dataset!, out var names)) Members[to.Dataset!] = names;
         // KeysUnder includes the dataset's own key (a sequential dataset's content), so one loop moves everything.
-        foreach (var key in KeysUnder(from.Dataset)) Move(key, to.Dataset + key[from.Dataset.Length..]);
+        foreach (var key in KeysUnder(from.Dataset!)) Move(key, to.Dataset + key[from.Dataset!.Length..]);
     }
 
     /// <summary>Every content or stamp key that is the dataset itself or one of its members.</summary>
@@ -323,7 +323,7 @@ public sealed class FakeHostFileService : IHostFileService
 
     private void AddMember(HostPath path)
     {
-        if (path.Member is { } member && Members.TryGetValue(path.Dataset, out var names) && !names.Contains(member))
+        if (path.Member is { } member && Members.TryGetValue(path.Dataset!, out var names) && !names.Contains(member))
             names.Add(member);
     }
 

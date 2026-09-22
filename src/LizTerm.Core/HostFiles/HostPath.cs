@@ -6,38 +6,83 @@ using System.Text.RegularExpressions;
 
 namespace LizTerm.Core.HostFiles;
 
-public enum HostPathKind { Dataset, Member }
+public enum HostPathKind { Dataset, Member, Unix }
 
-/// <summary>Where a file lives on the host: a dataset, or a member of a partitioned one. Names are trimmed, folded to
-/// upper case and checked against the MVS naming rules when the path is made, so a path that exists is always one
-/// the host could accept. A UNIX file system path will arrive as a further kind and factory on this type.</summary>
+/// <summary>Where a file lives on the host: a dataset, a member of a partitioned one, or a UNIX path. Dataset and
+/// member names are trimmed, folded to upper case and checked against the MVS naming rules when the path is made; a
+/// UNIX path is trimmed, kept in its case and checked against <see cref="UnixPathError"/>. A path that exists is
+/// always one the host could accept.</summary>
 public sealed record HostPath
 {
     public const int MaxDatasetLength = 44;
     public const int MaxMemberLength = 8;
+    /// <summary>One under the length at which the host's path buffer overflows.</summary>
+    public const int MaxUnixPathLength = 251;
     private const int MaxQualifierLength = 8;
 
-    private HostPath(HostPathKind kind, string dataset, string? member)
+    private HostPath(HostPathKind kind, string? dataset, string? member, string? unixPath)
     {
         Kind = kind;
         Dataset = dataset;
         Member = member;
+        UnixPath = unixPath;
     }
 
     public HostPathKind Kind { get; }
-    public string Dataset { get; }
+    /// <summary>The dataset name; null for a UNIX path.</summary>
+    public string? Dataset { get; }
+    /// <summary>The member name; null for a dataset or a UNIX path.</summary>
     public string? Member { get; }
+    /// <summary>The absolute, <c>/</c>-separated path; null for a dataset or member.</summary>
+    public string? UnixPath { get; }
 
     /// <exception cref="ArgumentException">The name breaks a naming rule; the message says which.</exception>
-    public static HostPath ForDataset(string dataset) => new(HostPathKind.Dataset, Checked(dataset, DatasetNameError), null);
+    public static HostPath ForDataset(string dataset) => new(HostPathKind.Dataset, Checked(dataset, DatasetNameError), null, null);
 
     /// <exception cref="ArgumentException">Either name breaks a naming rule; the message says which.</exception>
     public static HostPath ForMember(string dataset, string member) =>
-        new(HostPathKind.Member, Checked(dataset, DatasetNameError), Checked(member, MemberNameError));
+        new(HostPathKind.Member, Checked(dataset, DatasetNameError), Checked(member, MemberNameError), null);
 
-    public HostPath WithMember(string member) => ForMember(Dataset, member);
+    /// <exception cref="ArgumentException">The path breaks a rule (<see cref="UnixPathError"/>); the message says which.</exception>
+    public static HostPath ForUnix(string path) =>
+        UnixPathError(path) is { } error ? throw new ArgumentException(error) : new HostPath(HostPathKind.Unix, null, null, path.Trim());
 
-    /// <summary>Reads <c>DSN</c> or <c>DSN(MEMBER)</c>.</summary>
+    /// <exception cref="InvalidOperationException">This is a UNIX path.</exception>
+    public HostPath WithMember(string member) => Kind == HostPathKind.Unix
+        ? throw new InvalidOperationException("A UNIX path has no members.")
+        : ForMember(Dataset!, member);
+
+    /// <summary>The directory above a UNIX path; null at the root, and for a dataset or member.</summary>
+    public HostPath? Parent
+    {
+        get
+        {
+            if (UnixPath is null || UnixPath == "/") return null;
+            var cut = UnixPath.LastIndexOf('/');
+            return ForUnix(cut == 0 ? "/" : UnixPath[..cut]);
+        }
+    }
+
+    /// <summary>The last segment of a UNIX path (<c>/</c> at the root), the member name, or the dataset name.</summary>
+    public string Name => Kind switch
+    {
+        HostPathKind.Unix => UnixPath == "/" ? "/" : UnixPath![(UnixPath!.LastIndexOf('/') + 1)..],
+        HostPathKind.Member => Member!,
+        _ => Dataset!,
+    };
+
+    /// <summary>The entry <paramref name="name"/> under this UNIX directory.</summary>
+    /// <exception cref="InvalidOperationException">This is a dataset or member.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is not one acceptable segment; the message says why.</exception>
+    public HostPath Child(string name)
+    {
+        if (Kind != HostPathKind.Unix) throw new InvalidOperationException("Only a UNIX path has children.");
+        if (name.Length == 0) throw new ArgumentException("Enter a name.");
+        if (name.Contains('/')) throw new ArgumentException("A name cannot contain '/'.");
+        return ForUnix(UnixPath == "/" ? "/" + name : UnixPath + "/" + name);
+    }
+
+    /// <summary>Reads <c>DSN</c>, <c>DSN(MEMBER)</c>, or a path starting with <c>/</c>.</summary>
     public static bool TryParse(string? text, out HostPath? path, out string? error)
     {
         path = null;
@@ -45,7 +90,11 @@ public sealed record HostPath
         try
         {
             var open = trimmed.IndexOf('(');
-            if (open < 0)
+            if (trimmed.StartsWith('/'))
+            {
+                path = ForUnix(trimmed);
+            }
+            else if (open < 0)
             {
                 path = ForDataset(trimmed);
             }
@@ -62,6 +111,30 @@ public sealed record HostPath
             error = ex.Message;
             return false;
         }
+    }
+
+    /// <summary>Why <paramref name="path"/> is not a UNIX path the host could take, or null when it is one: it must be
+    /// absolute, hold no empty, <c>.</c> or <c>..</c> segment, no control character, not end in <c>/</c> (except the
+    /// root itself), and be at most <see cref="MaxUnixPathLength"/> characters. Surrounding blanks are ignored; case
+    /// is kept.</summary>
+    public static string? UnixPathError(string path)
+    {
+        var trimmed = (path ?? "").Trim();
+        if (trimmed.Length == 0) return "Enter a path.";
+        if (trimmed[0] != '/') return "A path must start with '/'.";
+        if (trimmed.Length > MaxUnixPathLength) return $"A path is at most {MaxUnixPathLength} characters.";
+        foreach (var c in trimmed)
+        {
+            if (char.IsControl(c)) return "A path cannot contain control characters.";
+        }
+        if (trimmed == "/") return null;
+        if (trimmed.EndsWith('/')) return "A path cannot end with '/'.";
+        foreach (var segment in trimmed[1..].Split('/'))
+        {
+            if (segment.Length == 0) return "A path cannot have an empty segment.";
+            if (segment is "." or "..") return "A path cannot contain a '.' or '..' segment.";
+        }
+        return null;
     }
 
     /// <summary>Why <paramref name="name"/> is not a dataset name, or null when it is one. Case and surrounding blanks
@@ -139,7 +212,7 @@ public sealed record HostPath
         return Regex.IsMatch(Fold(name), regex);
     }
 
-    public override string ToString() => Member is null ? Dataset : $"{Dataset}({Member})";
+    public override string ToString() => Kind == HostPathKind.Unix ? UnixPath! : Member is null ? Dataset! : $"{Dataset}({Member})";
 
     private static string Fold(string name) => (name ?? "").Trim().ToUpperInvariant();
 

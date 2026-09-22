@@ -106,7 +106,7 @@ public sealed partial class MvsmfBrowserViewModel
         StatusText = $"⟳ Renaming {from} to {to}…";
         try
         {
-            await _connection.RunAsync(service => service.RenameAsync(from, to.Dataset, token));
+            await _connection.RunAsync(service => service.RenameAsync(from, to.Dataset!, token));
         }
         catch (HostFileException ex) when (ex.Kind == HostFileErrorKind.NotFound)
         {
@@ -119,8 +119,8 @@ public sealed partial class MvsmfBrowserViewModel
         // The old name is gone from the host, so its row goes now, whether or not the listing below can be asked.
         DropDataset(dataset);
         var what = $"Renamed {from} to {to}";
-        retryWith(() => ListAgainAsync(to.Dataset, what));
-        await ShowAfterChangeAsync(to.Dataset, what, token);
+        retryWith(() => ListAgainAsync(to.Dataset!, what));
+        await ShowAfterChangeAsync(to.Dataset!, what, token);
     }
 
     // ---- dataset delete ----

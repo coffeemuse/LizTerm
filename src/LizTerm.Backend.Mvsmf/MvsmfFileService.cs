@@ -282,10 +282,10 @@ public sealed class MvsmfFileService : IHostFileService
     {
         // ForMember and ForDataset fold the name and throw ArgumentException for one the rules refuse, so nothing
         // the host would fold differently is ever sent.
-        var target = from.Kind == HostPathKind.Member ? HostPath.ForMember(from.Dataset, newName) : HostPath.ForDataset(newName);
+        var target = from.Kind == HostPathKind.Member ? HostPath.ForMember(from.Dataset!, newName) : HostPath.ForDataset(newName);
         var what = $"Rename {from} to {(from.Kind == HostPathKind.Member ? target.Member : target.Dataset)}";
         var body = JsonSerializer.SerializeToUtf8Bytes(
-            new MvsmfRename("rename", new MvsmfRenameSource(from.Dataset, from.Member)), MvsmfJsonContext.Default.MvsmfRename);
+            new MvsmfRename("rename", new MvsmfRenameSource(from.Dataset!, from.Member)), MvsmfJsonContext.Default.MvsmfRename);
         using var idle = new IdleTimeout(_idle, cancellationToken);
         // mvsMF-compat: put-json-is-rename — this is the one PUT that sends application/json, and it is a rename
         // on purpose: the new name is the URL, the old one the body. A write never sends this content type.
@@ -357,8 +357,8 @@ public sealed class MvsmfFileService : IHostFileService
 
     /// <summary><c>restfiles/ds/DSN</c> or <c>restfiles/ds/DSN(MEMBER)</c>.</summary>
     private static string DatasetPath(HostPath path) => path.Member is null
-        ? $"restfiles/ds/{EscapeName(path.Dataset)}"
-        : $"restfiles/ds/{EscapeName(path.Dataset)}({EscapeName(path.Member)})";
+        ? $"restfiles/ds/{EscapeName(path.Dataset!)}"
+        : $"restfiles/ds/{EscapeName(path.Dataset!)}({EscapeName(path.Member)})";
 
     /// <summary>Validated names hold only A-Z 0-9 . - # $ @ and, in filters, * and %. Of those only # and % mean
     /// something in a URL; the rest go as they are, exactly as curl sends them.</summary>

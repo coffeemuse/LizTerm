@@ -40,7 +40,7 @@ public sealed class EtagMemory
     {
         lock (_lock)
         {
-            foreach (var key in KeysUnder(dataset.Dataset)) _stamps.Remove(key);
+            foreach (var key in KeysUnder(dataset.Dataset!)) _stamps.Remove(key);
         }
     }
 
@@ -59,13 +59,13 @@ public sealed class EtagMemory
                 if (had) _stamps[to.ToString()] = stamp!;
                 return;
             }
-            var moving = KeysUnder(from.Dataset);
-            foreach (var stale in KeysUnder(to.Dataset)) _stamps.Remove(stale);
+            var moving = KeysUnder(from.Dataset!);
+            foreach (var stale in KeysUnder(to.Dataset!)) _stamps.Remove(stale);
             foreach (var key in moving)
             {
                 var stamp = _stamps[key];
                 _stamps.Remove(key);
-                _stamps[to.Dataset + key[from.Dataset.Length..]] = stamp;
+                _stamps[to.Dataset + key[from.Dataset!.Length..]] = stamp;
             }
         }
     }

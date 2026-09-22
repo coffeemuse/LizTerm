@@ -31,7 +31,7 @@ public sealed partial class MvsmfBrowserViewModel
         {
             var row = dataset.IsSequential ? null : _selectedMembers[0];
             var path = row?.Path ?? dataset.Path;
-            var suggested = (path.Member ?? path.Dataset[(path.Dataset.LastIndexOf('.') + 1)..]) + extension;
+            var suggested = (path.Member ?? path.Dataset![(path.Dataset!.LastIndexOf('.') + 1)..]) + extension;
             var file = await TryPickAsync(() => _picker.PickSaveLocationAsync(suggested, $"Download {path}"));
             if (file is null) return;
             if (await DownloadOneAsync(path, file, options, row, token, token)) StatusText = $"✓ Downloaded {path} to {file}.";

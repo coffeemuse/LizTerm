@@ -100,8 +100,8 @@ public sealed partial class MvsmfBrowserViewModel
             return;
         }
         var what = $"Created {path}";
-        retryWith(() => ListAgainAsync(path.Dataset, what));
+        retryWith(() => ListAgainAsync(path.Dataset!, what));
         HideForm();
-        await ShowAfterChangeAsync(path.Dataset, what, token);
+        await ShowAfterChangeAsync(path.Dataset!, what, token);
     }
 }
