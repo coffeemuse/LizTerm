@@ -15,9 +15,11 @@ public sealed record HostListRequest(int MaxItems = 0, string? Continuation = nu
     public static readonly HostListRequest All = new();
 }
 
-/// <summary>One page of a listing. A null <paramref name="Continuation"/> means the list is complete; otherwise
-/// passing it back in the next <see cref="HostListRequest"/> fetches the entries after these.</summary>
-public sealed record HostFileListing(IReadOnlyList<HostFileEntry> Entries, string? Continuation)
+/// <summary>One page of a listing. A null <paramref name="Continuation"/> means there is nothing to continue with;
+/// otherwise passing it back in the next <see cref="HostListRequest"/> fetches the entries after these.
+/// <paramref name="Truncated"/> says the host cut the list short and offers no way to continue it (a directory
+/// listing); it is never set on a dataset or member listing.</summary>
+public sealed record HostFileListing(IReadOnlyList<HostFileEntry> Entries, string? Continuation, bool Truncated = false)
 {
-    public bool IsComplete => Continuation is null;
+    public bool IsComplete => Continuation is null && !Truncated;
 }

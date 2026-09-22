@@ -155,4 +155,56 @@ public class TextUploadCheckTests
         Assert.Equal(TextUploadProblemKind.LineTooLong, result.Errors[5].Kind);
         Assert.Equal(TextUploadProblemKind.UnsupportedCharacter, result.Errors[6].Kind);
     }
+
+    [Fact]
+    public void A_unix_file_has_no_record_length_and_keeps_its_tabs()
+    {
+        var result = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes("A\tB\n" + new string('x', 500) + "\n"), maxBytes: null, new TextUploadOptions(ExpandTabs: false));
+        Assert.True(result.CanUpload);
+        Assert.Equal("A\tB", result.Lines[0]);
+        Assert.Equal(500, result.Lines[1].Length);
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public void A_unix_file_still_refuses_characters_outside_latin1()
+    {
+        var result = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes("café\n€\n"));
+        Assert.False(result.CanUpload);
+        var problem = Assert.Single(result.Errors);
+        Assert.Equal(TextUploadProblemKind.UnsupportedCharacter, problem.Kind);
+        Assert.Equal(2, problem.Line);
+    }
+
+    [Fact]
+    public void A_unix_file_over_the_cap_is_too_large_counting_latin1_bytes_and_line_feeds()
+    {
+        var ok = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes("ab\ncd\n"), maxBytes: 6);
+        Assert.True(ok.CanUpload);
+
+        var over = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes("ab\ncd\n"), maxBytes: 5);
+        Assert.False(over.CanUpload);
+        var problem = Assert.Single(over.Errors);
+        Assert.Equal(TextUploadProblemKind.FileTooLarge, problem.Kind);
+        Assert.Equal(0, problem.Line);
+        Assert.Equal("The file is 6 bytes; the host holds at most 5.", problem.Message);
+    }
+
+    [Fact]
+    public void The_cap_counts_expanded_tabs_and_formats_thousands()
+    {
+        var result = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes("\tx\n"), maxBytes: 8, new TextUploadOptions(ExpandTabs: true));
+        Assert.False(result.CanUpload);
+        Assert.Equal("The file is 10 bytes; the host holds at most 8.", Assert.Single(result.Errors).Message);
+
+        var big = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes(new string('x', 70_000) + "\n"), maxBytes: HostFileLimits.MaxUnixFileBytes);
+        Assert.Equal("The file is 70,001 bytes; the host holds at most 65,536.", Assert.Single(big.Errors).Message);
+    }
+
+    [Fact]
+    public void A_dataset_check_still_warns_about_tabs_it_did_not_expand()
+    {
+        var result = Run("A\tB\n", options: new TextUploadOptions(ExpandTabs: false));
+        Assert.Equal(TextUploadProblemKind.TabsPresent, Assert.Single(result.Warnings).Kind);
+    }
 }

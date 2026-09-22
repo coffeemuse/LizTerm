@@ -98,6 +98,12 @@ public sealed class FakeHostFileService : IHostFileService
         finally { Leave(); }
     }
 
+    public Task<HostFileListing> ListDirectoryAsync(HostPath directory, HostListRequest request, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Task 5 of the USS backend plan fills this in.");
+
+    public Task CreateDirectoryAsync(HostPath directory, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Task 5 of the USS backend plan fills this in.");
+
     public async Task<HostTextRead> ReadTextAsync(HostPath path, IProgress<long>? progress = null, bool withEtag = false, CancellationToken cancellationToken = default)
     {
         await EnterAsync($"readtext:{path}", $"readtext:{path}", cancellationToken);

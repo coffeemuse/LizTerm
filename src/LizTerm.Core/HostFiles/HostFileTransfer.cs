@@ -82,6 +82,22 @@ public static class HostFileTransfer
     public static TextUploadResult CheckTextFile(string sourceFile, DatasetAttributes target, TextUploadOptions? options = null) =>
         TextUploadCheck.Run(File.ReadAllBytes(sourceFile), target, options);
 
+    /// <summary>Reads <paramref name="sourceFile"/> and runs <see cref="TextUploadCheck.RunForUnixFile"/> on it.</summary>
+    /// <exception cref="IOException">The local file could not be read; not a <see cref="HostFileException"/>.</exception>
+    /// <exception cref="UnauthorizedAccessException">The local file is not readable.</exception>
+    public static TextUploadResult CheckUnixTextFile(string sourceFile, long? maxBytes = null, TextUploadOptions? options = null) =>
+        TextUploadCheck.RunForUnixFile(File.ReadAllBytes(sourceFile), maxBytes, options);
+
+    /// <summary>Why <paramref name="sourceFile"/> cannot be sent as bytes to a host holding at most
+    /// <paramref name="maxBytes"/>, or null when it can: checked before any request, since the host would write what
+    /// fits and only then fail.</summary>
+    /// <exception cref="IOException">The local file could not be examined; not a <see cref="HostFileException"/>.</exception>
+    public static string? BinaryUploadProblem(string sourceFile, long maxBytes)
+    {
+        var length = new FileInfo(sourceFile).Length;
+        return length > maxBytes ? TextUploadCheck.TooLarge(length, maxBytes) : null;
+    }
+
     /// <summary>Sends text that passed its check and, with <paramref name="verify"/>, reads it back and compares.
     /// <paramref name="ifMatch"/> is the stamp the target must still hold (see <see cref="IHostFileService.WriteTextAsync"/>).
     /// The outcome carries the write's stamp, not the read-back's: the write's is the one the host promises for

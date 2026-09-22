@@ -228,4 +228,46 @@ public sealed class HostFileTransferTests : IDisposable
         await File.WriteAllTextAsync(Local(name), text, TestContext.Current.CancellationToken);
         return Local(name);
     }
+
+    [Fact]
+    public void A_binary_upload_over_the_cap_is_named_before_any_request()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"liz-{Guid.NewGuid():N}.bin");
+        try
+        {
+            File.WriteAllBytes(file, new byte[10]);
+            Assert.Null(HostFileTransfer.BinaryUploadProblem(file, 10));
+            Assert.Equal("The file is 10 bytes; the host holds at most 9.", HostFileTransfer.BinaryUploadProblem(file, 9));
+            File.WriteAllBytes(file, new byte[HostFileLimits.MaxUnixFileBytes + 1]);
+            Assert.Equal("The file is 65,537 bytes; the host holds at most 65,536.", HostFileTransfer.BinaryUploadProblem(file, HostFileLimits.MaxUnixFileBytes));
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void A_unix_text_file_is_checked_without_a_record_length()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"liz-{Guid.NewGuid():N}.txt");
+        try
+        {
+            File.WriteAllText(file, new string('x', 200) + "\n");
+            Assert.True(HostFileTransfer.CheckUnixTextFile(file).CanUpload);
+            Assert.False(HostFileTransfer.CheckUnixTextFile(file, maxBytes: 100).CanUpload);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void A_listing_cut_short_without_a_continuation_is_not_complete()
+    {
+        Assert.True(new HostFileListing([], null).IsComplete);
+        Assert.False(new HostFileListing([], null, Truncated: true).IsComplete);
+        Assert.False(new HostFileListing([], "X").IsComplete);
+    }
 }
