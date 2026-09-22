@@ -55,7 +55,8 @@ re-recording against a newer build: a changed fixture is a changed behaviour.
 | `uss-write-204` | `PUT` of `hello.txt` |
 | `uss-write-etag-204` | the same with `X-IBM-Return-Etag: true` — 204 with `ETag` |
 | `uss-write-412` | the same with a stale `If-Match` — 412, category 4, reason 1, "The resource was modified since the supplied ETag was created" |
-| `uss-write-too-large` | `PUT` of 70,000 bytes — 204; the host stored all 70,000 bytes, no error (this host enforces no USS size limit at that size) |
+| `uss-write-70000-204` | `PUT` of 70,000 bytes — 204, stored whole: the documented 64 KB cap does not hold on this build |
+| `uss-write-too-large` | `PUT` of 2,200,000 bytes — 400, category 2, reason 1, "Failed to read request body"; nothing written |
 | `uss-mkdir-201` | `POST restfiles/fs/u/ibmuser/liztest-fix` with `{"type":"directory"}` — 201 |
 | `uss-mkdir-exists` | the same again — 400, category 4, reason 1, "File or directory already exists" |
 | `uss-mkdir-no-parent` | `POST restfiles/fs/u/nobody/child` — 404, category 6, reason 1, "File or directory not found" |
