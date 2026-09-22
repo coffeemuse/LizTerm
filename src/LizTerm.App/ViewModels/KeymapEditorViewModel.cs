@@ -25,10 +25,14 @@ public sealed class KeymapEditorViewModel : ObservableObject, IDisposable
         TerminalKey.Enter, TerminalKey.Newline, TerminalKey.Clear, TerminalKey.Reset, TerminalKey.Attn, TerminalKey.SysReq,
         .. Enumerable.Range((int)TerminalKey.PF1, 24).Select(i => (TerminalKey)i),
         .. Enumerable.Range((int)TerminalKey.PA1, 3).Select(i => (TerminalKey)i),
-        TerminalKey.Tab, TerminalKey.BackTab, TerminalKey.Insert, TerminalKey.Home, TerminalKey.EraseEof,
+        TerminalKey.Tab, TerminalKey.BackTab, TerminalKey.Insert, TerminalKey.Home, TerminalKey.FieldEnd, TerminalKey.EraseEof,
         TerminalKey.EraseInput, TerminalKey.Delete, TerminalKey.Erase, TerminalKey.Backspace, TerminalKey.Dup,
         TerminalKey.FieldMark, TerminalKey.Up, TerminalKey.Down, TerminalKey.Left, TerminalKey.Right,
     ];
+
+    /// <summary>How many skipped entries the note names before it says how many more there are. Enough for a
+    /// hand-edit gone wrong, short of a wall of text under the list.</summary>
+    private const int NamedSkips = 5;
 
     private readonly KeymapViewModel _keymap;
     private readonly Func<PlatformHotkeys> _hotkeys;
@@ -47,6 +51,7 @@ public sealed class KeymapEditorViewModel : ObservableObject, IDisposable
         AddNewTextRows();
         keymap.Changed += OnKeymapChanged;
         ResetCommand = new RelayCommand(keymap.ResetToDefaults);
+        RestoreCommand = new RelayCommand(keymap.RestoreDefaults);
         keymap.PropertyChanged += OnKeymapPropertyChanged;
     }
 
@@ -54,19 +59,53 @@ public sealed class KeymapEditorViewModel : ObservableObject, IDisposable
 
     public ICommand ResetCommand { get; }
 
+    /// <summary>Moves a keymap.json this build cannot use aside and starts again from the defaults (#168). Offered
+    /// in place of the rows, since while the file will not load there is nothing to edit and nothing would save.</summary>
+    public ICommand RestoreCommand { get; }
+
     /// <summary>The last save's failure, the same message every session window's banner shows.</summary>
     public string? SaveError => _keymap.LastSaveError;
     public bool HasSaveError => SaveError is not null;
 
+    /// <summary>True while keymap.json will not load at all (#168). The tab shows LoadErrorNote and Restore in
+    /// place of the rows: every default is in force, so the rows would all say the same thing, and every change
+    /// would be refused by the store anyway.</summary>
+    public bool HasLoadError => _keymap.LoadError is not null;
+
+    public string? LoadErrorNote => _keymap.LoadError;
+
+    /// <summary>The file to go and fix, shown under the reason so it can be found and read.</summary>
+    public string? KeymapFilePath => _keymap.KeymapFilePath;
+
     public bool HasUnreadable => _keymap.UnreadableEntries > 0;
 
-    /// <summary>What the tab tells someone whose keymap.json holds entries this build skipped: they are safe, and
-    /// Reset is what discards them.</summary>
+    /// <summary>What the tab tells someone whose keymap.json holds entries this build skipped (#168): which ones
+    /// and what is wrong with each, so the typo can be found in the file without diffing it against the
+    /// documentation, then that they are safe and that Reset is what discards them.</summary>
     public string? UnreadableNote => _keymap.UnreadableEntries switch
     {
         0 => null,
-        1 => "1 entry in keymap.json could not be read. It is kept as written, and Reset to defaults removes it.",
-        var n => $"{n} entries in keymap.json could not be read. They are kept as written, and Reset to defaults removes them.",
+        1 => $"1 entry in keymap.json could not be read: {Listed}. It is kept as written, and Reset to defaults removes it.",
+        var n => $"{n} entries in keymap.json could not be read: {Listed}. They are kept as written, and Reset to defaults removes them.",
+    };
+
+    /// <summary>The skipped entries, each with its reason, cut short so one badly mangled file cannot fill the tab.</summary>
+    private string Listed
+    {
+        get
+        {
+            var skipped = _keymap.Skipped;
+            var shown = skipped.Take(NamedSkips).Select(Describe);
+            return string.Join(", ", skipped.Count > NamedSkips ? shown.Append($"and {skipped.Count - NamedSkips} more") : shown);
+        }
+    }
+
+    private static string Describe(KeymapSkip skip) => skip.Reason switch
+    {
+        KeymapSkipReason.UnknownChord => $"{skip.Chord} (unknown chord)",
+        KeymapSkipReason.UnknownKey => $"{skip.Chord} (unknown key \"{skip.KeyName}\")",
+        KeymapSkipReason.EmptyText => $"{skip.Chord} (no text to type)",
+        _ => $"{skip.Chord} (not a key name or text)",
     };
 
     public void Dispose()
@@ -88,6 +127,10 @@ public sealed class KeymapEditorViewModel : ObservableObject, IDisposable
             case nameof(KeymapViewModel.UnreadableEntries):
                 OnPropertyChanged(nameof(UnreadableNote));
                 OnPropertyChanged(nameof(HasUnreadable));
+                break;
+            case nameof(KeymapViewModel.LoadError):
+                OnPropertyChanged(nameof(LoadErrorNote));
+                OnPropertyChanged(nameof(HasLoadError));
                 break;
         }
     }

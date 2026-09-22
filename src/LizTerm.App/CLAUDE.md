@@ -65,8 +65,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   logout or shutdown, and its `ShutdownRequestedEventArgs.IsOSShutdown` is internal, so the close reason is the
   one public place the two differ. **The macOS backend never sets that flag** (`AvaloniaNativeApplicationPlatform`
   raises `ShutdownRequested` with a plain `ShutdownRequestedEventArgs`, and `applicationShouldTerminate:` answers
-  `NSTerminateCancel` when the pass is refused), so on macOS a logout with connected sessions is asked the Quit
-  question and the logout is cancelled until it is answered; the user guide says so. `App.Quit()` uses
+  `NSTerminateCancel` when the pass is refused), so there the reason alone cannot tell a logout from a Cmd+Q, and
+  the guard is told separately by `Platform/MacQuitReason` (#169; see below). `App.Quit()` uses
   `TryShutdown`, not `Shutdown`: the forced one closes every window past `Closing`, so neither the guard nor a
   running transfer could hold it; a refused shutdown takes `_quitting` back. A `Quit()` from a `Closed` handler
   is posted to the dispatcher: `Closed` is raised before the routed `WindowClosedEvent` that takes the window off
@@ -74,6 +74,28 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   with no window. `AvaloniaClosePrompt` yields one dispatcher turn after its dialog for the same reason. The
   shutdown reasons cannot be produced headlessly, so `ClosePolicyTests` and `QuitGuardTests` take the reason
   directly, and `SessionWindowCloseTests` cover the window's own question with `FakeClosePrompt`.
+- **A macOS logout is not asked about (#169).** `Platform/MacQuitReason` supplies the half of the close reason
+  Avalonia's macOS backend cannot: AppKit calls `applicationShouldTerminate:` from inside its handler for the
+  quit Apple event, and `-[AvnAppDelegate applicationShouldTerminate:]` is one call to the managed `TryShutdown`,
+  so the whole window pass — and every `QuitGuard.Holds` in it — runs inside that handler, where
+  `NSAppleEventManager.currentAppleEvent` is still the quit event and its `kAEQuitReason` **parameter** says why
+  loginwindow sent it — a parameter, not an attribute (AERegistry.h says so outright, and every attribute keyword
+  in AEDataModel.h is spelled `...Attr`), so it is read with `paramDescriptorForKeyword:`; the attribute slot is
+  tried after it only because code in the wild writes it there, and the two never fall back to one another. A user's Cmd+Q, the Quit menu item and every managed `TryShutdown` carry no Apple event at
+  all, which is how the two are told apart. `EndsTheSession` is the pure rule (`MacQuitReasonTests` pins it): the
+  logout, restart and shutdown reasons count, `kAEQuitAll` does not, because quitting every application leaves
+  the user logged in. Nothing is installed or replaced — it is a read, taken afresh each pass, with no cached
+  selectors, because a static `IntPtr` initialised eagerly would P/Invoke libobjc on Linux. Every failure answers
+  false, which is 0.7.0's behaviour: ask, and let macOS report the logout as interrupted. A running IND$FILE
+  transfer still refuses a logout and still draws that alert; that refusal protects the transfer and is a
+  different path from this question, and the user guide names it as the one exception. A question already on the
+  screen does not refuse: `SessionWindow.OnClosing` asks `QuitGuard.IsSystemShutdown` ahead of its own
+  already-asking early return, so a logout arriving over an open Close or Quit question is let through. To exercise any of it without logging out, send the running app a quit
+  Apple event with a forged reason — an `NSAppleEventDescriptor` for `kCoreEventClass`/`kAEQuitApplication`
+  addressed to its pid by `typeKernelProcessID`, with `descriptorWithEnumCode:` set under `kAEQuitReason` by
+  `setParamDescriptor:forKeyword:`, the slot loginwindow uses — and
+  watch: `rlgo` and `shut` quit with a session connected, no reason and `quia` ask, and an unrecognised code
+  asks and names itself in the trace log (`DOTNET_DebugWriteToStdErr=1` to see it on stderr).
 
 ## Session view model
 
@@ -249,6 +271,19 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 - The crosshair is an app-wide setting (`SettingsViewModel.Crosshair`, remembered across sessions) and deliberately
   does not use b3270's own `CROSSHAIR` toggle: the engine has no display, and routing a display preference through a
   child process would only make the crosshair unavailable while disconnected.
+- **The crosshair is a hairline on a cell boundary, not a shaded cell** (#180): the horizontal line on the cursor
+  cell's bottom edge, the vertical on its left, `CrosshairGeometry.Thickness` (1 DIP) thick at any font size. A line
+  through the middle of the row would strike through every glyph on it, and a boundary is what lining up a column
+  wants. It is painted **last of the overlays, after `DrawCursor`**, because the cursor's block fills the whole
+  cursor cell opaquely and drawing the ruler under it erased most of the crossing point — the one place a hairline
+  has to read. `Rects` snaps every edge to a whole **device** pixel and widens the line to a whole number of them,
+  which is why it takes the top level's `RenderScaling`: a cell is a fraction of one tall, a hairline spread over two
+  rows of pixels at partial coverage draws as a soft smear rather than a line, and a whole DIP is a whole device
+  pixel only at integer scaling — at 125% or 150% rounding in DIPs alone brings the smear back. The run plan's
+  underline still rounds in DIPs and carries that limitation.
+  Because it no longer covers host text it is nearly opaque where the old wash was 0x30, which is also why it now
+  follows `Monochrome` — `Palette.CrosshairBrush(bool)`, `FindMatchBrush`'s shape, so the choice is reachable from a
+  test that cannot see pixels. A yellow ruler on a 3278 screen went unnoticed while it was faint and would not now.
 - It raises `KeyRequested`, `TextEntered` and `CellClicked`, which `SessionWindow` wires to the view model.
 - **Colours are decided in `Rendering/CellColors`, not in the control** (#123). `Monochrome` (a styled property the
   window binds from `SessionViewModel.Monochrome`, that is `Profile.Display == TerminalDisplay.Mono`) makes every run
@@ -277,7 +312,15 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   strings; `ChordSyntax` and `KeymapAction` read them), composed over the profile's default with `Without` then `With`.
   `KeymapViewModel` is the process's one live copy, write-through like `SettingsViewModel`;
   `SessionWindow.AttachKeymap` composes it for the screen, the keypad and the Keys menu's shortcuts on every change (`ApplyKeymap`).
-  `KeymapPolicy` is what the Keyboard tab refuses, with the reason. The tab is `KeymapEditorViewModel` (a
+  `KeymapPolicy` is what the Keyboard tab refuses, with the reason.
+  **A keymap.json this build cannot read at all is a state of its own** (#168): `KeymapViewModel.LoadError` carries
+  the reason, every default is in force, and `KeymapStore.Update` would refuse every save — so the tab shows
+  `LoadErrorPanel` (the reason, the file, and `RestoreCommand`, which moves the file to `keymap.json.bad`) in place
+  of the rows, and `App.Execute` puts `KeymapNoticeWindow` over whatever the startup plan opened, the picker
+  included. That notice only tells; the one destructive action lives in the tab. `KeymapNotice.For` is the pure
+  decision, and reading `App.Keymap` in `Execute`'s picker branch is what makes the keymap load at launch on that
+  path, where nothing else touches it; the session branch already loads it through `AttachKeymap`. A file that merely holds entries this build skipped keeps its editor and gets the tab's
+  note, which names them and what is wrong with each (`KeymapOverlay.Skipped`, `KeymapSkip`). The tab is `KeymapEditorViewModel` (a
   `KeymapRow` per action, a `KeymapChip` per chord, all answered from `KeymapViewModel`'s `ChordsFor`/`ActionOf`,
   never its dictionary) laid out by `Views/KeyboardTab`. A row's `TryCapture` calls `KeymapPolicy.Check` before every
   `Bind`, which is what keeps a Cmd chord out of the file, and answers the slot with a `CaptureResult`. There are two
@@ -889,9 +932,16 @@ constructor captured.
 - **The holder owns the refused-password loop**, which is why `SignInReason` has three members rather than a
   boolean. The backend no longer tells a bad password from an expired token — a bad password is caught inside
   `SignInAsync` — so the reason is the loop's own variable: the first ask is `First`, or `Expired` ("your mvsMF
-  session has expired") when the caller named a rejected token, and every ask after an `Unauthenticated` from
-  `signIn` is `Rejected` ("the userid or password was not accepted"), until the host takes it or the user cancels.
-  Blaming the password for an expired session, which the old single retry line did, is the bug this replaced.
+  session timed out") when the caller named a rejected token, and every ask after an `Unauthenticated` from
+  `signIn` is `Rejected` ("mvsMF did not accept that userid and password"), until the host takes it or the user
+  cancels. Blaming the password for an expired session, which the old single retry line did, is the bug this
+  replaced.
+- **The three reasons are three registers, and the colour is never the carrier** (#164). `SignInWindow` draws
+  `First` grey with no mark ("Sign in to access this host via mvsMF." — it names mvsMF, not datasets, since jobs
+  and USS are still to come), `Expired` amber with `⚠` (the routine idle timeout, `CertificateWindow`'s warning
+  shade) and `Rejected` red with `✗`. The line is always shown: with `First` blank the window opened from the
+  profile editor's Test button said nothing about who wanted a password. The classes `note`, `warning` and `error`
+  carry the colours, and the code-behind adds one of them, so a test asserts the register rather than a brush.
 - `_lastUserid` is written **as soon as the prompt answers**, not once the host accepts it: a sign-in that fails for
   anything other than the password — an unreachable host, a host with no sign-in route — must still prefill the
   userid that was just typed.

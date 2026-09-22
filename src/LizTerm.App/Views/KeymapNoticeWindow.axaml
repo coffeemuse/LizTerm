@@ -1,0 +1,21 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LizTerm.App.Views.KeymapNoticeWindow"
+        Width="460" SizeToContent="Height" CanResize="False" CanMinimize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="16" Spacing="12">
+    <TextBlock x:Name="MessageText" TextWrapping="Wrap" />
+    <!-- Selectable so the path can be copied into an editor; fixing the file is what this is for. Not a tab stop,
+         so the one button still has the focus when the notice opens. -->
+    <SelectableTextBlock x:Name="PathText" TextWrapping="Wrap" IsTabStop="False" />
+    <TextBlock x:Name="PointerText" TextWrapping="Wrap" Opacity="0.75" />
+    <!-- One button, and it only dismisses: the notice opens before the user has settled on anything, so nothing
+         here may move a file. The reset lives in Preferences > Keyboard, which PointerText names. -->
+    <Button x:Name="DismissButton" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" Click="OnDismissClick" />
+  </StackPanel>
+</Window>

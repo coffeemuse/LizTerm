@@ -2,6 +2,7 @@
 // Copyright 2026 by CoffeeMuse
 // SPDX-License-Identifier: BSD-3-Clause
 
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -14,6 +15,7 @@ using LizTerm.App.Files;
 using LizTerm.App.HostFiles;
 using LizTerm.App.Keyboard;
 using LizTerm.App.Menus;
+using LizTerm.App.Platform;
 using LizTerm.App.Sessions;
 using LizTerm.App.Startup;
 using LizTerm.App.Updates;
@@ -153,11 +155,18 @@ public partial class App : Application
                     window.Show();
                     break;
                 case StartupPlan.OpenSession open:
-                    OpenSession(open.Profile, open.FromStore);
+                    // The notice goes over the window this plan just opened, named rather than looked up: it is
+                    // the only window there is at launch. OpenSession loads the keymap itself, through
+                    // AttachKeymap; it is the picker branch that needs the read below to load it at all.
+                    ShowKeymapNotice(KeymapNotice.For(plan, Keymap.LoadError, Keymap.KeymapFilePath),
+                                     OpenSession(open.Profile, open.FromStore));
                     _ = CheckForUpdatesOnStartupAsync();
                     break;
                 default:
+                    // Reading App.Keymap here is what makes the keymap load at launch on this path: nothing the
+                    // picker opens touches it, so without this it would first load when Preferences is opened.
                     ShowPicker();
+                    ShowKeymapNotice(KeymapNotice.For(plan, Keymap.LoadError, Keymap.KeymapFilePath), _picker);
                     _ = CheckForUpdatesOnStartupAsync();
                     break;
             }
@@ -178,9 +187,36 @@ public partial class App : Application
         }
     }
 
+    /// <summary>The launch notice for a keymap.json this build cannot read (#168), over the window the startup
+    /// plan just opened — the picker included, since someone may never open a session and would otherwise never
+    /// hear that their bindings are out of force. Null when there is nothing to say, or no window to say it over.
+    /// Internal, taking the notice and the owner, so a test drives it without the user's own file.</summary>
+    internal KeymapNoticeWindow? ShowKeymapNotice(KeymapNotice? notice, Window? owner)
+    {
+        if (notice is null || owner is null) return null;
+        var window = new KeymapNoticeWindow(notice);
+        _ = ShowNoticeAsync(window, owner);
+        return window;
+    }
+
+    /// <summary>A notice that cannot be put up must not cost the launch: the app runs on the default keys either
+    /// way, and the Keyboard tab says the same thing whenever the user gets there.</summary>
+    private static async Task ShowNoticeAsync(Window dialog, Window owner)
+    {
+        try
+        {
+            await dialog.ShowDialogAbove(owner);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning("Could not show the keymap notice: " + ex.Message);
+        }
+    }
+
     /// <param name="fromStore">True for a saved profile, whose "Always allow" choice can be written back; false for
     /// an ad hoc command-line profile.</param>
-    public void OpenSession(SessionProfile profile, bool fromStore)
+    /// <returns>The window it opened, for a caller that has something to put over it.</returns>
+    public SessionWindow OpenSession(SessionProfile profile, bool fromStore)
     {
         var window = new SessionWindow(Settings.MenuStyle, OperatingSystem.IsMacOS());
         var store = _store ??= new ProfileStore(AppPaths.ProfilesDirectory());
@@ -243,6 +279,7 @@ public partial class App : Application
         _picker?.Close();
         window.Show();
         _ = viewModel.ConnectCommand.ExecuteAsync(null);
+        return window;
     }
 
     /// <summary>The session's profile is fixed at construction, so the pin (and the verification it implies) is
@@ -296,6 +333,7 @@ public partial class App : Application
     /// <summary>The process's one Quit guard (#151), over its session list and settings. Lazy for the reason
     /// Settings is: the headless test lifetime never runs OnFrameworkInitializationCompleted.</summary>
     private QuitGuard QuitGuard => _quitGuard ??= new QuitGuard(_sessions, () => Settings.ConfirmCloseWhileConnected,
+        () => MacQuitReason.IsSystemShutdown(OperatingSystem.IsMacOS()),
         entry => new AvaloniaClosePrompt((Window)entry.Host), Quit);
 
     /// <summary>TryShutdown, not Shutdown: the forced one closes every window past its Closing, so neither a

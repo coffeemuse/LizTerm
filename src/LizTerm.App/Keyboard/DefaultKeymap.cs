@@ -11,10 +11,13 @@ namespace LizTerm.App.Keyboard;
 /// second home on Ctrl+Escape because Mac keyboards have no Pause key, PA2 and PA3 a second home on Alt+2 and Alt+3
 /// and Insert one on Ctrl+I (#111) because Mac laptops have no Insert key, and Reset a second home on Ctrl+R
 /// (wc3270's) in case a platform never reports the Left Ctrl tap. Ctrl+I is Tab only to an ASCII terminal; a 3270
-/// host sees EBCDIC and 3270 keys, never ASCII control codes, so a TN3270 client need not reserve it. Copy, paste,
-/// and select-all are platform hotkeys checked before this table and are deliberately absent from it; that includes
-/// Vista's Ctrl+Insert for PA1, which Avalonia lists as a Copy gesture on every platform (the Meta-based macOS table
-/// included), so PA1 lives on Alt+1 alone. The user's keymap.json is applied over this table by <see cref="KeymapOverlay"/> (#18).</summary>
+/// host sees EBCDIC and 3270 keys, never ASCII control codes, so a TN3270 client need not reserve it. Field End is
+/// on Shift+End (#177), which is Vista's; its other chord for it, Ctrl+E, belongs to the Ctrl+letter editing set 6.2
+/// left alone, and End itself stays Erase EOF, where Vista and this table have always had it. wc3270 has that pair
+/// the other way round. Copy, paste, and select-all are platform hotkeys checked before this table and are
+/// deliberately absent from it; that includes Vista's Ctrl+Insert for PA1, which Avalonia lists as a Copy gesture on
+/// every platform (the Meta-based macOS table included), so PA1 lives on Alt+1 alone. The user's keymap.json is
+/// applied over this table by <see cref="KeymapOverlay"/> (#18).</summary>
 public static class DefaultKeymap
 {
     private static readonly Keymap Erasing = Build(destructiveBackspace: true);
@@ -60,6 +63,7 @@ public static class DefaultKeymap
         Add(Key.I, TerminalKey.Insert, KeyModifiers.Control);
         Add(Key.Home, TerminalKey.Home);
         Add(Key.End, TerminalKey.EraseEof);
+        Add(Key.End, TerminalKey.FieldEnd, KeyModifiers.Shift);
         Add(Key.Delete, TerminalKey.Delete);
         Add(Key.Back, destructiveBackspace ? TerminalKey.Erase : TerminalKey.Backspace);
         Add(Key.Up, TerminalKey.Up);

@@ -63,6 +63,7 @@ public sealed class KeymapRow : ObservableObject
         KeymapAction.SendKey send => send.Key switch
         {
             TerminalKey.BackTab => "Back Tab",
+            TerminalKey.FieldEnd => "Field End",
             TerminalKey.EraseEof => "Erase EOF",
             TerminalKey.EraseInput => "Erase Input",
             TerminalKey.FieldMark => "Field Mark",

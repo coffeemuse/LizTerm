@@ -167,12 +167,14 @@ public class SettingsStoreTests : IDisposable
         Assert.Equal("None", ReadFile()["crosshair"]!.GetValue<string>());
     }
 
+    /// <param name="reason">The part of the refusal that says what is wrong with the file (#168), so someone who
+    /// hand-edited it is not left to find the typo alone.</param>
     [Theory]
-    [InlineData("not json at all")]
-    [InlineData("")]
-    [InlineData("[1, 2, 3]")]
-    [InlineData("""{"blink":false,"blink":true}""")]
-    public void A_file_that_is_not_a_json_object_loads_defaults_and_refuses_to_be_overwritten(string content)
+    [InlineData("not json at all", "Line 1: 'not json at all' is an invalid JSON literal.")]
+    [InlineData("", "It is not valid JSON.")]
+    [InlineData("[1, 2, 3]", "It does not hold a JSON object.")]
+    [InlineData("""{"blink":false,"blink":true}""", "Duplicate property 'blink'.")]
+    public void A_file_that_is_not_a_json_object_loads_defaults_and_refuses_to_be_overwritten(string content, string reason)
     {
         WriteFile(content);
         Assert.Equal(new AppSettings(), Store.Load());
@@ -180,7 +182,8 @@ public class SettingsStoreTests : IDisposable
         var ex = Assert.Throws<InvalidDataException>(() => Store.Update(s => s with { Blink = false }));
 
         Assert.Contains(FilePath, ex.Message);
-        Assert.Contains("fix or delete it", ex.Message);
+        Assert.Contains("Fix or delete it", ex.Message);
+        Assert.Contains(reason, ex.Message);
         Assert.Equal(content, File.ReadAllText(FilePath));
         Assert.Equal(["settings.json"], Directory.GetFiles(_dir).Select(Path.GetFileName));
     }

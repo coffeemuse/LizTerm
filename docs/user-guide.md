@@ -30,9 +30,10 @@ Closing a window whose session is still connected asks first, so a stray click o
 meant for something else does not end a live session: **Keep Connected** (the default, and Escape) leaves the
 window and the session as they were, and **Disconnect** closes the window. Quitting with one or more sessions
 connected asks once, for all of them, and **Keep Connected** leaves every window open. A window that is not
-connected closes without a question, and **Disconnect** in the menu never asks. A system logout or shutdown skips
-the question where the system tells LizTerm it is one; macOS does not, so there a logout with connected sessions
-asks the same question and macOS cancels the logout until you answer. Log out again once you have. Turn the
+connected closes without a question, and **Disconnect** in the menu never asks. Logging out, restarting or
+shutting the machine down skips the question and disconnects the sessions, so LizTerm does not stand in the way
+of a system on its way down. A file transfer still running is the one exception: it holds its window open, and
+macOS says LizTerm interrupted the logout. Cancel the transfer or let it finish, then log out again. Turn the
 question off under **Closing** in [Preferences](#preferences).
 
 Right-click a profile (on macOS, Control-click or a two-finger tap) for **Connect**, **Edit...** and **Mark as
@@ -193,11 +194,16 @@ binding in **Preferences > Keyboard**; see [Changing a binding](#changing-a-bind
 | Insert, or Ctrl+I | Toggle insert mode |
 | Home | Home |
 | End | Erase EOF |
+| Shift+End | Field End |
 | Delete | Delete |
 | Backspace | Erase the previous character, or move left (see the profile's Backspace setting) |
 | Arrow keys | Move the cursor |
 | Ctrl+[ | Types `¬` |
 | Ctrl+6 | Types `¢` |
+
+**Field End** moves the cursor to the end of what you have already typed in the field you are in, so you can add
+to an entry without arrowing across the blanks. No 3270 keyboard had this key — it is a convenience every
+emulator since has offered — and Shift+End is where Vista TN3270 puts it. End itself stays Erase EOF.
 
 On a Mac, Alt is the Option key. A "tap" means pressing and releasing the key on its own, with nothing else in
 between. On Windows, Ctrl+Escape opens the Start menu before LizTerm can see it, so Clear there is Pause — or
@@ -511,8 +517,8 @@ red banner with **Retry**. A status line that reports an outcome starts with a m
 **Help > About LizTerm...** names the version, and so does the splash screen. A build that is not a release — one
 made from source, or from a pull request — shows it as `0.7.0-DEV (a1b2c3d)`, where `a1b2c3d` is the commit it was
 built from; a build made outside a git checkout, such as one from a downloaded source archive, says `0.7.0-DEV` with
-no commit. A release shows its plain version, with no `-DEV` and no commit. The line in About can be selected and
-copied, so a bug report can say exactly which build it was filed against.
+no commit. A release shows its plain version, with no `-DEV` and no commit. The version line and the engine line
+under it can be selected and copied, so a bug report can say exactly which build and engine it was filed against.
 
 ## Wire logs
 
@@ -628,8 +634,10 @@ sit on five tabs:
 **Keyboard**
 
 - One row for each 3270 key, with the keys that send it and an **Add** slot. See [Changing a binding](#changing-a-binding).
-- **Reset to defaults** clears every change. The tab also says how many entries in `keymap.json` it could not read,
-  and keeps them as written.
+- **Reset to defaults** clears every change. The tab also names any entries in `keymap.json` it could not read,
+  with what is wrong with each, and keeps them as written.
+- When `keymap.json` cannot be read at all, the tab shows that instead of the rows, with the reason, the file, and
+  **Reset keymap to defaults**, which moves the file aside to `keymap.json.bad` and starts again from the defaults.
 
 ## Where LizTerm keeps its files
 
@@ -663,12 +671,13 @@ type, or to `null` to take that key away:
 ```
 
 Key names in a chord are Avalonia's (`Home`, `PageUp`, `D1` for the 1 key, `OemOpenBrackets` for `[`). The 3270 keys
-are `Enter`, `Clear`, `PF1` to `PF24`, `PA1` to `PA3`, `Attn`, `SysReq`, `Reset`, `Tab`, `BackTab`, `Home`, `EraseEof`,
+are `Enter`, `Clear`, `PF1` to `PF24`, `PA1` to `PA3`, `Attn`, `SysReq`, `Reset`, `Tab`, `BackTab`, `Home`, `FieldEnd`, `EraseEof`,
 `EraseInput`, `Delete`, `Backspace`, `Erase`, `Insert`, `Dup`, `FieldMark`, `Newline`, `Up`, `Down`, `Left` and `Right`,
-spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default; a file that
-is not valid JSON (a trailing comma, a comment, the same chord twice) is skipped as a whole, and every default
-applies. LizTerm reads the file once, when the first session window or Preferences opens, so restart it after
-editing by hand. Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless
+spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default;
+Preferences > Keyboard names each one it skipped and keeps it in the file as you wrote it. A file that is not valid
+JSON at all (a trailing comma, a comment, the same chord twice) costs every binding in it, so LizTerm says so when
+it starts, naming the line to look at, and keeps the file untouched for you to fix. LizTerm reads the file once,
+when it starts, so restart it after editing by hand. Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless
 the file binds `Back` itself. A hand edit is not checked against what you type: binding a plain letter takes that
 key away from typing, which Preferences > Keyboard would have refused. The
 platform's Copy, Paste and Select All shortcuts, Find and Switch Session are handled before the keymap, so a binding

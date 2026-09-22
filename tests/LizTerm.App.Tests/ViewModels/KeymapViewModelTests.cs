@@ -73,7 +73,7 @@ public class KeymapViewModelTests : IDisposable
 
         vm.ResetToDefaults();
 
-        Assert.Empty(new KeymapStore(FilePath).Load().Bindings);
+        Assert.Empty(new KeymapStore(FilePath).Load().File.Bindings);
         Assert.True(vm.Compose(destructiveBackspace: true).TryMap(CtrlHome, out _));
     }
 
@@ -106,7 +106,7 @@ public class KeymapViewModelTests : IDisposable
 
         vm.Bind(new KeyChord(Key.End, KeyModifiers.Control), new KeymapAction.SendKey(TerminalKey.PF3));
 
-        var bindings = new KeymapStore(FilePath).Load().Bindings;
+        var bindings = new KeymapStore(FilePath).Load().File.Bindings;
         Assert.Equal(new KeymapEntry.SendKey("PA1"), bindings["Ctrl+Home"]);
         Assert.Equal(new KeymapEntry.SendKey("PF3"), bindings["Ctrl+End"]);
         Assert.Null(vm.LastSaveError);
@@ -128,6 +128,89 @@ public class KeymapViewModelTests : IDisposable
         Assert.Contains(nameof(KeymapViewModel.UnreadableEntries), notified);
     }
 
+    // ---- a file this build cannot use at all (#168) -------------------------------------------------------------
+
+    [Fact]
+    public void A_file_that_will_not_load_says_why_and_leaves_every_default_in_force()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "{\n  \"bindings\": {\n    \"Ctrl+Home\": \"PA1\",\n  }\n}");
+
+        var vm = new KeymapViewModel(new KeymapStore(FilePath));
+
+        Assert.Equal("keymap.json could not be read. It is not valid JSON. Line 4: the JSON object contains a trailing comma "
+                     + "at the end. LizTerm is using the default keys until it is fixed; your file has not been changed.",
+                     vm.LoadError);
+        Assert.Equal(FilePath, vm.KeymapFilePath);
+        // The file asked for PA1 on Ctrl+Home; unread, the chord keeps the default it has always had.
+        Assert.True(vm.Compose(destructiveBackspace: true).TryMap(CtrlHome, out var key));
+        Assert.Equal(TerminalKey.PA2, key);
+    }
+
+    [Fact]
+    public void A_file_that_loads_has_no_load_error()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, """{"bindings": {"Ctrl+Home": "PA1"}}""");
+
+        Assert.Null(new KeymapViewModel(new KeymapStore(FilePath)).LoadError);
+    }
+
+    [Fact]
+    public void An_in_memory_keymap_has_no_file_and_no_load_error()
+    {
+        var vm = new KeymapViewModel();
+
+        Assert.Null(vm.LoadError);
+        Assert.Null(vm.KeymapFilePath);
+    }
+
+    [Fact]
+    public void RestoreDefaults_moves_the_broken_file_aside_and_clears_the_error()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var vm = new KeymapViewModel(new KeymapStore(FilePath));
+        var notified = new List<string?>();
+        vm.PropertyChanged += (_, e) => notified.Add(e.PropertyName);
+
+        vm.RestoreDefaults();
+
+        Assert.Null(vm.LoadError);
+        Assert.Contains(nameof(KeymapViewModel.LoadError), notified);
+        Assert.False(File.Exists(FilePath));
+        Assert.Equal("not json", File.ReadAllText(FilePath + ".bad"));
+    }
+
+    [Fact]
+    public void A_binding_made_after_RestoreDefaults_saves_to_a_fresh_file()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var vm = new KeymapViewModel(new KeymapStore(FilePath));
+        vm.RestoreDefaults();
+
+        vm.Bind(CtrlHome, Pa1);
+
+        Assert.Null(vm.LastSaveError);
+        Assert.Equal(new KeymapEntry.SendKey("PA1"), new KeymapStore(FilePath).Load().File.Bindings["Ctrl+Home"]);
+    }
+
+    [Fact]
+    public void RestoreDefaults_reports_a_file_it_could_not_move()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        // A directory where the set-aside file would go: the move cannot land, as a read-only folder would do.
+        Directory.CreateDirectory(FilePath + ".bad");
+        var vm = new KeymapViewModel(new KeymapStore(FilePath));
+
+        vm.RestoreDefaults();
+
+        Assert.NotNull(vm.LastSaveError);
+        Assert.NotNull(vm.LoadError);
+    }
+
     [Fact]
     public void A_throwing_Changed_subscriber_does_not_cost_the_save()
     {
@@ -136,6 +219,6 @@ public class KeymapViewModelTests : IDisposable
 
         Assert.Throws<InvalidOperationException>(() => vm.Bind(CtrlHome, Pa1));
 
-        Assert.Equal(new KeymapEntry.SendKey("PA1"), new KeymapStore(FilePath).Load().Bindings["Ctrl+Home"]);
+        Assert.Equal(new KeymapEntry.SendKey("PA1"), new KeymapStore(FilePath).Load().File.Bindings["Ctrl+Home"]);
     }
 }

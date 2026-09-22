@@ -6,8 +6,9 @@ using System.Runtime.InteropServices;
 
 namespace LizTerm.App.Platform;
 
-/// <summary>The Objective-C runtime calls LizTerm's two macOS overrides share (Menus/MacMenuKeyEquivalents and
-/// Keyboard/MacEscapeChords, both shaped by MacOverride). DllImport rather than LibraryImport because
+/// <summary>The Objective-C runtime calls LizTerm's macOS code shares: the two overrides
+/// (Menus/MacMenuKeyEquivalents and Keyboard/MacEscapeChords, both shaped by MacOverride) and the quit-reason
+/// read beside them (MacQuitReason). DllImport rather than LibraryImport because
 /// LibraryImport's generated stub is unsafe code, which the App project does not use; the signatures that take a
 /// string are not blittable, so SystemBellRinger's other reason does not apply. Every objc_msgSend variant is the
 /// same symbol under a name that says what it returns and takes, since the runtime's one function is called with
@@ -26,6 +27,8 @@ internal static class LibObjc
     [DllImport(Path)] [return: MarshalAs(UnmanagedType.I1)]
     internal static extern bool class_addMethod(IntPtr cls, IntPtr selector, IntPtr imp, string types);
     [DllImport(Path, EntryPoint = "objc_msgSend")] internal static extern IntPtr objc_msgSend_IntPtr(IntPtr self, IntPtr selector);
+    [DllImport(Path, EntryPoint = "objc_msgSend")] internal static extern IntPtr objc_msgSend_IntPtr(IntPtr self, IntPtr selector, uint arg);
+    [DllImport(Path, EntryPoint = "objc_msgSend")] internal static extern uint objc_msgSend_uint(IntPtr self, IntPtr selector);
     [DllImport(Path, EntryPoint = "objc_msgSend")] internal static extern ulong objc_msgSend_ulong(IntPtr self, IntPtr selector);
     [DllImport(Path, EntryPoint = "objc_msgSend")] internal static extern ushort objc_msgSend_ushort(IntPtr self, IntPtr selector);
     [DllImport(Path, EntryPoint = "objc_msgSend")] [return: MarshalAs(UnmanagedType.I1)]

@@ -31,6 +31,13 @@ public sealed class KeymapOverlay
 
     public int IgnoredCount => Ignored.Bindings.Count + Ignored.Unreadable.Count;
 
+    /// <summary>The same entries, named and explained for the Keyboard tab (#168), in the file's own spellings and
+    /// in ordinal order, so the list does not move about between launches.</summary>
+    public IReadOnlyList<KeymapSkip> Skipped =>
+        [.. Ignored.Bindings.Select(pair => Describe(pair.Key, pair.Value))
+             .Concat(Ignored.Unreadable.Keys.Select(chord => new KeymapSkip(chord, KeymapSkipReason.WrongShape)))
+             .OrderBy(skip => skip.Chord, StringComparer.Ordinal)];
+
     private KeymapOverlay(IReadOnlyDictionary<KeyChord, KeymapAction> entries, KeymapFile ignored)
     {
         Entries = entries;
@@ -90,6 +97,14 @@ public sealed class KeymapOverlay
                     .Select(e => KeyValuePair.Create(e.Key, ((KeymapAction.SendKey)e.Value).Key)),
                 Entries.Where(e => e.Value is KeymapAction.TypeText)
                     .Select(e => KeyValuePair.Create(e.Key, ((KeymapAction.TypeText)e.Value).Text)));
+
+    /// <summary>Why Parse passed this entry over. The chord is judged first, because it is what the user reads
+    /// first: an entry with both halves wrong is reported as the chord it could not place, and its key name is not
+    /// carried, since nothing yet says that name is wrong.</summary>
+    private static KeymapSkip Describe(string spelling, KeymapEntry entry) =>
+        !ChordSyntax.TryParse(spelling, out _) ? new(spelling, KeymapSkipReason.UnknownChord)
+        : entry is KeymapEntry.SendKey send ? new(spelling, KeymapSkipReason.UnknownKey, send.KeyName)
+        : new(spelling, KeymapSkipReason.EmptyText);
 
     private static bool MatchesBaseline(KeyChord chord, KeymapAction action) => action switch
     {

@@ -8,10 +8,45 @@ What changed in each LizTerm release, newest first. Downloads are on the
 - **mvsMF Access can show a member without downloading it.** **View** in the Members pane opens a read-only window
   with the member's text, with find and line numbers; a sequential dataset shows itself
   ([#163](https://github.com/coffeemuse/LizTerm/issues/163)).
+
+- **The crosshair is a thin line instead of a shaded row and column.** **View > Crosshair** used to tint the
+  cursor's whole row and column, which sat over the host's text and was a heavy way to point at one line; it now
+  draws a hairline along the edge of the cursor's cell, so it rules the screen without covering anything. A
+  monochrome (3278) session draws it in the same green as the rest of the screen
+  ([#180](https://github.com/coffeemuse/LizTerm/issues/180), reported by
+  [@mgrossmann](https://github.com/mgrossmann)).
+
+- **Shift+End jumps the cursor to the end of a field.** Adding to something already typed meant arrowing across
+  the blanks to reach the end of it; **Field End** goes straight there. It is on Shift+End, where Vista TN3270 has
+  it, and End itself still erases to the end of the field. Like every other key, you can move it in
+  **Preferences > Keyboard** ([#177](https://github.com/coffeemuse/LizTerm/issues/177), reported by
+  [@mgrossmann](https://github.com/mgrossmann)).
+
+- **Logging out of macOS no longer stops to ask.** A logout, restart or shut down with sessions connected used
+  to put LizTerm's "still connected" question up, and macOS read the wait as LizTerm refusing to quit and said
+  *"LizTerm" interrupted logout* beside it, so the logout took an extra click. LizTerm now recognises a quit the
+  system sent and disconnects the sessions without a word, the way it already did on Windows and Linux. Cmd+Q,
+  the **Quit** menu item and closing a connected window still ask
+  ([#169](https://github.com/coffeemuse/LizTerm/issues/169)).
+
+- **A hand-edited `keymap.json` says what went wrong.** A mistyped 3270 key or an unrecognised chord used to lose
+  that binding without a word; **Preferences > Keyboard** now names each entry it skipped and what is wrong with it.
+  A file that is not valid JSON at all costs every binding in it, so LizTerm now says so when it starts, names the
+  line to look at, and keeps your file untouched — with **Reset keymap to defaults** in that tab as the way out,
+  which moves the file aside to `keymap.json.bad` rather than deleting it
+  ([#168](https://github.com/coffeemuse/LizTerm/issues/168)). A `settings.json` LizTerm will not overwrite now
+  names its own problem the same way.
+
+- **The mvsMF sign-in window reads more clearly.** The profile and the host address are on separate lines, the
+  window says why it is asking, and an expired session is now shown as the routine timeout it is rather than in
+  the same red as a refused password. A blank box says which one is blank
+  ([#164](https://github.com/coffeemuse/LizTerm/issues/164)).
+
 - **Sessions no longer drop after thirty seconds on Linux desktops whose language writes decimals with a comma**
   (Croatian, German, French and most of Europe). The emulation engine wrote its timings the local way, LizTerm could
   not read them, and a connection that was working in every visible way was reported as timed out and closed, leaving
   the TSO user logged on at the host ([#170](https://github.com/coffeemuse/LizTerm/issues/170)).
+- **About LizTerm's engine line can be copied**, like the version line above it, so a bug report can quote both.
 
 ## 0.7.0
 

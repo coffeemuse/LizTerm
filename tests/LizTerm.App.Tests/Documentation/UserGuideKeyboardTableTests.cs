@@ -182,6 +182,7 @@ public partial class UserGuideKeyboardTableTests
             "Back Tab" => TerminalKey.BackTab,
             "Toggle insert mode" => TerminalKey.Insert,
             "Erase EOF" => TerminalKey.EraseEof,
+            "Field End" => TerminalKey.FieldEnd,
             _ when text.All(char.IsAsciiLetterOrDigit) && Enum.TryParse<TerminalKey>(text, out var key) && Enum.IsDefined(key) => key,
             _ => throw Unreadable(row, text),
         };
