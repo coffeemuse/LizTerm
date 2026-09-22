@@ -124,6 +124,46 @@ public class CrosshairGeometryTests
         Assert.Equal(new Rect(115, 0, 1, 466), vertical);
     }
 
+    /// <summary>A whole DIP is a whole device pixel only where the render scaling is an integer, so on a 150%
+    /// Windows display the snapping has to happen in device pixels or the smear it exists to prevent comes back.
+    /// At 1.5, y 116.4 snaps to 116.667 (device row 175) and the line is two device pixels thick rather than one
+    /// and a half; x 115.2 snaps to 115.333 (device column 173).</summary>
+    [Fact]
+    public void The_lines_land_on_whole_device_pixels_at_a_fractional_render_scaling()
+    {
+        var fractional = new CellGeometry(9.6, 19.4, 16, 0, 0);
+
+        var (horizontal, vertical) = CrosshairGeometry.Rects(
+            CrosshairMode.Both, new CursorPosition(5, 12, true), fractional, 24, 80, scaling: 1.5);
+
+        Assert.NotNull(horizontal);
+        Assert.NotNull(vertical);
+        foreach (var edge in new[]
+                 {
+                     horizontal!.Value.Left, horizontal.Value.Top, horizontal.Value.Right, horizontal.Value.Bottom,
+                     vertical!.Value.Left, vertical.Value.Top, vertical.Value.Right, vertical.Value.Bottom,
+                 })
+            Assert.Equal(Math.Round(edge * 1.5), edge * 1.5, precision: 9);
+
+        Assert.Equal(2 / 1.5, horizontal.Value.Height, precision: 9);
+        Assert.Equal(2 / 1.5, vertical.Value.Width, precision: 9);
+    }
+
+    /// <summary>The default scaling is the unscaled display's, so the rectangles above stay exactly what they
+    /// were, and a nonsense scaling from a root that cannot answer is taken as that rather than dividing by it.
+    /// </summary>
+    [Fact]
+    public void A_scaling_that_is_not_a_positive_number_is_taken_as_one()
+    {
+        var geometry = new CellGeometry(10, 20, 16, 0, 0);
+        var cursor = new CursorPosition(5, 12, true);
+
+        foreach (var scaling in new[] { 0, -1, double.NaN })
+            Assert.Equal(
+                CrosshairGeometry.Rects(CrosshairMode.Both, cursor, geometry, 24, 80),
+                CrosshairGeometry.Rects(CrosshairMode.Both, cursor, geometry, 24, 80, scaling));
+    }
+
     [Fact]
     public void An_unmeasured_geometry_draws_nothing()
     {
