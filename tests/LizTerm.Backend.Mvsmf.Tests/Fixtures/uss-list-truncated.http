@@ -1,0 +1,30 @@
+HTTP/1.1 200 OK
+Server: HTTPD Server
+X-Powered-By: MVSLOVERS
+Connection: keep-alive
+Cache-Control: no-store
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
+Content-Type: application/json
+Transfer-Encoding: chunked
+
+{
+  "items": [
+    {
+      "name": "ibmuser",
+      "mode": "drwxr-xr-x",
+      "size": 128,
+      "user": "IBMUSER",
+      "group": "USER",
+      "links": 2,
+      "mtime": "2026-09-17T19:57:07Z",
+      "inode": 2
+    }
+  ],
+  "returnedRows": 1,
+  "totalRows": 3,
+  "moreRows": true,
+  "JSONversion": 1
+}

@@ -6,9 +6,9 @@ headers without CRs (Date, Jobname, Jobid and Node dropped), a blank line, then 
 `Fixture.Load` turns one into an `HttpResponseMessage`; `Transfer-Encoding`, `Content-Length` and `Connection` are
 ignored because the body is already whole. `.gitattributes` marks the files `-text` so no checkout converts their line endings.
 
-Recorded 2026-09-18 from an MVS/CE host running mvsMF 1.1.0 (`zosmf_full_version`). The `LtpaToken2` cookie value
-is replaced by `<token>` at recording time. See `docs/mvsmf-compatibility.md` before re-recording against a newer
-build: a changed fixture is a changed behaviour.
+Recorded 2026-09-18 (`uss-*` on 2026-09-22) from an MVS/CE host running mvsMF 1.1.0 (`zosmf_full_version`). The
+`LtpaToken2` cookie value is replaced by `<token>` at recording time. See `docs/mvsmf-compatibility.md` before
+re-recording against a newer build: a changed fixture is a changed behaviour.
 
 | Fixture | Request |
 |---|---|
@@ -43,3 +43,21 @@ build: a changed fixture is a changed behaviour.
 | `rename-ds-204` | `PUT restfiles/ds/<hlq>.LIZITEST.FIX2` with the JSON rename body naming the old dataset — 204 |
 | `delete-ds-204` | `DELETE` of that dataset — 204 |
 | `delete-ds-missing` | the same again — 404, reason 4 |
+| `uss-list-root` | `GET restfiles/fs?path=/` — `tmp`, `u`, `www`; `user` and `group` empty |
+| `uss-list-empty` | `GET restfiles/fs?path=/u/ibmuser` — no items |
+| `uss-list-missing` | `GET restfiles/fs?path=/u/nobody` — 404, category 6, reason 1 |
+| `uss-list-truncated` | `GET restfiles/fs?path=/u` with `X-IBM-Max-Items: 1` — one of three, `moreRows: true` |
+| `uss-stat-file` | `GET restfiles/fs?path=<a file>` — 200 with one item naming the full path |
+| `uss-read-text` | `GET restfiles/fs/u/ibmuser/liztest-fix/hello.txt`, text, with `X-IBM-Return-Etag: true` |
+| `uss-read-binary` | the same, binary — the same `ETag` |
+| `uss-read-missing` | `GET` of a file that is not there — 404, reason 1 |
+| `uss-read-directory` | `GET restfiles/fs/u` — 400, category 2, reason 1, "Is a directory" |
+| `uss-write-204` | `PUT` of `hello.txt` |
+| `uss-write-etag-204` | the same with `X-IBM-Return-Etag: true` — 204 with `ETag` |
+| `uss-write-412` | the same with a stale `If-Match` — 412, category 4, reason 1, "The resource was modified since the supplied ETag was created" |
+| `uss-write-too-large` | `PUT` of 70,000 bytes — 204; the host stored all 70,000 bytes, no error (this host enforces no USS size limit at that size) |
+| `uss-mkdir-201` | `POST restfiles/fs/u/ibmuser/liztest-fix` with `{"type":"directory"}` — 201 |
+| `uss-mkdir-exists` | the same again — 400, category 4, reason 1, "File or directory already exists" |
+| `uss-mkdir-no-parent` | `POST restfiles/fs/u/nobody/child` — 404, category 6, reason 1, "File or directory not found" |
+| `uss-delete-204` | `DELETE` of the directory with `X-IBM-Option: recursive` — 204 |
+| `uss-delete-missing` | the same again — 404, reason 1 |

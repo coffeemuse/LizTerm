@@ -1,0 +1,16 @@
+HTTP/1.1 200 OK
+Server: HTTPD Server
+X-Powered-By: MVSLOVERS
+Connection: keep-alive
+Cache-Control: no-store
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
+Content-Type: text/plain
+ETag: 8E7675AF0000000D
+Transfer-Encoding: chunked
+
+hello
+
+¬ end

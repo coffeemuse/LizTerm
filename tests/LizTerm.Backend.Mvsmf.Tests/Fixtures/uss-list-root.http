@@ -1,0 +1,49 @@
+HTTP/1.1 200 OK
+Server: HTTPD Server
+X-Powered-By: MVSLOVERS
+Connection: keep-alive
+Cache-Control: no-store
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+Content-Language: en
+Set-Cookie: LtpaToken2=<token>; Path=/; HttpOnly; SameSite=Strict
+Content-Type: application/json
+Transfer-Encoding: chunked
+
+{
+  "items": [
+    {
+      "name": "tmp",
+      "mode": "drwxr-xr-x",
+      "size": 128,
+      "user": "",
+      "group": "",
+      "links": 2,
+      "mtime": "2026-09-17T20:26:58Z",
+      "inode": 2
+    }
+   ,{
+      "name": "u",
+      "mode": "drwxr-xr-x",
+      "size": 128,
+      "user": "",
+      "group": "",
+      "links": 2,
+      "mtime": "2026-09-17T20:36:34Z",
+      "inode": 62
+    }
+   ,{
+      "name": "www",
+      "mode": "drwxr-xr-x",
+      "size": 128,
+      "user": "",
+      "group": "",
+      "links": 2,
+      "mtime": "2026-09-17T20:29:52Z",
+      "inode": 2
+    }
+  ],
+  "returnedRows": 3,
+  "totalRows": 3,
+  "JSONversion": 1
+}
