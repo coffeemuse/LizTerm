@@ -489,7 +489,7 @@ Add to `src/LizTerm.App/ViewModels/MvsmfViewerViewModel.cs`, inside the class, a
 
     public string CountText => Term.Length == 0 ? ""
         : Matches.Count == 0 ? "No matches"
-        : $"{(CurrentIndex + 1).ToString(CultureInfo.InvariantCulture)} of {Count(Matches.Count)}";
+        : $"{Count(CurrentIndex + 1)} of {Count(Matches.Count)}";
 
     [RelayCommand]
     private void FindNext() => Step(1);
@@ -554,6 +554,8 @@ EOF
 - Create: `src/LizTerm.App/ViewModels/MvsmfBrowserViewModel.View.cs`
 - Modify: `src/LizTerm.App/ViewModels/MvsmfBrowserViewModel.cs` (the `SelectedDataset` notification list; the
   `NotifyCommands()` body)
+- Modify: `tests/LizTerm.App.Tests/Fakes/FakeHostFileService.cs` (records which reads asked for a stamp)
+- Modify: `tests/CLAUDE.md` (the fake's documented surface)
 - Test: `tests/LizTerm.App.Tests/ViewModels/MvsmfBrowserViewTests.cs`
 
 **Interfaces:**
@@ -690,6 +692,9 @@ public sealed class MvsmfBrowserViewTests
 
         await t.Vm.ViewCommand.ExecuteAsync(null);
 
+        // The request itself, not just the memory: asking costs the host a second pass over the content, and
+        // Remember is never called here either way, so the memory alone would pass with withEtag: true.
+        Assert.Empty(t.Host.EtagRequests);
         Assert.Null(t.Access.Etags.TryGet(HostPath.ForMember("MVSCE02.CNTL", "HELLO")));
     }
 
@@ -730,7 +735,28 @@ public sealed class MvsmfBrowserViewTests
 Run: `dotnet test tests/LizTerm.App.Tests --filter "FullyQualifiedName~MvsmfBrowserViewTests"`
 Expected: FAIL — the build errors with `does not contain a definition for 'ViewCommand'`.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Let the fake record which reads asked for a stamp**
+
+`FakeHostFileService.ReadTextAsync` and `ReadBinaryAsync` take `withEtag` and today say nothing about it, so a
+test cannot tell `withEtag: false` from `withEtag: true`. Add to `tests/LizTerm.App.Tests/Fakes/FakeHostFileService.cs`,
+beside `Calls`:
+
+```csharp
+    /// <summary>The paths of the reads that asked for a stamp (<c>withEtag: true</c>). A read that must not cost
+    /// the host a second pass over the content is pinned by its absence from this list.</summary>
+    public List<string> EtagRequests { get; } = [];
+```
+
+and record it inside the existing `lock (_lock)` of each read, where the stamp is looked up:
+
+```csharp
+                if (withEtag) EtagRequests.Add(path.ToString());
+```
+
+Then add the clause to the fake's description in `tests/CLAUDE.md`, in the sentence that lists what it records:
+`EtagRequests` names the reads that asked for a stamp.
+
+- [ ] **Step 4: Implement**
 
 Create `src/LizTerm.App/ViewModels/MvsmfBrowserViewModel.View.cs`:
 
@@ -818,7 +844,7 @@ and add the command to `NotifyCommands()`, beside `DownloadCommand`:
         ViewCommand.NotifyCanExecuteChanged();
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `dotnet test tests/LizTerm.App.Tests --filter "FullyQualifiedName~MvsmfBrowserViewTests"`
 Expected: PASS, ten tests.
@@ -827,10 +853,10 @@ Then run the whole App project to catch anything the new notification broke:
 Run: `dotnet test tests/LizTerm.App.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/LizTerm.App/ViewModels/MvsmfBrowserViewModel.View.cs src/LizTerm.App/ViewModels/MvsmfBrowserViewModel.cs tests/LizTerm.App.Tests/ViewModels/MvsmfBrowserViewTests.cs
+git add src/LizTerm.App/ViewModels/MvsmfBrowserViewModel.View.cs tests/LizTerm.App.Tests/Fakes/FakeHostFileService.cs tests/CLAUDE.md src/LizTerm.App/ViewModels/MvsmfBrowserViewModel.cs tests/LizTerm.App.Tests/ViewModels/MvsmfBrowserViewTests.cs
 git commit -m "$(cat <<'EOF'
 mvsMF Access: the View verb and its read
 
