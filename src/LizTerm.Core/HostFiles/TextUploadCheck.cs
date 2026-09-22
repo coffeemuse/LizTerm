@@ -42,7 +42,8 @@ public static class TextUploadCheck
 
     /// <summary>For a byte-stream target: no record length, tabs kept without a warning when not expanded (the host
     /// stores them), and with <paramref name="maxBytes"/> the bytes the lines will take on the host, one per
-    /// character plus one per line ending, counted against it as <see cref="TextUploadProblemKind.FileTooLarge"/>.</summary>
+    /// character plus one per line, since every line is written with a line ending whether or not the source's
+    /// last line had one, counted against it as <see cref="TextUploadProblemKind.FileTooLarge"/>.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="TextUploadOptions.TabWidth"/> is less than 1.</exception>
     public static TextUploadResult RunForUnixFile(ReadOnlySpan<byte> file, long? maxBytes = null, TextUploadOptions? options = null) =>
         Run(file, null, maxBytes, warnTabs: false, options);

@@ -207,4 +207,17 @@ public class TextUploadCheckTests
         var result = Run("A\tB\n", options: new TextUploadOptions(ExpandTabs: false));
         Assert.Equal(TextUploadProblemKind.TabsPresent, Assert.Single(result.Warnings).Kind);
     }
+
+    [Fact]
+    public void A_final_line_without_a_newline_still_counts_its_line_ending()
+    {
+        // "ab\ncd" is 5 bytes in the source, but the write path stores every line LF-terminated, including the
+        // last, so the stored size — and the cap — count a line ending for "cd" too, making it 6 bytes.
+        var ok = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes("ab\ncd"), maxBytes: 6);
+        Assert.True(ok.CanUpload);
+
+        var over = TextUploadCheck.RunForUnixFile(Encoding.UTF8.GetBytes("ab\ncd"), maxBytes: 5);
+        Assert.False(over.CanUpload);
+        Assert.Equal("The file is 6 bytes; the host holds at most 5.", Assert.Single(over.Errors).Message);
+    }
 }
