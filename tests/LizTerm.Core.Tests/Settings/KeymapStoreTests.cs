@@ -33,7 +33,7 @@ public class KeymapStoreTests : IDisposable
     [Fact]
     public void A_missing_file_loads_empty_and_creates_nothing()
     {
-        Assert.Empty(Store.Load().Bindings);
+        Assert.Empty(Store.Load().File.Bindings);
         Assert.False(Directory.Exists(_dir));
     }
 
@@ -42,7 +42,7 @@ public class KeymapStoreTests : IDisposable
     {
         Store.Update(f => Plus(f, "Ctrl+Home", new KeymapEntry.SendKey("PA1")));
 
-        Assert.Equal(new KeymapEntry.SendKey("PA1"), Store.Load().Bindings["Ctrl+Home"]);
+        Assert.Equal(new KeymapEntry.SendKey("PA1"), Store.Load().File.Bindings["Ctrl+Home"]);
         Assert.Equal("PA1", ReadBindings()["Ctrl+Home"]!.GetValue<string>());
     }
 
@@ -92,10 +92,94 @@ public class KeymapStoreTests : IDisposable
     {
         WriteFile("not json");
 
-        Assert.Empty(Store.Load().Bindings);
+        Assert.Empty(Store.Load().File.Bindings);
         var ex = Assert.Throws<InvalidDataException>(() => Store.Update(f => f));
         Assert.Contains("keymap.json", ex.Message);
         Assert.Equal("not json", File.ReadAllText(FilePath));
+    }
+
+    // ---- why a file would not load (#168) -----------------------------------------------------------------------
+
+    [Fact]
+    public void A_missing_file_has_no_problem_to_report()
+    {
+        Assert.Null(Store.Load().Problem);
+    }
+
+    [Fact]
+    public void A_file_with_no_bindings_key_is_simply_empty()
+    {
+        WriteFile("""{"version": 2}""");
+
+        var load = Store.Load();
+
+        Assert.Empty(load.File.Bindings);
+        Assert.Null(load.Problem);
+    }
+
+    [Fact]
+    public void A_file_that_is_not_json_reports_the_line_to_look_at()
+    {
+        WriteFile("{\n  \"bindings\": {\n    \"Ctrl+Q\": \"PF1\",\n  }\n}");
+
+        Assert.Equal("keymap.json could not be read. It is not valid JSON. Line 4: the JSON object contains a trailing comma at the end.",
+                     Store.Load().Problem);
+    }
+
+    [Fact]
+    public void A_bindings_that_is_not_an_object_is_its_own_problem()
+    {
+        WriteFile("""{"bindings": ["F2"]}""");
+
+        var load = Store.Load();
+
+        Assert.Empty(load.File.Bindings);
+        Assert.Equal("keymap.json could not be read. Its \"bindings\" is not a JSON object.", load.Problem);
+    }
+
+    [Fact]
+    public void A_load_that_failed_leaves_the_file_alone()
+    {
+        WriteFile("not json");
+
+        Store.Load();
+
+        Assert.Equal("not json", File.ReadAllText(FilePath));
+    }
+
+    // ---- moving a broken file aside (#168) --------------------------------------------------------------------
+
+    [Fact]
+    public void MoveAside_keeps_the_broken_file_under_a_new_name_and_loads_the_defaults()
+    {
+        WriteFile("not json");
+
+        var moved = Store.MoveAside();
+
+        Assert.Equal(FilePath + ".bad", moved);
+        Assert.Equal("not json", File.ReadAllText(moved!));
+        Assert.False(File.Exists(FilePath));
+        Assert.Empty(Store.Load().File.Bindings);
+        Assert.Null(Store.Load().Problem);
+    }
+
+    [Fact]
+    public void MoveAside_over_an_earlier_broken_file_keeps_the_newer_one()
+    {
+        WriteFile("older");
+        Store.MoveAside();
+        WriteFile("newer");
+
+        Store.MoveAside();
+
+        Assert.Equal("newer", File.ReadAllText(FilePath + ".bad"));
+    }
+
+    [Fact]
+    public void MoveAside_with_no_file_moves_nothing()
+    {
+        Assert.Null(Store.MoveAside());
+        Assert.False(File.Exists(FilePath + ".bad"));
     }
 
     [Fact]
