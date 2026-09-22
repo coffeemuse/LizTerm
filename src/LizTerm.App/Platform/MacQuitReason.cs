@@ -19,7 +19,7 @@ namespace LizTerm.App.Platform;
 /// -[AvnAppDelegate applicationShouldTerminate:] is one call to the managed TryShutdown, which raises
 /// ShutdownRequested and makes the whole window pass before it answers. So every window's Closing — and the
 /// Startup/QuitGuard consulted from it — runs inside that handler, where currentAppleEvent is still the quit
-/// event and its kAEQuitReason attribute says why loginwindow sent it. A user's Cmd+Q, the Quit menu item and
+/// event and its kAEQuitReason parameter says why loginwindow sent it. A user's Cmd+Q, the Quit menu item and
 /// every managed TryShutdown carry no Apple event at all, which is how the two are told apart.
 ///
 /// Nothing here is installed or replaced: it is a read, taken afresh each time, so there is no state to go stale
@@ -35,7 +35,10 @@ internal static class MacQuitReason
     /// <summary>kAEQuitApplication, 'quit'.</summary>
     internal const uint QuitEventId = 0x71756974;
 
-    /// <summary>kAEQuitReason, 'why?': the attribute naming what led to the quit being sent.</summary>
+    /// <summary>kAEQuitReason, 'why?': the quit event's parameter naming what led to it being sent. A
+    /// parameter, not an attribute — AERegistry.h says so in as many words ("in a kAEQuitApplication event,
+    /// this parameter if present is the reason the quit is being sent"), and every attribute keyword in
+    /// AEDataModel.h is spelled ...Attr, which this one is not.</summary>
     internal const uint QuitReasonKeyword = 0x7768793F;
 
     /// <summary>kAEQuitAll, 'quia'. Every application is being quit and the user stays logged in.</summary>
@@ -63,8 +66,8 @@ internal static class MacQuitReason
     /// machine ending. AERegistry.h lists kAEQuitAll, kAEShutDown, kAERestart and kAEReallyLogOut as the reasons
     /// an application can be given, and the logout and dialog spellings beside them; all but Quit All mean the
     /// user is on their way out and LizTerm must not stand in the way. Quit All leaves the user logged in, so it
-    /// is a Quit like any other and a connected session is still worth asking about. Reason 0 is the attribute
-    /// missing altogether, which is every quit nobody gave a reason for — an AppleScript quit, say.</summary>
+    /// is a Quit like any other and a connected session is still worth asking about. Reason 0 is no reason
+    /// read at all, which is every quit nobody gave one for — an AppleScript quit, say.</summary>
     internal static bool EndsTheSession(uint eventClass, uint eventId, uint reason) =>
         eventClass == QuitEventClass && eventId == QuitEventId
         && reason is ReallyLogOut or LogOut or ShutDown or Restart or ShowShutdownDialog or ShowRestartDialog;
@@ -85,15 +88,23 @@ internal static class MacQuitReason
             if (quit == IntPtr.Zero) return false;
             var eventClass = objc_msgSend_uint(quit, sel_registerName("eventClass"));
             var eventId = objc_msgSend_uint(quit, sel_registerName("eventID"));
-            var attribute = objc_msgSend_IntPtr(quit, sel_registerName("attributeDescriptorForKeyword:"), QuitReasonKeyword);
-            var reason = attribute == IntPtr.Zero ? 0u : objc_msgSend_uint(attribute, sel_registerName("enumCodeValue"));
+            // The reason is a parameter of the quit event (see QuitReasonKeyword), and an event's parameters
+            // and its attributes are separate slots that do not fall back to one another, so the parameter is
+            // the one to read. The attribute is tried after it only because code in the wild writes it there.
+            var descriptor = objc_msgSend_IntPtr(quit, sel_registerName("paramDescriptorForKeyword:"), QuitReasonKeyword);
+            if (descriptor == IntPtr.Zero)
+                descriptor = objc_msgSend_IntPtr(quit, sel_registerName("attributeDescriptorForKeyword:"), QuitReasonKeyword);
+            var reason = descriptor == IntPtr.Zero ? 0u : objc_msgSend_uint(descriptor, sel_registerName("enumCodeValue"));
             if (EndsTheSession(eventClass, eventId, reason)) return true;
-            // A reason this build does not know leaves 0.7.0's behaviour in place, so say which one it was: that
-            // code is the whole fix for a macOS that has changed what it sends.
-            if (eventClass == QuitEventClass && eventId == QuitEventId && reason != 0 && reason != QuitAll)
-                Logger.TryGet(LogEventLevel.Warning, LogArea.Platform)
-                    ?.Log(null, "MacQuitReason: unknown quit reason {Reason}; the quit is asked about as a user's own",
-                          FourCharCode(reason));
+            // A reason this build cannot use leaves 0.7.0's behaviour in place, so say what was there: these two
+            // lines are the whole fix for a macOS that has changed what it sends, or that has moved the reason
+            // out from under us again. No reason at all is the ordinary case for an AppleScript quit, so it goes
+            // in the trace log rather than as a warning — but it is also what reading the wrong slot looks like,
+            // so it is not passed over in silence.
+            if (eventClass == QuitEventClass && eventId == QuitEventId && reason != QuitAll)
+                Logger.TryGet(reason == 0 ? LogEventLevel.Verbose : LogEventLevel.Warning, LogArea.Platform)
+                    ?.Log(null, "MacQuitReason: quit reason {Reason}; the quit is asked about as a user's own",
+                          reason == 0 ? "none readable" : FourCharCode(reason));
             return false;
         }
         catch (Exception ex)

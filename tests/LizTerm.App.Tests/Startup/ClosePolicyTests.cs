@@ -102,4 +102,19 @@ public class ClosePolicyTests
     {
         Assert.True(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, isSystemShutdown: false, connectedSessions: 3, confirmEnabled: true, confirmed: false));
     }
+
+    /// <summary>#169. The test a window makes before its own already-asking refusal: a system shutdown is
+    /// recognised however LizTerm hears of it, so nothing holds it. Elsewhere it closes windows with OSShutdown;
+    /// on macOS it arrives as an ApplicationShutdown and only the quit event's reason tells it from a Cmd+Q.</summary>
+    [Theory]
+    [InlineData(WindowCloseReason.OSShutdown, false, true)]
+    [InlineData(WindowCloseReason.OSShutdown, true, true)]
+    [InlineData(WindowCloseReason.ApplicationShutdown, true, true)]
+    [InlineData(WindowCloseReason.ApplicationShutdown, false, false)]
+    [InlineData(WindowCloseReason.WindowClosing, true, false)]
+    [InlineData(WindowCloseReason.OwnerWindowClosing, true, false)]
+    public void A_system_shutdown_is_recognised_whichever_way_it_arrives(WindowCloseReason reason, bool isSystemShutdown, bool expected)
+    {
+        Assert.Equal(expected, ClosePolicy.IsSystemShutdown(reason, isSystemShutdown));
+    }
 }

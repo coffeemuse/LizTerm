@@ -36,6 +36,11 @@ internal sealed class QuitGuard(SessionList sessions, Func<bool> confirmEnabled,
     /// without putting a second question on the screen, and the open one decides for its window.</summary>
     public CloseQuestion NewWindowQuestion() => new(() => _windowQuestions++, () => _windowQuestions--);
 
+    /// <summary>Whether this close is the system logging out, restarting or shutting down (#169), for a caller
+    /// that must let it past a question it has already put on the screen. The macOS half is read here, at each
+    /// pass, exactly as <see cref="Holds"/> reads it.</summary>
+    public bool IsSystemShutdown(WindowCloseReason reason) => ClosePolicy.IsSystemShutdown(reason, isSystemShutdown());
+
     /// <summary>Whether a window closing for <paramref name="reason"/> must refuse, because a Quit is being
     /// questioned. Called from Closing; true means set Cancel.</summary>
     public bool Holds(WindowCloseReason reason)

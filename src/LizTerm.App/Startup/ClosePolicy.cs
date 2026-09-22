@@ -19,6 +19,15 @@ internal static class ClosePolicy
     public static bool ConfirmsWindowClose(WindowCloseReason reason, bool connected, bool confirmEnabled, bool confirmed) =>
         !confirmed && confirmEnabled && connected && !ShutdownPolicy.IsShutdown(reason);
 
+    /// <summary>Whether this close is the system going down, which nothing may hold — not the Quit question,
+    /// and not a window's own question already on the screen: cancelling such a close is exactly what makes
+    /// macOS report an interrupted logout (#169). The platform reports one as OSShutdown; the macOS backend
+    /// reports none, so there <paramref name="isSystemShutdown"/> supplies it, read from the quit Apple event by
+    /// Platform/MacQuitReason. A running file transfer's refusal is not a question and is not covered here.</summary>
+    public static bool IsSystemShutdown(WindowCloseReason reason, bool isSystemShutdown) =>
+        reason == WindowCloseReason.OSShutdown
+        || (reason == WindowCloseReason.ApplicationShutdown && isSystemShutdown);
+
     /// <summary>A Quit asks once, for all connected sessions. It is recognised by the reason the windows it closes
     /// receive: ApplicationShutdown for a user's Quit (Cmd+Q, the Quit menu item, the picker's Quit), OSShutdown
     /// when the platform reports a logout or shutdown, which never asks. Avalonia keeps the OS flag on its

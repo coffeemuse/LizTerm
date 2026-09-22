@@ -78,17 +78,22 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   Avalonia's macOS backend cannot: AppKit calls `applicationShouldTerminate:` from inside its handler for the
   quit Apple event, and `-[AvnAppDelegate applicationShouldTerminate:]` is one call to the managed `TryShutdown`,
   so the whole window pass — and every `QuitGuard.Holds` in it — runs inside that handler, where
-  `NSAppleEventManager.currentAppleEvent` is still the quit event and its `kAEQuitReason` attribute says why
-  loginwindow sent it. A user's Cmd+Q, the Quit menu item and every managed `TryShutdown` carry no Apple event at
+  `NSAppleEventManager.currentAppleEvent` is still the quit event and its `kAEQuitReason` **parameter** says why
+  loginwindow sent it — a parameter, not an attribute (AERegistry.h says so outright, and every attribute keyword
+  in AEDataModel.h is spelled `...Attr`), so it is read with `paramDescriptorForKeyword:`; the attribute slot is
+  tried after it only because code in the wild writes it there, and the two never fall back to one another. A user's Cmd+Q, the Quit menu item and every managed `TryShutdown` carry no Apple event at
   all, which is how the two are told apart. `EndsTheSession` is the pure rule (`MacQuitReasonTests` pins it): the
   logout, restart and shutdown reasons count, `kAEQuitAll` does not, because quitting every application leaves
   the user logged in. Nothing is installed or replaced — it is a read, taken afresh each pass, with no cached
   selectors, because a static `IntPtr` initialised eagerly would P/Invoke libobjc on Linux. Every failure answers
   false, which is 0.7.0's behaviour: ask, and let macOS report the logout as interrupted. A running IND$FILE
   transfer still refuses a logout and still draws that alert; that refusal protects the transfer and is a
-  different path from this question. To exercise any of it without logging out, send the running app a quit
+  different path from this question, and the user guide names it as the one exception. A question already on the
+  screen does not refuse: `SessionWindow.OnClosing` asks `QuitGuard.IsSystemShutdown` ahead of its own
+  already-asking early return, so a logout arriving over an open Close or Quit question is let through. To exercise any of it without logging out, send the running app a quit
   Apple event with a forged reason — an `NSAppleEventDescriptor` for `kCoreEventClass`/`kAEQuitApplication`
-  addressed to its pid by `typeKernelProcessID`, with `descriptorWithEnumCode:` under `kAEQuitReason` — and
+  addressed to its pid by `typeKernelProcessID`, with `descriptorWithEnumCode:` set under `kAEQuitReason` by
+  `setParamDescriptor:forKeyword:`, the slot loginwindow uses — and
   watch: `rlgo` and `shut` quit with a session connected, no reason and `quia` ask, and an unrecognised code
   asks and names itself in the trace log (`DOTNET_DebugWriteToStdErr=1` to see it on stderr).
 
