@@ -374,6 +374,10 @@ only the exact certificate you pinned, and only until that certificate expires.
 
 ### Browsing
 
+The window has two tabs. **Datasets**, described here, browses datasets and members; **USS** browses the host's UNIX
+file system (see [USS](#uss)). The status line at the bottom, the **Cancel** button and the questions asked in the
+strip above it serve whichever tab is in front, and one operation runs at a time across both.
+
 Type a dataset pattern in **Filter**, such as `MVSCE02.**`, and choose **List**. The window has two panes, each
 with a toolbar of the actions that apply to what is selected in it, and a status line at the bottom.
 
@@ -504,6 +508,41 @@ exists; renaming a dataset onto an existing name fails with a server error.
 
 **Delete…** in the Datasets pane's toolbar deletes the selected dataset, after a question that names it and, for a
 partitioned dataset, says how many members it has. This cannot be undone.
+
+### USS
+
+The **USS** tab browses the host's UNIX file system one directory at a time. The **Path** box names the current
+directory; it starts at your home directory, `/u/` followed by your userid in lower case, the first time you open the
+tab. Type a path and choose **Go** (or press **Enter**) to list it, or **↑ Up** to go to the directory above. A path
+the host does not have leaves the box as you typed it and the panes as they were, with the reason in the status
+line.
+
+The **Directories** pane on the left lists the subdirectories with their **NAME** and **MODIFIED** time. **Enter** or a
+double-click on one opens it. Its toolbar has **New…**, which asks for a name in the strip at the bottom and
+creates the directory here, **Delete…**, which deletes the selected directory *and everything in it* after a question,
+and **↻ Refresh**.
+
+The pane on the right, titled with the current path, lists the files with their **NAME**, **SIZE** and **MODIFIED**
+time, and you can select several at once. Its toolbar has **View**, **⇣ Download…**, **⇡ Upload…** and **Delete…**,
+and a **Transfer** drop-down with **Text** and **Binary** and **Verify after upload**. An entry that is not a
+regular file (a link, say) is listed as **(not a file)**, and nothing can be done with it.
+
+**Download…** saves the selected files under their own names, asking before it replaces a file you already have.
+**Upload…** sends the files you choose into the current directory under their own names; a file that already exists
+there is replaced after a question, and a file this window downloaded or uploaded earlier is checked against the
+host's copy first, so a change made on the host meanwhile gets a question rather than being overwritten. **View**
+opens one file read-only, as it does a member.
+
+A UNIX file is a stream of bytes, not records, so the **Text** transfer keeps tabs and trailing blanks as they are
+in both directions, and **Verify after upload** compares exactly. The host holds at most 1 MiB in one file: a
+larger file is refused before anything is sent, and the status line says so. mvsMF cannot rename or move a UNIX
+file, so there is no **Rename…** on this tab.
+
+Each list has a right-click menu with the same actions, and the keys are the Datasets tab's: **Enter** or a
+double-click on a file downloads it, **Delete** or **Backspace** deletes what is selected in the focused list,
+**Cmd+R** (macOS) or **Ctrl+R** refreshes, **Cmd+N** or **Ctrl+N** creates a directory, **Cmd+Enter** or
+**Ctrl+Enter** views the selected file, and **Escape** cancels a question, then a running operation, then closes
+the window.
 
 ### When something goes wrong
 

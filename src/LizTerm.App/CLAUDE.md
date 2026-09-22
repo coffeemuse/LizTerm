@@ -973,6 +973,26 @@ constructor captured.
   Cancel. A question with a text box (`ConfirmationRequest` with `input` and an `inputRule`) is how a rename asks;
   its primary is allowed only for an acceptable, changed value, and `Primary()` checks that itself because the
   window's Enter goes through `Execute`.
+- **The runner is `BrowserOperations`** (USS spec §4.4): the busy flag and its cancellation, the status line, the
+  banner with Retry, the confirmation strip, `WhenIdle` and `TryPickAsync`. `MvsmfBrowserViewModel` forwards its
+  old properties and commands to it under their old names, re-raising the runner's changes as its own (IsBusy
+  notifies the commands first, then the property, as the generated hook did), so the window's bindings never
+  changed. `UssBrowserViewModel` runs on the same instance, which is what makes one operation at a time hold
+  across both tabs and puts every result on the one status line. `BrowserTransfers` is the download side both
+  share: one transfer reported where its caller says, and the two-at-a-time batch with its connection-failure stop.
+- **The USS tab** (`UssBrowserViewModel`, three partials): `Path` is the box, `Current` the listed directory (null
+  until a listing lands), `Directories` and `Files` its rows, sorted by name here because the host lists in its own
+  order. `ListCoreAsync` is the one listing: a path the rules refuse or the host does not have is a status line, and
+  the box keeps its text while the panes keep the last good listing. `EnsureListedAsync` runs on the tab's first
+  show. `DirectoryRow.Path`/`FileRow.Path` are null for a name the rules refuse and `FileRow.IsFile` is false for
+  anything but a regular file; every verb needs usable rows, and Delete never sees the root because the rows are
+  the current directory's children. Uploads check every file first (`CheckUnixTextFile` with tabs kept,
+  `BinaryUploadProblem`), list the directory again before calling a name existing, and put each file's result on
+  its row once the listing after the batch has given new files theirs; the refused ones are named on the status
+  line, never as rows. `Mode` and `VerifyUploads` are the tab's own; trailing blanks are never trimmed and tabs
+  never expanded. The window's `TabControl` hosts the Datasets tab's filter row and panes unchanged; the USS tab's
+  keys go through `HandleUssKey` first while that tab is in front and no question is up, and Escape's ladder is
+  shared. The viewer window is shared: either tab's `Viewer` opens or reuses it.
 - **Connection failures** (`IsConnectionFailure`: cannot reach, sign-in, certificate, unsupported host) are the red banner with
   Retry; everything else is the status line or a row's status. They stop the whole operation. A download batch
   cancels its other transfers through a linked token and rethrows the first failure once; its rows say
