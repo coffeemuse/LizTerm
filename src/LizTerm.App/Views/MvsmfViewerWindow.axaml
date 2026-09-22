@@ -1,0 +1,46 @@
+<!--
+  This file is part of LizTerm.
+  Copyright 2026 by CoffeeMuse
+  SPDX-License-Identifier: BSD-3-Clause
+-->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LizTerm.App.ViewModels"
+        x:Class="LizTerm.App.Views.MvsmfViewerWindow"
+        x:DataType="vm:MvsmfViewerViewModel"
+        Title="{Binding Title}"
+        Width="720" Height="560" MinWidth="420" MinHeight="300"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="12,8">
+      <TextBlock Text="Find" VerticalAlignment="Center" Margin="0,0,8,0" />
+      <TextBox Grid.Column="1" x:Name="FindBox" Text="{Binding Term}" />
+      <TextBlock Grid.Column="2" x:Name="MatchCount" Text="{Binding CountText}" VerticalAlignment="Center"
+                 MinWidth="80" Margin="8,0" Foreground="#A0A0A0" />
+      <Button Grid.Column="3" x:Name="PreviousButton" Content="‹" Command="{Binding FindPreviousCommand}"
+              ToolTip.Tip="Previous match (Shift+Enter)" />
+      <Button Grid.Column="4" x:Name="NextButton" Content="›" Command="{Binding FindNextCommand}"
+              Margin="4,0,0,0" ToolTip.Tip="Next match (Enter)" />
+      <CheckBox Grid.Column="5" x:Name="LineNumbersBox" Content="Line numbers" Margin="12,0,0,0"
+                IsChecked="{Binding ShowLineNumbers}" />
+    </Grid>
+
+    <Border DockPanel.Dock="Bottom" Background="#1C1E22" Padding="12,6" BorderBrush="#33373D" BorderThickness="0,1,0,0">
+      <TextBlock x:Name="FooterLine" Text="{Binding FooterText}" TextWrapping="Wrap" />
+    </Border>
+
+    <!-- The gutter and the text scroll together: the code-behind follows the text box's own scroll viewer, and
+         both are pinned to the same line height, so a number always sits beside its record. -->
+    <Grid ColumnDefinitions="Auto,*" Margin="12,0,12,8">
+      <ScrollViewer x:Name="GutterScroller" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled"
+                    BorderBrush="#33373D" BorderThickness="0,0,1,0" Padding="0,0,6,0"
+                    IsVisible="{Binding ShowLineNumbers}">
+        <TextBlock x:Name="Gutter" Text="{Binding LineNumbers}" TextAlignment="Right" Foreground="#A0A0A0"
+                   FontFamily="Menlo, Consolas, monospace" FontSize="13" />
+      </ScrollViewer>
+      <TextBox Grid.Column="1" x:Name="TextArea" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True"
+               AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Menlo, Consolas, monospace" FontSize="13"
+               BorderThickness="0" Background="Transparent" Padding="6,0,0,0" />
+    </Grid>
+  </DockPanel>
+</Window>
