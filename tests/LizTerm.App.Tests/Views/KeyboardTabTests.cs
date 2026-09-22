@@ -200,17 +200,21 @@ public class KeyboardTabTests : IDisposable
         var note = tab.FindControl<TextBlock>("UnreadableText")!;
 
         Assert.True(note.IsVisible);
-        Assert.Equal("1 entry in keymap.json could not be read. It is kept as written, and Reset to defaults removes it.",
+        Assert.Equal("1 entry in keymap.json could not be read: Bogus+Home (unknown chord). "
+                     + "It is kept as written, and Reset to defaults removes it.",
                      note.Text);
     }
 
     /// <summary>A chord captured in the tab over a file that cannot be written puts the save failure on screen, which
-    /// is the whole point of the banner: the change stands in memory and the user is told it did not reach the file.</summary>
+    /// is the whole point of the banner: the change stands in memory and the user is told it did not reach the file.
+    /// The file itself reads: a file that does not is the load error below, where there are no rows to capture in.
+    /// A directory in the way of the write's temp file is what makes the write fail, TagMaintenance's own trick.</summary>
     [AvaloniaFact]
     public void A_failed_save_shows_its_message_under_the_list()
     {
         Directory.CreateDirectory(_dir);
-        File.WriteAllText(FilePath, "not json");
+        File.WriteAllText(FilePath, """{"bindings": {}}""");
+        Directory.CreateDirectory(FilePath + ".tmp");
         var (window, tab, editor, _) = Show(new KeymapViewModel(new KeymapStore(FilePath)));
         var error = tab.FindControl<TextBlock>("KeymapSaveErrorText")!;
         Assert.False(error.IsVisible);
@@ -224,6 +228,52 @@ public class KeyboardTabTests : IDisposable
 
         Assert.True(error.IsVisible);
         Assert.StartsWith("Could not save the keymap", error.Text);
+    }
+
+    // ---- a file this build cannot use at all (#168) -------------------------------------------------------------
+
+    /// <summary>The rows go, since every default is in force and nothing would save; the reason, the file and a way
+    /// out take their place.</summary>
+    [AvaloniaFact]
+    public void A_file_that_would_not_load_replaces_the_rows_with_the_reason_and_a_way_out()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+
+        var (_, tab, _, _) = Show(new KeymapViewModel(new KeymapStore(FilePath)));
+
+        Assert.False(tab.FindControl<ScrollViewer>("RowScroller")!.IsVisible);
+        // Its own IsVisible is untouched; the footer around it is what went, so ask what the user can see.
+        Assert.False(tab.FindControl<Button>("ResetButton")!.IsEffectivelyVisible);
+        Assert.True(tab.FindControl<StackPanel>("LoadErrorPanel")!.IsVisible);
+        Assert.StartsWith("keymap.json could not be read.", tab.FindControl<TextBlock>("LoadErrorText")!.Text);
+        Assert.Equal(FilePath, tab.FindControl<SelectableTextBlock>("LoadErrorPath")!.Text);
+    }
+
+    /// <summary>And the way out works from the view: the file goes aside under its own name and the rows come back.</summary>
+    [AvaloniaFact]
+    public void Resetting_from_the_error_panel_brings_the_rows_back()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var (window, tab, _, _) = Show(new KeymapViewModel(new KeymapStore(FilePath)));
+
+        Click(window, tab.FindControl<Button>("RestoreButton")!);
+        window.UpdateLayout();
+
+        Assert.False(tab.FindControl<StackPanel>("LoadErrorPanel")!.IsVisible);
+        Assert.True(tab.FindControl<ScrollViewer>("RowScroller")!.IsVisible);
+        Assert.Equal("not json", File.ReadAllText(FilePath + ".bad"));
+    }
+
+    /// <summary>A file that loads keeps its editor, whatever else is wrong with its entries.</summary>
+    [AvaloniaFact]
+    public void A_file_that_loads_keeps_its_rows()
+    {
+        var (_, tab, _, _) = Show();
+
+        Assert.True(tab.FindControl<ScrollViewer>("RowScroller")!.IsVisible);
+        Assert.False(tab.FindControl<StackPanel>("LoadErrorPanel")!.IsVisible);
     }
 
     /// <summary>The whole route (#18): a chord captured in the tab inside a real Preferences window reaches an open

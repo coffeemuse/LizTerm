@@ -341,7 +341,8 @@ public class KeymapEditorViewModelTests : IDisposable
         editor.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
         Assert.True(editor.HasUnreadable);
-        Assert.Equal("2 entries in keymap.json could not be read. They are kept as written, and Reset to defaults removes them.",
+        Assert.Equal("2 entries in keymap.json could not be read: Bogus+Home (unknown chord), Ctrl+F9 (unknown key \"NoSuchKey\"). "
+                     + "They are kept as written, and Reset to defaults removes them.",
                      editor.UnreadableNote);
 
         editor.ResetCommand.Execute(null);
@@ -352,13 +353,86 @@ public class KeymapEditorViewModelTests : IDisposable
     }
 
     [Fact]
+    public void A_file_that_would_not_load_at_all_replaces_the_rows_with_its_reason()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var editor = new KeymapEditorViewModel(new KeymapViewModel(new KeymapStore(FilePath)), () => PlatformHotkeys.Fallback, Words);
+
+        Assert.True(editor.HasLoadError);
+        Assert.Equal("keymap.json could not be read. It is not valid JSON. Line 1: 'not json' is an invalid JSON literal. "
+                     + "Expected the literal 'null'. LizTerm is using the default keys until it is fixed; your file has not been changed.",
+                     editor.LoadErrorNote);
+        Assert.Equal(FilePath, editor.KeymapFilePath);
+        // The skipped-entry note is for a file that loaded; this one has nothing to list.
+        Assert.False(editor.HasUnreadable);
+    }
+
+    [Fact]
+    public void Restoring_the_defaults_puts_the_editor_back()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "not json");
+        var editor = new KeymapEditorViewModel(new KeymapViewModel(new KeymapStore(FilePath)), () => PlatformHotkeys.Fallback, Words);
+        var raised = new List<string?>();
+        editor.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        editor.RestoreCommand.Execute(null);
+
+        Assert.False(editor.HasLoadError);
+        Assert.Null(editor.LoadErrorNote);
+        Assert.Contains(nameof(KeymapEditorViewModel.HasLoadError), raised);
+        Assert.Contains(nameof(KeymapEditorViewModel.LoadErrorNote), raised);
+        Assert.Equal("not json", File.ReadAllText(FilePath + ".bad"));
+    }
+
+    [Fact]
+    public void A_file_that_loads_has_no_load_error()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, """{"bindings": {"Ctrl+Home": "PA1"}}""");
+        var editor = new KeymapEditorViewModel(new KeymapViewModel(new KeymapStore(FilePath)), () => PlatformHotkeys.Fallback, Words);
+
+        Assert.False(editor.HasLoadError);
+        Assert.Null(editor.LoadErrorNote);
+    }
+
+    [Fact]
     public void One_unreadable_entry_is_worded_in_the_singular()
     {
         Directory.CreateDirectory(_dir);
         File.WriteAllText(FilePath, """{"bindings": {"Bogus+Home": "PA1"}}""");
         var editor = new KeymapEditorViewModel(new KeymapViewModel(new KeymapStore(FilePath)), () => PlatformHotkeys.Fallback, Words);
 
-        Assert.Equal("1 entry in keymap.json could not be read. It is kept as written, and Reset to defaults removes it.",
+        Assert.Equal("1 entry in keymap.json could not be read: Bogus+Home (unknown chord). "
+                     + "It is kept as written, and Reset to defaults removes it.",
+                     editor.UnreadableNote);
+    }
+
+    [Fact]
+    public void Every_kind_of_skipped_entry_says_what_is_wrong_with_it()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, """{"bindings": {"Bogus+Home": "PA1", "F1": "NoSuchKey", "F2": 7, "F3": {"text": ""}}}""");
+        var editor = new KeymapEditorViewModel(new KeymapViewModel(new KeymapStore(FilePath)), () => PlatformHotkeys.Fallback, Words);
+
+        Assert.Equal("4 entries in keymap.json could not be read: Bogus+Home (unknown chord), F1 (unknown key \"NoSuchKey\"), "
+                     + "F2 (not a key name or text), F3 (no text to type). "
+                     + "They are kept as written, and Reset to defaults removes them.",
+                     editor.UnreadableNote);
+    }
+
+    [Fact]
+    public void A_long_list_of_skipped_entries_is_cut_short()
+    {
+        Directory.CreateDirectory(_dir);
+        var entries = string.Join(", ", Enumerable.Range(1, 7).Select(n => $"\"Bogus{n}+Home\": \"PA1\""));
+        File.WriteAllText(FilePath, "{\"bindings\": {" + entries + "}}");
+        var editor = new KeymapEditorViewModel(new KeymapViewModel(new KeymapStore(FilePath)), () => PlatformHotkeys.Fallback, Words);
+
+        Assert.Equal("7 entries in keymap.json could not be read: Bogus1+Home (unknown chord), Bogus2+Home (unknown chord), "
+                     + "Bogus3+Home (unknown chord), Bogus4+Home (unknown chord), Bogus5+Home (unknown chord), and 2 more. "
+                     + "They are kept as written, and Reset to defaults removes them.",
                      editor.UnreadableNote);
     }
 

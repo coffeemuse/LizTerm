@@ -567,8 +567,10 @@ it off when your keyboard's F-keys are enough, and the keypad keeps just PA1 to 
 <p><strong>Keyboard</strong></p>
 <ul>
 <li>One row for each 3270 key, with the keys that send it and an <strong>Add</strong> slot. See <a href="#changing-a-binding">Changing a binding</a>.</li>
-<li><strong>Reset to defaults</strong> clears every change. The tab also says how many entries in <code>keymap.json</code> it could not read,
-and keeps them as written.</li>
+<li><strong>Reset to defaults</strong> clears every change. The tab also names any entries in <code>keymap.json</code> it could not read,
+with what is wrong with each, and keeps them as written.</li>
+<li>When <code>keymap.json</code> cannot be read at all, the tab shows that instead of the rows, with the reason, the file, and
+<strong>Reset keymap to defaults</strong>, which moves the file aside to <code>keymap.json.bad</code> and starts again from the defaults.</li>
 </ul>
 <h2 id="where-lizterm-keeps-its-files">Where LizTerm keeps its files</h2>
 <table>
@@ -603,10 +605,11 @@ type, or to <code>null</code> to take that key away:</p>
 <p>Key names in a chord are Avalonia's (<code>Home</code>, <code>PageUp</code>, <code>D1</code> for the 1 key, <code>OemOpenBrackets</code> for <code>[</code>). The 3270 keys
 are <code>Enter</code>, <code>Clear</code>, <code>PF1</code> to <code>PF24</code>, <code>PA1</code> to <code>PA3</code>, <code>Attn</code>, <code>SysReq</code>, <code>Reset</code>, <code>Tab</code>, <code>BackTab</code>, <code>Home</code>, <code>EraseEof</code>,
 <code>EraseInput</code>, <code>Delete</code>, <code>Backspace</code>, <code>Erase</code>, <code>Insert</code>, <code>Dup</code>, <code>FieldMark</code>, <code>Newline</code>, <code>Up</code>, <code>Down</code>, <code>Left</code> and <code>Right</code>,
-spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default; a file that
-is not valid JSON (a trailing comma, a comment, the same chord twice) is skipped as a whole, and every default
-applies. LizTerm reads the file once, when the first session window or Preferences opens, so restart it after
-editing by hand. Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless
+spelled that way, without spaces. An entry LizTerm cannot read is skipped, and that key keeps its default;
+Preferences &gt; Keyboard names each one it skipped and keeps it in the file as you wrote it. A file that is not valid
+JSON at all (a trailing comma, a comment, the same chord twice) costs every binding in it, so LizTerm says so when
+it starts, naming the line to look at, and keeps the file untouched for you to fix. LizTerm reads the file once,
+when it starts, so restart it after editing by hand. Deleting the file restores the defaults. Backspace follows the profile's Backspace setting unless
 the file binds <code>Back</code> itself. A hand edit is not checked against what you type: binding a plain letter takes that
 key away from typing, which Preferences &gt; Keyboard would have refused. The
 platform's Copy, Paste and Select All shortcuts, Find and Switch Session are handled before the keymap, so a binding

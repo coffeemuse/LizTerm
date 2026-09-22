@@ -41,13 +41,30 @@
   <DockPanel>
     <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
       <!-- Hidden until a save fails; the session windows show the same message in their banners. Named for the keymap
-           rather than SaveErrorText, which is the Preferences window's own settings failure, in the same window. -->
+           rather than SaveErrorText, which is the Preferences window's own settings failure, in the same window.
+           Outside EditorFooter because a failed reset has to be readable while the load error is what is showing. -->
       <TextBlock x:Name="KeymapSaveErrorText" Text="{Binding SaveError}" IsVisible="{Binding HasSaveError}"
                  Foreground="#FF8080" TextWrapping="Wrap" />
-      <TextBlock x:Name="UnreadableText" Classes="hint" Text="{Binding UnreadableNote}" IsVisible="{Binding HasUnreadable}" />
-      <Button x:Name="ResetButton" Content="Reset to defaults" Command="{Binding ResetCommand}" />
+      <StackPanel x:Name="EditorFooter" Spacing="6" IsVisible="{Binding !HasLoadError}">
+        <TextBlock x:Name="UnreadableText" Classes="hint" Text="{Binding UnreadableNote}" IsVisible="{Binding HasUnreadable}"
+                   TextWrapping="Wrap" />
+        <Button x:Name="ResetButton" Content="Reset to defaults" Command="{Binding ResetCommand}" />
+      </StackPanel>
     </StackPanel>
-    <ScrollViewer x:Name="RowScroller" VerticalScrollBarVisibility="Auto">
+    <!-- One cell, two states (#168). A keymap.json this build cannot read at all leaves nothing to edit — every
+         default is in force and KeymapStore.Update would refuse every save — so the rows go and the reason, the
+         file and the one way out take their place. Words, not colour, carry which state this is. -->
+    <Panel>
+    <StackPanel x:Name="LoadErrorPanel" Spacing="8" IsVisible="{Binding HasLoadError}" VerticalAlignment="Top">
+      <TextBlock x:Name="LoadErrorText" Text="{Binding LoadErrorNote}" Foreground="#FF8080" TextWrapping="Wrap" />
+      <!-- Selectable so the path can be copied into an editor; the file is the whole point of the message. -->
+      <SelectableTextBlock x:Name="LoadErrorPath" Text="{Binding KeymapFilePath}" TextWrapping="Wrap" IsTabStop="False" />
+      <TextBlock Classes="hint" TextWrapping="Wrap"
+                 Text="Resetting moves the file to keymap.json.bad and starts again from the defaults, so your bindings are still there to read." />
+      <Button x:Name="RestoreButton" Content="Reset keymap to defaults" Command="{Binding RestoreCommand}"
+              HorizontalAlignment="Left" />
+    </StackPanel>
+    <ScrollViewer x:Name="RowScroller" VerticalScrollBarVisibility="Auto" IsVisible="{Binding !HasLoadError}">
       <ItemsControl x:Name="RowList" ItemsSource="{Binding Rows}" Margin="0,0,12,0">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:KeymapRow">
@@ -88,5 +105,6 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </ScrollViewer>
+    </Panel>
   </DockPanel>
 </UserControl>

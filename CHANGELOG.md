@@ -5,6 +5,13 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **A hand-edited `keymap.json` says what went wrong.** A mistyped 3270 key or an unrecognised chord used to lose
+  that binding without a word; **Preferences > Keyboard** now names each entry it skipped and what is wrong with it.
+  A file that is not valid JSON at all costs every binding in it, so LizTerm now says so when it starts, names the
+  line to look at, and keeps your file untouched — with **Reset keymap to defaults** in that tab as the way out,
+  which moves the file aside to `keymap.json.bad` rather than deleting it
+  ([#168](https://github.com/coffeemuse/LizTerm/issues/168)). A `settings.json` LizTerm will not overwrite now
+  names its own problem the same way.
 - **Sessions no longer drop after thirty seconds on Linux desktops whose language writes decimals with a comma**
   (Croatian, German, French and most of Europe). The emulation engine wrote its timings the local way, LizTerm could
   not read them, and a connection that was working in every visible way was reported as timed out and closed, leaving
