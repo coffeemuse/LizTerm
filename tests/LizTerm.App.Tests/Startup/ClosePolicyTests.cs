@@ -53,20 +53,20 @@ public class ClosePolicyTests
     [Fact]
     public void A_user_quit_with_a_connected_session_asks()
     {
-        Assert.True(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, connectedSessions: 1, confirmEnabled: true, confirmed: false));
+        Assert.True(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, isSystemShutdown: false, connectedSessions: 1, confirmEnabled: true, confirmed: false));
     }
 
     [Fact]
     public void A_quit_with_nothing_connected_goes_through()
     {
-        Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, connectedSessions: 0, confirmEnabled: true, confirmed: false));
+        Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, isSystemShutdown: false, connectedSessions: 0, confirmEnabled: true, confirmed: false));
     }
 
     /// <summary>The issue's hard rule: an OS shutdown never waits on this prompt.</summary>
     [Fact]
     public void An_os_shutdown_never_asks()
     {
-        Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.OSShutdown, connectedSessions: 2, confirmEnabled: true, confirmed: false));
+        Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.OSShutdown, isSystemShutdown: false, connectedSessions: 2, confirmEnabled: true, confirmed: false));
     }
 
     /// <summary>A window the user is closing on its own is the window question's business, not Quit's.</summary>
@@ -76,13 +76,30 @@ public class ClosePolicyTests
     [InlineData(WindowCloseReason.Undefined)]
     public void Closing_one_window_is_not_a_quit(WindowCloseReason reason)
     {
-        Assert.False(ClosePolicy.ConfirmsQuit(reason, connectedSessions: 2, confirmEnabled: true, confirmed: false));
+        Assert.False(ClosePolicy.ConfirmsQuit(reason, isSystemShutdown: false, connectedSessions: 2, confirmEnabled: true, confirmed: false));
     }
 
     [Fact]
     public void The_preference_and_a_confirmed_quit_both_let_it_through()
     {
-        Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, connectedSessions: 2, confirmEnabled: false, confirmed: false));
-        Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, connectedSessions: 2, confirmEnabled: true, confirmed: true));
+        Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, isSystemShutdown: false, connectedSessions: 2, confirmEnabled: false, confirmed: false));
+        Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, isSystemShutdown: false, connectedSessions: 2, confirmEnabled: true, confirmed: true));
+    }
+
+    /// <summary>#169. The macOS backend closes a logout's windows with ApplicationShutdown, since it never sets
+    /// the OS-shutdown flag, so the reason alone cannot tell a logout from a Cmd+Q there. Told separately that
+    /// the login session is ending, the quit goes through unasked, as OSShutdown does everywhere else: a system
+    /// shutdown must not wait on a dialog, whichever way LizTerm hears about it.</summary>
+    [Fact]
+    public void A_macos_logout_arriving_as_an_application_shutdown_never_asks()
+    {
+        Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, isSystemShutdown: true, connectedSessions: 3, confirmEnabled: true, confirmed: false));
+    }
+
+    /// <summary>The flag is off for a user's Quit on every platform, so the question survives it.</summary>
+    [Fact]
+    public void A_quit_that_is_not_a_system_shutdown_still_asks()
+    {
+        Assert.True(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, isSystemShutdown: false, connectedSessions: 3, confirmEnabled: true, confirmed: false));
     }
 }

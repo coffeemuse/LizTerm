@@ -65,8 +65,8 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   logout or shutdown, and its `ShutdownRequestedEventArgs.IsOSShutdown` is internal, so the close reason is the
   one public place the two differ. **The macOS backend never sets that flag** (`AvaloniaNativeApplicationPlatform`
   raises `ShutdownRequested` with a plain `ShutdownRequestedEventArgs`, and `applicationShouldTerminate:` answers
-  `NSTerminateCancel` when the pass is refused), so on macOS a logout with connected sessions is asked the Quit
-  question and the logout is cancelled until it is answered; the user guide says so. `App.Quit()` uses
+  `NSTerminateCancel` when the pass is refused), so there the reason alone cannot tell a logout from a Cmd+Q, and
+  the guard is told separately by `Platform/MacQuitReason` (#169; see below). `App.Quit()` uses
   `TryShutdown`, not `Shutdown`: the forced one closes every window past `Closing`, so neither the guard nor a
   running transfer could hold it; a refused shutdown takes `_quitting` back. A `Quit()` from a `Closed` handler
   is posted to the dispatcher: `Closed` is raised before the routed `WindowClosedEvent` that takes the window off
@@ -74,6 +74,23 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   with no window. `AvaloniaClosePrompt` yields one dispatcher turn after its dialog for the same reason. The
   shutdown reasons cannot be produced headlessly, so `ClosePolicyTests` and `QuitGuardTests` take the reason
   directly, and `SessionWindowCloseTests` cover the window's own question with `FakeClosePrompt`.
+- **A macOS logout is not asked about (#169).** `Platform/MacQuitReason` supplies the half of the close reason
+  Avalonia's macOS backend cannot: AppKit calls `applicationShouldTerminate:` from inside its handler for the
+  quit Apple event, and `-[AvnAppDelegate applicationShouldTerminate:]` is one call to the managed `TryShutdown`,
+  so the whole window pass — and every `QuitGuard.Holds` in it — runs inside that handler, where
+  `NSAppleEventManager.currentAppleEvent` is still the quit event and its `kAEQuitReason` attribute says why
+  loginwindow sent it. A user's Cmd+Q, the Quit menu item and every managed `TryShutdown` carry no Apple event at
+  all, which is how the two are told apart. `EndsTheSession` is the pure rule (`MacQuitReasonTests` pins it): the
+  logout, restart and shutdown reasons count, `kAEQuitAll` does not, because quitting every application leaves
+  the user logged in. Nothing is installed or replaced — it is a read, taken afresh each pass, with no cached
+  selectors, because a static `IntPtr` initialised eagerly would P/Invoke libobjc on Linux. Every failure answers
+  false, which is 0.7.0's behaviour: ask, and let macOS report the logout as interrupted. A running IND$FILE
+  transfer still refuses a logout and still draws that alert; that refusal protects the transfer and is a
+  different path from this question. To exercise any of it without logging out, send the running app a quit
+  Apple event with a forged reason — an `NSAppleEventDescriptor` for `kCoreEventClass`/`kAEQuitApplication`
+  addressed to its pid by `typeKernelProcessID`, with `descriptorWithEnumCode:` under `kAEQuitReason` — and
+  watch: `rlgo` and `shut` quit with a session connected, no reason and `quia` ask, and an unrecognised code
+  asks and names itself in the trace log (`DOTNET_DebugWriteToStdErr=1` to see it on stderr).
 
 ## Session view model
 

@@ -18,7 +18,12 @@ public class QuitGuardTests
 {
     private const WindowCloseReason Quit = WindowCloseReason.ApplicationShutdown;
 
-    private static (QuitGuard Guard, FakeClosePrompt Prompt, List<string> Quits) Build(bool confirmEnabled = true, params ConnectionState[] states)
+    private static (QuitGuard Guard, FakeClosePrompt Prompt, List<string> Quits) Build(bool confirmEnabled = true, params ConnectionState[] states) =>
+        Build(confirmEnabled, systemShutdown: false, states);
+
+    /// <param name="systemShutdown">What the platform says about this pass: on macOS a logout arrives as an
+    /// ApplicationShutdown like any Quit, and this is the only thing that tells the two apart (#169).</param>
+    private static (QuitGuard Guard, FakeClosePrompt Prompt, List<string> Quits) Build(bool confirmEnabled, bool systemShutdown, ConnectionState[] states)
     {
         var sessions = new SessionList();
         foreach (var (state, i) in states.Select((s, i) => (s, i)))
@@ -26,7 +31,7 @@ public class QuitGuardTests
         var prompt = new FakeClosePrompt();
         var quits = new List<string>();
         QuitGuard guard = null!;
-        guard = new QuitGuard(sessions, () => confirmEnabled, _ => prompt, () =>
+        guard = new QuitGuard(sessions, () => confirmEnabled, () => systemShutdown, _ => prompt, () =>
         {
             // What App.Quit does: TryShutdown, which closes every window with ApplicationShutdown.
             var held = states.Count(_ => guard.Holds(Quit));
@@ -142,7 +147,7 @@ public class QuitGuardTests
         sessions.Add(second);
         sessions.Activated(second);
         var owners = new List<SessionEntry>();
-        var guard = new QuitGuard(sessions, () => true, entry => { owners.Add(entry); return new FakeClosePrompt(); }, () => { });
+        var guard = new QuitGuard(sessions, () => true, () => false, entry => { owners.Add(entry); return new FakeClosePrompt(); }, () => { });
 
         guard.Holds(Quit);
 
@@ -160,7 +165,7 @@ public class QuitGuardTests
         sessions.Add(entry);
         var prompt = new FakeClosePrompt { Exception = new InvalidOperationException("no dialog") };
         var quits = 0;
-        var guard = new QuitGuard(sessions, () => true, _ => prompt, () => quits++);
+        var guard = new QuitGuard(sessions, () => true, () => false, _ => prompt, () => quits++);
 
         Assert.True(guard.Holds(Quit));
 
@@ -191,5 +196,21 @@ public class QuitGuardTests
         Assert.Equal(0, repeated);
         Assert.True(guard.Holds(Quit));
         Assert.Single(prompt.Calls);
+    }
+
+    /// <summary>#169. A macOS logout closes the windows with ApplicationShutdown, exactly as a Cmd+Q does, so
+    /// without this the guard would put its question up and macOS would report the logout as interrupted. Told
+    /// that the login session is ending, it holds nothing and asks nothing: the sessions go, as they do on a
+    /// Windows or Linux logout, where Avalonia gives the windows OSShutdown instead.</summary>
+    [Fact]
+    public void A_system_shutdown_closes_every_window_unasked()
+    {
+        var (guard, prompt, _) = Build(confirmEnabled: true, systemShutdown: true,
+            [ConnectionState.Connected3270, ConnectionState.ConnectedNvt]);
+
+        Assert.False(guard.Holds(Quit));
+        Assert.False(guard.Holds(Quit));
+        Assert.Empty(prompt.Calls);
+        Assert.False(guard.IsAsking);
     }
 }
