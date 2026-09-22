@@ -206,7 +206,7 @@ Entries marked *log only* change nothing in the code.
   intact, comfortably under its body ceiling) is checked before any upload request: `TextUploadCheck.RunForUnixFile`
   counts the lines' Latin-1 bytes plus one per line, and `HostFileTransfer.BinaryUploadProblem` the file's length;
   a file over the cap is refused with its size and the limit, and nothing is sent. A full file system is the
-  host's answer and can leave a partial file; the App's failure wording says so. Raise the constant when the host
+  host's answer and can leave a partial file, which the next listing shows. Raise the constant when the host
   grows.
 
 ### `uss-list-no-continuation`
