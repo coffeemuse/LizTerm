@@ -30,7 +30,9 @@ public sealed partial class MvsmfViewerViewModel : ObservableObject
         var options = new DownloadOptions(HostTransferMode.Text, trimTrailingBlanks);
         LineCount = Math.Min(_totalLines, MaxLines);
         Text = string.Join("\n", lines.Take(MaxLines).Select(options.Format));
-        LineNumbers = string.Join("\n", Enumerable.Range(1, LineCount).Select(Count));
+        // Plain digits, explicitly invariant: a gutter is not a count, so it carries no thousands separator,
+        // and a comma-decimal locale must not reach it (#170's lesson).
+        LineNumbers = string.Join("\n", Enumerable.Range(1, LineCount).Select(n => n.ToString(CultureInfo.InvariantCulture)));
     }
 
     /// <summary>The host path as display text, never a HostPath: a USS file uses this window unchanged (spec §12).</summary>
@@ -57,5 +59,6 @@ public sealed partial class MvsmfViewerViewModel : ObservableObject
 
     [ObservableProperty] private bool _showLineNumbers = true;
 
+    /// <summary>A count for the footer, grouped: 10,000. The gutter does not use it.</summary>
     private static string Count(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
 }

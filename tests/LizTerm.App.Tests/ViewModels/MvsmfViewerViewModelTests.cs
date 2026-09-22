@@ -62,6 +62,15 @@ public sealed class MvsmfViewerViewModelTests
     }
 
     [Fact]
+    public void The_gutter_numbers_carry_no_thousands_separator()
+    {
+        var viewer = Viewer(Enumerable.Range(1, 1001).Select(n => $"LINE {n}").ToArray());
+
+        Assert.Contains("\n1000\n", viewer.LineNumbers);
+        Assert.DoesNotContain(",", viewer.LineNumbers);
+    }
+
+    [Fact]
     public void Past_the_cap_the_first_lines_are_shown_and_the_footer_says_so()
     {
         var lines = Enumerable.Range(1, MvsmfViewerViewModel.MaxLines + 1).Select(n => $"LINE {n}").ToArray();

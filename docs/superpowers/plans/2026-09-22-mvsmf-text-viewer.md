@@ -218,6 +218,15 @@ public sealed class MvsmfViewerViewModelTests
     }
 
     [Fact]
+    public void The_gutter_numbers_carry_no_thousands_separator()
+    {
+        var viewer = Viewer(Enumerable.Range(1, 1001).Select(n => $"LINE {n}").ToArray());
+
+        Assert.Contains("\n1000\n", viewer.LineNumbers);
+        Assert.DoesNotContain(",", viewer.LineNumbers);
+    }
+
+    [Fact]
     public void Past_the_cap_the_first_lines_are_shown_and_the_footer_says_so()
     {
         var lines = Enumerable.Range(1, MvsmfViewerViewModel.MaxLines + 1).Select(n => $"LINE {n}").ToArray();
@@ -276,7 +285,9 @@ public sealed partial class MvsmfViewerViewModel : ObservableObject
         var options = new DownloadOptions(HostTransferMode.Text, trimTrailingBlanks);
         LineCount = Math.Min(_totalLines, MaxLines);
         Text = string.Join("\n", lines.Take(MaxLines).Select(options.Format));
-        LineNumbers = string.Join("\n", Enumerable.Range(1, LineCount).Select(Count));
+        // Plain digits, explicitly invariant: a gutter is not a count, so it carries no thousands separator,
+        // and a comma-decimal locale must not reach it (#170's lesson).
+        LineNumbers = string.Join("\n", Enumerable.Range(1, LineCount).Select(n => n.ToString(CultureInfo.InvariantCulture)));
     }
 
     /// <summary>The host path as display text, never a HostPath: a USS file uses this window unchanged (spec §12).</summary>
@@ -303,6 +314,7 @@ public sealed partial class MvsmfViewerViewModel : ObservableObject
 
     [ObservableProperty] private bool _showLineNumbers = true;
 
+    /// <summary>A count for the footer, grouped: 10,000. The gutter does not use it.</summary>
     private static string Count(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
 }
 ```
@@ -310,7 +322,7 @@ public sealed partial class MvsmfViewerViewModel : ObservableObject
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `dotnet test tests/LizTerm.App.Tests --filter "FullyQualifiedName~MvsmfViewerViewModelTests"`
-Expected: PASS, seven tests.
+Expected: PASS, eight tests.
 
 - [ ] **Step 5: Commit**
 
