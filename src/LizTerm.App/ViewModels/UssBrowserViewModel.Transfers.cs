@@ -77,10 +77,21 @@ public sealed partial class UssBrowserViewModel
         foreach (var row in files) row.Status = "";
 
         var plan = new List<DownloadItem>();
+        var fullFolder = System.IO.Path.GetFullPath(folder) + System.IO.Path.DirectorySeparatorChar;
         bool? replaceAll = null;
         foreach (var row in files)
         {
             var file = System.IO.Path.Combine(folder, row.Name);
+            // A UNIX name may hold a character the local file system refuses (a Windows-reserved one) or, combined
+            // with the folder, resolve outside it (a rooted name, or one built from '..' segments); the rules
+            // HostPath enforces do not rule either out, so both are caught here, before anything is written.
+            var hasInvalidChars = row.Name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0;
+            var escapesFolder = !System.IO.Path.GetFullPath(file).StartsWith(fullFolder, StringComparison.Ordinal);
+            if (hasInvalidChars || escapesFolder)
+            {
+                row.Status = "– Skipped: the name cannot be a local file name.";
+                continue;
+            }
             if (File.Exists(file))
             {
                 var replace = replaceAll;
@@ -332,6 +343,18 @@ public sealed partial class UssBrowserViewModel
         {
             summary += " ✗ Not sent: " + string.Join("; ", refused.Take(NamesInQuestion));
             if (refused.Count > NamesInQuestion) summary += $" and {refused.Count - NamesInQuestion} more";
+        }
+        // A file new to the directory whose write failed gets no row from the listing above (the host never had
+        // it), so ApplyResults finds nothing to show it on: named here instead, or the reason is lost entirely.
+        const string failedMark = "✗ Failed: ";
+        var failedWithNoRow = results
+            .Where(result => result.Value.StartsWith(failedMark, StringComparison.Ordinal) && Files.All(row => row.Name != result.Key))
+            .Select(result => $"{result.Key}: {result.Value[failedMark.Length..]}")
+            .ToList();
+        if (failedWithNoRow.Count > 0)
+        {
+            summary += " ✗ Failed: " + string.Join("; ", failedWithNoRow.Take(NamesInQuestion));
+            if (failedWithNoRow.Count > NamesInQuestion) summary += $" and {failedWithNoRow.Count - NamesInQuestion} more";
         }
         _ops.StatusText = summary;
     }

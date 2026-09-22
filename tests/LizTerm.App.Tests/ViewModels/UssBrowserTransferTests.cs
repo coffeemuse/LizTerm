@@ -90,6 +90,31 @@ public class UssBrowserTransferTests : IDisposable
     }
 
     [Fact]
+    public async Task A_name_the_local_file_system_refuses_is_skipped_and_nothing_is_written()
+    {
+        // On Windows Path.GetInvalidFileNameChars() includes many characters HostPath's own rules allow (\, :, *,
+        // ? …), which is exactly the gap this guards; on this platform it is only '/' and NUL, both of which
+        // HostPath already refuses, so there is nothing left to build a portable name from.
+        var candidates = Path.GetInvalidFileNameChars().Where(c => c is not '/' and not '\0').ToArray();
+        Assert.SkipWhen(candidates.Length == 0,
+            "this platform's invalid file name characters are only '/' and NUL, both already refused by HostPath's own rules, so the local-name check cannot be exercised here");
+        var badName = $"bad{candidates[0]}name";
+
+        var t = await NotesAsync();
+        t.Host.AddFile($"/u/ibmuser/notes/{badName}", "x");
+        await t.ListAsync("/u/ibmuser/notes");
+        t.Select("README.txt", badName);
+        t.Picker.FolderResult = _dir;
+
+        await t.Vm.DownloadCommand.ExecuteAsync(null);
+
+        Assert.Equal("– Skipped: the name cannot be a local file name.", t.Vm.Files.Single(f => f.Name == badName).Status);
+        Assert.Equal("✓ Done · 12 bytes", t.Vm.Files.Single(f => f.Name == "README.txt").Status);
+        Assert.Equal(["README.txt"], Directory.GetFiles(_dir).Select(Path.GetFileName));
+        Assert.Equal($"⚠ Downloaded 1 of 2 files to {_dir}.", t.Ops.StatusText);
+    }
+
+    [Fact]
     public async Task Download_is_off_without_a_regular_file_selected_and_a_cancelled_picker_does_nothing()
     {
         var t = await NotesAsync();
@@ -118,6 +143,19 @@ public class UssBrowserTransferTests : IDisposable
         Assert.Equal("✓ Uploaded and verified", t.Vm.Files.Single(f => f.Name == "new.txt").Status);
         Assert.Equal("⚠ Uploaded 1 of 2 files to /u/ibmuser/notes. ✗ Not sent: bad.bin: The file is not UTF-8 text. Choose Binary to send its bytes unchanged.", t.Ops.StatusText);
         Assert.NotNull(t.Access.Etags.TryGet(HostPath.ForUnix("/u/ibmuser/notes/new.txt")));
+    }
+
+    [Fact]
+    public async Task A_failed_upload_of_a_new_file_names_the_reason_on_the_status_line()
+    {
+        var t = await NotesAsync();
+        t.Host.Failures["writetext:/u/ibmuser/notes/new.txt"] = new HostFileException(HostFileErrorKind.NotAuthorized, "x");
+        t.Picker.Results = [Local("new.txt", "a\n")];
+
+        await t.Vm.UploadCommand.ExecuteAsync(null);
+
+        Assert.DoesNotContain(t.Vm.Files, f => f.Name == "new.txt");
+        Assert.Equal("⚠ Uploaded 0 of 1 file to /u/ibmuser/notes. ✗ Failed: new.txt: Not authorized.", t.Ops.StatusText);
     }
 
     [Fact]
