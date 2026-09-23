@@ -63,10 +63,13 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   (`IsAsking`) refuses without asking; the open question decides. The reason is how a user's Quit is told from an
   OS shutdown where Avalonia tells them apart: it closes windows with `OSShutdown` when the platform reports a
   logout or shutdown, and its `ShutdownRequestedEventArgs.IsOSShutdown` is internal, so the close reason is the
-  one public place the two differ. **The macOS backend never sets that flag** (`AvaloniaNativeApplicationPlatform`
-  raises `ShutdownRequested` with a plain `ShutdownRequestedEventArgs`, and `applicationShouldTerminate:` answers
-  `NSTerminateCancel` when the pass is refused), so there the reason alone cannot tell a logout from a Cmd+Q, and
-  the guard is told separately by `Platform/MacQuitReason` (#169; see below). `App.Quit()` uses
+  one public place the two differ. **The macOS backend sets that flag only from Avalonia 12.1.3** (#188):
+  `-[AvnAppDelegate applicationShouldTerminate:]` reads the quit Apple event's `kAEQuitReason` and passes it to
+  `TryShutdown`. Before that it raised a plain `ShutdownRequestedEventArgs`, so the reason alone could not tell a
+  logout from a Cmd+Q, and the guard is still told separately by `Platform/MacQuitReason` (#169; see below). It
+  answers `NSTerminateCancel` when the pass is refused, and also when a user's Quit goes through: the managed main
+  loop exits and `Main` returns, where it used to be AppKit's `exit()`; only an OS shutdown still gets
+  `NSTerminateNow`. `App.Quit()` uses
   `TryShutdown`, not `Shutdown`: the forced one closes every window past `Closing`, so neither the guard nor a
   running transfer could hold it; a refused shutdown takes `_quitting` back. A `Quit()` from a `Closed` handler
   is posted to the dispatcher: `Closed` is raised before the routed `WindowClosedEvent` that takes the window off
@@ -74,8 +77,9 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   with no window. `AvaloniaClosePrompt` yields one dispatcher turn after its dialog for the same reason. The
   shutdown reasons cannot be produced headlessly, so `ClosePolicyTests` and `QuitGuardTests` take the reason
   directly, and `SessionWindowCloseTests` cover the window's own question with `FakeClosePrompt`.
-- **A macOS logout is not asked about (#169).** `Platform/MacQuitReason` supplies the half of the close reason
-  Avalonia's macOS backend cannot: AppKit calls `applicationShouldTerminate:` from inside its handler for the
+- **A macOS logout is not asked about (#169).** `Platform/MacQuitReason` supplied the half of the close reason
+  Avalonia's macOS backend could not before 12.1.3, and now makes the same reading a second time (#188); retiring
+  it waits on a real logout checked on 12.1.3. AppKit calls `applicationShouldTerminate:` from inside its handler for the
   quit Apple event, and `-[AvnAppDelegate applicationShouldTerminate:]` is one call to the managed `TryShutdown`,
   so the whole window pass — and every `QuitGuard.Holds` in it — runs inside that handler, where
   `NSAppleEventManager.currentAppleEvent` is still the quit event and its `kAEQuitReason` **parameter** says why
@@ -86,7 +90,7 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   logout, restart and shutdown reasons count, `kAEQuitAll` does not, because quitting every application leaves
   the user logged in. Nothing is installed or replaced — it is a read, taken afresh each pass, with no cached
   selectors, because a static `IntPtr` initialised eagerly would P/Invoke libobjc on Linux. Every failure answers
-  false, which is 0.7.0's behaviour: ask, and let macOS report the logout as interrupted. A running IND$FILE
+  false, which leaves the decision to the close reason Avalonia supplies. A running IND$FILE
   transfer still refuses a logout and still draws that alert; that refusal protects the transfer and is a
   different path from this question, and the user guide names it as the one exception. A question already on the
   screen does not refuse: `SessionWindow.OnClosing` asks `QuitGuard.IsSystemShutdown` ahead of its own

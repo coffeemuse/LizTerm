@@ -9,11 +9,13 @@ namespace LizTerm.App.Platform;
 
 /// <summary>Tells a macOS logout from a user's Quit, so a logout is not held up by the question #151 added
 /// (#169). Avalonia closes windows with WindowCloseReason.OSShutdown where the platform reports a logout or a
-/// shutdown, and Startup/ClosePolicy never asks then; the macOS backend never reports one
-/// (AvaloniaNativeApplicationPlatform raises ShutdownRequested with a plain ShutdownRequestedEventArgs), so there
+/// shutdown, and Startup/ClosePolicy never asks then; before Avalonia 12.1.3 the macOS backend never reported one
+/// (AvaloniaNativeApplicationPlatform raised ShutdownRequested with a plain ShutdownRequestedEventArgs), so there
 /// a logout arrived as an ordinary Quit, was asked, and AppKit — reading the NSTerminateCancel that the unanswered
 /// question produces as the app refusing to go — put up "LizTerm interrupted logout" beside LizTerm's own
-/// question. This is the missing half of the reason, read where Avalonia cannot supply it.
+/// question. This was the missing half of the reason. Since 12.1.3 (#188) -[AvnAppDelegate
+/// applicationShouldTerminate:] reads the same kAEQuitReason, for the same six reasons, and passes it on as
+/// IsOSShutdown, so a logout closes the windows with OSShutdown and this read is a second opinion that agrees.
 ///
 /// AppKit calls applicationShouldTerminate: from inside its handler for the quit Apple event, and
 /// -[AvnAppDelegate applicationShouldTerminate:] is one call to the managed TryShutdown, which raises
@@ -25,8 +27,8 @@ namespace LizTerm.App.Platform;
 /// Nothing here is installed or replaced: it is a read, taken afresh each time, so there is no state to go stale
 /// and no method in front of AppKit's. Selectors are registered per call rather than cached, because a quit
 /// happens once and a static IntPtr initialised eagerly would P/Invoke libobjc on Linux. Every failure — a
-/// runtime that cannot be read, a class that is not there, an exception — answers false, which is the behaviour
-/// that shipped in 0.7.0: ask, and let macOS say the logout was interrupted.</summary>
+/// runtime that cannot be read, a class that is not there, an exception — answers false, which leaves the
+/// decision to the close reason Avalonia supplies.</summary>
 internal static class MacQuitReason
 {
     /// <summary>kCoreEventClass, 'aevt'.</summary>
