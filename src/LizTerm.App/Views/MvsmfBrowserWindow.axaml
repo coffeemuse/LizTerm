@@ -21,6 +21,9 @@
     <Style Selector="TextBlock.cell">
       <Setter Property="FontFamily" Value="Menlo, Consolas, monospace" />
     </Style>
+    <Style Selector="TextBlock.masked">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
     <Style Selector="Button.link">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
@@ -299,14 +302,17 @@
                   </WrapPanel>
                 </controls:BrowserPane.Toolbar>
                 <controls:BrowserPane.Body>
-                  <DockPanel>
-                    <!-- Both panes' MODIFIED columns hold FormatModified's 16 characters in the cell font, about 135
-                         wide in Menlo or DejaVu Sans Mono (#186), and SIZE holds ten ("10,485,760"). A header and its
-                         row template change together, and a header's 12 is the ListBoxItem's padding, so its columns
-                         sit over the rows'. -->
-                    <Grid x:Name="DirectoriesHeader" DockPanel.Dock="Top" ColumnDefinitions="*,140" Margin="12,4">
+                  <!-- Both panes' fixed columns are Auto and shared between the header and the realized rows, so they
+                       fit the widest value in whatever font the cell style resolves to (#186). A header's 12 is the
+                       ListBoxItem's padding, so its columns sit over the rows'. -->
+                  <DockPanel Grid.IsSharedSizeScope="True">
+                    <Grid x:Name="DirectoriesHeader" DockPanel.Dock="Top" Margin="12,4">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="DirectoryModified" />
+                      </Grid.ColumnDefinitions>
                       <TextBlock Classes="header" Text="NAME" />
-                      <TextBlock Classes="header" Grid.Column="1" Text="MODIFIED" />
+                      <TextBlock Classes="header" Grid.Column="1" Text="MODIFIED" Margin="12,0,0,0" />
                     </Grid>
                     <ListBox x:Name="DirectoryList" ItemsSource="{Binding Directories}" SelectedItem="{Binding SelectedDirectory}"
                              SelectionMode="Single" IsEnabled="{Binding !IsBusy}">
@@ -321,9 +327,13 @@
                       </ListBox.ContextMenu>
                       <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:DirectoryRow">
-                          <Grid ColumnDefinitions="*,140" Opacity="{Binding IsUsable, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                          <Grid Opacity="{Binding IsUsable, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" SharedSizeGroup="DirectoryModified" />
+                            </Grid.ColumnDefinitions>
                             <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Modified}" />
+                            <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Modified}" Margin="12,0,0,0" />
                           </Grid>
                         </DataTemplate>
                       </ListBox.ItemTemplate>
@@ -362,10 +372,15 @@
                   </DockPanel>
                 </controls:BrowserPane.Toolbar>
                 <controls:BrowserPane.Body>
-                  <DockPanel>
-                    <Grid x:Name="FilesHeader" DockPanel.Dock="Top" ColumnDefinitions="*,90,152" Margin="12,4">
+                  <DockPanel Grid.IsSharedSizeScope="True">
+                    <Grid x:Name="FilesHeader" DockPanel.Dock="Top" Margin="12,4">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="FileSize" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="FileModified" />
+                      </Grid.ColumnDefinitions>
                       <TextBlock Classes="header" Text="NAME" />
-                      <TextBlock Classes="header" Grid.Column="1" Text="SIZE" HorizontalAlignment="Right" />
+                      <TextBlock Classes="header" Grid.Column="1" Text="SIZE" HorizontalAlignment="Right" Margin="12,0,0,0" />
                       <TextBlock Classes="header" Grid.Column="2" Text="MODIFIED" Margin="12,0,0,0" />
                     </Grid>
                     <ListBox x:Name="FileList" ItemsSource="{Binding Files}" SelectionMode="Multiple" IsEnabled="{Binding !IsBusy}">
@@ -381,14 +396,23 @@
                         <DataTemplate x:DataType="vm:FileRow">
                           <!-- A row with a result shows it where its size and time were: the result is what the
                                user is waiting for, and the columns come back with the next listing. -->
-                          <Grid ColumnDefinitions="*,90,152" Opacity="{Binding IsFile, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                          <Grid Opacity="{Binding IsFile, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" SharedSizeGroup="FileSize" />
+                              <ColumnDefinition Width="Auto" SharedSizeGroup="FileModified" />
+                            </Grid.ColumnDefinitions>
                             <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Size}" HorizontalAlignment="Right"
-                                       IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
+                            <!-- Under a result the size and time are masked, not hidden, so they still size the shared
+                                 columns; the result asks for no width of its own, so a long one cannot widen them. -->
+                            <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Size}" HorizontalAlignment="Right" Margin="12,0,0,0"
+                                       Classes.masked="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                             <TextBlock Classes="cell" Grid.Column="2" Text="{Binding Modified}" Margin="12,0,0,0"
-                                       IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
-                            <TextBlock Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Status}" TextTrimming="CharacterEllipsis"
-                                       IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                       Classes.masked="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            <controls:WidthlessDecorator Grid.Column="1" Grid.ColumnSpan="2"
+                                                         IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                              <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
+                            </controls:WidthlessDecorator>
                           </Grid>
                         </DataTemplate>
                       </ListBox.ItemTemplate>

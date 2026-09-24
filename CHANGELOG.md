@@ -5,8 +5,8 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
-- **mvsMF Access's USS tab shows the whole modified time**, where the minutes were cut off, and the column headings
-  on both tabs sit over their columns ([#186](https://github.com/coffeemuse/LizTerm/issues/186)).
+- **mvsMF Access's USS tab shows the whole modified time and size**, and the column headings on both tabs sit over
+  their columns ([#186](https://github.com/coffeemuse/LizTerm/issues/186)).
 
 ## 0.7.1
 

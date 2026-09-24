@@ -33,7 +33,7 @@ public class MvsmfBrowserWindowTests
         return (window, t);
     }
 
-    private static T Named<T>(Window window, string name) where T : Control => window.FindControl<T>(name)!;
+    internal static T Named<T>(Window window, string name) where T : Control => window.FindControl<T>(name)!;
 
     private static async Task<(MvsmfBrowserWindow Window, BrowserTestHost T)> ViewableAsync()
     {
@@ -1061,18 +1061,26 @@ public class MvsmfBrowserWindowTests
     }
 
     /// <summary>A list's column headings sit over its columns: the header grid spans exactly what the first row's
-    /// grid spans, so the fixed columns, laid out from the right, start at the same x in both (#186). The rows sit
-    /// inside the ListBoxItem's padding, which the header has to match.</summary>
+    /// grid spans, and each of its columns is as wide as the row's (#186). The rows sit inside the ListBoxItem's
+    /// padding, which the header has to match.</summary>
     internal static void AssertHeaderSpansRows(Window window, string header, string list)
     {
+        // A shared-size group that grows invalidates the grids already measured, so the layout takes a second pass.
         window.UpdateLayout();
-        var heading = window.FindControl<Grid>(header)!;
-        var row = window.FindControl<ListBox>(list)!.ContainerFromIndex(0)!.GetVisualDescendants().OfType<Grid>().First();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        var heading = Named<Grid>(window, header);
+        var row = Named<ListBox>(window, list).ContainerFromIndex(0)!.GetVisualDescendants().OfType<Grid>().First();
         var headingLeft = heading.TranslatePoint(new Point(0, 0), window)!.Value.X;
         var rowLeft = row.TranslatePoint(new Point(0, 0), window)!.Value.X;
         Assert.True(Math.Abs(headingLeft - rowLeft) < 0.5 && Math.Abs(heading.Bounds.Width - row.Bounds.Width) < 0.5,
             $"{header} spans {headingLeft}..{headingLeft + heading.Bounds.Width}, " +
             $"{list}'s first row {rowLeft}..{rowLeft + row.Bounds.Width}");
+        Assert.Equal(heading.ColumnDefinitions.Count, row.ColumnDefinitions.Count);
+        for (var i = 0; i < heading.ColumnDefinitions.Count; i++)
+            Assert.True(Math.Abs(heading.ColumnDefinitions[i].ActualWidth - row.ColumnDefinitions[i].ActualWidth) < 0.5,
+                $"{header}'s column {i} is {heading.ColumnDefinitions[i].ActualWidth} wide, " +
+                $"{list}'s first row's {row.ColumnDefinitions[i].ActualWidth}");
     }
 
     [AvaloniaFact]

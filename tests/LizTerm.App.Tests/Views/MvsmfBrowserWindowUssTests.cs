@@ -325,6 +325,25 @@ public class MvsmfBrowserWindowUssTests
         MvsmfBrowserWindowTests.AssertHeaderSpansRows(window, "FilesHeader", "FileList");
     }
 
+    /// <summary>A row's status spans the SIZE and MODIFIED columns but must not resize them: they are shared with the
+    /// header and every other row, so a long result would push NAME out of the whole list, and a batch that gives
+    /// every row a result must not shrink them to the headings.</summary>
+    [AvaloniaFact]
+    public async Task A_file_status_does_not_resize_the_shared_columns()
+    {
+        var (window, t) = await UssAsync();
+        await ListAsync(t, "/u/ibmuser/notes");
+        MvsmfBrowserWindowTests.AssertHeaderSpansRows(window, "FilesHeader", "FileList");
+        var header = Named<Grid>(window, "FilesHeader");
+        var before = header.ColumnDefinitions.Select(c => c.ActualWidth).ToArray();
+
+        foreach (var file in t.Vm.Uss.Files)
+            file.Status = "✗ " + new string('x', 200);
+        MvsmfBrowserWindowTests.AssertHeaderSpansRows(window, "FilesHeader", "FileList");
+
+        Assert.Equal(before, header.ColumnDefinitions.Select(c => c.ActualWidth).ToArray());
+    }
+
     [AvaloniaFact]
     public async Task Enter_in_the_path_box_lists_and_the_lists_fill()
     {
