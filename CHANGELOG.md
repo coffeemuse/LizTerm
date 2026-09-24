@@ -3,6 +3,11 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
+## Unreleased
+
+- **A host's soft hyphen (X'CA') shows as a hyphen** and no longer pulls the rest of the line one column left
+  ([#191](https://github.com/coffeemuse/LizTerm/issues/191)).
+
 ## 0.7.1
 
 - **mvsMF Access has a USS tab** for the host's UNIX file system: browse a directory at a time, create and delete

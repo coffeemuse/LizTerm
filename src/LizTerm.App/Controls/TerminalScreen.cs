@@ -548,7 +548,7 @@ public sealed class TerminalScreen : Control
         var text = snapshot.GetText(row, start, length);
         FormattedText? formatted = null;
         if (!string.IsNullOrWhiteSpace(text))
-            formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, CellColors.Foreground(style, monochrome));
+            formatted = new FormattedText(CellGlyphs.ForDrawing(text), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, CellColors.Foreground(style, monochrome));
 
         var underline = style.Rendition.HasFlag(CellRendition.Underline) ? new Pen(CellColors.Underline(style, monochrome)) : null;
         return new RunVisual(rect, background, formatted, underline, style.Rendition.HasFlag(CellRendition.Blink));
@@ -599,7 +599,7 @@ public sealed class TerminalScreen : Control
         var ch = cell.Character.ToString();
         if (!string.IsNullOrWhiteSpace(ch))
         {
-            var formatted = new FormattedText(ch, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, CellColors.CursorGlyph(cell, monochrome));
+            var formatted = new FormattedText(CellGlyphs.ForDrawing(ch), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, g.FontSize, CellColors.CursorGlyph(cell, monochrome));
             context.DrawText(formatted, rect.TopLeft);
         }
     }
