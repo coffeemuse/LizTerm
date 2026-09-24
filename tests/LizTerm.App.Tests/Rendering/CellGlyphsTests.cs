@@ -36,7 +36,7 @@ public class CellGlyphsTests
     }
 
     [Fact]
-    public void The_result_has_one_character_per_cell()
+    public void The_result_is_as_long_as_the_input()
     {
         var text = "A\u00ADB\u00AD";
         Assert.Equal(text.Length, CellGlyphs.ForDrawing(text).Length);

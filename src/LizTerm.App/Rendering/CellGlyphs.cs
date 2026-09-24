@@ -8,13 +8,13 @@ namespace LizTerm.App.Rendering;
 /// itself. Drawing only: the snapshot, Copy and Find keep the real character.</summary>
 public static class CellGlyphs
 {
-    private const char SoftHyphen = '­';
+    private const char SoftHyphen = '\u00AD';
 
     /// <summary><paramref name="text"/> with every U+00AD SOFT HYPHEN drawn as U+002D HYPHEN-MINUS (#191). A host's
     /// X'CA' arrives as U+00AD in every Latin code page b3270 ships, and HarfBuzz shapes that default-ignorable
     /// character with no advance even though the 3270 font has a full-width glyph for it, so a run of cells drawn as
     /// one FormattedText came out a cell short and everything after it sat one column left. The font's two glyphs
-    /// are nearly identical. The result has one character per cell, exactly as the input had.</summary>
-    public static string ForDrawing(string text) =>
-        text.Contains(SoftHyphen) ? text.Replace(SoftHyphen, '-') : text;
+    /// are nearly identical. The result has exactly as many UTF-16 units as the input, which is not one per cell
+    /// when a cell holds a character outside the BMP.</summary>
+    public static string ForDrawing(string text) => text.Replace(SoftHyphen, '-');
 }
