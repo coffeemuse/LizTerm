@@ -276,10 +276,20 @@ public partial class App : Application
             catch { /* the window is gone; nothing more to do with a failed disposal */ }
             if (ShutdownPolicy.UserClosedLastWindow(_quitting, shutdownClose, _sessions.Count)) ShowPicker();
         };
-        _picker?.Close();
-        window.Show();
+        ShowInPlaceOf(window, _picker);
         _ = viewModel.ConnectCommand.ExecuteAsync(null);
         return window;
+    }
+
+    /// <summary>Shows the new window, then closes the one it replaces, in that order (#190). Under WSLg a closing
+    /// window hands focus to the next Linux window in the stacking order (microsoft/wslg#194), so a picker closed
+    /// first gave it to an older session window, which could cover the new one for a second or two. The order also
+    /// means a window that cannot be shown leaves the picker open, rather than the process running with no window.
+    /// Internal so a test drives it without the engine session OpenSession builds.</summary>
+    internal static void ShowInPlaceOf(Window window, Window? replaced)
+    {
+        window.Show();
+        replaced?.Close();
     }
 
     /// <summary>The session's profile is fixed at construction, so the pin (and the verification it implies) is

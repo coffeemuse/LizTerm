@@ -7,6 +7,8 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 - **mvsMF Access's USS tab shows the whole modified time and size**, and the column headings on both tabs sit over
   their columns ([#186](https://github.com/coffeemuse/LizTerm/issues/186)).
+- **Under WSL2, a session opened from the picker no longer vanishes for a second or two** before it settles in front
+  ([#190](https://github.com/coffeemuse/LizTerm/issues/190), reported by [@mgrossmann](https://github.com/mgrossmann)).
 
 ## 0.7.1
 
