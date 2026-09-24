@@ -12,9 +12,10 @@ namespace LizTerm.App.Startup;
 /// tries to close. Avalonia's TryShutdown makes one pass over the owner-less windows, closing each with
 /// ApplicationShutdown and giving up if any refuses; every window's Closing asks <see cref="Holds"/>, so the
 /// whole pass is held while the question is up and Keep Connected leaves every window where it was. A forced
-/// Shutdown, and a system logout, restart or shutdown, are never held: the platform reports most of them as
-/// OSShutdown, and the macOS backend reports none, which is what <paramref name="isSystemShutdown"/> is for (see
-/// <see cref="ClosePolicy.ConfirmsQuit"/>). On Disconnect the quit is repeated with the guard lowered for that
+/// Shutdown, and a system logout, restart or shutdown, are never held: the platform reports them as OSShutdown,
+/// the macOS backend only since Avalonia 12.1.3 (#188), and <paramref name="isSystemShutdown"/> is the second
+/// reading LizTerm made while it reported none (see <see cref="ClosePolicy.ConfirmsQuit"/>). On Disconnect the
+/// quit is repeated with the guard lowered for that
 /// one pass. App owns one, over its session list, and attaches it to every session window and to the
 /// picker.</summary>
 /// <param name="sessions">The open sessions, counted for the question and searched for its owner.</param>

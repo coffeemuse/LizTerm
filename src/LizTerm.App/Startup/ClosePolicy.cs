@@ -21,9 +21,10 @@ internal static class ClosePolicy
 
     /// <summary>Whether this close is the system going down, which nothing may hold — not the Quit question,
     /// and not a window's own question already on the screen: cancelling such a close is exactly what makes
-    /// macOS report an interrupted logout (#169). The platform reports one as OSShutdown; the macOS backend
-    /// reports none, so there <paramref name="isSystemShutdown"/> supplies it, read from the quit Apple event by
-    /// Platform/MacQuitReason. A running file transfer's refusal is not a question and is not covered here.</summary>
+    /// macOS report an interrupted logout (#169). The platform reports one as OSShutdown, the macOS backend too
+    /// since Avalonia 12.1.3 (#188); <paramref name="isSystemShutdown"/> is the same answer read from the quit
+    /// Apple event by Platform/MacQuitReason, which supplied it while the macOS backend reported none. A running
+    /// file transfer's refusal is not a question and is not covered here.</summary>
     public static bool IsSystemShutdown(WindowCloseReason reason, bool isSystemShutdown) =>
         reason == WindowCloseReason.OSShutdown
         || (reason == WindowCloseReason.ApplicationShutdown && isSystemShutdown);
@@ -32,12 +33,12 @@ internal static class ClosePolicy
     /// receive: ApplicationShutdown for a user's Quit (Cmd+Q, the Quit menu item, the picker's Quit), OSShutdown
     /// when the platform reports a logout or shutdown, which never asks. Avalonia keeps the OS flag on its
     /// ShutdownRequested event internal, so the close reason is the one public place the two are told apart, and
-    /// only where the backend sets the flag: the macOS backend never does (AvaloniaNativeApplicationPlatform
-    /// raises ShutdownRequested with a plain ShutdownRequestedEventArgs), so there a logout would arrive as
-    /// ApplicationShutdown and be asked like a Quit. <paramref name="isSystemShutdown"/> is the missing half of
-    /// the reason, read from the quit Apple event by Platform/MacQuitReason (#169) and false everywhere else, so
-    /// a macOS logout goes unasked like every other platform's: a system shutdown must not wait on a dialog,
-    /// whichever way LizTerm hears about it. A user closing a single window is never a quit. Nothing connected,
+    /// only where the backend sets the flag. Before Avalonia 12.1.3 the macOS backend never did, so there a logout
+    /// arrived as ApplicationShutdown and would have been asked like a Quit; <paramref name="isSystemShutdown"/>
+    /// was the missing half of the reason, read from the quit Apple event by Platform/MacQuitReason (#169) and
+    /// false everywhere else. Since 12.1.3 (#188) the macOS backend reads that same reason and a logout arrives as
+    /// OSShutdown, and the second reading is kept: a system shutdown must not wait on a dialog, whichever way
+    /// LizTerm hears about it. A user closing a single window is never a quit. Nothing connected,
     /// the preference off, or a quit the user has just confirmed all go through.</summary>
     public static bool ConfirmsQuit(WindowCloseReason reason, bool isSystemShutdown, int connectedSessions, bool confirmEnabled, bool confirmed) =>
         reason == WindowCloseReason.ApplicationShutdown && !isSystemShutdown && !confirmed && confirmEnabled && connectedSessions > 0;

@@ -86,8 +86,9 @@ public class ClosePolicyTests
         Assert.False(ClosePolicy.ConfirmsQuit(WindowCloseReason.ApplicationShutdown, isSystemShutdown: false, connectedSessions: 2, confirmEnabled: true, confirmed: true));
     }
 
-    /// <summary>#169. The macOS backend closes a logout's windows with ApplicationShutdown, since it never sets
-    /// the OS-shutdown flag, so the reason alone cannot tell a logout from a Cmd+Q there. Told separately that
+    /// <summary>#169. Before Avalonia 12.1.3 (#188) the macOS backend closed a logout's windows with
+    /// ApplicationShutdown, since it never set the OS-shutdown flag, so the reason alone could not tell a logout
+    /// from a Cmd+Q there; the second reading LizTerm keeps must still decide on its own. Told separately that
     /// the login session is ending, the quit goes through unasked, as OSShutdown does everywhere else: a system
     /// shutdown must not wait on a dialog, whichever way LizTerm hears about it.</summary>
     [Fact]
