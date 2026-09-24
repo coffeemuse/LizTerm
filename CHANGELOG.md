@@ -3,6 +3,11 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
+## Unreleased
+
+- **mvsMF Access's USS tab shows the whole modified time and size**, and the column headings on both tabs sit over
+  their columns ([#186](https://github.com/coffeemuse/LizTerm/issues/186)).
+
 ## 0.7.1
 
 - **mvsMF Access has a USS tab** for the host's UNIX file system: browse a directory at a time, create and delete
