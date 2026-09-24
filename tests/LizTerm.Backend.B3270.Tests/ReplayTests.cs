@@ -299,4 +299,28 @@ public class ReplayTests
         Assert.Contains("===>", text);
         Assert.DoesNotContain("***", text);
     }
+
+    /// <summary>A host's X'CA' (#191): b3270 hands it over as U+00AD SOFT HYPHEN, and the buffer keeps it in a cell
+    /// of its own, so the columns after it are where the host put them. Drawing it is the App's business
+    /// (CellGlyphs.ForDrawing); this pins that the screen model underneath is right and stays the real character.</summary>
+    [Fact]
+    public async Task A_soft_hyphen_from_the_host_keeps_its_own_cell()
+    {
+        var fake = new FakeB3270Process();
+        var session = new B3270Session(new SessionProfile { Name = "replay", Host = "127.0.0.1" }, () => fake);
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, _) => ended.TrySetResult();
+        await session.StartProcessAsync(TestContext.Current.CancellationToken);
+
+        foreach (var line in File.ReadLines(Fixture("soft-hyphen-clist.jsonl"))) fake.Emit(line);
+        fake.Exit(0);
+        await ended.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        var screen = session.CurrentScreen;
+        Assert.Equal(" AB\u00ADCD FOLLOWS ONE SOFT HYPHEN", screen.GetText(1, 0, 30));
+        Assert.Equal(new System.Text.Rune(0xAD), screen[1, 3].Character);
+        Assert.Equal(new System.Text.Rune('C'), screen[1, 4].Character);
+        Assert.Equal(" \u00AD\u00AD\u00ADXYZ AFTER THREE", screen.GetText(2, 0, 19));
+        Assert.Equal(" READY ", screen.GetText(3, 0, 7));
+    }
 }

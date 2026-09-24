@@ -1,0 +1,19 @@
+{"oia":{"field":"not-undera","value":true}}
+{"oia":{"field":"lock","value":"twait"}}
+{"oia":{"field":"not-undera","value":false}}
+{"erase":{"fg":"blue","bg":"neutralBlack"}}
+{"screen":{"cursor":{"enabled":true,"row":1,"column":1}}}
+{"oia":{"field":"lock"}}
+{"formatted":{"state":true}}
+{"screen":{"rows":[{"row":1,"changes":[{"column":1,"fg":"green","count":80}]},{"row":2,"changes":[{"column":1,"fg":"green","count":80}]},{"row":3,"changes":[{"column":1,"fg":"green","count":80}]},{"row":4,"changes":[{"column":1,"fg":"green","count":80}]},{"row":5,"changes":[{"column":1,"fg":"green","count":80}]},{"row":6,"changes":[{"column":1,"fg":"green","count":80}]},{"row":7,"changes":[{"column":1,"fg":"green","count":80}]},{"row":8,"changes":[{"column":1,"fg":"green","count":80}]},{"row":9,"changes":[{"column":1,"fg":"green","count":80}]},{"row":10,"changes":[{"column":1,"fg":"green","count":80}]},{"row":11,"changes":[{"column":1,"fg":"green","count":80}]},{"row":12,"changes":[{"column":1,"fg":"green","count":80}]},{"row":13,"changes":[{"column":1,"fg":"green","count":80}]},{"row":14,"changes":[{"column":1,"fg":"green","count":80}]},{"row":15,"changes":[{"column":1,"fg":"green","count":80}]},{"row":16,"changes":[{"column":1,"fg":"green","count":80}]},{"row":17,"changes":[{"column":1,"fg":"green","count":80}]},{"row":18,"changes":[{"column":1,"fg":"green","count":80}]},{"row":19,"changes":[{"column":1,"fg":"green","count":80}]},{"row":20,"changes":[{"column":1,"fg":"green","count":80}]},{"row":21,"changes":[{"column":1,"fg":"green","count":80}]},{"row":22,"changes":[{"column":1,"fg":"green","count":80}]},{"row":23,"changes":[{"column":1,"fg":"green","count":80}]},{"row":24,"changes":[{"column":1,"fg":"green","count":80}]}]}}
+{"oia":{"field":"script","value":true}}
+{"oia":{"field":"script","value":false}}
+{"oia":{"field":"not-undera","value":true}}
+{"oia":{"field":"lock","value":"twait"}}
+{"oia":{"field":"not-undera","value":false}}
+{"screen":{"cursor":{"enabled":true,"row":1,"column":29},"rows":[{"row":1,"changes":[{"column":1,"text":"EXEC 'MVSCE02.CNTL(LIZ191C)'"}]}]}}
+{"oia":{"field":"lock","value":"syswait"}}
+{"screen":{"cursor":{"enabled":true,"row":3,"column":1},"rows":[{"row":2,"changes":[{"column":1,"fg":"red","gr":"highlight,selectable","text":" AB­CD FOLLOWS ONE SOFT HYPHEN"}]}]}}
+{"screen":{"cursor":{"enabled":true,"row":4,"column":1},"rows":[{"row":3,"changes":[{"column":1,"fg":"red","gr":"highlight,selectable","text":" ­­­XYZ AFTER THREE"}]}]}}
+{"oia":{"field":"lock"}}
+{"screen":{"cursor":{"enabled":true,"row":5,"column":1},"rows":[{"row":4,"changes":[{"column":1,"fg":"red","gr":"highlight,selectable","text":" READY "}]}]}}

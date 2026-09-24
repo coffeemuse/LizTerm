@@ -7,6 +7,8 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 - **mvsMF Access's USS tab shows the whole modified time and size**, and the column headings on both tabs sit over
   their columns ([#186](https://github.com/coffeemuse/LizTerm/issues/186)).
+- **A host's soft hyphen (X'CA') shows as a hyphen** and no longer pulls the rest of the line one column left
+  ([#191](https://github.com/coffeemuse/LizTerm/issues/191)).
 
 ## 0.7.1
 
