@@ -316,6 +316,16 @@ public class MvsmfBrowserWindowUssTests
     }
 
     [AvaloniaFact]
+    public async Task The_directory_and_file_headings_sit_over_their_columns()
+    {
+        var (window, t) = await UssAsync();
+        await ListAsync(t, "/u/ibmuser/notes");
+
+        MvsmfBrowserWindowTests.AssertHeaderSpansRows(window, "DirectoriesHeader", "DirectoryList");
+        MvsmfBrowserWindowTests.AssertHeaderSpansRows(window, "FilesHeader", "FileList");
+    }
+
+    [AvaloniaFact]
     public async Task Enter_in_the_path_box_lists_and_the_lists_fill()
     {
         var (window, t) = await UssAsync();

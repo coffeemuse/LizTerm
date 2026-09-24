@@ -125,7 +125,7 @@
               </controls:BrowserPane.FooterAction>
               <controls:BrowserPane.Body>
                 <DockPanel>
-                  <Grid DockPanel.Dock="Top" ColumnDefinitions="*,56,56,56" Margin="8,4">
+                  <Grid x:Name="DatasetsHeader" DockPanel.Dock="Top" ColumnDefinitions="*,56,56,56" Margin="12,4">
                     <TextBlock Classes="header" Text="NAME" />
                     <TextBlock Classes="header" Grid.Column="1" Text="DSORG" />
                     <TextBlock Classes="header" Grid.Column="2" Text="RECFM" />
@@ -216,7 +216,7 @@
                              IsVisible="{Binding ShowSequentialNote}" />
 
                   <DockPanel x:Name="MemberPane" IsVisible="{Binding ShowMemberPane}">
-                    <Grid DockPanel.Dock="Top" ColumnDefinitions="110,*" Margin="8,4">
+                    <Grid x:Name="MembersHeader" DockPanel.Dock="Top" ColumnDefinitions="110,*" Margin="12,4">
                       <TextBlock Classes="header" Text="MEMBER" />
                       <TextBlock Classes="header" Grid.Column="1" Text="STATUS" />
                     </Grid>
@@ -300,7 +300,11 @@
                 </controls:BrowserPane.Toolbar>
                 <controls:BrowserPane.Body>
                   <DockPanel>
-                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,120" Margin="8,4">
+                    <!-- Both panes' MODIFIED columns hold FormatModified's 16 characters in the cell font, about 135
+                         wide in Menlo or DejaVu Sans Mono (#186), and SIZE holds ten ("10,485,760"). A header and its
+                         row template change together, and a header's 12 is the ListBoxItem's padding, so its columns
+                         sit over the rows'. -->
+                    <Grid x:Name="DirectoriesHeader" DockPanel.Dock="Top" ColumnDefinitions="*,140" Margin="12,4">
                       <TextBlock Classes="header" Text="NAME" />
                       <TextBlock Classes="header" Grid.Column="1" Text="MODIFIED" />
                     </Grid>
@@ -317,7 +321,7 @@
                       </ListBox.ContextMenu>
                       <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:DirectoryRow">
-                          <Grid ColumnDefinitions="*,120" Opacity="{Binding IsUsable, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                          <Grid ColumnDefinitions="*,140" Opacity="{Binding IsUsable, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
                             <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Modified}" />
                           </Grid>
@@ -359,7 +363,7 @@
                 </controls:BrowserPane.Toolbar>
                 <controls:BrowserPane.Body>
                   <DockPanel>
-                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,80,120" Margin="8,4">
+                    <Grid x:Name="FilesHeader" DockPanel.Dock="Top" ColumnDefinitions="*,90,152" Margin="12,4">
                       <TextBlock Classes="header" Text="NAME" />
                       <TextBlock Classes="header" Grid.Column="1" Text="SIZE" HorizontalAlignment="Right" />
                       <TextBlock Classes="header" Grid.Column="2" Text="MODIFIED" Margin="12,0,0,0" />
@@ -377,7 +381,7 @@
                         <DataTemplate x:DataType="vm:FileRow">
                           <!-- A row with a result shows it where its size and time were: the result is what the
                                user is waiting for, and the columns come back with the next listing. -->
-                          <Grid ColumnDefinitions="*,80,120" Opacity="{Binding IsFile, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
+                          <Grid ColumnDefinitions="*,90,152" Opacity="{Binding IsFile, Converter={x:Static vm:MvsmfBrowserConverters.DimUnlessTrue}}">
                             <TextBlock Classes="cell" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Classes="cell" Grid.Column="1" Text="{Binding Size}" HorizontalAlignment="Right"
                                        IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNullOrEmpty}}" />

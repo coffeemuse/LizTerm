@@ -1059,4 +1059,30 @@ public class MvsmfBrowserWindowTests
         Assert.Equal("Download the selected members (Enter)", ToolTip.GetTip(Named<Button>(window, "DownloadButton")));
         Assert.Equal("Delete the selected members (Delete)", ToolTip.GetTip(Named<Button>(window, "DeleteButton")));
     }
+
+    /// <summary>A list's column headings sit over its columns: the header grid spans exactly what the first row's
+    /// grid spans, so the fixed columns, laid out from the right, start at the same x in both (#186). The rows sit
+    /// inside the ListBoxItem's padding, which the header has to match.</summary>
+    internal static void AssertHeaderSpansRows(Window window, string header, string list)
+    {
+        window.UpdateLayout();
+        var heading = window.FindControl<Grid>(header)!;
+        var row = window.FindControl<ListBox>(list)!.ContainerFromIndex(0)!.GetVisualDescendants().OfType<Grid>().First();
+        var headingLeft = heading.TranslatePoint(new Point(0, 0), window)!.Value.X;
+        var rowLeft = row.TranslatePoint(new Point(0, 0), window)!.Value.X;
+        Assert.True(Math.Abs(headingLeft - rowLeft) < 0.5 && Math.Abs(heading.Bounds.Width - row.Bounds.Width) < 0.5,
+            $"{header} spans {headingLeft}..{headingLeft + heading.Bounds.Width}, " +
+            $"{list}'s first row {rowLeft}..{rowLeft + row.Bounds.Width}");
+    }
+
+    [AvaloniaFact]
+    public async Task The_dataset_and_member_headings_sit_over_their_columns()
+    {
+        var (window, t) = Show();
+        await Wait.UntilAsync(() => t.Vm.Datasets.Count == 4, "the first listing");
+        await t.ChooseAsync("MVSCE02.CNTL");
+
+        AssertHeaderSpansRows(window, "DatasetsHeader", "DatasetList");
+        AssertHeaderSpansRows(window, "MembersHeader", "MemberList");
+    }
 }
