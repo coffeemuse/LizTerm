@@ -83,3 +83,15 @@ around them are intact, which is why the reporter saw a live ISPF panel under a 
 the malformed lines exactly as the engine wrote them. The address was replaced with `hercules.test` and the LAN IP
 with `192.0.2.10`; the Hercules banner on screen still names the reporter's machine `hercules`, as the issue does. The
 logon and the ISPF screens between the two runs were cut.
+
+## soft-hyphen-clist.jsonl
+
+Raw b3270 4.5ga6 stdout (the Homebrew build, model 3279-2-E) from a scripted TSO session against the MVS/CE host on
+2026-09-24, for #191. Member `MVSCE02.CNTL(LIZ191C)` was written through mvsMF in binary mode, so its bytes reached the
+host unchanged: a two-line CLIST whose `WRITE` lines hold one X'CA' between `AB` and `CD`, and three in a row before
+`XYZ`. The fixture is trimmed to the Clear at READY, `EXEC 'MVSCE02.CNTL(LIZ191C)'`, the two lines of line-mode output
+and the READY after them. It pins that b3270 delivers X'CA' as U+00AD in a cell of its own, so the columns after it are
+the host's; `ReplayTests.A_soft_hyphen_from_the_host_keeps_its_own_cell` asserts that. The logon, logoff and the
+driver's own `run-result` and `stats` lines were cut; no host address is in the file. REVIEW (and so Wally ISPF's
+Browse, which is REVIEW) is no way to record this: it replaces the byte before it reaches the screen, and b3270
+reported U+2206 there.
