@@ -30,7 +30,11 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   surrounding space), so `mvs.local:abc` and `mvs.local:99999` are usage errors rather than hostnames containing a
   colon. A syntax error prints the usage line and opens the picker.
 - `App.OpenSession` creates the `SessionWindow` first (the clipboard adapter needs it), then a `SessionViewModel`
-  around `SessionFactory.Create(profile)`, shows the window, and starts `ConnectCommand`.
+  around `SessionFactory.Create(profile)`, shows the window, and starts `ConnectCommand`. **The window is shown
+  before the picker closes, never after** (`App.ShowInPlaceOf`, #190): under WSLg a closing window hands focus to
+  the next Linux window in the stacking order, and a picker closed first gave it to an older session window, which
+  could cover the new one for a second or two. Closing the picker second cannot quit the app, because the session
+  joined `_sessions` before either call and `ShutdownPolicy` counts it.
 - `ShutdownMode` is `OnExplicitShutdown`: closing the last session window reopens the picker, and closing the picker
   with no sessions open quits. **Both are gated on `ShutdownPolicy`** (`Startup/`), because neither may happen while
   the app is on its way out. `ClassicDesktopStyleApplicationLifetime.DoShutdown` closes every owner-less window and

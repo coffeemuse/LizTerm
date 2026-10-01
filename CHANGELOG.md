@@ -9,6 +9,8 @@ What changed in each LizTerm release, newest first. Downloads are on the
   their columns ([#186](https://github.com/coffeemuse/LizTerm/issues/186)).
 - **A host's soft hyphen (X'CA') shows as a hyphen** and no longer pulls the rest of the line one column left
   ([#191](https://github.com/coffeemuse/LizTerm/issues/191)).
+- **Under WSL2, a session opened from the Sessions list no longer vanishes for a second or two** before it settles in front
+  ([#190](https://github.com/coffeemuse/LizTerm/issues/190), reported by [@mgrossmann](https://github.com/mgrossmann)).
 
 ## 0.7.1
 
