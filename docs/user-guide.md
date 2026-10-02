@@ -109,8 +109,8 @@ symbol has its plain words on a tooltip. From left to right:
 - The mode field: a boxed **4**, then an underlined **A** or **B** for a TN3270 or TN3270E connection, then a solid
   box once a 3270 session is bound, a boxed **?** while there is none, or **N** for a host in NVT mode. Its tooltip
   also gives the terminal name the host is told, such as `IBM-3279-2-E`, from the first connection attempt on. A
-  colour model 4 or 5 is named a 3278, and over TN3270E the host is asked for a 3278 whatever the profile says, as
-  the TN3270E standard asks.
+  colour model 4 or 5 is named a 3278. Over TN3270E the host is asked for a 3278 even for a colour profile, as the
+  TN3270E standard asks; a custom size is still `IBM-DYNAMIC`.
 - On a TLS connection, a padlock with a green **✓** when the host's certificate was verified, or an orange **!** when
   it was not.
 - The message area: blank while the keyboard is free, otherwise a lock **X** and why. While connecting it shows the

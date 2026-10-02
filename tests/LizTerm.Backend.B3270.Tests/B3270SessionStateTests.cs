@@ -161,6 +161,20 @@ public class B3270SessionStateTests
         await Wait.UntilAsync(() => session.TerminalName == "IBM-3278-4-E", "replaced name");
     }
 
+    /// <summary>#203 review: a report with no usable text says nothing about the name, so the last one stands.</summary>
+    [Fact]
+    public async Task A_terminal_name_report_without_text_keeps_the_last_name()
+    {
+        var (session, fake) = await StartAsync();
+        fake.Emit("""{"terminal-name":{"text":"IBM-3279-2-E","override":false}}""");
+        fake.Emit("""{"terminal-name":{"override":true}}""");
+        fake.Emit("""{"terminal-name":{"text":42,"override":false}}""");
+        // Lines are handled in order, so once this state has landed both reports above have been handled.
+        fake.Emit("""{"connection":{"state":"tcp-pending","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "the marker line");
+        Assert.Equal("IBM-3279-2-E", session.TerminalName);
+    }
+
     [Fact]
     public async Task Popup_raises_host_message()
     {

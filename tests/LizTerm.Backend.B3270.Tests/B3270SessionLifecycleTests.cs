@@ -396,6 +396,38 @@ public class B3270SessionLifecycleTests
         Assert.True(session.CanPinCertificates);
     }
 
+    /// <summary>#203 review: the terminal name is the reporting engine's, like its TLS options. A replacement that
+    /// reports none must not show its dead predecessor's as if it had said so.</summary>
+    [Fact]
+    public async Task A_dead_processs_terminal_name_does_not_survive_into_its_replacement()
+    {
+        var calls = 0;
+        FakeB3270Process? fake1 = null;
+        var session = new B3270Session(Profile, () =>
+        {
+            calls++;
+            if (calls != 1) return new FakeB3270Process();
+            var fake = new FakeB3270Process { AutoInitialize = false };
+            fake.Emit("""{"initialize":[{"hello":{"version":"4.5.6","build":"mac"}},{"terminal-name":{"text":"IBM-3278-4-E","override":false}}]}""");
+            fake1 = fake;
+            return fake;
+        });
+
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("IBM-3278-4-E", session.TerminalName);
+
+        var faulted = new TaskCompletionSource<BackendFault>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Faulted += (_, f) => faulted.TrySetResult(f);
+        fake1!.Exit(137);
+        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await Wait.UntilAsync(() => !session.HasProcess, "the dead process's slot to clear");
+
+        // The replacement's MinimalInitialize carries no terminal-name.
+        await session.ConnectAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Null(session.TerminalName);
+    }
+
     [Fact]
     public async Task Fault_after_a_failed_start_and_a_retry_is_still_reported()
     {

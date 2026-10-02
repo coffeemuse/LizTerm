@@ -4,7 +4,7 @@
 
 namespace LizTerm.Core.Session;
 
-/// <summary>The one spelling of a profile's 3270 terminal type, which the backend puts on b3270's -model command
+/// <summary>The one spelling of a profile's 3270 terminal type, which the backend puts on the engine's command
 /// line. It is not the name the host is told: the engine names the terminal by rules of its own, so a colour model 4
 /// is <c>IBM-3278-4-E</c> and any custom size <c>IBM-DYNAMIC</c>. The status bar therefore shows the engine's report,
 /// <see cref="IEmulatorSession.TerminalName"/>, and never this (#202).</summary>

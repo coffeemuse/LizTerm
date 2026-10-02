@@ -19,9 +19,10 @@ public interface IEmulatorSession : IAsyncDisposable
     KeyboardStatus KeyboardStatus { get; }
 
     /// <summary>The terminal name the engine reports giving the host, such as <c>IBM-3279-2-E</c>, exactly as it
-    /// reports it; null until the engine has started. It is the engine's, never worked out from the profile: the
-    /// engine names a model and colour by rules of its own (#202). It outlives a disconnect. A backend updates it
-    /// before raising the <see cref="ConnectionChanged"/> that follows a change, so a caller may read it there.</summary>
+    /// reports it; null until the engine has reported one, and again once that engine has gone. It is the engine's,
+    /// never worked out from the profile: the engine names a model and colour by rules of its own (#202). It
+    /// outlives a disconnect. A backend updates it before raising the <see cref="ConnectionChanged"/> that follows a
+    /// change, so a caller may read it there.</summary>
     string? TerminalName { get; }
 
     /// <summary>The engine binary in use; <see cref="EngineInfo.Version"/> fills in once the engine has started.</summary>

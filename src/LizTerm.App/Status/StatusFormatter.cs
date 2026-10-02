@@ -55,7 +55,7 @@ public static class StatusFormatter
     /// it. Never worked out from the profile, whose model and colour the engine names by rules of its own (#202), so
     /// there is no second line until the engine has reported one.</summary>
     public static string ModeTip(ConnectionState state, string host, string? terminalName) =>
-        terminalName is null ? Connection(state, host) : $"{Connection(state, host)}\n{terminalName}";
+        Connection(state, host) + (terminalName is null ? "" : "\n" + terminalName);
 
     /// <summary>Padlock, mark and tooltip: green check when the certificate was verified, orange ! when it was not,
     /// nothing on a plain connection. Both the mark and the colour carry the verdict, so neither has to alone.</summary>

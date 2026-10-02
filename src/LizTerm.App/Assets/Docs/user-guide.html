@@ -133,8 +133,8 @@ symbol has its plain words on a tooltip. From left to right:</p>
 <li>The mode field: a boxed <strong>4</strong>, then an underlined <strong>A</strong> or <strong>B</strong> for a TN3270 or TN3270E connection, then a solid
 box once a 3270 session is bound, a boxed <strong>?</strong> while there is none, or <strong>N</strong> for a host in NVT mode. Its tooltip
 also gives the terminal name the host is told, such as <code>IBM-3279-2-E</code>, from the first connection attempt on. A
-colour model 4 or 5 is named a 3278, and over TN3270E the host is asked for a 3278 whatever the profile says, as
-the TN3270E standard asks.</li>
+colour model 4 or 5 is named a 3278. Over TN3270E the host is asked for a 3278 even for a colour profile, as the
+TN3270E standard asks; a custom size is still <code>IBM-DYNAMIC</code>.</li>
 <li>On a TLS connection, a padlock with a green <strong>✓</strong> when the host's certificate was verified, or an orange <strong>!</strong> when
 it was not.</li>
 <li>The message area: blank while the keyboard is free, otherwise a lock <strong>X</strong> and why. While connecting it shows the

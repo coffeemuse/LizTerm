@@ -332,6 +332,9 @@ public sealed class B3270Session : IEmulatorSession
                 exitCode);
             _hello?.TrySetException(new BackendUnavailableException(fault.Message + " stderr: " + string.Join(" | ", process.StderrTail)));
 
+            // The terminal name dies with the process, so a replacement that reports none cannot show this one's.
+            // Cleared before the state change, which is where IEmulatorSession promises a caller can read it.
+            TerminalName = null;
             SetConnectionState(ConnectionState.Disconnected);
             if (!_shuttingDown)
             {
@@ -379,6 +382,7 @@ public sealed class B3270Session : IEmulatorSession
         _process = null;
         _hello = null;
         _tlsOptions = null;
+        TerminalName = null;
         process?.Kill();
         process?.Dispose();
     }
@@ -642,10 +646,11 @@ public sealed class B3270Session : IEmulatorSession
             case TlsIndication tls:
                 Tls = new TlsInfo(tls.Secure, tls.Verified, tls.Session, tls.HostCert);
                 break;
-            case TerminalNameIndication name:
-                // Not cleared on disconnect, unlike Tls: it is what the engine will tell the next host, and a fresh
-                // engine sends its own in the initialize block.
-                TerminalName = name.Text;
+            case TerminalNameIndication { Text: { } name }:
+                // Not cleared on disconnect, unlike Tls: it is what the engine will tell the next host. Cleared when
+                // the engine goes (OnProcessEnded, TearDown), since a fresh one sends its own in the initialize
+                // block. A report with no text says nothing, so the last name stands.
+                TerminalName = name;
                 break;
             case FtIndication { Bytes: { } bytes } when Volatile.Read(ref _transfer) is { } transfer:
                 // Progress only. The outcome comes from the Transfer run's run-result, which carries the same

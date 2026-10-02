@@ -83,9 +83,10 @@ Easy to get wrong:
   rather than trusting a model suffix.
 - `terminal-name` and `Query TerminalName` report the TELNET TERMINAL-TYPE name (`termtype`), which is not the
   `-model` argument: `create_3270_termtype` names a colour model 4 or 5 `IBM-3278-n` and any oversize `IBM-DYNAMIC`
-  (#202). Over TN3270E the host goes by the device type instead, which b3270 always requests as a 3278
-  (`tn3270e_request`), and neither that request nor the host's DEVICE-TYPE IS reply (`connected_type`) is reported
-  anywhere. x3270's About box shows `termtype` too, so the status bar shows it as reported.
+  (#202). Over TN3270E the host goes by the device type instead, which `tn3270e_request` builds with
+  `create_3270_termtype(true)`: a 3278 even for colour, and still `IBM-DYNAMIC` for an oversize. Neither that
+  request nor the host's DEVICE-TYPE IS reply (`connected_type`) is reported anywhere. x3270's About box shows
+  `termtype` too, so the status bar shows it as reported.
 - The cursor is nested inside `screen` indications, and `enabled:false` hides it while keeping its position.
 
 ## Connect and disconnect

@@ -31,8 +31,8 @@ public sealed record PopupIndication(string Type, string Text, bool Retrying, bo
 /// <summary>The host rang the 3270 alarm. b3270 sends an empty body; there is nothing to carry.</summary>
 public sealed record BellIndication : Indication;
 /// <summary>The terminal name the engine gives the host in a TELNET TERMINAL-TYPE reply, sent in the startup
-/// <c>initialize</c> block and again whenever it changes. Over TN3270E b3270 asks for the 3278 form instead and
-/// reports nothing about it. The <c>override</c> field is left out: it is true only when the <c>termName</c>
+/// <c>initialize</c> block and again whenever it changes. Over TN3270E b3270 asks for a 3278 even for colour (still
+/// <c>IBM-DYNAMIC</c> for an oversize) and reports nothing about it. The <c>override</c> field is left out: it is true only when the <c>termName</c>
 /// resource is set, which LizTerm never does.</summary>
 public sealed record TerminalNameIndication(string? Text) : Indication;
 public sealed record UiErrorIndication(bool Fatal, string Text, string? Operation, string? Member) : Indication;
