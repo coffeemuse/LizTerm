@@ -3,7 +3,7 @@
 What changed in each LizTerm release, newest first. Downloads are on the
 [Releases page](https://github.com/coffeemuse/LizTerm/releases). Releases before 0.6.0 are not listed here.
 
-## Unreleased
+## 0.7.2
 
 - **The status bar's mode tooltip names the terminal as the host is told it**, such as `IBM-3278-4-E` for a colour
   model 4 and `IBM-DYNAMIC` for a custom size ([#202](https://github.com/coffeemuse/LizTerm/issues/202)).
