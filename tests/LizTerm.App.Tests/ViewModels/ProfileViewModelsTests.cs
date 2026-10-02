@@ -523,6 +523,44 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Equal("", vm.ColumnsText);
     }
 
+    /// <summary>b3270 drops a custom size without the extended data stream, so under Other the box shows checked
+    /// and saves checked (#200), whatever was chosen before; leaving Other brings that choice back.</summary>
+    [Fact]
+    public void Other_locks_extended_on_and_leaving_it_brings_the_choice_back()
+    {
+        var vm = new ProfileEditorViewModel(null) { Name = "p", Host = "h" };
+        vm.ExtendedDisplay = false;
+        Assert.False(vm.TryBuild()!.Extended);
+
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        vm.SelectedModelChoice = ModelChoice.Other;
+
+        Assert.True(vm.ExtendedDisplay);
+        Assert.Contains(nameof(vm.ExtendedDisplay), changed);
+        vm.ExtendedDisplay = false;
+        Assert.True(vm.ExtendedDisplay);
+        Assert.True(vm.TryBuild()!.Extended);
+
+        vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 2);
+        Assert.False(vm.ExtendedDisplay);
+        Assert.False(vm.TryBuild()!.Extended);
+    }
+
+    /// <summary>The editor before #200 let a custom size be saved with Extended unchecked. Such a profile has always
+    /// run with the stream on, and still does (TerminalType.IsExtended), so it opens with the box checked.</summary>
+    [Fact]
+    public void A_custom_size_saved_with_extended_unchecked_opens_and_saves_checked()
+    {
+        var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Oversize = "132x43", Extended = false });
+
+        Assert.True(vm.IsCustomSize);
+        Assert.True(vm.ExtendedDisplay);
+        var built = vm.TryBuild()!;
+        Assert.True(built.Extended);
+        Assert.Equal("132x43", built.Oversize);
+    }
+
     /// <summary>Leaving Other drops the custom size from the profile, but the typed numbers come back if the user
     /// returns to Other before closing the editor.</summary>
     [Fact]

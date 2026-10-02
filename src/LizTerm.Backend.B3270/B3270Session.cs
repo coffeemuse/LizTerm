@@ -165,11 +165,11 @@ public sealed class B3270Session : IEmulatorSession
     public event EventHandler<string>? HostMessage;
     public event EventHandler? BellRang;
 
-    /// <summary>The engine's command line. Oversize and the keep-alive ride here rather than as runtime Set
-    /// actions: it needs no new protocol handling, and it sidesteps the unverified question of whether a runtime
-    /// oversize change takes effect on the next connect, on the next process, or not at all. `reconnect` is the
-    /// exception and must be a runtime Set, because it is armed only after a connect has succeeded.
-    /// Both are omitted at their defaults, which are b3270's own.</summary>
+    /// <summary>The engine's command line. Oversize, the extended data stream and the keep-alive ride here rather
+    /// than as runtime Set actions: it needs no new protocol handling, and it sidesteps the unverified question of
+    /// whether a runtime oversize change takes effect on the next connect, on the next process, or not at all.
+    /// `reconnect` is the exception and must be a runtime Set, because it is armed only after a connect has
+    /// succeeded. All three are omitted at their defaults, which are b3270's own.</summary>
     /// <exception cref="ConnectionFailedException">The profile's oversize is one b3270 would refuse.</exception>
     public static IReadOnlyList<string> BuildArguments(SessionProfile profile)
     {
@@ -194,6 +194,12 @@ public sealed class B3270Session : IEmulatorSession
                 arguments.Add("-oversize");
                 arguments.Add(oversize.ToString());
             }
+        }
+        if (!TerminalType.IsExtended(profile))
+        {
+            // The model's -E cannot do this: b3270 4.5 reads only the model number and colour from -model (#200).
+            arguments.Add("-set");
+            arguments.Add("extendedDataStream=false");
         }
         if (profile.KeepAliveSeconds > 0)
         {

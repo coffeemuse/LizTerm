@@ -22,7 +22,8 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private bool _useTls;
     [ObservableProperty] private bool _verifyCertificate = true;
     [ObservableProperty] private int _model = 2;
-    [ObservableProperty] private bool _extended = true;
+    /// <summary>The user's own choice, kept while Other overrides it; see <see cref="ExtendedDisplay"/>.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ExtendedDisplay))] private bool _extended = true;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(SelectedDisplayChoice))] private TerminalDisplay _display = TerminalDisplay.Color;
     [ObservableProperty] private string _codePage = "cp037";
     [ObservableProperty] private string _luName = "";
@@ -32,7 +33,7 @@ public partial class ProfileEditorViewModel : ObservableObject
 
     /// <summary>Whether the drop-down is on Other. The boxes below are the custom size only while this is on.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SelectedModelChoice), nameof(ColumnsDisplay), nameof(RowsDisplay))]
+    [NotifyPropertyChangedFor(nameof(SelectedModelChoice), nameof(ColumnsDisplay), nameof(RowsDisplay), nameof(ExtendedDisplay))]
     private bool _isCustomSize;
 
     /// <summary>What the user typed for the custom size. Kept while the drop-down is on a model, so returning to
@@ -205,6 +206,16 @@ public partial class ProfileEditorViewModel : ObservableObject
     {
         get => IsCustomSize ? RowsText : ModelDimension(m => m.Rows);
         set { if (IsCustomSize) RowsText = value ?? ""; }
+    }
+
+    /// <summary>What the Extended box shows: checked under Other, because b3270 drops a custom size without the
+    /// extended data stream (#200), else <see cref="Extended"/>. Writes land only outside Other, where the box is
+    /// enabled, the same rule as <see cref="ColumnsDisplay"/>. Save writes what this shows, which is also what
+    /// <see cref="TerminalType.IsExtended"/> makes of a profile saved before the rule.</summary>
+    public bool ExtendedDisplay
+    {
+        get => IsCustomSize || Extended;
+        set { if (!IsCustomSize) Extended = value; }
     }
 
     private string ModelDimension(Func<TerminalModel, int> dimension) =>
@@ -661,7 +672,7 @@ public partial class ProfileEditorViewModel : ObservableObject
             VerifyCertificate = VerifyCertificate,
             PinnedCertificate = PinnedCertificate,
             Model = Model,
-            Extended = Extended,
+            Extended = ExtendedDisplay,
             Display = Display,
             CodePage = CodePage.Trim(),
             LuName = string.IsNullOrWhiteSpace(LuName) ? null : LuName.Trim(),
