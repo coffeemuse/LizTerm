@@ -24,7 +24,13 @@ public class ReplayTests
         var states = new List<ConnectionState>();
         var screens = 0;
         var bells = 0;
-        session.ConnectionChanged += (_, s) => states.Add(s);
+        string? nameWhenBound = null;
+        session.ConnectionChanged += (_, s) =>
+        {
+            states.Add(s);
+            // Read where the App reads it: the engine's exit at the end of the recording clears it.
+            if (s == ConnectionState.ConnectedTn3270E) nameWhenBound ??= session.TerminalName;
+        };
         session.ScreenUpdated += (_, _) => screens++;
         session.BellRang += (_, _) => bells++;
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -46,6 +52,9 @@ public class ReplayTests
         // the original .trc), so the session never passes through the plain Connected3270 state --
         // it goes straight to ConnectedUnbound/ConnectedTn3270E once the BIND completes.
         Assert.Contains(ConnectionState.ConnectedTn3270E, states);
+        // The TERMINAL-TYPE name, from the initialize block. Over TN3270E b3270 asked the host for IBM-3278-2-E
+        // instead, and no indication says so: this is the name it reports, and the one x3270's About box shows (#202).
+        Assert.Equal("IBM-3279-2-E", nameWhenBound);
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
         Assert.True(screens > 0);
         // Line 30 of the fixture is {"bell":{}}: a real host rang it, and this is the end-to-end proof it reaches
@@ -262,7 +271,6 @@ public class ReplayTests
     {
         var fake = new FakeB3270Process { AutoInitialize = false, RunResponder = _ => [] };
         foreach (var line in File.ReadLines(Fixture("oversize-100x50.jsonl"))) fake.Emit(line);
-        fake.Exit(0);
 
         var profile = new SessionProfile { Name = "replay", Host = "127.0.0.1", Oversize = "100x50" };
         var session = new B3270Session(profile, () => fake);
@@ -270,6 +278,10 @@ public class ReplayTests
         session.Faulted += (_, _) => ended.TrySetResult();
 
         await session.StartProcessAsync(TestContext.Current.CancellationToken);
+        // The start completes only once every item in the initialize block has been handled, and the engine is still
+        // running, so its terminal name has not been cleared yet.
+        Assert.Equal("IBM-DYNAMIC", session.TerminalName);
+        fake.Exit(0);
         await ended.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         var screen = session.CurrentScreen;

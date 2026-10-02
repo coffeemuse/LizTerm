@@ -145,6 +145,36 @@ public class B3270SessionStateTests
         Assert.Null(session.Tls);
     }
 
+    /// <summary>The name is the engine's, not worked out from the profile (#202), so it is unknown until the engine
+    /// reports one. Unlike TLS it survives a disconnect: it is what the engine will tell the host next time.</summary>
+    [Fact]
+    public async Task Terminal_name_is_the_engines_latest_report_and_outlives_a_disconnect()
+    {
+        var (session, fake) = await StartAsync();
+        Assert.Null(session.TerminalName);
+        fake.Emit("""{"terminal-name":{"text":"IBM-3279-2-E","override":false}}""");
+        await Wait.UntilAsync(() => session.TerminalName == "IBM-3279-2-E", "first name");
+        fake.Emit(NotConnected);
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Disconnected, "disconnected");
+        Assert.Equal("IBM-3279-2-E", session.TerminalName);
+        fake.Emit("""{"terminal-name":{"text":"IBM-3278-4-E","override":false}}""");
+        await Wait.UntilAsync(() => session.TerminalName == "IBM-3278-4-E", "replaced name");
+    }
+
+    /// <summary>#203 review: a report with no usable text says nothing about the name, so the last one stands.</summary>
+    [Fact]
+    public async Task A_terminal_name_report_without_text_keeps_the_last_name()
+    {
+        var (session, fake) = await StartAsync();
+        fake.Emit("""{"terminal-name":{"text":"IBM-3279-2-E","override":false}}""");
+        fake.Emit("""{"terminal-name":{"override":true}}""");
+        fake.Emit("""{"terminal-name":{"text":42,"override":false}}""");
+        // Lines are handled in order, so once this state has landed both reports above have been handled.
+        fake.Emit("""{"connection":{"state":"tcp-pending","host":"h","cause":"ui"}}""");
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.TcpPending, "the marker line");
+        Assert.Equal("IBM-3279-2-E", session.TerminalName);
+    }
+
     [Fact]
     public async Task Popup_raises_host_message()
     {

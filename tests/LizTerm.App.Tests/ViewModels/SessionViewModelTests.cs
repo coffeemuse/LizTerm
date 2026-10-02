@@ -26,7 +26,7 @@ public class SessionViewModelTests
         Assert.Equal("Fake - fake.host", vm.Title);
         Assert.Same(session.CurrentScreen, vm.Screen);
         Assert.Equal(OiaGlyphs.Box4 + " " + OiaGlyphs.BoxQuestion, vm.ModeText);
-        Assert.Equal("Not connected\n3279-2-E", vm.ModeTip);
+        Assert.Equal("Not connected", vm.ModeTip);
         Assert.Equal(OiaGlyphs.Lock + " " + OiaGlyphs.NoConnection, vm.MessageText);
         Assert.Equal("Not connected", vm.MessageTip);
         Assert.Equal("", vm.TlsGlyph);
@@ -51,10 +51,12 @@ public class SessionViewModelTests
     public void Connection_event_updates_mode_tls_and_flag()
     {
         var (vm, session) = Create();
+        // The profile is a colour model 2; the name is the engine's, whatever the profile says (#202).
+        session.TerminalName = "IBM-DYNAMIC";
         session.RaiseConnection(ConnectionState.ConnectedTn3270E, new TlsInfo(true, true, null, null));
         Assert.True(vm.IsConnected);
         Assert.Equal(OiaGlyphs.Box4 + OiaGlyphs.UnderB + OiaGlyphs.BoxSolid, vm.ModeText);
-        Assert.Equal("Connected to fake.host (TN3270E)\n3279-2-E", vm.ModeTip);
+        Assert.Equal("Connected to fake.host (TN3270E)\nIBM-DYNAMIC", vm.ModeTip);
         Assert.Equal(StatusFormatter.PadlockGlyph, vm.TlsGlyph);
         Assert.Equal("✓", vm.TlsMark);
         Assert.True(vm.TlsVerified);

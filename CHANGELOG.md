@@ -5,6 +5,8 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **The status bar's mode tooltip names the terminal as the host is told it**, such as `IBM-3278-4-E` for a colour
+  model 4 and `IBM-DYNAMIC` for a custom size ([#202](https://github.com/coffeemuse/LizTerm/issues/202)).
 - **Unchecking Extended data stream in a profile now turns it off**, so the host sees a basic terminal such as
   `IBM-3279-2`; a custom size keeps it on ([#200](https://github.com/coffeemuse/LizTerm/issues/200)).
 - **A session window opens sized for the model's largest screen**, such as 43x80 for a model 4, and the text no

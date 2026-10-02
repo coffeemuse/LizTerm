@@ -215,6 +215,13 @@ public class IndicationParserTests
     }
 
     [Fact]
+    public void Parses_terminal_name()
+    {
+        var name = Parse<TerminalNameIndication>("""{"terminal-name":{"text":"IBM-DYNAMIC","override":false}}""");
+        Assert.Equal("IBM-DYNAMIC", name.Text);
+    }
+
+    [Fact]
     public void Malformed_lines_return_false()
     {
         Assert.False(IndicationParser.TryParse("not json", out _));

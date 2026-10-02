@@ -57,6 +57,9 @@ snapshots, threading, zero-based coordinates). Core depends on the BCL only and 
   in `src/LizTerm.App/CLAUDE.md`).
 - `WireLogPath`, `StartWireLog` and `StopWireLog` make the wire log a session capability that survives an engine
   restart.
+- `TerminalName` is the engine's own report of the name it gives the host, null while no running engine has reported
+  one. Never work it out from the profile: `TerminalType.For` is only the engine's command-line argument, and the
+  engine names the terminal by rules of its own (#202).
 
 ## Host files
 

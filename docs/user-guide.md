@@ -67,7 +67,7 @@ the buttons.
 | Keep-alive every *n* seconds | Keeps the network connection open through firewalls and routers that drop idle connections. `0` turns it off. It does not stop the host logging you off for being idle. |
 | Reconnect automatically | Reconnect if the host drops the session. |
 | Model | The screen size: model 2 (24x80), 3 (32x80), 4 (43x80) or 5 (27x132), or **Other (custom size)** for a size of your own, for hosts that support one. |
-| Colour (3279) / Mono (3278) | The drop-down under Model: **Colour (3279)**, the default, or **Mono (3278)**. A mono profile tells the host it is a 3278, so the host leaves colour out of what it sends, and the screen is drawn in one green phosphor, brighter where the host intensifies. Some applications lay out their panels differently for a mono terminal. |
+| Colour (3279) / Mono (3278) | The drop-down under Model: **Colour (3279)**, the default, or **Mono (3278)**. A mono profile tells the host the terminal has no colour, so the host leaves colour out of what it sends, and the screen is drawn in one green phosphor, brighter where the host intensifies. Some applications lay out their panels differently for a mono terminal. |
 | Extended data stream | On by default, for both terminal types. The host can then send colours, highlighting and other extended attributes, and the terminal type it is told ends in `-E`, such as `IBM-3279-2-E`. Turn it off only for a host that needs a basic terminal. A custom size needs it, so when Model is **Other** the box stays checked, and the host is told `IBM-DYNAMIC` instead. |
 | Screen size | Columns and rows. They show the model's own size, and you can change them, by typing or with the arrows, only when Model is **Other**, which starts from the size already shown. A custom size must be at least 80 columns and 24 rows, and columns times rows can be at most 16,383 (at 160 columns, 102 rows at most). |
 | Code page | The host's character set. The default is `cp037` (US/Canada); TK4- and TK5 users may want `bracket`, which maps the 3270 bracket characters. |
@@ -108,7 +108,9 @@ symbol has its plain words on a tooltip. From left to right:
 - A small note icon (see below).
 - The mode field: a boxed **4**, then an underlined **A** or **B** for a TN3270 or TN3270E connection, then a solid
   box once a 3270 session is bound, a boxed **?** while there is none, or **N** for a host in NVT mode. Its tooltip
-  also names the terminal model.
+  also gives the terminal name the host is told, such as `IBM-3279-2-E`, from the first connection attempt on. A
+  colour model 4 or 5 is named a 3278. Over TN3270E the host is asked for a 3278 even for a colour profile, as the
+  TN3270E standard asks; a custom size is still `IBM-DYNAMIC`.
 - On a TLS connection, a padlock with a green **✓** when the host's certificate was verified, or an orange **!** when
   it was not.
 - The message area: blank while the keyboard is free, otherwise a lock **X** and why. While connecting it shows the

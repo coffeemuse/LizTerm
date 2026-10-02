@@ -107,6 +107,7 @@ public sealed class B3270Session : IEmulatorSession
     public ConnectionState ConnectionState { get; private set; } = ConnectionState.Disconnected;
     public TlsInfo? Tls { get; private set; }
     public KeyboardStatus KeyboardStatus { get; private set; } = KeyboardStatus.Initial;
+    public string? TerminalName { get; private set; }
     public EngineInfo Engine { get; private set; }
 
     /// <summary>Whether this session's engine can honour a certificate pin at all (spec: plan 3d task 8). A
@@ -331,6 +332,9 @@ public sealed class B3270Session : IEmulatorSession
                 exitCode);
             _hello?.TrySetException(new BackendUnavailableException(fault.Message + " stderr: " + string.Join(" | ", process.StderrTail)));
 
+            // The terminal name dies with the process, so a replacement that reports none cannot show this one's.
+            // Cleared before the state change, which is where IEmulatorSession promises a caller can read it.
+            TerminalName = null;
             SetConnectionState(ConnectionState.Disconnected);
             if (!_shuttingDown)
             {
@@ -378,6 +382,7 @@ public sealed class B3270Session : IEmulatorSession
         _process = null;
         _hello = null;
         _tlsOptions = null;
+        TerminalName = null;
         process?.Kill();
         process?.Dispose();
     }
@@ -640,6 +645,12 @@ public sealed class B3270Session : IEmulatorSession
                 break;
             case TlsIndication tls:
                 Tls = new TlsInfo(tls.Secure, tls.Verified, tls.Session, tls.HostCert);
+                break;
+            case TerminalNameIndication { Text: { } name }:
+                // Not cleared on disconnect, unlike Tls: it is what the engine will tell the next host. Cleared when
+                // the engine goes (OnProcessEnded, TearDown), since a fresh one sends its own in the initialize
+                // block. A report with no text says nothing, so the last name stands.
+                TerminalName = name;
                 break;
             case FtIndication { Bytes: { } bytes } when Volatile.Read(ref _transfer) is { } transfer:
                 // Progress only. The outcome comes from the Transfer run's run-result, which carries the same
