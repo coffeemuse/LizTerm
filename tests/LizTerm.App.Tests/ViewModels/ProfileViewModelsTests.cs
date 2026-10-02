@@ -524,8 +524,8 @@ public class ProfileViewModelsTests : IDisposable
     }
 
     /// <summary>b3270 drops a custom size without the extended data stream, so under Other the box shows checked
-    /// (#200), whatever was chosen before. Save keeps that choice, since TerminalType.IsExtended keeps the stream on
-    /// for any custom size, and leaving Other brings it back.</summary>
+    /// and saves checked (#200), whatever was chosen before: like the size boxes, nothing the editor is not showing
+    /// survives a save. Leaving Other before the editor closes brings the choice back.</summary>
     [Fact]
     public void Other_locks_extended_on_and_leaving_it_brings_the_choice_back()
     {
@@ -541,33 +541,31 @@ public class ProfileViewModelsTests : IDisposable
         Assert.Contains(nameof(vm.ExtendedDisplay), changed);
         vm.ExtendedDisplay = false;
         Assert.True(vm.ExtendedDisplay);
-        var custom = vm.TryBuild()!;
-        Assert.False(custom.Extended);
-        Assert.True(TerminalType.IsExtended(custom));
+        Assert.True(vm.TryBuild()!.Extended);
 
         vm.SelectedModelChoice = vm.ModelChoices.Single(c => c.Model?.Number == 2);
         Assert.False(vm.ExtendedDisplay);
         Assert.False(vm.TryBuild()!.Extended);
     }
 
-    /// <summary>A custom size saved with Extended unchecked, by the editor before #200 or since, runs with the stream
-    /// on (TerminalType.IsExtended), so it opens with the box checked. The unchecked choice survives a save and
-    /// comes back when the profile goes back to a model, even in a later editor.</summary>
+    /// <summary>The editor before #200 let a custom size be saved with Extended unchecked. Such a profile has always
+    /// run with the stream on, and still does (TerminalType.IsExtended), so it opens with the box checked and saves
+    /// what the box shows: a later editor going back to a model starts from checked.</summary>
     [Fact]
-    public void A_custom_size_saved_with_extended_unchecked_opens_checked_and_keeps_the_choice()
+    public void A_custom_size_saved_with_extended_unchecked_opens_and_saves_checked()
     {
         var vm = new ProfileEditorViewModel(new SessionProfile { Name = "MVS", Host = "mvs", Oversize = "132x43", Extended = false });
 
         Assert.True(vm.IsCustomSize);
         Assert.True(vm.ExtendedDisplay);
         var built = vm.TryBuild()!;
-        Assert.False(built.Extended);
+        Assert.True(built.Extended);
         Assert.Equal("132x43", built.Oversize);
 
         var reopened = new ProfileEditorViewModel(built);
         reopened.SelectedModelChoice = reopened.ModelChoices.Single(c => c.Model?.Number == 2);
-        Assert.False(reopened.ExtendedDisplay);
-        Assert.False(reopened.TryBuild()!.Extended);
+        Assert.True(reopened.ExtendedDisplay);
+        Assert.True(reopened.TryBuild()!.Extended);
     }
 
     /// <summary>Leaving Other drops the custom size from the profile, but the typed numbers come back if the user

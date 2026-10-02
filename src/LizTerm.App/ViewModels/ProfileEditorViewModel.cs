@@ -22,7 +22,7 @@ public partial class ProfileEditorViewModel : ObservableObject
     [ObservableProperty] private bool _useTls;
     [ObservableProperty] private bool _verifyCertificate = true;
     [ObservableProperty] private int _model = 2;
-    /// <summary>The user's own choice, kept and saved while Other overrides it; see <see cref="ExtendedDisplay"/>.</summary>
+    /// <summary>The user's own choice, kept while Other overrides it; see <see cref="ExtendedDisplay"/>.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(ExtendedDisplay))] private bool _extended = true;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(SelectedDisplayChoice))] private TerminalDisplay _display = TerminalDisplay.Color;
     [ObservableProperty] private string _codePage = "cp037";
@@ -210,9 +210,9 @@ public partial class ProfileEditorViewModel : ObservableObject
 
     /// <summary>What the Extended box shows: checked under Other, because b3270 drops a custom size without the
     /// extended data stream (#200), else <see cref="Extended"/>. Writes land only outside Other, where the box is
-    /// enabled, the same rule as <see cref="ColumnsDisplay"/>. Save writes <see cref="Extended"/>, not this:
-    /// <see cref="TerminalType.IsExtended"/> keeps the stream on for any custom size, so the user's choice can be
-    /// kept for when the profile goes back to a model.</summary>
+    /// enabled, the same rule as <see cref="ColumnsDisplay"/>. Save writes what this shows: like the size boxes,
+    /// nothing the editor is not showing survives a save. That is also what <see cref="TerminalType.IsExtended"/>
+    /// makes of a profile saved before the rule.</summary>
     public bool ExtendedDisplay
     {
         get => IsCustomSize || Extended;
@@ -673,7 +673,7 @@ public partial class ProfileEditorViewModel : ObservableObject
             VerifyCertificate = VerifyCertificate,
             PinnedCertificate = PinnedCertificate,
             Model = Model,
-            Extended = Extended,
+            Extended = ExtendedDisplay,
             Display = Display,
             CodePage = CodePage.Trim(),
             LuName = string.IsNullOrWhiteSpace(LuName) ? null : LuName.Trim(),
