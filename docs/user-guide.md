@@ -124,6 +124,11 @@ there is nothing to dismiss. A profile with neither tags nor a note shows no ban
 icon to read the note, or click it to bring the banner back at any time. The profile's tags can also be drawn in
 the status bar itself, beside the icon: turn on **Show the profile's tags in the status bar** in Preferences.
 
+The window opens sized for the model's largest screen, 43x80 for a model 4, say, or smaller when that would not
+fit the display. A host starts every model on a 24x80 screen and switches to the larger one when it wants it, TSO
+usually at logon. The text keeps its size when it does: the 24x80 screen sits at the top of the window with blank
+rows below it, as on x3270. Resizing the window scales the text to fit.
+
 If a connection attempt has not finished within 30 seconds, LizTerm gives up and says so. **File > Disconnect**
 cancels an attempt that is still in progress.
 

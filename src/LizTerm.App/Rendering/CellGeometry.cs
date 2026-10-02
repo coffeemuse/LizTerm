@@ -16,13 +16,28 @@ public readonly record struct CellGeometry(double CellWidth, double CellHeight, 
         if (rows <= 0 || columns <= 0 || advancePerEm <= 0 || lineHeightPerEm <= 0) return default;
         var byWidth = availableWidth / (columns * advancePerEm);
         var byHeight = availableHeight / (rows * lineHeightPerEm);
-        var fontSize = Math.Max(1, Math.Floor(Math.Min(byWidth, byHeight)));
+        // The epsilon absorbs floating-point noise only: an area GridSize measured at a size, divided back here,
+        // can come out a hair under that size and would floor to the one below it.
+        var fontSize = Math.Max(1, Math.Floor(Math.Min(byWidth, byHeight) + 1e-9));
+        return At(fontSize, availableWidth, availableHeight, rows, columns, advancePerEm, lineHeightPerEm);
+    }
+
+    /// <summary>A rows x columns grid at <paramref name="fontSize"/>, centred in the area as Fit centres the size it
+    /// chooses; a grid larger than the area starts at its top left.</summary>
+    public static CellGeometry At(double fontSize, double availableWidth, double availableHeight, int rows, int columns, double advancePerEm, double lineHeightPerEm)
+    {
+        if (fontSize <= 0 || rows <= 0 || columns <= 0 || advancePerEm <= 0 || lineHeightPerEm <= 0) return default;
         var cellWidth = fontSize * advancePerEm;
         var cellHeight = fontSize * lineHeightPerEm;
         var originX = Math.Max(0, (availableWidth - cellWidth * columns) / 2);
         var originY = Math.Max(0, (availableHeight - cellHeight * rows) / 2);
         return new CellGeometry(cellWidth, cellHeight, fontSize, originX, originY);
     }
+
+    /// <summary>The room a rows x columns grid takes at <paramref name="fontSize"/>, rounded up to whole DIPs:
+    /// what the screen asks the layout for (#198), so that the area it is given fits that size back.</summary>
+    public static Size GridSize(int rows, int columns, double fontSize, double advancePerEm, double lineHeightPerEm) =>
+        new(Math.Ceiling(columns * advancePerEm * fontSize), Math.Ceiling(rows * lineHeightPerEm * fontSize));
 
     public (int Row, int Column)? HitTest(double x, double y, int rows, int columns)
     {

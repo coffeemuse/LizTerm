@@ -76,4 +76,48 @@ public class CellGeometryTests
         Assert.Null(default(CellGeometry).NearestCell(1, 1, 24, 80));
         Assert.Null(g.NearestCell(1, 1, 0, 80));
     }
+
+    /// <summary>A grid at a given size is placed exactly as Fit places the size it chose, and one too large for the
+    /// area starts at its top left rather than off it.</summary>
+    [Fact]
+    public void At_places_a_given_size_as_Fit_places_its_own()
+    {
+        Assert.Equal(CellGeometry.Fit(800, 600, 24, 80, Advance, Line), CellGeometry.At(16, 800, 600, 24, 80, Advance, Line));
+        var tooLarge = CellGeometry.At(40, 800, 600, 24, 80, Advance, Line);
+        Assert.Equal(40, tooLarge.FontSize);
+        Assert.Equal(0, tooLarge.OriginX);
+        Assert.Equal(0, tooLarge.OriginY);
+        Assert.Equal(default, CellGeometry.At(0, 800, 600, 24, 80, Advance, Line));
+    }
+
+    /// <summary>What a screen asks the layout for (#198): the grid at that font size, rounded up to whole DIPs so
+    /// the area it is given fits the same size back rather than the one below it.</summary>
+    [Theory]
+    [InlineData(24, 80, 22, 0.6, 1.2)]
+    [InlineData(43, 80, 22, 0.6, 1.2)]
+    [InlineData(27, 132, 22, 0.6, 1.2)]
+    [InlineData(24, 80, 22, 0.54, 1.09)]
+    [InlineData(43, 80, 17, 0.54, 1.09)]
+    [InlineData(27, 132, 13, 0.54, 1.09)]
+    [InlineData(50, 100, 9, 0.54, 1.09)]
+    public void A_grid_s_size_at_a_font_size_fits_back_at_that_font_size(int rows, int columns, double fontSize, double advance, double line)
+    {
+        var size = CellGeometry.GridSize(rows, columns, fontSize, advance, line);
+        Assert.Equal(Math.Ceiling(columns * advance * fontSize), size.Width);
+        Assert.Equal(Math.Ceiling(rows * line * fontSize), size.Height);
+        Assert.Equal(fontSize, CellGeometry.Fit(size.Width, size.Height, rows, columns, advance, line).FontSize);
+    }
+
+    /// <summary>Products that land on a whole number exactly: the division back must not come out a hair under
+    /// it and floor to the size below.</summary>
+    [Fact]
+    public void Fit_does_not_lose_a_size_to_floating_point_noise()
+    {
+        // The width is multiplied out in one order and divided back in another, as a layout pass does.
+        for (var font = 1; font <= 72; font++)
+        {
+            var g = CellGeometry.Fit(80 * 0.54 * font, 24 * 1.09 * font, 24, 80, 0.54, 1.09);
+            Assert.Equal(font, g.FontSize);
+        }
+    }
 }

@@ -92,9 +92,19 @@ public partial class SessionWindow : Window, ISessionHost
         // handledEventsToo: the item's Command marks Click handled before any instance handler runs. See OnInsertClick.
         InsertMenuItem.AddHandler(MenuItem.ClickEvent, OnInsertClick, RoutingStrategies.Bubble, handledEventsToo: true);
         ApplyMenuStyle(MenuStrategy.Resolve(style, isMacOS));
+        // The window opens sized to its screen (SizeToContent in the XAML, #198), and the screen keeps the size it
+        // asks for until then; see KeepsRequestedSize for the bogus arrange this guards against.
+        Screen.KeepsRequestedSize = true;
         Opened += (_, _) =>
         {
             _opened = true;
+            // Sized to its screen for the first layout only. From here the window is the user's: a bar appearing
+            // under the screen takes its room from the screen rather than growing the window, and the display's
+            // limit goes, so the window can still be made larger than the room it opened in.
+            SizeToContent = SizeToContent.Manual;
+            ClearValue(MaxWidthProperty);
+            ClearValue(MaxHeightProperty);
+            Screen.KeepsRequestedSize = false;
             // The settings subscription starts here rather than the moment the data context arrives: a window
             // built and then never shown — App.OpenSession throwing before its Show() — never raises Closed
             // either, so a subscription taken earlier would leave the process-wide settings object calling
@@ -112,6 +122,26 @@ public partial class SessionWindow : Window, ISessionHost
             Screen.Focus();
         };
     }
+
+    /// <summary>Caps the size the window opens at, for its first layout only (#198); call it before Show. The
+    /// window sizes itself to the screen's alternate size at its preferred cell size, and Avalonia's own cap is the
+    /// largest display's whole bounds on macOS and X11, so a model 4 would open under the Dock or the taskbar. The
+    /// App knows which display the window opens on and supplies <see cref="OpeningRoom"/> for it.</summary>
+    internal void LimitOpeningSize(Size room)
+    {
+        MaxWidth = room.Width;
+        MaxHeight = room.Height;
+    }
+
+    /// <summary>What a window's client area can use of a display's working area: the area in DIPs, less
+    /// <see cref="FrameAllowance"/>.</summary>
+    internal static Size OpeningRoom(PixelRect workingArea, double scaling) =>
+        new(workingArea.Width / scaling - FrameAllowance.Width, workingArea.Height / scaling - FrameAllowance.Height);
+
+    /// <summary>The title bar and border, which the client size does not include, generously: the title bar is 28
+    /// DIPs on macOS, about 31 on Windows 11 and 37 under GNOME. No platform reports its own before the window is
+    /// shown.</summary>
+    internal static readonly Size FrameAllowance = new(16, 48);
 
     private MenuStyle _menuStyle;
 

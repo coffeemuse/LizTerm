@@ -35,6 +35,9 @@ public class SessionWindowTests
         var vm = new SessionViewModel(session, action => action(), clipboard);
         var window = new SessionWindow { DataContext = vm };
         window.Show();
+        // The window sizes itself to its screen in Show, and the screen is arranged at that size in the next layout
+        // pass (#198), which a real window always runs before any input reaches it.
+        window.UpdateLayout();
         var screen = window.FindControl<TerminalScreen>("Screen")!;
         screen.Focus();
         return (window, screen, vm, session, clipboard);

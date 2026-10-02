@@ -5,6 +5,8 @@ What changed in each LizTerm release, newest first. Downloads are on the
 
 ## Unreleased
 
+- **A session window opens sized for the model's largest screen**, such as 43x80 for a model 4, and the text no
+  longer shrinks when the host switches to it ([#198](https://github.com/coffeemuse/LizTerm/issues/198)).
 - **mvsMF Access's USS tab shows the whole modified time and size**, and the column headings on both tabs sit over
   their columns ([#186](https://github.com/coffeemuse/LizTerm/issues/186)).
 - **A host's soft hyphen (X'CA') shows as a hyphen** and no longer pulls the rest of the line one column left

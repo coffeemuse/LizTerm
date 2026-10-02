@@ -85,14 +85,17 @@ public class TerminalScreenBlinkTests
     [AvaloniaFact]
     public void A_new_cell_geometry_rebuilds_the_prepared_runs()
     {
+        // Resized through a sized host, not a direct Measure and Arrange: the screen's measure follows the room it
+        // is offered (#198), so the window's next pass would put a hand-arranged screen back where it was.
         var screen = new TerminalScreen { Snapshot = WithBlink() };
-        var window = new Window { Width = 800, Height = 600, Content = screen };
+        var host = new Border { Width = 800, Child = screen };
+        var window = new Window { Width = 800, Height = 600, Content = host };
         window.Show();
         TestRender.Repaint(window);
         Assert.Equal(1, screen.RunPlanBuilds);
 
-        screen.Measure(new Size(400, 600));
-        screen.Arrange(new Rect(0, 0, 400, 600));
+        host.Width = 400;
+        window.UpdateLayout();
         TestRender.Repaint(window);
 
         Assert.Equal(2, screen.RunPlanBuilds);

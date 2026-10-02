@@ -13,7 +13,7 @@
         x:Class="LizTerm.App.Views.SessionWindow"
         x:DataType="vm:SessionViewModel"
         Title="{Binding Title}"
-        Width="960" Height="680" MinWidth="480" MinHeight="360"
+        SizeToContent="WidthAndHeight" MinWidth="480" MinHeight="360"
         Background="Black">
   <NativeMenu.Menu>
     <NativeMenu>
@@ -443,6 +443,7 @@
     <Panel>
       <controls:TerminalScreen x:Name="Screen"
                                Snapshot="{Binding Screen}"
+                               AlternateSize="{Binding AlternateSize}"
                                Selection="{Binding Selection, Mode=TwoWay}"
                                Crosshair="{Binding Settings.Crosshair}"
                                BlinkEnabled="{Binding Settings.Blink}"

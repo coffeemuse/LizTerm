@@ -230,6 +230,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     /// <summary>Whether the screen and its captures draw in the one phosphor of a 3278 (#123).</summary>
     public bool Monochrome => Profile.Display == TerminalDisplay.Mono;
+
+    /// <summary>The largest screen the host can switch to, from the profile (#198): the screen fits its cells to it,
+    /// and the window opens around it.</summary>
+    public ScreenSize AlternateSize => ScreenSize.AlternateFor(Profile);
     public string Title => $"{Profile.Name} - {Profile.Host}";
 
     /// <summary>The profile as the session window shows it (#93): the banner on connect and the status bar's
