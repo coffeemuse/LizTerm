@@ -258,6 +258,22 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
 
 - A custom `Control` that draws each row as runs of identical style, segmented by `Cell.SameStyleAs` — each run a
   rectangle, brushes and shaped `FormattedText` — scaled to fit via `CellGeometry.Fit` (pure math, unit tested).
+- **The cells fit the model's alternate size, not the screen showing** (#198). `AlternateSize` (the profile's,
+  `ScreenSize.AlternateFor`, through `SessionViewModel.AlternateSize`) is a floor on the grid `Fit` sees, widened
+  to the snapshot wherever that is larger, so an Erase/Write Alternate keeps the cell size and the 24x80 default
+  screen sits at the top left of the same area, as in x3270. Only a snapshot of a new size invalidates the measure.
+  `MeasureOverride` asks for that grid at `PreferredFontSize` (22, what 80 columns got across the old fixed
+  960-wide window) or the largest size that fits, with a DIP to spare (`CellGeometry.GridSize`) for the platform's
+  rounding to device pixels. The session window is `SizeToContent` for its first layout only:
+  `Opened` sets `Manual`, drops the `MaxWidth`/`MaxHeight` that `App.OpenSession` set from the display's working
+  area (`SessionWindow.LimitOpeningSize`), since Avalonia's own cap is the largest display's whole bounds on macOS
+  and X11, and moves the window into that working area (`KeptInside`), since the platform places it. A profile
+  with a note or tags lays its connect banner out unseen until then (`ReserveBannerRoom`), so the banner arriving
+  does not take the cell size down. **`KeepsRequestedSize` is what makes that size right**: Avalonia arranges a size-to-content window's content
+  once before showing it, at the platform's first client size, and the status bar follows the font that arrange
+  settles on, so the bar's height came from a bogus size and the window opened a few DIPs short, a font size down.
+  The window sets it in its constructor and clears it in `Opened`; a test reading cell positions straight after
+  `Show()` calls `UpdateLayout()` first.
 - The run list is cached for as long as the snapshot instance and the `CellGeometry` are unchanged, so a blink phase
   flip (a full `InvalidateVisual` twice a second, for as long as anything blinks) redraws prepared runs instead of
   re-segmenting and re-shaping every cell. A new snapshot or geometry rebuilds it; `RunPlanBuilds` is the test seam.

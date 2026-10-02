@@ -230,6 +230,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     /// <summary>Whether the screen and its captures draw in the one phosphor of a 3278 (#123).</summary>
     public bool Monochrome => Profile.Display == TerminalDisplay.Mono;
+
+    /// <summary>The largest screen the host can switch to, from the profile (#198): the screen fits its cells to it,
+    /// and the window opens around it.</summary>
+    public ScreenSize AlternateSize => ScreenSize.AlternateFor(Profile);
     public string Title => $"{Profile.Name} - {Profile.Host}";
 
     /// <summary>The profile as the session window shows it (#93): the banner on connect and the status bar's
@@ -256,6 +260,10 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
 
     /// <summary>The status bar's note icon: the banner, one click away in every session.</summary>
     public void ShowBanner() => IsBannerVisible = true;
+
+    /// <summary>Whether the banner shows itself on connect: only for a note or a chip. The window opens with room
+    /// for it (#198).</summary>
+    public bool ShowsBannerOnConnect => HasNote || Chips.Count > 0;
     public EngineInfo Engine => _session.Engine;
 
     /// <summary>Find state for this window. Its own view model: see FindViewModel's own summary.</summary>
@@ -476,7 +484,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         TlsTip = tip.Length == 0 ? null : tip;
         UpdateMessage();
         if (state.HasSocket()) _socketOpened = true;
-        if (IsConnected && !_wasConnected && (HasNote || Chips.Count > 0)) IsBannerVisible = true;
+        if (IsConnected && !_wasConnected && ShowsBannerOnConnect) IsBannerVisible = true;
         _wasConnected = IsConnected;
     }
 

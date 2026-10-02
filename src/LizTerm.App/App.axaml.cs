@@ -276,9 +276,19 @@ public partial class App : Application
             catch { /* the window is gone; nothing more to do with a failed disposal */ }
             if (ShutdownPolicy.UserClosedLastWindow(_quitting, shutdownClose, _sessions.Count)) ShowPicker();
         };
+        // The window opens around its screen (#198), within the working area of the display the user is looking
+        // at: the picker's, else the window they were last in, else the primary display.
+        if (OpeningDisplay(window) is { } display)
+            window.LimitOpeningSize(display.WorkingArea, display.Scaling);
         ShowInPlaceOf(window, _picker);
         _ = viewModel.ConnectCommand.ExecuteAsync(null);
         return window;
+    }
+
+    private Avalonia.Platform.Screen? OpeningDisplay(Window opening)
+    {
+        var from = _picker is { IsVisible: true } ? _picker : ActiveWindow();
+        return (from is null ? null : opening.Screens.ScreenFromWindow(from)) ?? opening.Screens.Primary;
     }
 
     /// <summary>Shows the new window, then closes the one it replaces, in that order (#190). Under WSLg a closing

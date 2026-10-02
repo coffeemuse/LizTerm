@@ -8,6 +8,7 @@ using Avalonia.Headless.XUnit;
 using LizTerm.App.Controls;
 using LizTerm.App.Rendering;
 using LizTerm.Core.Screen;
+using LizTerm.Core.Session;
 
 namespace LizTerm.App.Tests.Controls;
 
@@ -37,6 +38,97 @@ public class TerminalScreenLayoutTests
         window.UpdateLayout();
         Assert.True(screen.LastGeometry.CellHeight * 43 <= 600.01);
         Assert.NotEqual(before, screen.LastGeometry);
+    }
+
+    /// <summary>#198: a model 4 starts on its 24x80 default screen, and TSO's logon switches it to the 43x80
+    /// alternate one. The cells are fitted to the alternate size throughout, so the switch keeps their size, and the
+    /// default screen sits at the top of the same area, where x3270 draws it.</summary>
+    [AvaloniaFact]
+    public void A_switch_between_the_default_and_alternate_screens_keeps_the_cell_size()
+    {
+        var screen = new TerminalScreen { AlternateSize = new ScreenSize(43, 80), Snapshot = ScreenSnapshot.Empty(24, 80) };
+        var window = new Window { Width = 800, Height = 600, Content = screen };
+        window.Show();
+        var onDefault = screen.LastGeometry;
+
+        screen.Snapshot = ScreenSnapshot.Empty(43, 80);
+        window.UpdateLayout();
+
+        Assert.Equal(onDefault, screen.LastGeometry);
+        Assert.True(onDefault.CellHeight * 43 <= 600.01, $"height {onDefault.CellHeight * 43}");
+        Assert.Equal((0, 0), onDefault.HitTest(onDefault.OriginX + 1, onDefault.OriginY + 1, 24, 80));
+    }
+
+    /// <summary>The alternate size is a floor, never a clip: a screen larger than it is still drawn whole.</summary>
+    [AvaloniaFact]
+    public void A_screen_larger_than_the_alternate_size_is_still_fitted_whole()
+    {
+        var screen = new TerminalScreen { AlternateSize = new ScreenSize(24, 80), Snapshot = ScreenSnapshot.Empty(27, 132) };
+        var window = new Window { Width = 800, Height = 600, Content = screen };
+        window.Show();
+
+        var g = screen.LastGeometry;
+        Assert.True(g.CellWidth * 132 <= 800.01, $"width {g.CellWidth * 132}");
+        Assert.True(g.CellHeight * 27 <= 600.01, $"height {g.CellHeight * 27}");
+    }
+
+    /// <summary>A window sized to its content opens around the screen at the preferred size (#198), so the screen
+    /// fills it with no bands.</summary>
+    [AvaloniaFact]
+    public void A_window_sized_to_the_screen_holds_the_alternate_screen_at_the_preferred_size()
+    {
+        var screen = new TerminalScreen { AlternateSize = new ScreenSize(27, 132), Snapshot = ScreenSnapshot.Empty(24, 80) };
+        var window = new Window { SizeToContent = SizeToContent.WidthAndHeight, Content = screen };
+        window.Show();
+        // Show sizes the window after its first layout pass; the arrange at that size is the next pass.
+        window.UpdateLayout();
+
+        var g = screen.LastGeometry;
+        Assert.Equal(TerminalScreen.PreferredFontSize, g.FontSize);
+        Assert.Equal(Math.Ceiling(g.CellWidth * 132) + 1, window.ClientSize.Width);
+        Assert.Equal(Math.Ceiling(g.CellHeight * 27) + 1, window.ClientSize.Height);
+    }
+
+    /// <summary>Offered less room than the preferred size needs, the screen asks for the largest size that fits,
+    /// so a window capped at the display's height still opens snug around it.</summary>
+    [AvaloniaFact]
+    public void Offered_too_little_room_it_asks_for_the_largest_size_that_fits()
+    {
+        var screen = new TerminalScreen { AlternateSize = new ScreenSize(43, 80), Snapshot = ScreenSnapshot.Empty(24, 80) };
+        var window = new Window { SizeToContent = SizeToContent.WidthAndHeight, MaxHeight = 400, Content = screen };
+        window.Show();
+        window.UpdateLayout();
+
+        var g = screen.LastGeometry;
+        Assert.True(g.FontSize < TerminalScreen.PreferredFontSize, $"font {g.FontSize}");
+        Assert.True(g.CellHeight * 43 <= 400.01, $"height {g.CellHeight * 43}");
+        Assert.Equal(Math.Ceiling(g.CellWidth * 80) + 1, window.ClientSize.Width);
+    }
+
+    /// <summary>While its window is sizing itself to it, the screen keeps the size it asked for whatever it is
+    /// arranged at: Avalonia arranges a window's content once before showing it, at whatever size the platform gave
+    /// the window first. Let go, it fits the arrange again.</summary>
+    [AvaloniaFact]
+    public void Keeping_the_requested_size_ignores_the_arrange_until_let_go()
+    {
+        var screen = new TerminalScreen { AlternateSize = new ScreenSize(43, 80), Snapshot = ScreenSnapshot.Empty(24, 80), KeepsRequestedSize = true };
+        screen.Measure(Size.Infinity);
+        screen.Arrange(new Rect(0, 0, 400, 300));
+        Assert.Equal(TerminalScreen.PreferredFontSize, screen.LastGeometry.FontSize);
+        Assert.Equal(TerminalScreen.PreferredFontSize, screen.OiaFontSize);
+
+        screen.KeepsRequestedSize = false;
+        screen.Arrange(new Rect(0, 0, 400, 300));
+        Assert.True(screen.LastGeometry.FontSize < TerminalScreen.PreferredFontSize, $"font {screen.LastGeometry.FontSize}");
+        Assert.True(screen.LastGeometry.CellHeight * 43 <= 300.01);
+    }
+
+    [AvaloniaFact]
+    public void With_no_screen_it_asks_for_no_room()
+    {
+        var screen = new TerminalScreen();
+        screen.Measure(Size.Infinity);
+        Assert.Equal(default, screen.DesiredSize);
     }
 
     /// <summary>The status bar draws its OIA glyphs at the screen's cell size (a real 3270's OIA is one more row

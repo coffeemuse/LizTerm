@@ -63,6 +63,17 @@ public sealed class TerminalScreen : Control
     public static readonly StyledProperty<bool> MonochromeProperty =
         AvaloniaProperty.Register<TerminalScreen, bool>(nameof(Monochrome));
 
+    /// <summary>The largest screen the session can show, the model's alternate size (#198), or null to fit each
+    /// screen as it comes. The cells are fitted to it, or to the screen itself where that is larger, so a host
+    /// switching between its default and alternate screens keeps the cell size: the smaller screen is drawn at the
+    /// top left of the same area, as x3270 draws it. It is also what the control asks the layout for.</summary>
+    public static readonly StyledProperty<ScreenSize?> AlternateSizeProperty =
+        AvaloniaProperty.Register<TerminalScreen, ScreenSize?>(nameof(AlternateSize));
+
+    /// <summary>The font size the control asks the layout for, room permitting (#198): what an 80-column screen
+    /// got across the 960-wide window every session window opened at before it was sized to its screen.</summary>
+    public const double PreferredFontSize = 22;
+
     public static readonly FontFamily TerminalFont = FontFamily.Parse("avares://LizTerm.App/Assets/Fonts#IBM 3270");
 
     private readonly Typeface _typeface = new(TerminalFont);
@@ -75,8 +86,10 @@ public sealed class TerminalScreen : Control
     static TerminalScreen()
     {
         AffectsRender<TerminalScreen>(SnapshotProperty, SelectionProperty, CrosshairProperty,
-            FindMatchesProperty, CurrentMatchProperty, BlinkEnabledProperty);
-        AffectsArrange<TerminalScreen>(SnapshotProperty);
+            FindMatchesProperty, CurrentMatchProperty, BlinkEnabledProperty, AlternateSizeProperty);
+        AffectsArrange<TerminalScreen>(SnapshotProperty, AlternateSizeProperty);
+        // A snapshot invalidates the measure only when its size changes (OnPropertyChanged), not on every host write.
+        AffectsMeasure<TerminalScreen>(AlternateSizeProperty);
         FocusableProperty.OverrideDefaultValue<TerminalScreen>(true);
     }
 
@@ -173,6 +186,12 @@ public sealed class TerminalScreen : Control
         set => SetValue(SnapshotProperty, value);
     }
 
+    public ScreenSize? AlternateSize
+    {
+        get => GetValue(AlternateSizeProperty);
+        set => SetValue(AlternateSizeProperty, value);
+    }
+
     public Keymap Keymap
     {
         get => GetValue(KeymapProperty);
@@ -216,6 +235,26 @@ public sealed class TerminalScreen : Control
     }
 
     internal CellGeometry LastGeometry { get; private set; }
+
+    /// <summary>While true, the cells keep the size the measure asked for rather than being fitted to the arrange
+    /// (#198). The session window sets it while it sizes itself to the screen: Avalonia arranges a window's content
+    /// once before showing it, at whatever size the platform gave the window first, and the status bar follows the
+    /// font the screen settles on, so a font fitted to that size would build a bar of the wrong height into the
+    /// size the window opens at. Turned off, the cells fit the arrange again.</summary>
+    internal bool KeepsRequestedSize
+    {
+        get => _keepsRequestedSize;
+        set
+        {
+            _keepsRequestedSize = value;
+            InvalidateArrange();
+        }
+    }
+
+    private bool _keepsRequestedSize;
+
+    /// <summary>The font size the last measure asked for.</summary>
+    private double _requestedFontSize;
 
     /// <summary>The status bar's font size: the cell font size, followed from ArrangeOverride through
     /// <see cref="StatusBarFont"/>, which holds only a bounce the bar's own resize causes. Read-only; the window's OIA
@@ -440,9 +479,21 @@ public sealed class TerminalScreen : Control
         if (change.Property != SnapshotProperty) return;
         var (oldValue, newValue) = change.GetOldAndNewValue<ScreenSnapshot?>();
         UpdateBlinkTimer(newValue);
-        if (Selection is null) return;
-        if (oldValue is null || newValue is null || oldValue.Rows != newValue.Rows || oldValue.Columns != newValue.Columns)
-            SetCurrentValue(SelectionProperty, null);
+        var resized = oldValue is null || newValue is null || oldValue.Rows != newValue.Rows || oldValue.Columns != newValue.Columns;
+        if (resized) InvalidateMeasure();
+        if (Selection is not null && resized) SetCurrentValue(SelectionProperty, null);
+    }
+
+    /// <summary>Asks for the grid the cells are fitted to at <see cref="PreferredFontSize"/>, or at the largest size
+    /// that fits the room offered, so a window sized to its content opens snug around the screen (#198). Anywhere
+    /// else the arrange decides the fit, as it always has.</summary>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        if (LayoutGrid() is not { } grid) return default;
+        EnsureMetrics();
+        var fits = CellGeometry.Fit(availableSize.Width, availableSize.Height, grid.Rows, grid.Columns, _advancePerEm, _lineHeightPerEm);
+        _requestedFontSize = Math.Min(PreferredFontSize, fits.FontSize);
+        return CellGeometry.GridSize(grid.Rows, grid.Columns, _requestedFontSize, _advancePerEm, _lineHeightPerEm);
     }
 
     protected override Size ArrangeOverride(Size finalSize)
@@ -489,10 +540,26 @@ public sealed class TerminalScreen : Control
 
     private void UpdateGeometry(Size size)
     {
-        var snapshot = Snapshot;
-        if (snapshot is null) { LastGeometry = default; return; }
+        if (Snapshot is null || LayoutGrid() is not { } grid) { LastGeometry = default; return; }
         EnsureMetrics();
-        LastGeometry = CellGeometry.Fit(size.Width, size.Height, snapshot.Rows, snapshot.Columns, _advancePerEm, _lineHeightPerEm);
+        LastGeometry = KeepsRequestedSize && _requestedFontSize > 0
+            ? CellGeometry.At(_requestedFontSize, size.Width, size.Height, grid.Rows, grid.Columns, _advancePerEm, _lineHeightPerEm)
+            : CellGeometry.Fit(size.Width, size.Height, grid.Rows, grid.Columns, _advancePerEm, _lineHeightPerEm);
+    }
+
+    /// <summary>The grid the cells are fitted to: the alternate size, widened to the screen in any dimension where
+    /// the screen is larger; the screen alone when there is no alternate size. Every cell coordinate stays the
+    /// screen's own, counted from the grid's top left.</summary>
+    private (int Rows, int Columns)? LayoutGrid()
+    {
+        var snapshot = Snapshot;
+        return (snapshot, AlternateSize) switch
+        {
+            (null, null) => null,
+            (null, { } alternate) => (alternate.Rows, alternate.Columns),
+            ({ } screen, null) => (screen.Rows, screen.Columns),
+            ({ } screen, { } alternate) => (Math.Max(screen.Rows, alternate.Rows), Math.Max(screen.Columns, alternate.Columns)),
+        };
     }
 
     private void EnsureMetrics()

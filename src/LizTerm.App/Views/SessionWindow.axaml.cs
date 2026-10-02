@@ -92,9 +92,28 @@ public partial class SessionWindow : Window, ISessionHost
         // handledEventsToo: the item's Command marks Click handled before any instance handler runs. See OnInsertClick.
         InsertMenuItem.AddHandler(MenuItem.ClickEvent, OnInsertClick, RoutingStrategies.Bubble, handledEventsToo: true);
         ApplyMenuStyle(MenuStrategy.Resolve(style, isMacOS));
+        // The window opens sized to its screen (SizeToContent in the XAML, #198), and the screen keeps the size it
+        // asks for until then; see KeepsRequestedSize for the bogus arrange this guards against.
+        Screen.KeepsRequestedSize = true;
         Opened += (_, _) =>
         {
             _opened = true;
+            // Sized to its screen for the first layout only. From here the window is the user's: a bar appearing
+            // under the screen takes its room from the screen rather than growing the window, and the display's
+            // limit goes, so the window can still be made larger than the room it opened in.
+            SizeToContent = SizeToContent.Manual;
+            ClearValue(MaxWidthProperty);
+            ClearValue(MaxHeightProperty);
+            ReleaseBannerRoom();
+            Screen.KeepsRequestedSize = false;
+            if (_openingArea is { } area)
+            {
+                // The frame in the coordinates Position and a screen's bounds share, as Avalonia's own CenterScreen
+                // computes it; before the platform reports a frame, the allowance the size was capped with.
+                var frame = FrameSize ?? new Size(ClientSize.Width + FrameAllowance.Width, ClientSize.Height + FrameAllowance.Height);
+                var kept = KeptInside(Position, PixelSize.FromSize(frame, DesktopScaling), area);
+                if (kept != Position) Position = kept;
+            }
             // The settings subscription starts here rather than the moment the data context arrives: a window
             // built and then never shown — App.OpenSession throwing before its Show() — never raises Closed
             // either, so a subscription taken earlier would leave the process-wide settings object calling
@@ -112,6 +131,65 @@ public partial class SessionWindow : Window, ISessionHost
             Screen.Focus();
         };
     }
+
+    /// <summary>Caps the size the window opens at to a display's working area, for its first layout only (#198),
+    /// and keeps the window on that area once open; call it before Show. The window sizes itself to the screen's
+    /// alternate size at its preferred cell size, and Avalonia's own cap is the largest display's whole bounds on
+    /// macOS and X11, so a model 4 would open under the Dock or the taskbar. Capping the size is not enough on its
+    /// own, because the platform still places the window: macOS put a 1005-high one with its top halfway down a
+    /// 1440-high display, and the platform may choose another display altogether. The App knows which display the
+    /// user is on and supplies its working area.</summary>
+    internal void LimitOpeningSize(PixelRect workingArea, double scaling)
+    {
+        var room = OpeningRoom(workingArea, scaling);
+        MaxWidth = room.Width;
+        MaxHeight = room.Height;
+        _openingArea = workingArea;
+    }
+
+    /// <summary>The working area <see cref="LimitOpeningSize"/> was given, which Opened moves the window into.</summary>
+    private PixelRect? _openingArea;
+
+    /// <summary>Where a window whose frame is <paramref name="frame"/> moves from <paramref name="position"/> to lie
+    /// inside <paramref name="area"/>: no further than it has to, and to the area's top or left edge in a dimension
+    /// it is too large for.</summary>
+    internal static PixelPoint KeptInside(PixelPoint position, PixelSize frame, PixelRect area) =>
+        new(Math.Max(area.X, Math.Min(position.X, area.Right - frame.Width)),
+            Math.Max(area.Y, Math.Min(position.Y, area.Bottom - frame.Height)));
+
+    /// <summary>A profile with a note or tags shows its banner on every connect, and a banner arriving in a window
+    /// sized snug around its screen would take its room from the screen and the cells a size or two down with it
+    /// (#198). So until the window opens the banner is laid out unseen, and the opening size has room for it, as
+    /// the fixed 960x680 window had. Opened hides it again (<see cref="ReleaseBannerRoom"/>).</summary>
+    private void ReserveBannerRoom()
+    {
+        ReleaseBannerRoom();
+        if (_opened || ViewModel is not { ShowsBannerOnConnect: true, IsBannerVisible: false } vm) return;
+        _bannerRoomFor = vm;
+        NoteBanner.Opacity = 0;
+        vm.ShowBanner();
+    }
+
+    private void ReleaseBannerRoom()
+    {
+        if (_bannerRoomFor is null) return;
+        _bannerRoomFor.IsBannerVisible = false;
+        _bannerRoomFor = null;
+        NoteBanner.ClearValue(OpacityProperty);
+    }
+
+    /// <summary>The view model whose banner is shown unseen for the opening layout, or null.</summary>
+    private SessionViewModel? _bannerRoomFor;
+
+    /// <summary>What a window's client area can use of a display's working area: the area in DIPs, less
+    /// <see cref="FrameAllowance"/>.</summary>
+    internal static Size OpeningRoom(PixelRect workingArea, double scaling) =>
+        new(workingArea.Width / scaling - FrameAllowance.Width, workingArea.Height / scaling - FrameAllowance.Height);
+
+    /// <summary>The title bar and border, which the client size does not include, generously: the title bar is 28
+    /// DIPs on macOS, about 31 on Windows 11 and 37 under GNOME. No platform reports its own before the window is
+    /// shown.</summary>
+    internal static readonly Size FrameAllowance = new(16, 48);
 
     private MenuStyle _menuStyle;
 
@@ -905,6 +983,7 @@ public partial class SessionWindow : Window, ISessionHost
         // Only once the window is open; see the Opened handler for why.
         if (_opened && _styleSource is not null) _styleSource.PropertyChanged += OnSettingsChanged;
         ApplyKeymap();
+        ReserveBannerRoom();
     }
 
     private void OnBellRang(object? sender, EventArgs e) => Screen.Flash();
