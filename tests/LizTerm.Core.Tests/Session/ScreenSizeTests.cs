@@ -22,6 +22,12 @@ public class ScreenSizeTests
     public void An_oversize_geometry_is_the_alternate_size() =>
         Assert.Equal(new ScreenSize(50, 100), ScreenSize.AlternateFor(new SessionProfile(Model: 2, Oversize: "100x50")));
 
+    /// <summary>b3270 drops an oversize without the extended data stream, so the model's own size is all the
+    /// host can switch to.</summary>
+    [Fact]
+    public void An_oversize_without_the_extended_data_stream_leaves_the_model_s_size() =>
+        Assert.Equal(new ScreenSize(24, 80), ScreenSize.AlternateFor(new SessionProfile(Model: 2, Oversize: "132x60", Extended: false)));
+
     [Theory]
     [InlineData("0x0")]
     [InlineData("")]

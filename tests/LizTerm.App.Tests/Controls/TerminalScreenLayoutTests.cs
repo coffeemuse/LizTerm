@@ -85,8 +85,8 @@ public class TerminalScreenLayoutTests
 
         var g = screen.LastGeometry;
         Assert.Equal(TerminalScreen.PreferredFontSize, g.FontSize);
-        Assert.Equal(Math.Ceiling(g.CellWidth * 132), window.ClientSize.Width);
-        Assert.Equal(Math.Ceiling(g.CellHeight * 27), window.ClientSize.Height);
+        Assert.Equal(Math.Ceiling(g.CellWidth * 132) + 1, window.ClientSize.Width);
+        Assert.Equal(Math.Ceiling(g.CellHeight * 27) + 1, window.ClientSize.Height);
     }
 
     /// <summary>Offered less room than the preferred size needs, the screen asks for the largest size that fits,
@@ -102,7 +102,7 @@ public class TerminalScreenLayoutTests
         var g = screen.LastGeometry;
         Assert.True(g.FontSize < TerminalScreen.PreferredFontSize, $"font {g.FontSize}");
         Assert.True(g.CellHeight * 43 <= 400.01, $"height {g.CellHeight * 43}");
-        Assert.Equal(Math.Ceiling(g.CellWidth * 80), window.ClientSize.Width);
+        Assert.Equal(Math.Ceiling(g.CellWidth * 80) + 1, window.ClientSize.Width);
     }
 
     /// <summary>While its window is sizing itself to it, the screen keeps the size it asked for whatever it is

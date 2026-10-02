@@ -68,6 +68,19 @@ public sealed record OversizeGeometry(int Columns, int Rows)
         return true;
     }
 
+    /// <summary>The oversize b3270 will use for <paramref name="profile"/>, measured against the profile's own model:
+    /// null when it names none, and also when the profile turns the extended data stream off, because b3270 drops
+    /// <c>-oversize</c> without it (x3270's <c>oversize_init</c>). The engine's command line and the window's size
+    /// (#198) both read the field through this, so the two cannot disagree. False, with the error, for one b3270
+    /// would refuse, whether or not the profile is extended.</summary>
+    public static bool TryFor(SessionProfile profile, out OversizeGeometry? geometry, out string? error)
+    {
+        var model = TerminalModel.Find(profile.Model) ?? new TerminalModel(profile.Model, 0, 0);
+        if (!TryParse(profile.Oversize, model, out geometry, out error)) return false;
+        if (!profile.Extended) geometry = null;
+        return true;
+    }
+
     /// <summary>Plain digits only, which is <see cref="PlainNumber"/>'s whole job: "-5", "+5" and " 5" are format
     /// errors rather than reaching the engine, and no trimming happens here, so "13 2x43" stays one. The ceiling
     /// is left to the rules above, which name columns and rows separately.</summary>

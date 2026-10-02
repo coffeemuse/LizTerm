@@ -263,10 +263,13 @@ The name users see on macOS comes from `LizTerm.parcel`'s `GeneralSettings.Packa
   to the snapshot wherever that is larger, so an Erase/Write Alternate keeps the cell size and the 24x80 default
   screen sits at the top left of the same area, as in x3270. Only a snapshot of a new size invalidates the measure.
   `MeasureOverride` asks for that grid at `PreferredFontSize` (22, what 80 columns got across the old fixed
-  960-wide window) or the largest size that fits. The session window is `SizeToContent` for its first layout only:
-  `Opened` sets `Manual` and drops the `MaxWidth`/`MaxHeight` that `App.OpenSession` set from the display's working
-  area (`SessionWindow.OpeningRoom`), since Avalonia's own cap is the largest display's whole bounds on macOS and
-  X11. **`KeepsRequestedSize` is what makes that size right**: Avalonia arranges a size-to-content window's content
+  960-wide window) or the largest size that fits, with a DIP to spare (`CellGeometry.GridSize`) for the platform's
+  rounding to device pixels. The session window is `SizeToContent` for its first layout only:
+  `Opened` sets `Manual`, drops the `MaxWidth`/`MaxHeight` that `App.OpenSession` set from the display's working
+  area (`SessionWindow.LimitOpeningSize`), since Avalonia's own cap is the largest display's whole bounds on macOS
+  and X11, and moves the window into that working area (`KeptInside`), since the platform places it. A profile
+  with a note or tags lays its connect banner out unseen until then (`ReserveBannerRoom`), so the banner arriving
+  does not take the cell size down. **`KeepsRequestedSize` is what makes that size right**: Avalonia arranges a size-to-content window's content
   once before showing it, at the platform's first client size, and the status bar follows the font that arrange
   settles on, so the bar's height came from a bogus size and the window opened a few DIPs short, a font size down.
   The window sets it in its constructor and clears it in `Opened`; a test reading cell positions straight after

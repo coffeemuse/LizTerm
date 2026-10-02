@@ -19,12 +19,14 @@ namespace LizTerm.App.Tests.Views;
 public class SessionWindowSizeTests
 {
     private static (SessionWindow Window, TerminalScreen Screen, SessionViewModel Vm, FakeEmulatorSession Session) Open(
-        int model, Size? room = null)
+        int model, Size? room = null, string? note = null)
     {
-        var session = new FakeEmulatorSession { Profile = new SessionProfile(Name: "Mod", Host: "h", Model: model) };
+        var session = new FakeEmulatorSession { Profile = new SessionProfile(Name: "Mod", Host: "h", Model: model, Note: note) };
         var vm = new SessionViewModel(session, action => action(), new FakeTextClipboard());
         var window = new SessionWindow { DataContext = vm };
-        if (room is { } r) window.LimitOpeningSize(r);
+        // A display whose working area leaves exactly that room, at 100%.
+        if (room is { } r)
+            window.LimitOpeningSize(new PixelRect(0, 0, (int)(r.Width + SessionWindow.FrameAllowance.Width), (int)(r.Height + SessionWindow.FrameAllowance.Height)), 1);
         window.Show();
         // Show sizes the window after its first layout pass; the arrange at that size is the next pass.
         window.UpdateLayout();
@@ -99,6 +101,70 @@ public class SessionWindowSizeTests
         Assert.True(double.IsPositiveInfinity(window.MaxWidth));
         Assert.True(double.IsPositiveInfinity(window.MaxHeight));
     }
+
+    /// <summary>Capped by the display, the screen and the status bar settle on one size before the window opens,
+    /// and the grid fits inside the screen.</summary>
+    [AvaloniaTheory]
+    [InlineData(500)]
+    [InlineData(600)]
+    [InlineData(700)]
+    [InlineData(800)]
+    [InlineData(900)]
+    public void Limited_by_the_display_the_screen_and_the_bar_open_at_one_size(int height)
+    {
+        var (window, screen, _, _) = Open(model: 4, room: new Size(1200, height));
+
+        var g = screen.LastGeometry;
+        Assert.Equal(g.FontSize, screen.OiaFontSize);
+        Assert.True(g.CellHeight * 43 <= screen.Bounds.Height + 0.01, $"grid {g.CellHeight * 43}, screen {screen.Bounds.Height}");
+        Assert.True(window.ClientSize.Height <= height, $"height {window.ClientSize.Height}");
+    }
+
+    /// <summary>A profile with a note or tags shows a banner on every connect. The window opens with room for it,
+    /// as the fixed 960x680 window had, so its arrival leaves the cell size alone.</summary>
+    [AvaloniaFact]
+    public void The_connect_banner_has_its_room_from_the_start()
+    {
+        var (window, screen, vm, session) = Open(model: 2, note: "LAN only");
+        Assert.Equal(TerminalScreen.PreferredFontSize, screen.LastGeometry.FontSize);
+
+        session.RaiseConnection(ConnectionState.ConnectedTn3270E);
+        window.UpdateLayout();
+
+        Assert.True(vm.IsBannerVisible);
+        Assert.Equal(TerminalScreen.PreferredFontSize, screen.LastGeometry.FontSize);
+    }
+
+    /// <summary>Placed partly off the display it was sized for, the window is moved onto it once open, no further
+    /// than it has to go.</summary>
+    [AvaloniaFact]
+    public void Once_open_the_window_is_kept_inside_the_working_area_it_was_sized_for()
+    {
+        var session = new FakeEmulatorSession { Profile = new SessionProfile(Name: "Mod", Host: "h", Model: 4) };
+        var window = new SessionWindow { DataContext = new SessionViewModel(session, action => action(), new FakeTextClipboard()) };
+        var area = new PixelRect(0, 25, 1440, 875);
+        window.LimitOpeningSize(area, 1);
+        window.Position = new PixelPoint(300, 600);
+        window.Show();
+
+        var frame = window.FrameSize ?? window.ClientSize;
+        Assert.Equal(300, window.Position.X);
+        Assert.True(window.Position.Y >= area.Y, $"top {window.Position.Y}");
+        Assert.True(window.Position.Y + frame.Height <= area.Bottom + 0.01, $"bottom {window.Position.Y + frame.Height}");
+    }
+
+    [Theory]
+    [InlineData(100, 200, 100, 200)]
+    [InlineData(100, 500, 100, 300)]
+    [InlineData(2000, 200, 1000, 200)]
+    [InlineData(-50, -50, 0, 25)]
+    [InlineData(100, 3000, 100, 300)]
+    public void A_window_is_moved_no_further_than_it_must_to_lie_inside_the_area(int x, int y, int keptX, int keptY) =>
+        Assert.Equal(new PixelPoint(keptX, keptY), SessionWindow.KeptInside(new PixelPoint(x, y), new PixelSize(440, 600), new PixelRect(0, 25, 1440, 875)));
+
+    [Fact]
+    public void A_window_larger_than_the_area_starts_at_its_top_left() =>
+        Assert.Equal(new PixelPoint(0, 25), SessionWindow.KeptInside(new PixelPoint(300, 400), new PixelSize(2000, 1000), new PixelRect(0, 25, 1440, 875)));
 
     /// <summary>The room is the display's working area, in DIPs, less an allowance for the title bar and border
     /// the client size does not include.</summary>

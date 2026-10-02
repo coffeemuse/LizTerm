@@ -90,8 +90,9 @@ public class CellGeometryTests
         Assert.Equal(default, CellGeometry.At(0, 800, 600, 24, 80, Advance, Line));
     }
 
-    /// <summary>What a screen asks the layout for (#198): the grid at that font size, rounded up to whole DIPs so
-    /// the area it is given fits the same size back rather than the one below it.</summary>
+    /// <summary>What a screen asks the layout for (#198): the grid at that font size, rounded up to whole DIPs with
+    /// one to spare, so the area it is given fits the same size back rather than the one below it, even once the
+    /// platform has taken up to a device pixel off it.</summary>
     [Theory]
     [InlineData(24, 80, 22, 0.6, 1.2)]
     [InlineData(43, 80, 22, 0.6, 1.2)]
@@ -103,9 +104,11 @@ public class CellGeometryTests
     public void A_grid_s_size_at_a_font_size_fits_back_at_that_font_size(int rows, int columns, double fontSize, double advance, double line)
     {
         var size = CellGeometry.GridSize(rows, columns, fontSize, advance, line);
-        Assert.Equal(Math.Ceiling(columns * advance * fontSize), size.Width);
-        Assert.Equal(Math.Ceiling(rows * line * fontSize), size.Height);
+        Assert.Equal(Math.Ceiling(columns * advance * fontSize) + 1, size.Width);
+        Assert.Equal(Math.Ceiling(rows * line * fontSize) + 1, size.Height);
         Assert.Equal(fontSize, CellGeometry.Fit(size.Width, size.Height, rows, columns, advance, line).FontSize);
+        // A device pixel short at 125%, the platform truncating.
+        Assert.Equal(fontSize, CellGeometry.Fit(size.Width - 0.8, size.Height - 0.8, rows, columns, advance, line).FontSize);
     }
 
     /// <summary>Products that land on a whole number exactly: the division back must not come out a hair under

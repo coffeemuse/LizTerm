@@ -186,10 +186,10 @@ public sealed class B3270Session : IEmulatorSession
             // (spec 4.2): b3270 answers a bad -oversize with a popup, which arrives as an unexplained HostMessage
             // with nothing naming the field the user typed. Throwing names it, and lands in the same error banner
             // DecideCaFile's own refusal does, before a single action is written.
-            var model = TerminalModel.Find(profile.Model) ?? new TerminalModel(profile.Model, 0, 0);
-            if (!OversizeGeometry.TryParse(profile.Oversize, model, out var oversize, out var error))
+            if (!OversizeGeometry.TryFor(profile, out var oversize, out var error))
                 throw new ConnectionFailedException([error!]);
-            // Null for b3270's own "0x0" spelling of none, which is valid and means: send nothing.
+            // Null for b3270's own "0x0" spelling of none, which is valid and means: send nothing. Null too for a
+            // profile without the extended data stream, which b3270 would drop the option for anyway.
             if (oversize is not null)
             {
                 arguments.Add("-oversize");

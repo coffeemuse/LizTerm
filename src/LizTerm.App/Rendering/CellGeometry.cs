@@ -34,10 +34,13 @@ public readonly record struct CellGeometry(double CellWidth, double CellHeight, 
         return new CellGeometry(cellWidth, cellHeight, fontSize, originX, originY);
     }
 
-    /// <summary>The room a rows x columns grid takes at <paramref name="fontSize"/>, rounded up to whole DIPs:
-    /// what the screen asks the layout for (#198), so that the area it is given fits that size back.</summary>
+    /// <summary>The room a rows x columns grid takes at <paramref name="fontSize"/>, rounded up to whole DIPs with one
+    /// to spare: what the screen asks the layout for (#198), so that the area it is given fits that size back. The
+    /// spare DIP is for the platform, which turns the size into whole device pixels and can truncate (at 125%,
+    /// 951 DIPs is 1188.75 pixels and comes back as 950.4 DIPs); a device pixel is at most a DIP at any scaling of
+    /// 100% or more.</summary>
     public static Size GridSize(int rows, int columns, double fontSize, double advancePerEm, double lineHeightPerEm) =>
-        new(Math.Ceiling(columns * advancePerEm * fontSize), Math.Ceiling(rows * lineHeightPerEm * fontSize));
+        new(Math.Ceiling(columns * advancePerEm * fontSize) + 1, Math.Ceiling(rows * lineHeightPerEm * fontSize) + 1);
 
     public (int Row, int Column)? HitTest(double x, double y, int rows, int columns)
     {

@@ -279,7 +279,7 @@ public partial class App : Application
         // The window opens around its screen (#198), within the working area of the display the user is looking
         // at: the picker's, else the window they were last in, else the primary display.
         if (OpeningDisplay(window) is { } display)
-            window.LimitOpeningSize(SessionWindow.OpeningRoom(display.WorkingArea, display.Scaling));
+            window.LimitOpeningSize(display.WorkingArea, display.Scaling);
         ShowInPlaceOf(window, _picker);
         _ = viewModel.ConnectCommand.ExecuteAsync(null);
         return window;
