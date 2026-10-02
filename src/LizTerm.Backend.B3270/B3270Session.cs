@@ -188,8 +188,7 @@ public sealed class B3270Session : IEmulatorSession
             // DecideCaFile's own refusal does, before a single action is written.
             if (!OversizeGeometry.TryFor(profile, out var oversize, out var error))
                 throw new ConnectionFailedException([error!]);
-            // Null for b3270's own "0x0" spelling of none, which is valid and means: send nothing. Null too for a
-            // profile without the extended data stream, which b3270 would drop the option for anyway.
+            // Null for b3270's own "0x0" spelling of none, which is valid and means: send nothing.
             if (oversize is not null)
             {
                 arguments.Add("-oversize");

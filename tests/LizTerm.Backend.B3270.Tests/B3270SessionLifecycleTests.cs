@@ -600,13 +600,14 @@ public class B3270SessionLifecycleTests
         Assert.DoesNotContain("-oversize", args);
     }
 
-    /// <summary>b3270 drops an oversize without the extended data stream, so it is not sent, and the window sizes
-    /// itself for the model alone (#198). One b3270 would refuse is still named.</summary>
+    /// <summary>Unchecking Extended only drops the model's -E, which b3270 4.5 ignores, so the engine keeps the
+    /// extended data stream and the oversize is sent as ever (#200). One b3270 would refuse is still named.</summary>
     [Fact]
-    public void BuildArguments_sends_no_oversize_without_the_extended_data_stream()
+    public void BuildArguments_sends_the_oversize_with_extended_unchecked()
     {
         var plain = new SessionProfile { Name = "p", Host = "h", Oversize = "132x43", Extended = false };
-        Assert.DoesNotContain("-oversize", B3270Session.BuildArguments(plain));
+        var args = B3270Session.BuildArguments(plain);
+        Assert.Equal("132x43", args[args.ToList().IndexOf("-oversize") + 1]);
         Assert.Throws<ConnectionFailedException>(() => B3270Session.BuildArguments(plain with { Oversize = "200x200" }));
     }
 

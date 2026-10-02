@@ -22,11 +22,11 @@ public class ScreenSizeTests
     public void An_oversize_geometry_is_the_alternate_size() =>
         Assert.Equal(new ScreenSize(50, 100), ScreenSize.AlternateFor(new SessionProfile(Model: 2, Oversize: "100x50")));
 
-    /// <summary>b3270 drops an oversize without the extended data stream, so the model's own size is all the
-    /// host can switch to.</summary>
+    /// <summary>Unchecking Extended only drops the model's -E, which b3270 4.5 ignores: the engine keeps the extended
+    /// data stream, and with it the oversize (#200).</summary>
     [Fact]
-    public void An_oversize_without_the_extended_data_stream_leaves_the_model_s_size() =>
-        Assert.Equal(new ScreenSize(24, 80), ScreenSize.AlternateFor(new SessionProfile(Model: 2, Oversize: "132x60", Extended: false)));
+    public void An_oversize_with_extended_unchecked_is_still_the_alternate_size() =>
+        Assert.Equal(new ScreenSize(60, 132), ScreenSize.AlternateFor(new SessionProfile(Model: 2, Oversize: "132x60", Extended: false)));
 
     [Theory]
     [InlineData("0x0")]
