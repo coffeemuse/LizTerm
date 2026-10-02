@@ -145,6 +145,22 @@ public class B3270SessionStateTests
         Assert.Null(session.Tls);
     }
 
+    /// <summary>The name is the engine's, not worked out from the profile (#202), so it is unknown until the engine
+    /// reports one. Unlike TLS it survives a disconnect: it is what the engine will tell the host next time.</summary>
+    [Fact]
+    public async Task Terminal_name_is_the_engines_latest_report_and_outlives_a_disconnect()
+    {
+        var (session, fake) = await StartAsync();
+        Assert.Null(session.TerminalName);
+        fake.Emit("""{"terminal-name":{"text":"IBM-3279-2-E","override":false}}""");
+        await Wait.UntilAsync(() => session.TerminalName == "IBM-3279-2-E", "first name");
+        fake.Emit(NotConnected);
+        await Wait.UntilAsync(() => session.ConnectionState == ConnectionState.Disconnected, "disconnected");
+        Assert.Equal("IBM-3279-2-E", session.TerminalName);
+        fake.Emit("""{"terminal-name":{"text":"IBM-3278-4-E","override":false}}""");
+        await Wait.UntilAsync(() => session.TerminalName == "IBM-3278-4-E", "replaced name");
+    }
+
     [Fact]
     public async Task Popup_raises_host_message()
     {

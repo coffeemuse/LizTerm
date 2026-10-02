@@ -49,10 +49,13 @@ public static class StatusFormatter
         _ => OiaGlyphs.Box4 + " " + OiaGlyphs.BoxQuestion,
     };
 
-    /// <summary>The words behind the mode field: the connection sentence, then the full terminal type the way a 3270
-    /// user writes one (3278 or 3279 is the colour distinction), which the OIA has no cell for.</summary>
-    public static string ModeTip(ConnectionState state, SessionProfile profile) =>
-        $"{Connection(state, profile.Host)}\n{TerminalType.For(profile)}";
+    /// <summary>The words behind the mode field: the connection sentence, then the terminal name, which the OIA has
+    /// no cell for. The name is the session's report of what the engine tells the host, shown as reported, such as
+    /// <c>IBM-3278-4-E</c> for a colour model 4 or <c>IBM-DYNAMIC</c> for a custom size, as x3270's About box shows
+    /// it. Never worked out from the profile, whose model and colour the engine names by rules of its own (#202), so
+    /// there is no second line until the engine has reported one.</summary>
+    public static string ModeTip(ConnectionState state, string host, string? terminalName) =>
+        terminalName is null ? Connection(state, host) : $"{Connection(state, host)}\n{terminalName}";
 
     /// <summary>Padlock, mark and tooltip: green check when the certificate was verified, orange ! when it was not,
     /// nothing on a plain connection. Both the mark and the colour carry the verdict, so neither has to alone.</summary>

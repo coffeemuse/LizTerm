@@ -39,13 +39,18 @@ public class StatusFormatterTests
         Assert.Equal(expected, StatusFormatter.Mode(state));
 
     [Fact]
-    public void Mode_tooltip_carries_the_connection_sentence_and_the_model()
+    public void Mode_tooltip_carries_the_connection_sentence_and_the_engines_terminal_name()
     {
-        var profile = new SessionProfile { Name = "a", Host = "mvs.local", Model = 4 };
-        Assert.Equal("Connected to mvs.local (TN3270E)\n3279-4-E", StatusFormatter.ModeTip(ConnectionState.ConnectedTn3270E, profile));
-        Assert.Equal("Not connected\n3279-4-E", StatusFormatter.ModeTip(ConnectionState.Disconnected, profile));
-        Assert.Equal("Not connected\n3278-4-E", StatusFormatter.ModeTip(ConnectionState.Disconnected, profile with { Display = TerminalDisplay.Mono }));
+        Assert.Equal("Connected to mvs.local (TN3270E)\nIBM-3278-4-E",
+            StatusFormatter.ModeTip(ConnectionState.ConnectedTn3270E, "mvs.local", "IBM-3278-4-E"));
+        Assert.Equal("Not connected\nIBM-DYNAMIC", StatusFormatter.ModeTip(ConnectionState.Disconnected, "mvs.local", "IBM-DYNAMIC"));
     }
+
+    /// <summary>Before the engine has started there is no name to give, and one worked out from the profile would be
+    /// the guess #202 removed.</summary>
+    [Fact]
+    public void Mode_tooltip_names_no_terminal_before_the_engine_reports_one() =>
+        Assert.Equal("Not connected", StatusFormatter.ModeTip(ConnectionState.Disconnected, "mvs.local", null));
 
     [Fact]
     public void Tls_is_a_padlock_and_a_mark_with_the_words_on_the_tooltip()

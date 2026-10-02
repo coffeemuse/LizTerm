@@ -54,6 +54,7 @@ public static class IndicationParser
             StringList(body, "text"), BoolList(body, "text-err"), Bool(body, "abort") ?? false),
         "popup" => new PopupIndication(Str(body, "type") ?? "", Str(body, "text") ?? "", Bool(body, "retrying") ?? false, Bool(body, "error") ?? false),
         "bell" => new BellIndication(),
+        "terminal-name" => new TerminalNameIndication(Str(body, "text")),
         "ui-error" => new UiErrorIndication(Bool(body, "fatal") ?? false, Str(body, "text") ?? "", Str(body, "operation"), Str(body, "member")),
         "ft" => new FtIndication(Str(body, "state") ?? "", Bool(body, "success"), Str(body, "text"), Long(body, "bytes"), Str(body, "cause")),
         "setting" => new SettingIndication(Str(body, "name") ?? "", Scalar(body, "value"), Str(body, "cause")),

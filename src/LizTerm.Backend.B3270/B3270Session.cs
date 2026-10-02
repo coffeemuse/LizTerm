@@ -107,6 +107,7 @@ public sealed class B3270Session : IEmulatorSession
     public ConnectionState ConnectionState { get; private set; } = ConnectionState.Disconnected;
     public TlsInfo? Tls { get; private set; }
     public KeyboardStatus KeyboardStatus { get; private set; } = KeyboardStatus.Initial;
+    public string? TerminalName { get; private set; }
     public EngineInfo Engine { get; private set; }
 
     /// <summary>Whether this session's engine can honour a certificate pin at all (spec: plan 3d task 8). A
@@ -640,6 +641,11 @@ public sealed class B3270Session : IEmulatorSession
                 break;
             case TlsIndication tls:
                 Tls = new TlsInfo(tls.Secure, tls.Verified, tls.Session, tls.HostCert);
+                break;
+            case TerminalNameIndication name:
+                // Not cleared on disconnect, unlike Tls: it is what the engine will tell the next host, and a fresh
+                // engine sends its own in the initialize block.
+                TerminalName = name.Text;
                 break;
             case FtIndication { Bytes: { } bytes } when Volatile.Read(ref _transfer) is { } transfer:
                 // Progress only. The outcome comes from the Transfer run's run-result, which carries the same

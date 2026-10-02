@@ -46,6 +46,9 @@ public class ReplayTests
         // the original .trc), so the session never passes through the plain Connected3270 state --
         // it goes straight to ConnectedUnbound/ConnectedTn3270E once the BIND completes.
         Assert.Contains(ConnectionState.ConnectedTn3270E, states);
+        // The TERMINAL-TYPE name, from the initialize block. Over TN3270E b3270 asked the host for IBM-3278-2-E
+        // instead, and no indication says so: this is the name it reports, and the one x3270's About box shows (#202).
+        Assert.Equal("IBM-3279-2-E", session.TerminalName);
         Assert.Equal(ConnectionState.Disconnected, session.ConnectionState);
         Assert.True(screens > 0);
         // Line 30 of the fixture is {"bell":{}}: a real host rang it, and this is the end-to-end proof it reaches
@@ -275,6 +278,7 @@ public class ReplayTests
         var screen = session.CurrentScreen;
         Assert.Equal(50, screen.Rows);
         Assert.Equal(100, screen.Columns);
+        Assert.Equal("IBM-DYNAMIC", session.TerminalName);
     }
 
     /// <summary>The trimmed ISPF fixture has no initialize block, so the fake's own starts the session and the fixture

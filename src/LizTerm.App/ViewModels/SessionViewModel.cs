@@ -476,7 +476,7 @@ public partial class SessionViewModel : ObservableObject, IAsyncDisposable
         IsConnected = state.IsConnected();
         Connection = state;
         ModeText = StatusFormatter.Mode(state);
-        ModeTip = StatusFormatter.ModeTip(state, Profile);
+        ModeTip = StatusFormatter.ModeTip(state, Profile.Host, _session.TerminalName);
         var (glyph, mark, tip) = StatusFormatter.Tls(_session.Tls);
         TlsGlyph = glyph;
         TlsMark = mark;

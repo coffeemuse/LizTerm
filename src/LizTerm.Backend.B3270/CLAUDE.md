@@ -46,8 +46,8 @@ in `src/LizTerm.Core/CLAUDE.md`; how the engine binary is built and located is i
 - A background thread named `b3270-reader` reads stdout line by line and runs each line through
   `IndicationParser.TryParse`, which never throws: malformed lines are skipped, and unknown message types become
   `UnknownIndication`. `screen-mode`, `erase` and `screen` mutate the buffer and publish a snapshot; `oia` updates
-  `KeyboardStatus`; `connection` and `tls` update state; `popup` and `ui-error` surface as `HostMessage`; `bell`
-  raises `BellRang`, which carries nothing.
+  `KeyboardStatus`; `connection` and `tls` update state; `terminal-name` sets `TerminalName`, which a disconnect
+  leaves alone; `popup` and `ui-error` surface as `HostMessage`; `bell` raises `BellRang`, which carries nothing.
 - A `ui-error` is b3270 rejecting something **we** wrote to its stdin, never our own parser failing on an inbound
   line — `IndicationParser.TryParse` skips a line it cannot parse and tells nobody. A **fatal** one is also an
   announcement that the engine is exiting, so `Handle` records its text in `_fatalUiError` and `OnProcessEnded`
@@ -81,6 +81,11 @@ Easy to get wrong:
   but b3270 4.5 ignores the `-E`: the extended data stream goes off only with `-set extendedDataStream=false`, sent
   when `TerminalType.IsExtended` is false (#200). Ask the engine (`Set extendedDataStream`, `Query TerminalName`)
   rather than trusting a model suffix.
+- `terminal-name` and `Query TerminalName` report the TELNET TERMINAL-TYPE name (`termtype`), which is not the
+  `-model` argument: `create_3270_termtype` names a colour model 4 or 5 `IBM-3278-n` and any oversize `IBM-DYNAMIC`
+  (#202). Over TN3270E the host goes by the device type instead, which b3270 always requests as a 3278
+  (`tn3270e_request`), and neither that request nor the host's DEVICE-TYPE IS reply (`connected_type`) is reported
+  anywhere. x3270's About box shows `termtype` too, so the status bar shows it as reported.
 - The cursor is nested inside `screen` indications, and `enabled:false` hides it while keeping its position.
 
 ## Connect and disconnect
