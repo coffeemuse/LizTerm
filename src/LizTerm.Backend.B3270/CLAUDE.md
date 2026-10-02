@@ -77,7 +77,10 @@ Easy to get wrong:
 - `String()` interprets backslash escapes, so literal backslashes are doubled.
 - `PasteString` takes **hex-encoded UTF-8**, not text, and is margin-aware where `String` is not.
 - Certificate verification is a `Set verifyHostCert` action sent before `Connect`, not a host-string prefix.
-- The host string is `[L:][lu@]host:port`, with IPv6 hosts bracketed. The model argument is `3279-<n>[-E]`.
+- The host string is `[L:][lu@]host:port`, with IPv6 hosts bracketed. The model argument is `327{8,9}-<n>[-E]`,
+  but b3270 4.5 ignores the `-E`: the extended data stream goes off only with `-set extendedDataStream=false`, sent
+  when `TerminalType.IsExtended` is false (#200). Ask the engine (`Set extendedDataStream`, `Query TerminalName`)
+  rather than trusting a model suffix.
 - The cursor is nested inside `screen` indications, and `enabled:false` hides it while keeping its position.
 
 ## Connect and disconnect

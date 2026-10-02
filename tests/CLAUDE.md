@@ -213,6 +213,9 @@ See `src/LizTerm.Backend.Mvsmf/CLAUDE.md`, "Tests". Tests that pin an mvsMF work
   `"time":0,003` under that locale unless `B3270ChildProcess` pins `LC_NUMERIC`). It sits in this project's
   `EnvironmentCollection`, non-parallel, so no other engine is spawned under the changed variables. It is decisive on
   macOS, which ships every locale; a Linux runner without `hr_HR` generated falls back to C; Windows skips.
+- `EngineExtendedDataStreamTests` starts the bundled engine for three profiles and asks it, with `Query
+  TerminalName` and `Set extendedDataStream`, what it will tell the host, then checks the screen it starts with
+  against `ScreenSize.AlternateFor` (#200, #198). It never connects.
 - The live tests carry a 10-minute xunit timeout. `gateway-pinned-login.jsonl` replays a verified pinned connect.
 - `ScreenWaiter` and `TsoNavigator` drive a TSO logon to READY by screen text only: LOGON, PASSWORD, `***` pauses
   answered with Enter, menus left with PF3, READY = the last non-blank line. Extend them with text rules, never

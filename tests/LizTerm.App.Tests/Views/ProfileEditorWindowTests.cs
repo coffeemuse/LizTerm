@@ -362,6 +362,35 @@ public class ProfileEditorWindowTests
         Assert.Equal("140x30", Vm(window).TryBuild()!.Oversize);
     }
 
+    /// <summary>A custom size needs the extended data stream (#200), so under Other the box is greyed out and
+    /// checked, with the reason under it; choosing a model again gives the user's own choice back.</summary>
+    [AvaloniaFact]
+    public void The_extended_box_is_locked_on_under_other()
+    {
+        var window = new ProfileEditorWindow(new SessionProfile { Name = "p", Host = "h", Extended = false });
+        window.Show();
+        var modelBox = window.FindControl<ComboBox>("ModelBox")!;
+        var extended = window.FindControl<CheckBox>("ExtendedBox")!;
+        var hint = window.FindControl<TextBlock>("ExtendedHint")!;
+
+        Assert.True(extended.IsEnabled);
+        Assert.False(extended.IsChecked);
+        Assert.False(hint.IsVisible);
+
+        modelBox.SelectedItem = ModelChoice.Other;
+
+        Assert.False(extended.IsEnabled);
+        Assert.True(extended.IsChecked);
+        Assert.True(hint.IsVisible);
+        Assert.Equal("A custom size needs it.", hint.Text);
+
+        modelBox.SelectedItem = Vm(window).ModelChoices[0];
+
+        Assert.True(extended.IsEnabled);
+        Assert.False(extended.IsChecked);
+        Assert.False(hint.IsVisible);
+    }
+
     /// <summary>The spinners have no range, so a number outside the engine's limits stays as typed for the view
     /// model's message to explain, rather than being snapped or emptied in silence; the arrows step by one.</summary>
     [AvaloniaFact]

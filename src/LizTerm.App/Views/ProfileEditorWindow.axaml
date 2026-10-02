@@ -154,9 +154,14 @@
             <!-- 280 matches the Code page drop-down. -->
             <StackPanel Grid.Column="1" Spacing="4">
               <ComboBox x:Name="ModelBox" ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding SelectedModelChoice}" Width="280" />
-              <!-- Colour (3279) or Mono (3278). Extended applies to both: 3278-n-E is a valid b3270 model. -->
+              <!-- Colour (3279) or Mono (3278). Extended applies to both: a 3278 can have the extended data stream
+                   too. Under Other the box is greyed out and checked, because b3270 drops a custom size without the
+                   stream (#200); the hint says so rather than leaving a dead control unexplained. -->
               <ComboBox x:Name="DisplayBox" ItemsSource="{Binding DisplayChoices}" SelectedItem="{Binding SelectedDisplayChoice}" Width="280" />
-              <CheckBox Content="Extended data stream" IsChecked="{Binding Extended}" />
+              <CheckBox x:Name="ExtendedBox" Content="Extended data stream" IsChecked="{Binding ExtendedDisplay}"
+                        IsEnabled="{Binding !IsCustomSize}" />
+              <TextBlock x:Name="ExtendedHint" Classes="hint" Text="A custom size needs it."
+                         IsVisible="{Binding IsCustomSize}" />
             </StackPanel>
           </Grid>
           <Grid Classes="row" ColumnDefinitions="120,*">

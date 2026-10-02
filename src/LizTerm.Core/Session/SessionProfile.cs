@@ -18,7 +18,11 @@ namespace LizTerm.Core.Session;
 /// <param name="Display">Colour (a 3279, the default) or mono (a 3278). Written by name, like the settings enums, so a
 /// reordering of <see cref="TerminalDisplay"/> can never change a saved meaning, and a name this build does not know
 /// reads as colour rather than costing the file (<see cref="TerminalDisplayJsonConverter"/>). Independent of
-/// <paramref name="Extended"/>: <c>3278-n-E</c> is a valid b3270 model.</param>
+/// <paramref name="Extended"/>: a 3278 can have the extended data stream too.</param>
+/// <param name="Extended">Whether the session uses the extended data stream: colours, highlighting and the rest of
+/// the extended attributes, and the -E on the terminal type the host is told. A profile with an
+/// <paramref name="Oversize"/> keeps it on whatever this says; <see cref="TerminalType.IsExtended"/> is the
+/// rule.</param>
 /// <param name="DestructiveBackspace">When true (the default, as in x3270's and wc3270's own base keymaps and Vista
 /// TN3270), the Backspace key erases the character to the left of the cursor (x3270's Erase action); when false it
 /// only moves the cursor left (BackSpace). The editor writes the field explicitly, so a saved choice survives.</param>

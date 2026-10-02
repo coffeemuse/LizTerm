@@ -31,6 +31,36 @@ public class TerminalTypeTests
     }
 
     [Fact]
+    public void The_extended_data_stream_follows_the_Extended_box()
+    {
+        Assert.True(TerminalType.IsExtended(new SessionProfile()));
+        Assert.False(TerminalType.IsExtended(new SessionProfile { Extended = false }));
+    }
+
+    /// <summary>b3270 drops an oversize without the extended data stream, so a custom size keeps the stream on, as
+    /// the profile editor's greyed box shows. Profiles saved before #200 can carry both, and their custom size must
+    /// not shrink to the model's own. A bad oversize counts too: the engine's command line refuses it by
+    /// name.</summary>
+    [Theory]
+    [InlineData("132x43")]
+    [InlineData("200x200")]
+    [InlineData("nonsense")]
+    public void A_custom_size_keeps_the_extended_data_stream_on(string oversize)
+    {
+        var profile = new SessionProfile { Model = 2, Extended = false, Oversize = oversize };
+        Assert.True(TerminalType.IsExtended(profile));
+        Assert.Equal("3279-2-E", TerminalType.For(profile));
+    }
+
+    /// <summary>b3270's own spelling of "no oversize" is no custom size.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("0x0")]
+    public void No_custom_size_leaves_the_Extended_box_in_charge(string? oversize) =>
+        Assert.False(TerminalType.IsExtended(new SessionProfile { Extended = false, Oversize = oversize }));
+
+    [Fact]
     public void The_default_display_is_colour()
     {
         Assert.Equal(TerminalDisplay.Color, new SessionProfile().Display);

@@ -11,16 +11,19 @@ how the pieces fit together, [architecture](architecture.md).
 
 ## Getting an engine
 
-The app runs b3270 as a child process and cannot connect without one. LizTerm ships its own build, with the patches
-in `native/patches` applied ([engines](engines.md#patches)), and that is the engine to develop and test against:
+The app runs b3270 as a child process and cannot connect without one. LizTerm ships its own build, at the version
+[engines](engines.md) pins and with the patches in `native/patches` applied ([engines](engines.md#patches)), so the
+engine users run is always one LizTerm chose. That is the engine to develop and test against:
 
 - Build one with `native/build/build-macos.sh`, `native/build/build-linux-docker.sh` or
   `native/build/build-windows-docker.sh` (see [engines](engines.md)), then rebuild the .NET projects so the engine
   is copied into their output.
 - Download a CI-built one ([engines](engines.md#using-a-ci-built-engine)).
 
-For quick work, `LIZTERM_B3270_PATH` can point at another b3270 4.2 or later, such as a Homebrew `x3270` install. It
-lacks LizTerm's patches, so ISPF (MVS) file transfers are refused with it, and it is never what users run.
+For quick work or troubleshooting, `LIZTERM_B3270_PATH` can point at another b3270 4.2 or later, such as a Homebrew
+`x3270` install. It is never what users run, and it can fall short of the bundled engine: it lacks LizTerm's patches,
+so ISPF (MVS) file transfers are refused with it, and one older than 4.4 has no `extendedDataStream` resource, so a
+profile's unchecked **Extended data stream** box does nothing there (#200).
 
 Without an engine the app shows an error instead of the profile picker, and the tests that need one skip.
 

@@ -600,14 +600,35 @@ public class B3270SessionLifecycleTests
         Assert.DoesNotContain("-oversize", args);
     }
 
-    /// <summary>Unchecking Extended only drops the model's -E, which b3270 4.5 ignores, so the engine keeps the
-    /// extended data stream and the oversize is sent as ever (#200). One b3270 would refuse is still named.</summary>
+    /// <summary>b3270 4.5 ignores the model's -E, so an unchecked Extended has to turn the stream off by name
+    /// (#200).</summary>
     [Fact]
-    public void BuildArguments_sends_the_oversize_with_extended_unchecked()
+    public void BuildArguments_turns_the_extended_data_stream_off_by_name()
+    {
+        var args = B3270Session.BuildArguments(new SessionProfile { Name = "p", Host = "h", Extended = false }).ToList();
+        var at = args.IndexOf("extendedDataStream=false");
+        Assert.True(at > 0, "no extendedDataStream=false");
+        Assert.Equal("-set", args[at - 1]);
+    }
+
+    /// <summary>The stream is on by default in b3270 too, so a checked Extended sends nothing for it.</summary>
+    [Fact]
+    public void BuildArguments_leaves_the_extended_data_stream_at_its_default()
+    {
+        var args = B3270Session.BuildArguments(new SessionProfile { Name = "p", Host = "h" });
+        Assert.DoesNotContain(args, a => a.Contains("extendedDataStream", StringComparison.Ordinal));
+    }
+
+    /// <summary>b3270 drops an oversize without the extended data stream, so a custom size keeps the stream on
+    /// whatever Extended says (TerminalType.IsExtended): the oversize is sent, and one b3270 would refuse is still
+    /// named.</summary>
+    [Fact]
+    public void BuildArguments_keeps_the_stream_and_the_oversize_for_a_custom_size_with_extended_unchecked()
     {
         var plain = new SessionProfile { Name = "p", Host = "h", Oversize = "132x43", Extended = false };
         var args = B3270Session.BuildArguments(plain);
         Assert.Equal("132x43", args[args.ToList().IndexOf("-oversize") + 1]);
+        Assert.DoesNotContain(args, a => a.Contains("extendedDataStream", StringComparison.Ordinal));
         Assert.Throws<ConnectionFailedException>(() => B3270Session.BuildArguments(plain with { Oversize = "200x200" }));
     }
 
